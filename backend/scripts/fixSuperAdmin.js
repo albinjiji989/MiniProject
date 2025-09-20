@@ -19,7 +19,7 @@ const User = require('../core/models/User');
 		console.log('Before:', { authProvider: user.authProvider, hasPwd: !!user.password });
 		user.password = pwd;
 		user.authProvider = 'both';
-		user.role = 'super_admin';
+		user.role = 'admin';
 		await user.save();
 		user = await User.findOne({ email }).select('+password');
 		console.log('After:', { authProvider: user.authProvider, hasPwd: !!user.password });

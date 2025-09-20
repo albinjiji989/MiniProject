@@ -187,8 +187,8 @@ module.exports = {
   // Workers Management (for ecommerce admins)
   async createWorker(req, res) {
     try {
-      if (!(req.user.role === 'ecommerce_admin' || req.user.role === 'super_admin')) {
-        return res.status(403).json({ success: false, message: 'Only ecommerce admins can create workers' });
+      if (!(req.user.role === 'ecommerce_manager' || req.user.role === 'admin')) {
+        return res.status(403).json({ success: false, message: 'Only ecommerce managers can create workers' });
       }
       const { name, email, phone, password } = req.body;
       if (!name || !email || !password) {
@@ -234,8 +234,8 @@ module.exports = {
   },
   async updateWorker(req, res) {
     try {
-      if (!(req.user.role === 'ecommerce_admin' || req.user.role === 'super_admin')) {
-        return res.status(403).json({ success: false, message: 'Only ecommerce admins can update workers' });
+      if (!(req.user.role === 'ecommerce_manager' || req.user.role === 'admin')) {
+        return res.status(403).json({ success: false, message: 'Only ecommerce managers can update workers' });
       }
       const { name, phone, isActive } = req.body;
       const user = await User.findById(req.params.id);
@@ -252,8 +252,8 @@ module.exports = {
   },
   async deleteWorker(req, res) {
     try {
-      if (!(req.user.role === 'ecommerce_admin' || req.user.role === 'super_admin')) {
-        return res.status(403).json({ success: false, message: 'Only ecommerce admins can remove workers' });
+      if (!(req.user.role === 'ecommerce_manager' || req.user.role === 'admin')) {
+        return res.status(403).json({ success: false, message: 'Only ecommerce managers can remove workers' });
       }
       const user = await User.findById(req.params.id);
       if (!user || user.role !== 'ecommerce_worker') return res.status(404).json({ success: false, message: 'Worker not found' });

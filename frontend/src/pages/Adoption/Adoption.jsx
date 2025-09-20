@@ -34,6 +34,7 @@ import {
   Pets as PetsIcon,
 } from '@mui/icons-material'
 import { useAuth } from '../../contexts/AuthContext'
+import { petsAPI } from '../../services/api'
 
 const Adoption = () => {
   const { user, logout } = useAuth()
@@ -41,6 +42,8 @@ const Adoption = () => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
+  const [loading, setLoading] = React.useState(false)
+  const [pets, setPets] = React.useState([])
 
   const handleMobileMenuToggle = () => {
     setMobileMenuOpen(!mobileMenuOpen)
@@ -55,49 +58,31 @@ const Adoption = () => {
     navigate('/dashboard')
   }
 
-  // Sample pet data
-  const pets = [
-    {
-      id: 1,
-      name: 'Buddy',
-      breed: 'Golden Retriever',
-      age: 3,
-      gender: 'Male',
-      image: 'https://images.unsplash.com/photo-1552053831-71594a27632d?w=400',
-      status: 'Available',
-      description: 'Friendly and energetic dog looking for a loving home.'
-    },
-    {
-      id: 2,
-      name: 'Luna',
-      breed: 'Siamese Cat',
-      age: 2,
-      gender: 'Female',
-      image: 'https://images.unsplash.com/photo-1574158622682-e40e69881006?w=400',
-      status: 'Available',
-      description: 'Calm and affectionate cat perfect for families.'
-    },
-    {
-      id: 3,
-      name: 'Max',
-      breed: 'Labrador Mix',
-      age: 1,
-      gender: 'Male',
-      image: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400',
-      status: 'Pending',
-      description: 'Young and playful puppy ready for adoption.'
-    },
-    {
-      id: 4,
-      name: 'Whiskers',
-      breed: 'Persian Cat',
-      age: 4,
-      gender: 'Female',
-      image: 'https://images.unsplash.com/photo-1592194996308-7b43878e84a6?w=400',
-      status: 'Available',
-      description: 'Gentle and quiet cat ideal for apartment living.'
+  React.useEffect(() => {
+    const loadPets = async () => {
+      try {
+        setLoading(true)
+        const res = await petsAPI.getPets({ limit: 50 })
+        const raw = res?.data?.data?.pets || res?.data?.pets || res?.data || []
+        const normalized = (Array.isArray(raw) ? raw : []).map((p) => ({
+          id: p._id || p.id,
+          name: p.name || p.petName || 'Pet',
+          breed: p.breed || p.petBreed || p.species || 'Unknown',
+          age: p.ageYears || p.age || 0,
+          gender: p.gender || 'Unknown',
+          image: p.image || p.photoUrl || 'https://via.placeholder.com/400x300?text=Pet',
+          status: p.currentStatus || p.status || 'Available',
+          description: p.description || 'No description provided.'
+        }))
+        setPets(normalized)
+      } catch (e) {
+        setPets([])
+      } finally {
+        setLoading(false)
+      }
     }
-  ]
+    loadPets()
+  }, [])
 
   const Navbar = () => (
     <AppBar 

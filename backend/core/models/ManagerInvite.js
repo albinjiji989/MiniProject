@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const adminInviteSchema = new mongoose.Schema({
+const managerInviteSchema = new mongoose.Schema({
   email: { type: String, required: true, index: true },
   name: { type: String, required: true },
   phone: { type: String, default: '' },
@@ -11,8 +11,8 @@ const adminInviteSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
 }, { timestamps: true });
 
-adminInviteSchema.index({ email: 1, module: 1, verified: 1 });
+managerInviteSchema.index({ email: 1, module: 1, verified: 1 });
 
-module.exports = mongoose.model('AdminInvite', adminInviteSchema);
+module.exports = mongoose.model('ManagerInvite', managerInviteSchema);
 
 

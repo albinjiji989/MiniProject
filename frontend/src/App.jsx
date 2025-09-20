@@ -12,13 +12,21 @@ import About from './pages/Static/About'
 import Contact from './pages/Static/Contact'
 import Dashboard from './pages/Dashboard/Dashboard'
 import PublicUserDashboard from './pages/Dashboard/PublicUserDashboard'
-import ShelterAdminDashboard from './pages/Dashboard/ShelterAdminDashboard'
-import TemporaryCareAdminDashboard from './pages/Dashboard/TemporaryCareAdminDashboard'
-import EcommerceAdminDashboard from './pages/Dashboard/EcommerceAdminDashboard'
-import AdoptionAdminDashboard from './pages/Dashboard/AdoptionAdminDashboard'
-import RescueAdminDashboard from './pages/Dashboard/RescueAdminDashboard'
-import PharmacyAdminDashboard from './pages/Dashboard/PharmacyAdminDashboard'
-import VeterinaryAdminDashboard from './pages/Dashboard/VeterinaryAdminDashboard'
+// Admin-named dashboards removed in favor of Manager dashboards
+import AdminLayout from './layouts/AdminLayout'
+import AdminDashboard from './pages/Admin/AdminDashboard'
+import ManagerManagement from './pages/Admin/ManagerManagement'
+import UserManagement from './pages/Admin/UserManagement'
+import RoleManagement from './pages/Admin/RoleManagement'
+import ModuleManagement from './pages/Admin/ModuleManagement'
+import DataTracking from './pages/Admin/DataTracking'
+import ShelterManagerDashboard from './modules/managers/Shelter/ShelterManagerDashboard'
+import TemporaryCareManagerDashboard from './modules/managers/TemporaryCare/TemporaryCareManagerDashboard'
+import EcommerceManagerDashboard from './modules/managers/Ecommerce/EcommerceManagerDashboard'
+import AdoptionManagerDashboard from './modules/managers/Adoption/AdoptionManagerDashboard'
+import RescueManagerDashboard from './modules/managers/Rescue/RescueManagerDashboard'
+import PharmacyManagerDashboard from './modules/managers/Pharmacy/PharmacyManagerDashboard'
+import VeterinaryManagerDashboard from './modules/managers/Veterinary/VeterinaryManagerDashboard'
 import Pets from './pages/Pets/Pets'
 import PetDetails from './pages/Pets/PetDetails'
 import AddPet from './pages/Pets/AddPet'
@@ -42,7 +50,6 @@ import CoreManagement from './pages/Core/CoreManagement'
 import Users from './pages/Users/Users'
 import Profile from './pages/Profile/Profile'
 import AdminManagement from './pages/Admin/AdminManagement'
-import UserManagement from './pages/Admin/UserManagement'
 import ProtectedRoute from './core/components/ProtectedRoute'
 import LoadingSpinner from './components/UI/LoadingSpinner'
 
@@ -57,21 +64,21 @@ function App() {
     <Routes>
       <Route 
         path="/" 
-        element={user ? <Navigate to="/dashboard" replace /> : <Landing />} 
+        element={user ? (user.role === 'admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />) : <Landing />} 
       />
       <Route path="/about" element={<About />} />
       <Route path="/contact" element={<Contact />} />
       <Route 
         path="/login" 
-        element={user ? <Navigate to="/dashboard" replace /> : <Login />} 
+        element={user ? (user.role === 'admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />) : <Login />} 
       />
       <Route 
         path="/register" 
-        element={user ? <Navigate to="/dashboard" replace /> : <Register />} 
+        element={user ? (user.role === 'admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />) : <Register />} 
       />
       <Route 
         path="/forgot-password" 
-        element={user ? <Navigate to="/dashboard" replace /> : <ForgotPassword />} 
+        element={user ? (user.role === 'admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />) : <ForgotPassword />} 
       />
       <Route 
         path="/force-password" 
@@ -79,7 +86,7 @@ function App() {
       />
       <Route 
         path="/register-module-admin" 
-        element={user ? <Navigate to="/dashboard" replace /> : <ModuleAdminRegister />} 
+        element={user ? (user.role === 'admin' ? <Navigate to="/admin/dashboard" replace /> : <Navigate to="/dashboard" replace />) : <ModuleAdminRegister />} 
       />
       
       {/* Dashboard route - standalone with its own navigation */}
@@ -88,6 +95,26 @@ function App() {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      
+      {/* Admin routes with AdminLayout */}
+      <Route
+        path="/admin/*"
+        element={
+          <ProtectedRoute>
+            <AdminLayout>
+              <Routes>
+                <Route path="/dashboard" element={<AdminDashboard />} />
+                <Route path="/managers" element={<ManagerManagement />} />
+                <Route path="/users" element={<UserManagement />} />
+                <Route path="/roles" element={<RoleManagement />} />
+                <Route path="/modules" element={<ModuleManagement />} />
+                <Route path="/tracking" element={<DataTracking />} />
+                <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+              </Routes>
+            </AdminLayout>
           </ProtectedRoute>
         }
       />
@@ -121,19 +148,25 @@ function App() {
                 <Route path="/users" element={<Users />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/admin-management" element={<AdminManagement />} />
-                <Route path="/user-management" element={<UserManagement />} />
                 
-                {/* Module Admin Dashboards */}
+                {/* Module Dashboards (Admin and Manager aliases) */}
                 <Route path="/dashboard/public" element={<PublicUserDashboard />} />
-                <Route path="/dashboard/shelter-admin" element={<ShelterAdminDashboard />} />
-                <Route path="/dashboard/temporary-care-admin" element={<TemporaryCareAdminDashboard />} />
+                <Route path="/dashboard/shelter-admin" element={<ShelterManagerDashboard />} />
+                <Route path="/dashboard/shelter-manager" element={<ShelterManagerDashboard />} />
+                <Route path="/dashboard/temporary-care-admin" element={<TemporaryCareManagerDashboard />} />
+                <Route path="/dashboard/temporary-care-manager" element={<TemporaryCareManagerDashboard />} />
                 {false && <Route path="/dashboard/donation-admin" element={<div />} />}
-                <Route path="/dashboard/ecommerce-admin" element={<EcommerceAdminDashboard />} />
-                <Route path="/dashboard/adoption-admin" element={<AdoptionAdminDashboard />} />
-                <Route path="/dashboard/rescue-admin" element={<RescueAdminDashboard />} />
-                <Route path="/dashboard/pharmacy-admin" element={<PharmacyAdminDashboard />} />
+                <Route path="/dashboard/ecommerce-admin" element={<EcommerceManagerDashboard />} />
+                <Route path="/dashboard/ecommerce-manager" element={<EcommerceManagerDashboard />} />
+                <Route path="/dashboard/adoption-admin" element={<AdoptionManagerDashboard />} />
+                <Route path="/dashboard/adoption-manager" element={<AdoptionManagerDashboard />} />
+                <Route path="/dashboard/rescue-admin" element={<RescueManagerDashboard />} />
+                <Route path="/dashboard/rescue-manager" element={<RescueManagerDashboard />} />
+                <Route path="/dashboard/pharmacy-admin" element={<PharmacyManagerDashboard />} />
+                <Route path="/dashboard/pharmacy-manager" element={<PharmacyManagerDashboard />} />
                 {false && <Route path="/dashboard/boarding-admin" element={<div />} />}
-                <Route path="/dashboard/veterinary-admin" element={<VeterinaryAdminDashboard />} />
+                <Route path="/dashboard/veterinary-admin" element={<VeterinaryManagerDashboard />} />
+                <Route path="/dashboard/veterinary-manager" element={<VeterinaryManagerDashboard />} />
               </Routes>
             </Layout>
           </ProtectedRoute>

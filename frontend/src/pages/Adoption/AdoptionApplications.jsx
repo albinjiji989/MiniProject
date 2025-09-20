@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { adoptionAPI } from '../../services/api'
 import {
   Box,
   Typography,
@@ -36,46 +37,40 @@ const AdoptionApplications = () => {
   const [filterAnchor, setFilterAnchor] = useState(null)
   const [menuAnchor, setMenuAnchor] = useState(null)
   const [selectedApplication, setSelectedApplication] = useState(null)
+  const [applications, setApplications] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  // Mock data - replace with actual API call
-  const applications = [
-    {
-      id: 1,
-      petName: 'Buddy',
-      petSpecies: 'Dog',
-      petBreed: 'Golden Retriever',
-      adopterName: 'John Doe',
-      adopterEmail: 'john@example.com',
-      adopterPhone: '123-456-7890',
-      status: 'pending',
-      applicationDate: '2024-01-15',
-      adoptionFee: 150
-    },
-    {
-      id: 2,
-      petName: 'Whiskers',
-      petSpecies: 'Cat',
-      petBreed: 'Persian',
-      adopterName: 'Jane Smith',
-      adopterEmail: 'jane@example.com',
-      adopterPhone: '123-456-7891',
-      status: 'approved',
-      applicationDate: '2024-01-14',
-      adoptionFee: 100
-    },
-    {
-      id: 3,
-      petName: 'Charlie',
-      petSpecies: 'Dog',
-      petBreed: 'Labrador',
-      adopterName: 'Mike Johnson',
-      adopterEmail: 'mike@example.com',
-      adopterPhone: '123-456-7892',
-      status: 'completed',
-      applicationDate: '2024-01-13',
-      adoptionFee: 200
-    },
-  ]
+  useEffect(() => {
+    const loadApplications = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const res = await adoptionAPI.getAdoptions({ limit: 50 })
+        const raw = res.data?.data || res.data || []
+        const items = raw.adoptions || raw
+        const normalized = (Array.isArray(items) ? items : []).map((a) => ({
+          id: a._id || a.id,
+          petName: (a.pet && a.pet.name) || a.petName || 'Pet',
+          petSpecies: (a.pet && a.pet.species) || a.petSpecies || '-',
+          petBreed: (a.pet && a.pet.breed) || a.petBreed || '-',
+          adopterName: (a.adopter && a.adopter.name) || a.adopterName || '-',
+          adopterEmail: (a.adopter && a.adopter.email) || a.adopterEmail || '-',
+          adopterPhone: (a.adopter && a.adopter.phone) || a.adopterPhone || '-',
+          status: a.status || 'pending',
+          applicationDate: a.createdAt ? new Date(a.createdAt).toLocaleDateString() : '-',
+          adoptionFee: a.adoptionFee || 0
+        }))
+        setApplications(normalized)
+      } catch (e) {
+        setApplications([])
+        setError('Failed to load applications')
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadApplications()
+  }, [])
 
   const handleSearch = (event) => {
     setSearchTerm(event.target.value)

@@ -8,13 +8,13 @@
  * @returns {Object} - MongoDB filter object
  */
 const getStoreFilter = (user) => {
-  // Super admin can see all data
-  if (user.role === 'super_admin') {
+  // Admin can see all data
+  if (user.role === 'admin') {
     return {};
   }
 
-  // Module admins can only see their store's data
-  if (user.role && user.role.includes('_admin') && user.storeId) {
+  // Module managers can only see their store's data
+  if (user.role && user.role.includes('_manager') && user.storeId) {
     return { storeId: user.storeId };
   }
 
@@ -52,13 +52,13 @@ const addStoreInfo = (data, user) => {
  * @returns {boolean} - Whether user has access
  */
 const hasStoreAccess = (resource, user) => {
-  // Super admin has access to everything
-  if (user.role === 'super_admin') {
+  // Admin has access to everything
+  if (user.role === 'admin') {
     return true;
   }
 
-  // Module admins can only access their store's resources
-  if (user.role && user.role.includes('_admin')) {
+  // Module managers can only access their store's resources
+  if (user.role && user.role.includes('_manager')) {
     return resource.storeId === user.storeId;
   }
 

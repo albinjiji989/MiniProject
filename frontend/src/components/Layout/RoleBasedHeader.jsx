@@ -70,14 +70,14 @@ const RoleBasedHeader = ({ onMenuClick }) => {
 
   const getRoleInfo = (role) => {
     switch (role) {
-      case 'super_admin':
+      case 'admin':
         return {
-          title: 'Super Admin Dashboard',
+          title: 'Admin Dashboard',
           icon: <SuperAdminIcon />,
           color: 'error.main',
           description: 'System Administration'
         }
-      case 'module_admin':
+      case 'module_manager':
         return {
           title: 'Module Admin Dashboard',
           icon: <ModuleIcon />,

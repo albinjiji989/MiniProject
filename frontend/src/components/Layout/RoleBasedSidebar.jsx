@@ -49,93 +49,93 @@ const getMenuItems = (userRole, userDetails) => {
     { text: 'Profile', icon: <ProfileIcon />, path: '/profile', roles: ['all'] },
   ]
 
-  // Super Admin gets access to everything
-  if (userRole === 'super_admin') {
+  // Admin gets access to everything
+  if (userRole === 'admin') {
     return [
       ...baseItems,
       {
         text: 'System Management',
         icon: <SuperAdminIcon />,
         children: [
-          { text: 'Admin Management', icon: <UsersIcon />, path: '/admin-management', roles: ['super_admin'] },
-          { text: 'User Management', icon: <PeopleIcon />, path: '/user-management', roles: ['super_admin'] },
-          { text: 'RBAC Management', icon: <SecurityIcon />, path: '/rbac', roles: ['super_admin'] },
-          { text: 'Core System', icon: <SettingsIcon />, path: '/core', roles: ['super_admin'] },
+          { text: 'Admin Management', icon: <UsersIcon />, path: '/admin-management', roles: ['admin'] },
+          { text: 'User Management', icon: <PeopleIcon />, path: '/user-management', roles: ['admin'] },
+          { text: 'RBAC Management', icon: <SecurityIcon />, path: '/rbac', roles: ['admin'] },
+          { text: 'Core System', icon: <SettingsIcon />, path: '/core', roles: ['admin'] },
         ]
       },
       {
         text: 'Module Management',
         icon: <ModuleIcon />,
         children: [
-          { text: 'Adoption', icon: <AdoptionIcon />, path: '/adoption', roles: ['super_admin'] },
-          { text: 'Shelter', icon: <ShelterIcon />, path: '/shelter', roles: ['super_admin'] },
-          { text: 'Rescue', icon: <RescueIcon />, path: '/rescue', roles: ['super_admin'] },
-          { text: 'E-Commerce', icon: <EcommerceIcon />, path: '/ecommerce', roles: ['super_admin'] },
-          { text: 'Pharmacy', icon: <PharmacyIcon />, path: '/pharmacy', roles: ['super_admin'] },
-          { text: 'Temporary Care', icon: <TemporaryCareIcon />, path: '/temporary-care', roles: ['super_admin'] },
-          { text: 'Veterinary', icon: <VeterinaryIcon />, path: '/veterinary', roles: ['super_admin'] },
+          { text: 'Adoption', icon: <AdoptionIcon />, path: '/adoption', roles: ['admin'] },
+          { text: 'Shelter', icon: <ShelterIcon />, path: '/shelter', roles: ['admin'] },
+          { text: 'Rescue', icon: <RescueIcon />, path: '/rescue', roles: ['admin'] },
+          { text: 'E-Commerce', icon: <EcommerceIcon />, path: '/ecommerce', roles: ['admin'] },
+          { text: 'Pharmacy', icon: <PharmacyIcon />, path: '/pharmacy', roles: ['admin'] },
+          { text: 'Temporary Care', icon: <TemporaryCareIcon />, path: '/temporary-care', roles: ['admin'] },
+          { text: 'Veterinary', icon: <VeterinaryIcon />, path: '/veterinary', roles: ['admin'] },
         ]
       },
       {
         text: 'Analytics & Reports',
         icon: <StatsIcon />,
         children: [
-          { text: 'System Overview', icon: <DashboardIcon />, path: '/analytics/system', roles: ['super_admin'] },
-          { text: 'User Analytics', icon: <PeopleIcon />, path: '/analytics/users', roles: ['super_admin'] },
-          { text: 'Module Performance', icon: <ModuleIcon />, path: '/analytics/modules', roles: ['super_admin'] },
+          { text: 'System Overview', icon: <DashboardIcon />, path: '/analytics/system', roles: ['admin'] },
+          { text: 'User Analytics', icon: <PeopleIcon />, path: '/analytics/users', roles: ['admin'] },
+          { text: 'Module Performance', icon: <ModuleIcon />, path: '/analytics/modules', roles: ['admin'] },
         ]
       }
     ]
   }
 
-  // Module Admins get access to their specific module
-  if (userRole.includes('_admin') && userRole !== 'super_admin') {
-    const moduleName = userRole.replace('_admin', '')
+  // Module Managers get access to their specific module
+  if (userRole.includes('_manager')) {
+    const moduleName = userRole.replace('_manager', '')
     const moduleItems = []
     
-    // Add module-specific access based on the admin's role
-    if (userRole === 'adoption_admin') {
+    // Add module-specific access based on the manager's role
+    if (userRole === 'adoption_manager') {
       moduleItems.push(
-        { text: 'Adoption Management', icon: <AdoptionIcon />, path: '/adoption', roles: ['adoption_admin'] },
-        { text: 'Applications', icon: <AssignmentIcon />, path: '/adoption/applications', roles: ['adoption_admin'] },
-        { text: 'Pet Management', icon: <PetsIcon />, path: '/adoption/pets', roles: ['adoption_admin'] }
+        { text: 'Adoption Management', icon: <AdoptionIcon />, path: '/adoption', roles: ['adoption_manager'] },
+        { text: 'Applications', icon: <AssignmentIcon />, path: '/adoption/applications', roles: ['adoption_manager'] },
+        { text: 'Pet Management', icon: <PetsIcon />, path: '/adoption/pets', roles: ['adoption_manager'] }
       )
-    } else if (userRole === 'shelter_admin') {
+    } else if (userRole === 'shelter_manager') {
       moduleItems.push(
-        { text: 'Shelter Management', icon: <ShelterIcon />, path: '/shelter', roles: ['shelter_admin'] },
-        { text: 'Capacity Management', icon: <HomeIcon />, path: '/shelter/capacity', roles: ['shelter_admin'] },
-        { text: 'Staff Management', icon: <PeopleIcon />, path: '/shelter/staff', roles: ['shelter_admin'] }
+        { text: 'Shelter Management', icon: <ShelterIcon />, path: '/shelter', roles: ['shelter_manager'] },
+        { text: 'Capacity Management', icon: <HomeIcon />, path: '/shelter/capacity', roles: ['shelter_manager'] },
+        { text: 'Staff Management', icon: <PeopleIcon />, path: '/shelter/staff', roles: ['shelter_manager'] }
       )
-    } else if (userRole === 'rescue_admin') {
+    } else if (userRole === 'rescue_manager') {
       moduleItems.push(
-        { text: 'Rescue Management', icon: <RescueIcon />, path: '/rescue', roles: ['rescue_admin'] },
-        { text: 'Emergency Cases', icon: <AssignmentIcon />, path: '/rescue/emergencies', roles: ['rescue_admin'] },
-        { text: 'Team Management', icon: <PeopleIcon />, path: '/rescue/team', roles: ['rescue_admin'] }
+        { text: 'Rescue Management', icon: <RescueIcon />, path: '/rescue', roles: ['rescue_manager'] },
+        { text: 'Emergency Cases', icon: <AssignmentIcon />, path: '/rescue/emergencies', roles: ['rescue_manager'] },
+        { text: 'Team Management', icon: <PeopleIcon />, path: '/rescue/team', roles: ['rescue_manager'] }
       )
-    } else if (userRole === 'ecommerce_admin') {
+    } else if (userRole === 'ecommerce_manager') {
       moduleItems.push(
-        { text: 'E-Commerce Management', icon: <EcommerceIcon />, path: '/ecommerce', roles: ['ecommerce_admin'] },
-        { text: 'Product Management', icon: <ShoppingCartIcon />, path: '/ecommerce/products', roles: ['ecommerce_admin'] },
-        { text: 'Order Management', icon: <AssignmentIcon />, path: '/ecommerce/orders', roles: ['ecommerce_admin'] }
+        { text: 'E-Commerce Management', icon: <EcommerceIcon />, path: '/ecommerce', roles: ['ecommerce_manager'] },
+        { text: 'Product Management', icon: <ShoppingCartIcon />, path: '/ecommerce/products', roles: ['ecommerce_manager'] },
+        { text: 'Order Management', icon: <AssignmentIcon />, path: '/ecommerce/orders', roles: ['ecommerce_manager'] }
       )
-    } else if (userRole === 'pharmacy_admin') {
+    } else if (userRole === 'pharmacy_manager') {
       moduleItems.push(
-        { text: 'Pharmacy Management', icon: <PharmacyIcon />, path: '/pharmacy', roles: ['pharmacy_admin'] },
-        { text: 'Inventory Management', icon: <AssignmentIcon />, path: '/pharmacy/inventory', roles: ['pharmacy_admin'] },
-        { text: 'Prescription Management', icon: <AssignmentIcon />, path: '/pharmacy/prescriptions', roles: ['pharmacy_admin'] }
+        { text: 'Pharmacy Management', icon: <PharmacyIcon />, path: '/pharmacy', roles: ['pharmacy_manager'] },
+        { text: 'Inventory Management', icon: <AssignmentIcon />, path: '/pharmacy/inventory', roles: ['pharmacy_manager'] },
+        { text: 'Prescription Management', icon: <AssignmentIcon />, path: '/pharmacy/prescriptions', roles: ['pharmacy_manager'] }
       )
     
-    } else if (userRole === 'temporary_care_admin') {
+    } else if (userRole === 'temporary-care_manager') {
       moduleItems.push(
-        { text: 'Temporary Care Management', icon: <TemporaryCareIcon />, path: '/temporary-care', roles: ['temporary_care_admin'] },
-        { text: 'Caregiver Management', icon: <PeopleIcon />, path: '/temporary-care/caregivers', roles: ['temporary_care_admin'] },
-        { text: 'Request Management', icon: <AssignmentIcon />, path: '/temporary-care/requests', roles: ['temporary_care_admin'] }
+        { text: 'Temporary Care Management', icon: <TemporaryCareIcon />, path: '/temporary-care', roles: ['temporary-care_manager'] },
+        { text: 'Caregiver Management', icon: <PeopleIcon />, path: '/temporary-care/caregivers', roles: ['temporary-care_manager'] },
+        { text: 'Request Management', icon: <AssignmentIcon />, path: '/temporary-care/requests', roles: ['temporary-care_manager'] }
       )
-    } else if (userRole === 'veterinary_admin') {
+    } else if (userRole === 'veterinary_manager') {
       moduleItems.push(
-        { text: 'Veterinary Management', icon: <VeterinaryIcon />, path: '/veterinary', roles: ['veterinary_admin'] },
-        { text: 'Appointment Management', icon: <ScheduleIcon />, path: '/veterinary/appointments', roles: ['veterinary_admin'] },
-        { text: 'Medical Records', icon: <AssignmentIcon />, path: '/veterinary/records', roles: ['veterinary_admin'] }
+        { text: 'Veterinary Management', icon: <VeterinaryIcon />, path: '/veterinary', roles: ['veterinary_manager'] },
+        { text: 'Appointment Management', icon: <ScheduleIcon />, path: '/veterinary/appointments', roles: ['veterinary_manager'] },
+        { text: 'Medical Records', icon: <AssignmentIcon />, path: '/veterinary/records', roles: ['veterinary_manager'] }
       )
     }
 

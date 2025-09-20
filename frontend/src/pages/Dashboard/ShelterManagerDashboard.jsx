@@ -75,7 +75,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { shelterAPI } from '../../services/api'
 import { useNavigate } from 'react-router-dom'
 
-const ShelterAdminDashboard = () => {
+const ShelterManagerDashboard = () => {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [anchorEl, setAnchorEl] = useState(null)
@@ -138,7 +138,6 @@ const ShelterAdminDashboard = () => {
       ])
       setStats(statsRes.data.data)
       setAnimals(animalsRes.data.data.animals || [])
-      // Staff, tasks, and activity data should come from real APIs when available.
       setStaff([])
       setTasks([])
       setRecentActivities([])
@@ -181,7 +180,6 @@ const ShelterAdminDashboard = () => {
 
   return (
     <Box sx={{ flexGrow: 1, minHeight: '100vh', bgcolor: 'grey.50' }}>
-      {/* App Bar */}
       <AppBar position="static" elevation={0} sx={{ bgcolor: 'white', color: 'text.primary', borderBottom: 1, borderColor: 'divider' }}>
         <Toolbar>
           <HomeIcon sx={{ mr: 2, color: 'primary.main' }} />
@@ -193,11 +191,7 @@ const ShelterAdminDashboard = () => {
               <NotificationIcon />
             </Badge>
           </IconButton>
-          <IconButton
-            onClick={handleProfileMenuOpen}
-            color="inherit"
-            sx={{ p: 0 }}
-          >
+          <IconButton onClick={handleProfileMenuOpen} color="inherit" sx={{ p: 0 }}>
             <Avatar sx={{ bgcolor: 'primary.main' }}>
               {user?.name?.charAt(0)?.toUpperCase() || 'A'}
             </Avatar>
@@ -205,7 +199,6 @@ const ShelterAdminDashboard = () => {
         </Toolbar>
       </AppBar>
 
-      {/* Profile Menu */}
       <Menu
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
@@ -229,7 +222,6 @@ const ShelterAdminDashboard = () => {
       </Menu>
 
       <Container maxWidth="xl" sx={{ py: 4 }}>
-        {/* Stats Cards */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
           <Grid item xs={12} sm={6} md={3}>
             <Card sx={{ p: 2, textAlign: 'center' }}>
@@ -237,9 +229,7 @@ const ShelterAdminDashboard = () => {
               <Typography variant="h4" sx={{ fontWeight: 600, color: 'primary.main' }}>
                 {stats.totalAnimals}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Animals
-              </Typography>
+              <Typography variant="body2" color="text.secondary">Total Animals</Typography>
             </Card>
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
@@ -248,9 +238,7 @@ const ShelterAdminDashboard = () => {
               <Typography variant="h4" sx={{ fontWeight: 600, color: 'success.main' }}>
                 {stats.availableForAdoption}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Available for Adoption
-              </Typography>
+              <Typography variant="body2" color="text.secondary">Available for Adoption</Typography>
             </Card>
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
@@ -259,9 +247,7 @@ const ShelterAdminDashboard = () => {
               <Typography variant="h4" sx={{ fontWeight: 600, color: 'info.main' }}>
                 {stats.staffMembers}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Staff Members
-              </Typography>
+              <Typography variant="body2" color="text.secondary">Staff Members</Typography>
             </Card>
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
@@ -270,14 +256,11 @@ const ShelterAdminDashboard = () => {
               <Typography variant="h4" sx={{ fontWeight: 600, color: 'warning.main' }}>
                 ${stats.monthlyExpenses}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Monthly Expenses
-              </Typography>
+              <Typography variant="body2" color="text.secondary">Monthly Expenses</Typography>
             </Card>
           </Grid>
         </Grid>
 
-        {/* Tabs */}
         <Paper sx={{ mb: 3 }}>
           <Tabs value={activeTab} onChange={handleTabChange} aria-label="shelter management tabs">
             <Tab label="Animals" icon={<PetIcon />} />
@@ -287,37 +270,15 @@ const ShelterAdminDashboard = () => {
           </Tabs>
         </Paper>
 
-        {/* Animals Tab */}
         <TabPanel value={activeTab} index={0}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h5" sx={{ fontWeight: 600 }}>
-              Animal Management
-            </Typography>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>Animal Management</Typography>
             <Box>
-              <Button
-                variant="outlined"
-                startIcon={<SearchIcon />}
-                sx={{ mr: 1 }}
-              >
-                Search
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<FilterIcon />}
-                sx={{ mr: 1 }}
-              >
-                Filter
-              </Button>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => handleOpenDialog('addAnimal')}
-              >
-                Add Animal
-              </Button>
+              <Button variant="outlined" startIcon={<SearchIcon />} sx={{ mr: 1 }}>Search</Button>
+              <Button variant="outlined" startIcon={<FilterIcon />} sx={{ mr: 1 }}>Filter</Button>
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog('addAnimal')}>Add Animal</Button>
             </Box>
           </Box>
-
           <TableContainer component={Paper}>
             <Table>
               <TableHead>
@@ -338,22 +299,12 @@ const ShelterAdminDashboard = () => {
                     <TableCell>{animal.breed}</TableCell>
                     <TableCell>{animal.ageYears} years</TableCell>
                     <TableCell>
-                      <Chip
-                        label={animal.currentStatus}
-                        color={getStatusColor(animal.currentStatus)}
-                        size="small"
-                      />
+                      <Chip label={animal.currentStatus} color={getStatusColor(animal.currentStatus)} size="small" />
                     </TableCell>
                     <TableCell>
-                      <IconButton size="small" onClick={() => handleOpenDialog('viewAnimal', animal)}>
-                        <ViewIcon />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => handleOpenDialog('editAnimal', animal)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => handleOpenDialog('deleteAnimal', animal)}>
-                        <DeleteIcon />
-                      </IconButton>
+                      <IconButton size="small" onClick={() => handleOpenDialog('viewAnimal', animal)}><ViewIcon /></IconButton>
+                      <IconButton size="small" onClick={() => handleOpenDialog('editAnimal', animal)}><EditIcon /></IconButton>
+                      <IconButton size="small" onClick={() => handleOpenDialog('deleteAnimal', animal)}><DeleteIcon /></IconButton>
                     </TableCell>
                   </TableRow>
                 )) : (
@@ -368,21 +319,11 @@ const ShelterAdminDashboard = () => {
           </TableContainer>
         </TabPanel>
 
-        {/* Staff Tab */}
         <TabPanel value={activeTab} index={1}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h5" sx={{ fontWeight: 600 }}>
-              Staff Management
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog('addStaff')}
-            >
-              Add Staff
-            </Button>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>Staff Management</Typography>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog('addStaff')}>Add Staff</Button>
           </Box>
-
           <TableContainer component={Paper}>
             <Table>
               <TableHead>
@@ -402,20 +343,10 @@ const ShelterAdminDashboard = () => {
                     <TableCell>{member.role}</TableCell>
                     <TableCell>{member.phone}</TableCell>
                     <TableCell>{member.email}</TableCell>
+                    <TableCell><Chip label={member.status} color={getStatusColor(member.status)} size="small" /></TableCell>
                     <TableCell>
-                      <Chip
-                        label={member.status}
-                        color={getStatusColor(member.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <IconButton size="small" onClick={() => handleOpenDialog('editStaff', member)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => handleOpenDialog('deleteStaff', member)}>
-                        <DeleteIcon />
-                      </IconButton>
+                      <IconButton size="small" onClick={() => handleOpenDialog('editStaff', member)}><EditIcon /></IconButton>
+                      <IconButton size="small" onClick={() => handleOpenDialog('deleteStaff', member)}><DeleteIcon /></IconButton>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -424,21 +355,11 @@ const ShelterAdminDashboard = () => {
           </TableContainer>
         </TabPanel>
 
-        {/* Tasks Tab */}
         <TabPanel value={activeTab} index={2}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h5" sx={{ fontWeight: 600 }}>
-              Task Management
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog('addTask')}
-            >
-              Add Task
-            </Button>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>Task Management</Typography>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog('addTask')}>Add Task</Button>
           </Box>
-
           <TableContainer component={Paper}>
             <Table>
               <TableHead>
@@ -455,29 +376,13 @@ const ShelterAdminDashboard = () => {
                 {tasks.map((task) => (
                   <TableRow key={task.id}>
                     <TableCell>{task.title}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={task.priority}
-                        color={getStatusColor(task.priority)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={task.status}
-                        color={getStatusColor(task.status)}
-                        size="small"
-                      />
-                    </TableCell>
+                    <TableCell><Chip label={task.priority} color={getStatusColor(task.priority)} size="small" /></TableCell>
+                    <TableCell><Chip label={task.status} color={getStatusColor(task.status)} size="small" /></TableCell>
                     <TableCell>{task.assignedTo}</TableCell>
                     <TableCell>{task.dueDate}</TableCell>
                     <TableCell>
-                      <IconButton size="small" onClick={() => handleOpenDialog('editTask', task)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => handleOpenDialog('deleteTask', task)}>
-                        <DeleteIcon />
-                      </IconButton>
+                      <IconButton size="small" onClick={() => handleOpenDialog('editTask', task)}><EditIcon /></IconButton>
+                      <IconButton size="small" onClick={() => handleOpenDialog('deleteTask', task)}><DeleteIcon /></IconButton>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -486,12 +391,8 @@ const ShelterAdminDashboard = () => {
           </TableContainer>
         </TabPanel>
 
-        {/* Activities Tab */}
         <TabPanel value={activeTab} index={3}>
-          <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-            Recent Activities
-          </Typography>
-          
+          <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>Recent Activities</Typography>
           <List>
             {recentActivities.map((activity) => (
               <ListItem key={activity.id} divider>
@@ -500,27 +401,17 @@ const ShelterAdminDashboard = () => {
                   {activity.type === 'adoption' && <HomeIcon color="success" />}
                   {activity.type === 'medical' && <MedicalIcon color="info" />}
                 </ListItemIcon>
-                <ListItemText
-                  primary={activity.action}
-                  secondary={`${activity.details} • ${activity.timestamp}`}
-                />
+                <ListItemText primary={activity.action} secondary={`${activity.details} • ${activity.timestamp}`} />
               </ListItem>
             ))}
           </List>
         </TabPanel>
 
-        {/* Floating Action Button */}
-        <Fab
-          color="primary"
-          aria-label="add"
-          sx={{ position: 'fixed', bottom: 16, right: 16 }}
-          onClick={() => handleOpenDialog('quickAdd')}
-        >
+        <Fab color="primary" aria-label="add" sx={{ position: 'fixed', bottom: 16, right: 16 }} onClick={() => handleOpenDialog('quickAdd')}>
           <AddIcon />
         </Fab>
       </Container>
 
-      {/* Dialog for various actions */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
           {dialogType === 'addAnimal' && 'Add New Animal'}
@@ -553,4 +444,6 @@ const ShelterAdminDashboard = () => {
   )
 }
 
-export default ShelterAdminDashboard
+export default ShelterManagerDashboard
+
+// Standalone Shelter Manager dashboard implemented here (no re-export)

@@ -9,11 +9,11 @@ const User = require('../../core/models/User')
 
 // @route   GET /api/core/logs
 // @desc    Get system logs
-// @access  Private (Super Admin, Core Admin)
+// @access  Private (Admin)
 router.get('/logs', auth, async (req, res) => {
   try {
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -48,21 +48,22 @@ router.get('/logs', auth, async (req, res) => {
 
     const total = await SystemLog.countDocuments(query)
 
-    res.json({
-      logs,
-      totalPages: Math.ceil(total / limit),
+    return res.json({
+      logs: logs || [],
+      totalPages: Math.ceil((total || 0) / (limit || 50)),
       currentPage: page,
-      total
+      total: total || 0
     })
   } catch (error) {
     console.error(error.message)
-    res.status(500).json({ message: 'Server error' })
+    // Backend-level guard: return empty logs array instead of 500 for dashboard use
+    return res.json({ logs: [], totalPages: 0, currentPage: 1, total: 0 })
   }
 })
 
 // @route   PUT /api/core/logs/:id/resolve
 // @desc    Resolve system log
-// @access  Private (Super Admin, Core Admin)
+// @access  Private (Admin)
 router.put('/logs/:id/resolve', [
   auth,
   body('resolution').notEmpty().withMessage('Resolution is required')
@@ -74,7 +75,7 @@ router.put('/logs/:id/resolve', [
     }
 
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -94,11 +95,11 @@ router.put('/logs/:id/resolve', [
 
 // @route   GET /api/core/config
 // @desc    Get system configuration
-// @access  Private (Super Admin, Core Admin)
+// @access  Private (Admin)
 router.get('/config', auth, async (req, res) => {
   try {
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -120,7 +121,7 @@ router.get('/config', auth, async (req, res) => {
 
 // @route   POST /api/core/config
 // @desc    Create system configuration
-// @access  Private (Super Admin)
+// @access  Private (Admin)
 router.post('/config', [
   auth,
   body('key').notEmpty().withMessage('Key is required'),
@@ -136,7 +137,7 @@ router.post('/config', [
     }
 
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -160,7 +161,7 @@ router.post('/config', [
 
 // @route   PUT /api/core/config/:id
 // @desc    Update system configuration
-// @access  Private (Super Admin)
+// @access  Private (Admin)
 router.put('/config/:id', [
   auth,
   body('value').notEmpty().withMessage('Value is required')
@@ -172,7 +173,7 @@ router.put('/config/:id', [
     }
 
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -197,11 +198,11 @@ router.put('/config/:id', [
 
 // @route   GET /api/core/stats
 // @desc    Get system statistics
-// @access  Private (Super Admin, Core Admin)
+// @access  Private (Admin)
 router.get('/stats', auth, async (req, res) => {
   try {
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 

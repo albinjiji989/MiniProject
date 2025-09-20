@@ -14,7 +14,7 @@ const UserDetails = require('../../models/UserDetails')
 router.get('/roles', auth, async (req, res) => {
   try {
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -48,7 +48,7 @@ router.post('/roles', [
     }
 
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -86,7 +86,7 @@ router.put('/roles/:id', [
     }
 
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -116,7 +116,7 @@ router.put('/roles/:id', [
 router.delete('/roles/:id', auth, async (req, res) => {
   try {
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -160,7 +160,7 @@ router.post('/roles/:id/permissions', [
     }
 
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -194,7 +194,7 @@ router.delete('/roles/:id/permissions', [
     }
 
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -219,7 +219,7 @@ router.delete('/roles/:id/permissions', [
 router.get('/users', auth, async (req, res) => {
   try {
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -227,10 +227,14 @@ router.get('/users', auth, async (req, res) => {
       .select('-password')
       .sort({ createdAt: -1 })
 
+    if (!users || users.length === 0) {
+      return res.json({ success: true, data: { users: [] } })
+    }
+
     // Get user details for each user
     const usersWithDetails = await Promise.all(
       users.map(async (user) => {
-        const userDetails = await UserDetails.findOne({ userId: user._id });
+        const userDetails = await UserDetails.findOne({ userId: user._id }).catch(() => null)
         return {
           ...user.toObject(),
           role: user.role,
@@ -238,19 +242,15 @@ router.get('/users', auth, async (req, res) => {
           storeId: userDetails ? userDetails.storeId : null,
           storeName: userDetails ? userDetails.storeName : null,
           storeLocation: userDetails ? userDetails.storeLocation : null
-        };
+        }
       })
-    );
+    )
 
-    res.json({
-      success: true,
-      data: {
-        users: usersWithDetails
-      }
-    })
+    res.json({ success: true, data: { users: usersWithDetails } })
   } catch (error) {
     console.error(error.message)
-    res.status(500).json({ message: 'Server error' })
+    // Backend-level guard: return empty list on error instead of 500 for dashboard use
+    return res.json({ success: true, data: { users: [] } })
   }
 })
 
@@ -270,7 +270,7 @@ router.put('/users/:id/role', [
     }
 
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -313,7 +313,7 @@ router.put('/users/:id/role', [
 router.get('/permissions', auth, async (req, res) => {
   try {
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -346,7 +346,7 @@ router.post('/permissions', [
     }
 
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -391,7 +391,7 @@ router.get('/check-permission', auth, async (req, res) => {
 // Helpers
 const allowedModules = ['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'temporary-care']
 const allowedModuleNames = ['Adoption', 'Shelter', 'Rescue', 'Veterinary', 'E-commerce', 'Pharmacy', 'Donation', 'Boarding', 'Temporary Care']
-const moduleAdminRole = (module) => `${module}_admin`
+const moduleAdminRole = (module) => `${module}_manager`
 const moduleWorkerRole = (module) => `${module}_worker`
 
 // Helper function to convert module name to key
@@ -411,8 +411,8 @@ const moduleNameToKey = (moduleName) => {
 }
 
 // @route   POST /api/rbac/users/module-admin
-// @desc    Super Admin creates or assigns a Module Admin
-// @access  Private (Super Admin)
+// @desc    Admin creates or assigns a Module Manager
+// @access  Private (Admin)
 router.post('/users/module-admin', [
   auth,
   body('module').isIn(allowedModules).withMessage('Invalid module'),
@@ -425,7 +425,7 @@ router.post('/users/module-admin', [
   body('unitLocation').optional().isObject()
 ], async (req, res) => {
   try {
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -452,7 +452,7 @@ router.post('/users/module-admin', [
 
     const roleName = moduleAdminRole(module)
     const role = await Role.findOne({ name: roleName, isActive: true })
-    if (!role) return res.status(400).json({ message: 'Module admin role not configured' })
+    if (!role) return res.status(400).json({ message: 'Module manager role not configured' })
 
     user.role = roleName
     user.assignedModule = module
@@ -463,7 +463,7 @@ router.post('/users/module-admin', [
 
     await Role.updateOne({ name: roleName }, { $addToSet: { assignedUsers: user._id } })
 
-    res.status(200).json({ message: 'Module admin assigned', user })
+    res.status(200).json({ message: 'Module manager assigned', user })
   } catch (error) {
     console.error(error.message)
     res.status(500).json({ message: 'Server error' })
@@ -492,8 +492,8 @@ router.post('/users/module-staff', [
 
     const { module, userId, name, email, password, unitId, unitName, unitLocation } = req.body
 
-    // Authorization: super_admin or module admin of the same module
-    const isSuper = req.user.role === 'super_admin'
+    // Authorization: admin or module manager of the same module
+    const isSuper = req.user.role === 'admin'
     const isModuleAdmin = req.user.role === moduleAdminRole(module)
     if (!isSuper && !isModuleAdmin) {
       return res.status(403).json({ message: 'Access denied' })
@@ -563,7 +563,7 @@ router.post('/create-module-admin', [
     }
 
     // Check if user has permission
-    if (!['super_admin'].includes(req.user.role)) {
+    if (!['admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
@@ -584,7 +584,7 @@ router.post('/create-module-admin', [
       email,
       password, // Let the pre-save hook handle hashing
       phone: phone || '000-000-0000', // Default phone if not provided
-      role: `${moduleKey}_admin`,
+      role: `${moduleKey}_manager`,
       assignedModule: moduleKey,
       unitId: unitId || '',
       unitName: unitName || '',
@@ -595,14 +595,14 @@ router.post('/create-module-admin', [
     await newUser.save()
 
     // Update role's assigned users
-    const roleName = `${moduleKey}_admin`
+    const roleName = `${moduleKey}_manager`
     await Role.updateOne(
       { name: roleName },
       { $addToSet: { assignedUsers: newUser._id } }
     )
 
     res.status(201).json({
-      message: 'Module admin created successfully',
+      message: 'Module manager created successfully',
       user: {
         id: newUser._id,
         name: newUser.name,

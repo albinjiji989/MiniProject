@@ -70,7 +70,7 @@ const ModuleAdminRegister = () => {
     // Create module admin user
     const userData = {
       ...data,
-      role: 'module_admin',
+      role: 'module_manager',
       assignedModule: selectedModule,
       address: {
         street: data.street,
@@ -95,7 +95,7 @@ const ModuleAdminRegister = () => {
     }
 
     setIsLoading(true)
-    const result = await signUpWithGoogle('module_admin', selectedModule)
+    const result = await signUpWithGoogle('module_manager', selectedModule)
     setIsLoading(false)
     
     if (result.success) {

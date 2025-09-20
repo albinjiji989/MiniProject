@@ -14,19 +14,20 @@ const authorize = (...roles) => {
   };
 };
 
-// Module-level authorization: super_admin or matching admin/worker assigned to module
+// Module-level authorization: admin (global) or matching manager/worker assigned to module
 const authorizeModule = (moduleName) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    if (req.user.role === 'super_admin') return next();
+    // Global admin can access everything
+    if (req.user.role === 'admin') return next();
 
-    const adminRole = `${moduleName}_admin`;
+    const managerRole = `${moduleName}_manager`;
     const workerRole = `${moduleName}_worker`;
 
-    if (req.user.role === adminRole) return next();
+    if (req.user.role === managerRole) return next();
     if (req.user.role === workerRole && (req.user.assignedModule === moduleName || req.user.assignedModules?.includes(moduleName))) return next();
 
     return res.status(403).json({ success: false, message: `Access denied for module ${moduleName}` });

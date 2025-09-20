@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: function() { return !this.firebaseUid; } },
   role: { 
     type: String, 
-    enum: ['super_admin', 'module_admin', 'module_worker', 'public_user', 'volunteer', 'partner', 'temporary_care_admin', 'temporary_care_worker'],
+    enum: ['admin', 'module_manager', 'module_worker', 'public_user', 'volunteer', 'partner', 'temporary_care_manager', 'temporary_care_worker'],
     default: 'public_user'
   },
   phone: { type: String, required: true },
@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema({
   assignedModule: { 
     type: String, 
     enum: ['adoption', 'shelter', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary-care', 'veterinary', 'donation'],
-    required: function() { return ['module_admin', 'module_worker', 'temporary_care_admin', 'temporary_care_worker'].includes(this.role); }
+    required: function() { return ['module_manager', 'module_worker', 'temporary_care_manager', 'temporary_care_worker'].includes(this.role); }
   },
   supervisor: { 
     type: mongoose.Schema.Types.ObjectId, 

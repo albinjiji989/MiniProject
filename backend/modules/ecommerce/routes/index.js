@@ -77,7 +77,7 @@ router.delete('/cart/items/:itemId', auth, controller.removeCartItem);
 router.post('/checkout', auth, controller.checkout);
 router.get('/my/orders', auth, controller.listMyOrders);
 
-// Ecommerce workers management (admin or super_admin via authorizeModule)
+// Ecommerce workers management (manager or admin via authorizeModule)
 router.post('/admin/workers', auth, authorizeModule('ecommerce'), controller.createWorker);
 router.get('/admin/workers', auth, authorizeModule('ecommerce'), controller.listWorkers);
 router.patch('/admin/workers/:id', auth, authorizeModule('ecommerce'), controller.updateWorker);

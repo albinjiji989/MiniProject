@@ -90,15 +90,22 @@ const LoginPage = () => {
   useEffect(() => {
     if (location.state?.message) setSuccess(location.state.message)
     if (isAuthenticated) {
-      navigate('/dashboard', { replace: true })
+      // Let App.jsx handle the routing based on user role
+      // This prevents double redirects
+      if (user?.role === 'admin') {
+        navigate('/admin/dashboard', { replace: true })
+      } else {
+        navigate('/dashboard', { replace: true })
+      }
     }
-  }, [isAuthenticated, navigate, location.state])
+  }, [isAuthenticated, navigate, location.state, user])
 
   const handleAuthSuccess = (userData) => {
     const roleName = (userData.displayRole || userData.role || 'user').replace('_', ' ')
     setSuccess(`Welcome back, ${userData.name || 'user'}! (${roleName}) Redirecting...`)
     setError('')
-    setTimeout(() => navigate('/dashboard', { replace: true }), 500)
+    // Let the useEffect handle the redirect to prevent double redirects
+    // The useEffect will trigger when the user state updates
   }
 
   const handleAuthError = (errorMessage) => {

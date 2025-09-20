@@ -57,7 +57,7 @@ async function updateSuperAdmin() {
       
       // Update existing user
       superAdmin.name = 'ADMIN';
-      superAdmin.role = 'super_admin';
+      superAdmin.role = 'admin';
       superAdmin.isActive = true;
       superAdmin.provider = 'manual';
       superAdmin.phone = '000-000-0000';
@@ -84,7 +84,7 @@ async function updateSuperAdmin() {
         name: 'ADMIN',
         email: 'albinjiji2026@mca.ajce.in',
         password: hashedPassword,
-        role: 'super_admin',
+        role: 'admin',
         phone: '000-000-0000',
         isActive: true,
         provider: 'manual'

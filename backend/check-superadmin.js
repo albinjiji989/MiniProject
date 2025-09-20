@@ -24,8 +24,8 @@ async function checkAndUpdateSuperAdmin() {
         lastLogin: superAdmin.lastLogin
       });
 
-      // Update Super Admin to ensure it's properly configured
-      superAdmin.role = 'super_admin';
+      // Update Admin to ensure it's properly configured
+      superAdmin.role = 'admin';
       superAdmin.isActive = true;
       superAdmin.provider = 'manual'; // Set to manual since it was created manually
       
@@ -55,7 +55,7 @@ async function checkAndUpdateSuperAdmin() {
         name: 'ADMIN',
         email: 'albinjiji2026@mca.ajce.in',
         password: hashedPassword,
-        role: 'super_admin',
+        role: 'admin',
         phone: '000-000-0000',
         isActive: true,
         provider: 'manual',

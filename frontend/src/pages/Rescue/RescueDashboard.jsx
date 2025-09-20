@@ -1,4 +1,5 @@
 import React from 'react'
+import { rescueAPI } from '../../services/api'
 import {
   Box,
   Typography,
@@ -21,20 +22,44 @@ import {
 } from '@mui/icons-material'
 
 const RescueDashboard = () => {
-  // Mock data - replace with actual API calls
-  const stats = {
-    activeRescues: 3,
-    completedRescues: 67,
-    urgentCases: 1,
-    totalCost: 12500,
-    rescueTeam: 12
-  }
+  const [stats, setStats] = React.useState({ activeRescues: 0, completedRescues: 0, urgentCases: 0, totalCost: 0, rescueTeam: 0 })
+  const [recentRescues, setRecentRescues] = React.useState([])
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState('')
 
-  const recentRescues = [
-    { id: 1, location: 'Downtown Area', situation: 'Injured dog found', urgency: 'high', status: 'in_progress', time: '1 hour ago' },
-    { id: 2, location: 'Park District', situation: 'Abandoned cat', urgency: 'medium', status: 'completed', time: '3 hours ago' },
-    { id: 3, location: 'Highway 101', situation: 'Emergency rescue', urgency: 'critical', status: 'assigned', time: '5 hours ago' },
-  ]
+  React.useEffect(() => {
+    const loadRescue = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const [listRes] = await Promise.all([
+          rescueAPI.getRescues({ limit: 10 })
+        ])
+        const rescues = listRes.data?.data?.rescues || listRes.data?.rescues || []
+        setRecentRescues(rescues.map(r => ({
+          id: r._id || r.id,
+          location: r.location || '-',
+          situation: r.situation || r.description || '-',
+          urgency: r.urgency || 'low',
+          status: r.status || 'assigned',
+          time: new Date(r.createdAt || Date.now()).toLocaleString()
+        })))
+        setStats({
+          activeRescues: rescues.filter(r=>r.status==='in_progress').length,
+          completedRescues: rescues.filter(r=>r.status==='completed').length,
+          urgentCases: rescues.filter(r=>r.urgency==='high' || r.urgency==='critical').length,
+          totalCost: 0,
+          rescueTeam: 0
+        })
+      } catch (e) {
+        setError('Failed to load rescues')
+        setRecentRescues([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadRescue()
+  }, [])
 
   const getUrgencyColor = (urgency) => {
     switch (urgency) {

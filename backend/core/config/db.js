@@ -7,33 +7,33 @@ const connectDB = async () => {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log('MongoDB connected successfully');
     
-    // Check and create Super Admin
-    await ensureSuperAdminExists();
+    // Check and create Admin
+    await ensureAdminExists();
   } catch (err) {
     console.error('MongoDB connection error:', err);
     process.exit(1);
   }
 };
 
-// Function to ensure Super Admin exists
-const ensureSuperAdminExists = async () => {
+// Function to ensure Admin exists
+const ensureAdminExists = async () => {
   try {
-    const email = process.env.SUPER_ADMIN_EMAIL;
-    const name = process.env.SUPER_ADMIN_NAME || 'ADMIN';
-    const password = process.env.SUPER_ADMIN_PASSWORD;
+    const email = process.env.ADMIN_EMAIL || process.env.SUPER_ADMIN_EMAIL;
+    const name = process.env.ADMIN_NAME || process.env.SUPER_ADMIN_NAME || 'ADMIN';
+    const password = process.env.ADMIN_PASSWORD || process.env.SUPER_ADMIN_PASSWORD;
 
     // Check if required environment variables are set
     if (!email || !password) {
-      console.log('⚠️  Super Admin credentials not set in environment variables');
-      console.log('Please set SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD in .env file');
+      console.log('⚠️  Admin credentials not set in environment variables');
+      console.log('Please set ADMIN_EMAIL and ADMIN_PASSWORD (or SUPER_ADMIN_* fallback) in .env file');
       return;
     }
 
-    // Check if Super Admin already exists
+    // Check if Admin already exists
     const existingUser = await User.findOne({ email }).select('+password');
     if (existingUser) {
-      console.log('✅ Super Admin already exists');
-      // Ensure Super Admin has a password and proper authProvider
+      console.log('✅ Admin already exists');
+      // Ensure Admin has a password and proper authProvider
       let changed = false;
       if (!existingUser.password) {
         existingUser.password = password;
@@ -43,8 +43,8 @@ const ensureSuperAdminExists = async () => {
         existingUser.authProvider = 'both';
         changed = true;
       }
-      if (existingUser.role !== 'super_admin') {
-        existingUser.role = 'super_admin';
+      if (existingUser.role !== 'admin') {
+        existingUser.role = 'admin';
         changed = true;
       }
       if (!existingUser.phone) {
@@ -53,41 +53,41 @@ const ensureSuperAdminExists = async () => {
       }
       if (changed) {
         await existingUser.save();
-        console.log('🔧 Super Admin credentials normalized (password/authProvider/role)');
+        console.log('🔧 Admin credentials normalized (password/authProvider/role)');
       }
       return;
     }
 
-    console.log('🔧 Creating Super Admin...');
+    console.log('🔧 Creating Admin...');
 
-    // Create Super Admin user
-    const superAdmin = new User({
+    // Create Admin user
+    const adminUser = new User({
       name,
       email,
       password,
       phone: '000-000-0000',
       authProvider: 'both',  // Can use both manual password AND Google login
-      role: 'super_admin'
+      role: 'admin'
     });
 
-    await superAdmin.save();
-    console.log('✅ Super Admin user created');
+    await adminUser.save();
+    console.log('✅ Admin user created');
 
-    // Create Super Admin user details
-    const superAdminDetails = new UserDetails({
-      userId: superAdmin._id
+    // Create Admin user details
+    const adminDetails = new UserDetails({
+      userId: adminUser._id
     });
 
-    await superAdminDetails.save();
-    console.log('✅ Super Admin user details created');
+    await adminDetails.save();
+    console.log('✅ Admin user details created');
 
-    console.log('🎉 Super Admin created successfully!');
+    console.log('🎉 Admin created successfully!');
     console.log('Email:', email);
     console.log('Password:', password);
-    console.log('Role: super_admin');
+    console.log('Role: admin');
 
   } catch (error) {
-    console.error('❌ Error creating Super Admin:', error);
+    console.error('❌ Error creating Admin:', error);
   }
 };
 

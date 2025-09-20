@@ -83,16 +83,16 @@ const authorizeModule = (moduleName) => {
       });
     }
 
-    // Super admin can access everything
-    if (req.user.role === 'super_admin') {
+    // Admin can access everything
+    if (req.user.role === 'admin') {
       return next();
     }
 
     // Check if user has access to the specific module
-    const moduleAdminRole = `${moduleName}_admin`;
+    const moduleManagerRole = `${moduleName}_manager`;
     const moduleWorkerRole = `${moduleName}_worker`;
     if (
-      req.user.role === moduleAdminRole ||
+      req.user.role === moduleManagerRole ||
       req.user.assignedModule === moduleName ||
       req.user.role === moduleWorkerRole
     ) {

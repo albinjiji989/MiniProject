@@ -49,12 +49,28 @@ export const authAPI = {
 
 // Users API
 export const usersAPI = {
+  // Basic CRUD operations
   getUsers: (params) => api.get('/users', { params }),
   getUser: (id) => api.get(`/users/${id}`),
+  createUser: (userData) => api.post('/users', userData),
   updateUser: (id, userData) => api.put(`/users/${id}`, userData),
   deleteUser: (id) => api.delete(`/users/${id}`),
   activateUser: (id) => api.put(`/users/${id}/activate`),
   getUsersByModule: (module) => api.get(`/users/module/${module}`),
+  
+  // Enhanced user management for admin dashboard
+  getPublicUsers: (params) => api.get('/users/public', { params }),
+  getUserDetails: (id) => api.get(`/users/${id}/details`),
+  toggleUserStatus: (id, status) => api.put(`/users/${id}/status`, { status }),
+  deleteUserPermanent: (id) => api.delete(`/users/${id}/permanent`),
+  getUserActivities: (id, params) => api.get(`/users/${id}/activities`, { params }),
+  getUserPets: (id) => api.get(`/users/${id}/pets`),
+  getUserStats: () => api.get('/users/stats'),
+  getStats: () => api.get('/users/stats'), // Alias for AdminDashboard compatibility
+  
+  // Bulk operations
+  bulkUpdateStatus: (userIds, status) => api.put('/users/bulk/status', { userIds, status }),
+  bulkDelete: (userIds) => api.delete('/users/bulk/delete', { data: { userIds } }),
 }
 
 // Pets API
@@ -188,3 +204,51 @@ export const veterinaryAPI = {
 export { api }
 
 export default api
+
+// Modules API
+export const modulesAPI = {
+  list: () => api.get('/modules'),
+  listAdmin: () => api.get('/modules/admin'),
+  create: (payload) => api.post('/modules', payload),
+  update: (id, payload) => api.patch(`/modules/${id}`, payload),
+  updateStatus: (id, status, message) => api.patch(`/modules/${id}/status`, { status, message }),
+  remove: (id) => api.delete(`/modules/${id}`),
+  delete: (id) => api.delete(`/modules/${id}`), // Alias for compatibility
+  reorder: (modules) => api.patch('/modules/reorder', { modules })
+}
+
+// Roles API
+export const rolesAPI = {
+  list: () => api.get('/roles'),
+  get: (id) => api.get(`/roles/${id}`),
+  create: (roleData) => api.post('/roles', roleData),
+  update: (id, roleData) => api.put(`/roles/${id}`, roleData),
+  delete: (id) => api.delete(`/roles/${id}`),
+  getPermissions: (id) => api.get(`/roles/${id}/permissions`),
+  updatePermissions: (id, permissions) => api.put(`/roles/${id}/permissions`, { permissions }),
+}
+
+// Permissions API
+export const permissionsAPI = {
+  list: () => api.get('/permissions'),
+  get: (id) => api.get(`/permissions/${id}`),
+  create: (permissionData) => api.post('/permissions', permissionData),
+  update: (id, permissionData) => api.put(`/permissions/${id}`, permissionData),
+  delete: (id) => api.delete(`/permissions/${id}`),
+}
+
+// System Logs API
+export const systemLogsAPI = {
+  list: (params) => api.get('/core/logs', { params }),
+  resolve: (id, resolution) => api.put(`/core/logs/${id}/resolve`, { resolution })
+}
+
+// Managers API (unified)
+export const managersAPI = {
+  list: () => api.get('/admin/managers'),
+  create: (payload) => api.post('/admin/managers', payload),
+  update: (id, payload) => api.put(`/admin/managers/${id}`, payload),
+  remove: (id) => api.delete(`/admin/managers/${id}`),
+  invite: (payload) => api.post('/admin/invite-module-manager', payload),
+  verify: (payload) => api.post('/admin/verify-module-manager', payload)
+}

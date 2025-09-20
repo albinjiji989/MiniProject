@@ -24,11 +24,11 @@ const Register = () => {
 
     const onSubmit = async (data) => {
 		setIsLoading(true)
-		const userData = {
+        const userData = {
 			name: `${data.firstName || ''} ${data.lastName || ''}`.trim(),
 			email: data.email,
 			password: data.password,
-			phone: data.phone
+            phone: data.phone
 		}
         const result = await signUpWithEmail(userData)
 		setIsLoading(false)
@@ -102,7 +102,7 @@ const Register = () => {
 						</Button>
 						<Divider sx={{ my: 2 }}><Typography variant="caption" color="text.secondary">Or continue with email</Typography></Divider>
 
-						<Box component="form" onSubmit={handleSubmit(onSubmit)}>
+                        <Box component="form" onSubmit={handleSubmit(onSubmit)}>
 						<Grid container spacing={2}>
 								<Grid item xs={12} sm={6}>
 								<TextField fullWidth label="First Name" margin="normal" autoComplete="given-name" InputProps={{ startAdornment: (<InputAdornment position="start"><Person color="action" /></InputAdornment>) }} {...register('firstName', { required: 'First name is required', minLength: { value: 2, message: 'First name must be at least 2 characters' } })} error={!!errors.firstName} helperText={errors.firstName?.message} />
@@ -114,7 +114,7 @@ const Register = () => {
 
 						<TextField fullWidth label="Email Address" type="email" margin="normal" autoComplete="email" InputProps={{ startAdornment: (<InputAdornment position="start"><Email color="action" /></InputAdornment>) }} {...register('email', { required: 'Email is required', pattern: { value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i, message: 'Invalid email address' } })} error={!!errors.email} helperText={errors.email?.message} />
 
-						<TextField fullWidth label="Phone Number" type="tel" margin="normal" autoComplete="tel" InputProps={{ startAdornment: (<InputAdornment position="start"><Phone color="action" /></InputAdornment>) }} {...register('phone', { required: 'Phone number is required', pattern: { value: /^[\+]?[1-9][\d]{0,15}$/, message: 'Invalid phone number' } })} error={!!errors.phone} helperText={errors.phone?.message} />
+                        <TextField fullWidth label="Phone Number" type="tel" margin="normal" autoComplete="tel" InputProps={{ startAdornment: (<InputAdornment position="start"><Phone color="action" /></InputAdornment>) }} {...register('phone', { required: 'Phone number is required', pattern: { value: /^[\+]?[1-9][\d]{0,15}$/, message: 'Invalid phone number' } })} error={!!errors.phone} helperText={errors.phone?.message} />
 
 						<Grid container spacing={2}>
 								<Grid item xs={12} sm={6}>

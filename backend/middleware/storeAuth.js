@@ -1,13 +1,13 @@
 const UserDetails = require('../models/UserDetails');
 
 /**
- * Middleware to extract store information for module admins
+ * Middleware to extract store information for module managers
  * Adds storeId, storeName, and storeLocation to req.user
  */
 const storeAuth = async (req, res, next) => {
   try {
-    // Only apply to module admins
-    if (!req.user || !req.user.role || !req.user.role.includes('_admin')) {
+    // Only apply to module managers
+    if (!req.user || !req.user.role || !req.user.role.includes('_manager')) {
       return next();
     }
 

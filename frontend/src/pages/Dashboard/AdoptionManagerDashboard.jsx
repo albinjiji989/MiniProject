@@ -42,14 +42,22 @@ import {
   Fab,
   Badge,
   LinearProgress,
-  Rating
+  Rating,
+  
 } from '@mui/material'
-import MapIcon from '@mui/icons-material/Map'
+import {
+  Timeline,
+  TimelineItem,
+  TimelineSeparator,
+  TimelineConnector,
+  TimelineContent,
+  TimelineDot
+} from '@mui/lab'
 import {
   Dashboard as DashboardIcon,
   AccountCircle as ProfileIcon,
   Logout as LogoutIcon,
-  LocalShipping as RescueIcon,
+  Assignment as AdoptionIcon,
   Pets as PetIcon,
   People as PeopleIcon,
   CheckCircle as CheckIcon,
@@ -75,30 +83,27 @@ import {
   Star as StarIcon,
   Home as HomeIcon,
   Work as WorkIcon,
-  School as EducationIcon,
-  LocalHospital as MedicalIcon,
-  Speed as SpeedIcon,
-  PriorityHigh as PriorityIcon
+  School as EducationIcon
 } from '@mui/icons-material'
 import { useAuth } from '../../contexts/AuthContext'
-import { rescueAPI } from '../../services/api'
+import { adoptionAPI } from '../../services/api'
 import { useNavigate } from 'react-router-dom'
 
-const RescueAdminDashboard = () => {
+const AdoptionManagerDashboard = () => {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [anchorEl, setAnchorEl] = useState(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState(0)
   const [stats, setStats] = useState({
-    totalRescues: 0,
-    activeRescues: 0,
-    completedRescues: 0,
-    emergencyRescues: 0
+    totalApplications: 0,
+    pendingApplications: 0,
+    approvedApplications: 0,
+    completedAdoptions: 0
   })
-  const [rescues, setRescues] = useState([])
-  const [rescuers, setRescuers] = useState([])
-  const [emergencyContacts, setEmergencyContacts] = useState([])
+  const [applications, setApplications] = useState([])
+  const [pets, setPets] = useState([])
+  const [adopters, setAdopters] = useState([])
   const [openDialog, setOpenDialog] = useState(false)
   const [dialogType, setDialogType] = useState('')
   const [selectedItem, setSelectedItem] = useState(null)
@@ -140,17 +145,15 @@ const RescueAdminDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
-      const rescuesRes = await rescueAPI.getRescues()
-      const rescues = rescuesRes.data.data?.rescues || rescuesRes.data.data || []
-      setRescues(rescues)
-      setRescuers([])
-      setEmergencyContacts([])
-      setStats({
-        totalRescues: rescues.length,
-        activeRescues: rescues.filter(r => r.status === 'in_progress').length,
-        completedRescues: rescues.filter(r => r.status === 'completed').length,
-        emergencyRescues: rescues.filter(r => r.priority === 'high').length
-      })
+      const [statsRes, appsRes] = await Promise.all([
+        adoptionAPI.getStats(),
+        adoptionAPI.getAdoptions()
+      ])
+      setStats(statsRes.data.data)
+      const applications = appsRes.data.data?.adoptions || appsRes.data.data || []
+      setApplications(applications)
+      setPets([])
+      setAdopters([])
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
     } finally {
@@ -161,14 +164,12 @@ const RescueAdminDashboard = () => {
   const getStatusColor = (status) => {
     const colors = {
       'pending': 'warning',
-      'in_progress': 'info',
-      'completed': 'success',
-      'cancelled': 'error',
-      'active': 'success',
-      'inactive': 'error',
-      'high': 'error',
-      'medium': 'warning',
-      'low': 'success'
+      'approved': 'success',
+      'rejected': 'error',
+      'completed': 'info',
+      'available_for_adoption': 'success',
+      'adopted': 'info',
+      'not_available': 'error'
     }
     return colors[status] || 'default'
   }
@@ -176,14 +177,12 @@ const RescueAdminDashboard = () => {
   const getStatusIcon = (status) => {
     const icons = {
       'pending': <WarningIcon />,
-      'in_progress': <SpeedIcon />,
+      'approved': <CheckIcon />,
+      'rejected': <ErrorIcon />,
       'completed': <CheckIcon />,
-      'cancelled': <ErrorIcon />,
-      'active': <CheckIcon />,
-      'inactive': <ErrorIcon />,
-      'high': <PriorityIcon />,
-      'medium': <WarningIcon />,
-      'low': <InfoIcon />
+      'available_for_adoption': <CheckIcon />,
+      'adopted': <HomeIcon />,
+      'not_available': <ErrorIcon />
     }
     return icons[status] || <InfoIcon />
   }
@@ -192,8 +191,8 @@ const RescueAdminDashboard = () => {
     <div
       role="tabpanel"
       hidden={value !== index}
-      id={`rescue-tabpanel-${index}`}
-      aria-labelledby={`rescue-tab-${index}`}
+      id={`adoption-tabpanel-${index}`}
+      aria-labelledby={`adoption-tab-${index}`}
       {...other}
     >
       {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
@@ -205,12 +204,12 @@ const RescueAdminDashboard = () => {
       {/* App Bar */}
       <AppBar position="static" elevation={0} sx={{ bgcolor: 'white', color: 'text.primary', borderBottom: 1, borderColor: 'divider' }}>
         <Toolbar>
-          <RescueIcon sx={{ mr: 2, color: 'primary.main' }} />
+          <AdoptionIcon sx={{ mr: 2, color: 'primary.main' }} />
           <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 600, color: 'primary.main' }}>
-            Rescue Operations Management
+            Adoption Management
           </Typography>
           <IconButton color="inherit" sx={{ mr: 2 }}>
-            <Badge badgeContent={2} color="error">
+            <Badge badgeContent={4} color="error">
               <NotificationIcon />
             </Badge>
           </IconButton>
@@ -250,23 +249,23 @@ const RescueAdminDashboard = () => {
         <Grid container spacing={3} sx={{ mb: 4 }}>
           <Grid item xs={12} sm={6} md={3}>
             <Card sx={{ p: 2, textAlign: 'center' }}>
-              <RescueIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
+              <TaskIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
               <Typography variant="h4" sx={{ fontWeight: 600, color: 'primary.main' }}>
-                {stats.totalRescues}
+                {stats.totalApplications}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Total Rescues
+                Total Applications
               </Typography>
             </Card>
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
             <Card sx={{ p: 2, textAlign: 'center' }}>
-              <SpeedIcon sx={{ fontSize: 40, color: 'warning.main', mb: 1 }} />
+              <WarningIcon sx={{ fontSize: 40, color: 'warning.main', mb: 1 }} />
               <Typography variant="h4" sx={{ fontWeight: 600, color: 'warning.main' }}>
-                {stats.activeRescues}
+                {stats.pendingApplications}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Active Rescues
+                Pending Applications
               </Typography>
             </Card>
           </Grid>
@@ -274,21 +273,21 @@ const RescueAdminDashboard = () => {
             <Card sx={{ p: 2, textAlign: 'center' }}>
               <CheckIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
               <Typography variant="h4" sx={{ fontWeight: 600, color: 'success.main' }}>
-                {stats.completedRescues}
+                {stats.approvedApplications}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Completed Rescues
+                Approved Applications
               </Typography>
             </Card>
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
             <Card sx={{ p: 2, textAlign: 'center' }}>
-              <WarningIcon sx={{ fontSize: 40, color: 'error.main', mb: 1 }} />
-              <Typography variant="h4" sx={{ fontWeight: 600, color: 'error.main' }}>
-                {stats.emergencyRescues}
+              <HomeIcon sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
+              <Typography variant="h4" sx={{ fontWeight: 600, color: 'info.main' }}>
+                {stats.completedAdoptions}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Emergency Cases
+                Completed Adoptions
               </Typography>
             </Card>
           </Grid>
@@ -296,19 +295,19 @@ const RescueAdminDashboard = () => {
 
         {/* Tabs */}
         <Paper sx={{ mb: 3 }}>
-          <Tabs value={activeTab} onChange={handleTabChange} aria-label="rescue management tabs">
-            <Tab label="Rescue Operations" icon={<RescueIcon />} />
-            <Tab label="Rescuers" icon={<PeopleIcon />} />
-            <Tab label="Emergency Contacts" icon={<PhoneIcon />} />
-            <Tab label="Operations Map" icon={<MapIcon />} />
+          <Tabs value={activeTab} onChange={handleTabChange} aria-label="adoption management tabs">
+            <Tab label="Applications" icon={<TaskIcon />} />
+            <Tab label="Available Pets" icon={<PetIcon />} />
+            <Tab label="Adopters" icon={<PeopleIcon />} />
+            <Tab label="Process Timeline" icon={<ScheduleIcon />} />
           </Tabs>
         </Paper>
 
-        {/* Rescue Operations Tab */}
+        {/* Applications Tab */}
         <TabPanel value={activeTab} index={0}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h5" sx={{ fontWeight: 600 }}>
-              Rescue Operations
+              Adoption Applications
             </Typography>
             <Box>
               <Button
@@ -326,11 +325,10 @@ const RescueAdminDashboard = () => {
                 Filter
               </Button>
               <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => handleOpenDialog('addRescue')}
+                variant="outlined"
+                startIcon={<DownloadIcon />}
               >
-                New Rescue
+                Export
               </Button>
             </Box>
           </Box>
@@ -340,69 +338,68 @@ const RescueAdminDashboard = () => {
               <TableHead>
                 <TableRow>
                   <TableCell>Pet</TableCell>
-                  <TableCell>Location</TableCell>
-                  <TableCell>Priority</TableCell>
+                  <TableCell>Adopter</TableCell>
+                  <TableCell>Application Date</TableCell>
                   <TableCell>Status</TableCell>
-                  <TableCell>Rescuer</TableCell>
-                  <TableCell>Report Date</TableCell>
+                  <TableCell>Home Visit</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {rescues.map((rescue) => (
-                  <TableRow key={rescue.id}>
+                {applications.map((application) => (
+                  <TableRow key={application.id}>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <PetIcon sx={{ mr: 1, color: 'primary.main' }} />
                         <Box>
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {rescue.petName}
+                            {application.petName}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {rescue.petSpecies}
+                            {application.petSpecies}
                           </Typography>
                         </Box>
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <LocationIcon sx={{ mr: 1, fontSize: 16 }} />
-                        <Typography variant="body2">
-                          {rescue.location}
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {application.adopterName}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {application.adopterEmail}
                         </Typography>
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        label={rescue.priority}
-                        color={getStatusColor(rescue.priority)}
-                        size="small"
-                        icon={getStatusIcon(rescue.priority)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={rescue.status}
-                        color={getStatusColor(rescue.status)}
-                        size="small"
-                        icon={getStatusIcon(rescue.status)}
-                      />
-                    </TableCell>
-                    <TableCell>{rescue.rescuerName}</TableCell>
-                    <TableCell>
                       <Typography variant="body2">
-                        {new Date(rescue.reportDate).toLocaleDateString()}
+                        {new Date(application.applicationDate).toLocaleDateString()}
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <IconButton size="small" onClick={() => handleOpenDialog('viewRescue', rescue)}>
+                      <Chip
+                        label={application.status}
+                        color={getStatusColor(application.status)}
+                        size="small"
+                        icon={getStatusIcon(application.status)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={application.homeVisitScheduled ? 'Scheduled' : 'Pending'}
+                        color={application.homeVisitScheduled ? 'success' : 'warning'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <IconButton size="small" onClick={() => handleOpenDialog('viewApplication', application)}>
                         <ViewIcon />
                       </IconButton>
-                      <IconButton size="small" onClick={() => handleOpenDialog('updateRescue', rescue)}>
+                      <IconButton size="small" onClick={() => handleOpenDialog('reviewApplication', application)}>
                         <EditIcon />
                       </IconButton>
-                      <IconButton size="small" onClick={() => handleOpenDialog('assignRescuer', rescue)}>
-                        <PeopleIcon />
+                      <IconButton size="small" onClick={() => handleOpenDialog('scheduleHomeVisit', application)}>
+                        <ScheduleIcon />
                       </IconButton>
                     </TableCell>
                   </TableRow>
@@ -412,73 +409,52 @@ const RescueAdminDashboard = () => {
           </TableContainer>
         </TabPanel>
 
-        {/* Rescuers Tab */}
+        {/* Available Pets Tab */}
         <TabPanel value={activeTab} index={1}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h5" sx={{ fontWeight: 600 }}>
-              Rescue Team
+              Available Pets for Adoption
             </Typography>
             <Button
               variant="contained"
               startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog('addRescuer')}
+              onClick={() => handleOpenDialog('addPet')}
             >
-              Add Rescuer
+              Add Pet
             </Button>
           </Box>
 
           <Grid container spacing={3}>
-            {rescuers.map((rescuer) => (
-              <Grid item xs={12} sm={6} md={4} key={rescuer.id}>
+            {pets.map((pet) => (
+              <Grid item xs={12} sm={6} md={4} key={pet.id}>
                 <Card sx={{ height: '100%' }}>
                   <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <Avatar sx={{ bgcolor: 'primary.main', mr: 2 }}>
-                        {rescuer.name.charAt(0)}
-                      </Avatar>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          {rescuer.name}
-                        </Typography>
-                        <Chip
-                          label={rescuer.status}
-                          color={getStatusColor(rescuer.status)}
-                          size="small"
-                        />
-                      </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        {pet.name}
+                      </Typography>
+                      <Chip
+                        label={pet.status}
+                        color={getStatusColor(pet.status)}
+                        size="small"
+                        icon={getStatusIcon(pet.status)}
+                      />
                     </Box>
                     
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <PhoneIcon sx={{ fontSize: 16, mr: 1 }} />
-                        {rescuer.phone}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <EmailIcon sx={{ fontSize: 16, mr: 1 }} />
-                        {rescuer.email}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Rescues Completed: {rescuer.rescuesCompleted}
-                      </Typography>
-                    </Box>
-
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-                        Specializations:
-                      </Typography>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                        {rescuer.specializations.map((spec, index) => (
-                          <Chip key={index} label={spec} size="small" variant="outlined" />
-                        ))}
-                      </Box>
-                    </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      {pet.breed} • {pet.age} years old
+                    </Typography>
+                    
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Adoption Fee: ${pet.adoptionFee}
+                    </Typography>
 
                     <Box sx={{ display: 'flex', gap: 1 }}>
                       <Button
                         size="small"
                         variant="outlined"
                         startIcon={<ViewIcon />}
-                        onClick={() => handleOpenDialog('viewRescuer', rescuer)}
+                        onClick={() => handleOpenDialog('viewPet', pet)}
                       >
                         View
                       </Button>
@@ -486,7 +462,7 @@ const RescueAdminDashboard = () => {
                         size="small"
                         variant="outlined"
                         startIcon={<EditIcon />}
-                        onClick={() => handleOpenDialog('editRescuer', rescuer)}
+                        onClick={() => handleOpenDialog('editPet', pet)}
                       >
                         Edit
                       </Button>
@@ -498,18 +474,17 @@ const RescueAdminDashboard = () => {
           </Grid>
         </TabPanel>
 
-        {/* Emergency Contacts Tab */}
+        {/* Adopters Tab */}
         <TabPanel value={activeTab} index={2}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h5" sx={{ fontWeight: 600 }}>
-              Emergency Contacts
+              Adopter Profiles
             </Typography>
             <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog('addContact')}
+              variant="outlined"
+              startIcon={<DownloadIcon />}
             >
-              Add Contact
+              Export Report
             </Button>
           </Box>
 
@@ -517,53 +492,50 @@ const RescueAdminDashboard = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Type</TableCell>
-                  <TableCell>Phone</TableCell>
-                  <TableCell>Location</TableCell>
+                  <TableCell>Adopter</TableCell>
+                  <TableCell>Contact</TableCell>
+                  <TableCell>Applications</TableCell>
+                  <TableCell>Adoptions</TableCell>
+                  <TableCell>Status</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {emergencyContacts.map((contact) => (
-                  <TableRow key={contact.id}>
+                {adopters.map((adopter) => (
+                  <TableRow key={adopter.id}>
                     <TableCell>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {contact.name}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Avatar sx={{ bgcolor: 'primary.main', mr: 2, width: 32, height: 32 }}>
+                          {adopter.name.charAt(0)}
+                        </Avatar>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {adopter.name}
+                        </Typography>
+                      </Box>
                     </TableCell>
                     <TableCell>
+                      <Box>
+                        <Typography variant="body2">{adopter.email}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {adopter.phone}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>{adopter.applications}</TableCell>
+                    <TableCell>{adopter.adoptions}</TableCell>
+                    <TableCell>
                       <Chip
-                        label={contact.type}
-                        color={contact.type === 'veterinary' ? 'success' : 'primary'}
+                        label={adopter.status}
+                        color={getStatusColor(adopter.status)}
                         size="small"
                       />
                     </TableCell>
                     <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <PhoneIcon sx={{ mr: 1, fontSize: 16 }} />
-                        <Typography variant="body2">
-                          {contact.phone}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <LocationIcon sx={{ mr: 1, fontSize: 16 }} />
-                        <Typography variant="body2">
-                          {contact.location}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <IconButton size="small" onClick={() => handleOpenDialog('callContact', contact)}>
-                        <PhoneIcon />
+                      <IconButton size="small" onClick={() => handleOpenDialog('viewAdopter', adopter)}>
+                        <ViewIcon />
                       </IconButton>
-                      <IconButton size="small" onClick={() => handleOpenDialog('editContact', contact)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton size="small" onClick={() => handleOpenDialog('deleteContact', contact)}>
-                        <DeleteIcon />
+                      <IconButton size="small" onClick={() => handleOpenDialog('contactAdopter', adopter)}>
+                        <EmailIcon />
                       </IconButton>
                     </TableCell>
                   </TableRow>
@@ -573,21 +545,72 @@ const RescueAdminDashboard = () => {
           </TableContainer>
         </TabPanel>
 
-        {/* Operations Map Tab */}
+        {/* Process Timeline Tab */}
         <TabPanel value={activeTab} index={3}>
           <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
-            Rescue Operations Map
+            Adoption Process Timeline
           </Typography>
           
-          <Paper sx={{ p: 4, textAlign: 'center', minHeight: 400 }}>
-            <MapIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              Interactive Map
-            </Typography>
-            <Typography color="text.secondary">
-              Rescue operations map will be implemented here with real-time tracking
-            </Typography>
-          </Paper>
+          <Timeline>
+            <TimelineItem>
+              <TimelineSeparator>
+                <TimelineDot color="primary">
+                  <TaskIcon />
+                </TimelineDot>
+                <TimelineConnector />
+              </TimelineSeparator>
+              <TimelineContent>
+                <Typography variant="h6" component="span">
+                  Application Submitted
+                </Typography>
+                <Typography>Adopter submits adoption application</Typography>
+              </TimelineContent>
+            </TimelineItem>
+            
+            <TimelineItem>
+              <TimelineSeparator>
+                <TimelineDot color="warning">
+                  <SearchIcon />
+                </TimelineDot>
+                <TimelineConnector />
+              </TimelineSeparator>
+              <TimelineContent>
+                <Typography variant="h6" component="span">
+                  Application Review
+                </Typography>
+                <Typography>Staff reviews application and references</Typography>
+              </TimelineContent>
+            </TimelineItem>
+            
+            <TimelineItem>
+              <TimelineSeparator>
+                <TimelineDot color="info">
+                  <HomeIcon />
+                </TimelineDot>
+                <TimelineConnector />
+              </TimelineSeparator>
+              <TimelineContent>
+                <Typography variant="h6" component="span">
+                  Home Visit
+                </Typography>
+                <Typography>Schedule and conduct home visit</Typography>
+              </TimelineContent>
+            </TimelineItem>
+            
+            <TimelineItem>
+              <TimelineSeparator>
+                <TimelineDot color="success">
+                  <CheckIcon />
+                </TimelineDot>
+              </TimelineSeparator>
+              <TimelineContent>
+                <Typography variant="h6" component="span">
+                  Adoption Approved
+                </Typography>
+                <Typography>Final approval and adoption completion</Typography>
+              </TimelineContent>
+            </TimelineItem>
+          </Timeline>
         </TabPanel>
 
         {/* Floating Action Button */}
@@ -604,37 +627,33 @@ const RescueAdminDashboard = () => {
       {/* Dialog for various actions */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {dialogType === 'addRescue' && 'New Rescue Operation'}
-          {dialogType === 'viewRescue' && 'Rescue Details'}
-          {dialogType === 'updateRescue' && 'Update Rescue'}
-          {dialogType === 'assignRescuer' && 'Assign Rescuer'}
-          {dialogType === 'addRescuer' && 'Add New Rescuer'}
-          {dialogType === 'viewRescuer' && 'Rescuer Profile'}
-          {dialogType === 'editRescuer' && 'Edit Rescuer'}
-          {dialogType === 'addContact' && 'Add Emergency Contact'}
-          {dialogType === 'callContact' && 'Call Contact'}
-          {dialogType === 'editContact' && 'Edit Contact'}
+          {dialogType === 'viewApplication' && 'Application Details'}
+          {dialogType === 'reviewApplication' && 'Review Application'}
+          {dialogType === 'scheduleHomeVisit' && 'Schedule Home Visit'}
+          {dialogType === 'addPet' && 'Add New Pet'}
+          {dialogType === 'viewPet' && 'Pet Details'}
+          {dialogType === 'editPet' && 'Edit Pet'}
+          {dialogType === 'viewAdopter' && 'Adopter Profile'}
+          {dialogType === 'contactAdopter' && 'Contact Adopter'}
           {dialogType === 'quickAdd' && 'Quick Add'}
         </DialogTitle>
         <DialogContent>
           <Typography>
-            {dialogType === 'addRescue' && 'Rescue operation form will be implemented here.'}
-            {dialogType === 'viewRescue' && 'Rescue details will be displayed here.'}
-            {dialogType === 'updateRescue' && 'Rescue update form will be implemented here.'}
-            {dialogType === 'assignRescuer' && 'Rescuer assignment form will be implemented here.'}
-            {dialogType === 'addRescuer' && 'Rescuer creation form will be implemented here.'}
-            {dialogType === 'viewRescuer' && 'Rescuer profile will be displayed here.'}
-            {dialogType === 'editRescuer' && 'Rescuer edit form will be implemented here.'}
-            {dialogType === 'addContact' && 'Emergency contact form will be implemented here.'}
-            {dialogType === 'callContact' && 'Calling contact...'}
-            {dialogType === 'editContact' && 'Contact edit form will be implemented here.'}
+            {dialogType === 'viewApplication' && 'Application details will be displayed here.'}
+            {dialogType === 'reviewApplication' && 'Application review form will be implemented here.'}
+            {dialogType === 'scheduleHomeVisit' && 'Home visit scheduling form will be implemented here.'}
+            {dialogType === 'addPet' && 'Pet creation form will be implemented here.'}
+            {dialogType === 'viewPet' && 'Pet details will be displayed here.'}
+            {dialogType === 'editPet' && 'Pet edit form will be implemented here.'}
+            {dialogType === 'viewAdopter' && 'Adopter profile will be displayed here.'}
+            {dialogType === 'contactAdopter' && 'Contact form will be implemented here.'}
             {dialogType === 'quickAdd' && 'Quick add options will be implemented here.'}
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
           <Button variant="contained" onClick={handleCloseDialog}>
-            {dialogType.includes('add') ? 'Add' : dialogType.includes('update') ? 'Update' : 'Save'}
+            {dialogType.includes('add') ? 'Add' : dialogType.includes('review') ? 'Review' : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -642,4 +661,6 @@ const RescueAdminDashboard = () => {
   )
 }
 
-export default RescueAdminDashboard
+export default AdoptionManagerDashboard
+
+

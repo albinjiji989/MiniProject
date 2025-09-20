@@ -47,6 +47,7 @@ import {
   Add as AddIcon
 } from '@mui/icons-material'
 import { useAuth } from '../../contexts/AuthContext'
+import { modulesAPI } from '../../services/api'
 import { useNavigate } from 'react-router-dom'
 
 const PublicUserDashboard = () => {
@@ -55,6 +56,9 @@ const PublicUserDashboard = () => {
   const [anchorEl, setAnchorEl] = useState(null)
   const [loading, setLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [modules, setModules] = useState([])
+  const [modulesLoading, setModulesLoading] = useState(false)
+  const [modulesError, setModulesError] = useState('')
 
   const drawerWidth = 240
 
@@ -76,7 +80,64 @@ const PublicUserDashboard = () => {
     setSidebarOpen(!sidebarOpen)
   }
 
-  const moduleCards = [
+  useEffect(() => {
+    (async () => {
+      setModulesLoading(true)
+      setModulesError('')
+      try {
+        const res = await modulesAPI.list()
+        const list = (res.data?.data || [])
+        setModules(list)
+      } catch (e) {
+        setModules([])
+        setModulesError(e?.response?.data?.message || 'Failed to load modules')
+      } finally {
+        setModulesLoading(false)
+      }
+    })()
+  }, [])
+
+  const getModuleIcon = (iconName) => {
+    const iconMap = {
+      'Pets': <AdoptionIcon sx={{ fontSize: 40 }} />,
+      'LocalHospital': <VeterinaryIcon sx={{ fontSize: 40 }} />,
+      'ShoppingCart': <ShopIcon sx={{ fontSize: 40 }} />,
+      'LocalPharmacy': <PharmacyIcon sx={{ fontSize: 40 }} />,
+      'Home': <HomeIcon sx={{ fontSize: 40 }} />,
+      'Business': <CareIcon sx={{ fontSize: 40 }} />,
+      'Build': <RescueIcon sx={{ fontSize: 40 }} />,
+      'Settings': <CareIcon sx={{ fontSize: 40 }} />
+    }
+    return iconMap[iconName] || <CareIcon sx={{ fontSize: 40 }} />
+  }
+
+  const getModuleColor = (color) => {
+    const colorMap = {
+      '#4CAF50': 'success',
+      '#2196F3': 'info', 
+      '#FF9800': 'warning',
+      '#9C27B0': 'secondary',
+      '#F44336': 'error',
+      '#607D8B': 'primary',
+      '#795548': 'info'
+    }
+    return colorMap[color] || 'primary'
+  }
+
+  const getModulePath = (key) => {
+    const pathMap = {
+      'adoption': '/adoption',
+      'veterinary': '/veterinary',
+      'rescue': '/rescue',
+      'shelter': '/shelter',
+      'pharmacy': '/pharmacy',
+      'ecommerce': '/ecommerce',
+      'temporary-care': '/temporary-care'
+    }
+    return pathMap[key] || '/'
+  }
+
+  const staticCards = [
     {
       title: 'Pet Management',
       description: 'Manage your pets, view medical records, and track their history',
@@ -85,64 +146,6 @@ const PublicUserDashboard = () => {
       path: '/pets',
       features: ['Add/Edit Pets', 'Medical Records', 'Vaccination History', 'Ownership History']
     },
-    {
-      title: 'Adoption Center',
-      description: 'Browse and apply for pet adoptions',
-      icon: <AdoptionIcon sx={{ fontSize: 40, color: 'success.main' }} />,
-      color: 'success',
-      path: '/adoption',
-      features: ['Browse Pets', 'Apply for Adoption', 'Track Applications', 'Adoption History']
-    },
-    {
-      title: 'Shelter Services',
-      description: 'Access shelter services and view available animals',
-      icon: <HomeIcon sx={{ fontSize: 40, color: 'info.main' }} />,
-      color: 'info',
-      path: '/shelter',
-      features: ['View Shelters', 'Available Animals', 'Shelter Services', 'Contact Shelters']
-    },
-    {
-      title: 'Rescue Operations',
-      description: 'Report and track rescue operations',
-      icon: <RescueIcon sx={{ fontSize: 40, color: 'warning.main' }} />,
-      color: 'warning',
-      path: '/rescue',
-      features: ['Report Rescue', 'Track Operations', 'Emergency Contacts', 'Rescue History']
-    },
-    {
-      title: 'E-commerce',
-      description: 'Shop for pet supplies and accessories',
-      icon: <ShopIcon sx={{ fontSize: 40, color: 'secondary.main' }} />,
-      color: 'secondary',
-      path: '/ecommerce',
-      features: ['Browse Products', 'Shopping Cart', 'Order History', 'Product Reviews']
-    },
-    
-    {
-      title: 'Temporary Care',
-      description: 'Find temporary care for your pets',
-      icon: <CareIcon sx={{ fontSize: 40, color: 'info.main' }} />,
-      color: 'info',
-      path: '/temporary-care',
-      features: ['Request Care', 'Find Caregivers', 'Track Care', 'Care History']
-    },
-    {
-      title: 'Pharmacy',
-      description: 'Order medications and manage prescriptions',
-      icon: <PharmacyIcon sx={{ fontSize: 40, color: 'success.main' }} />,
-      color: 'success',
-      path: '/pharmacy',
-      features: ['Browse Medications', 'Order Prescriptions', 'Track Orders', 'Medication History']
-    },
-    
-    {
-      title: 'Veterinary',
-      description: 'Schedule appointments and manage medical records',
-      icon: <VeterinaryIcon sx={{ fontSize: 40, color: 'error.main' }} />,
-      color: 'error',
-      path: '/veterinary',
-      features: ['Find Clinics', 'Book Appointments', 'Medical Records', 'Appointment History']
-    }
   ]
 
   const quickActions = [
@@ -291,8 +294,53 @@ const PublicUserDashboard = () => {
         <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
           Available Services
         </Typography>
+        {modulesError && (
+          <Box sx={{ mb: 2 }}>
+            <Alert severity="error">{modulesError}</Alert>
+          </Box>
+        )}
         <Grid container spacing={3}>
-          {moduleCards.map((module, index) => (
+          {[...staticCards,
+            ...modules.map(m => {
+              const path = getModulePath(m.key)
+              const isActive = m.status === 'active' && m.hasManagerDashboard
+              const isBlocked = m.status === 'blocked'
+              const isMaintenance = m.status === 'maintenance'
+              const isComingSoon = m.status === 'coming_soon' || !m.hasManagerDashboard
+              
+              let statusMessage = ''
+              let statusColor = 'default'
+              
+              if (isBlocked) {
+                statusMessage = m.blockReason || 'Service is currently blocked'
+                statusColor = 'error'
+              } else if (isMaintenance) {
+                statusMessage = m.maintenanceMessage || 'Service is under maintenance'
+                statusColor = 'warning'
+              } else if (isComingSoon) {
+                statusMessage = 'Coming soon'
+                statusColor = 'info'
+              } else if (isActive) {
+                statusMessage = 'Active'
+                statusColor = 'success'
+              }
+              
+              return {
+                title: m.name,
+                description: m.description || statusMessage,
+                icon: getModuleIcon(m.icon),
+                color: getModuleColor(m.color),
+                path: isActive ? path : '#',
+                isActive,
+                isBlocked,
+                isMaintenance,
+                isComingSoon,
+                statusMessage,
+                statusColor,
+                features: []
+              }
+            })
+          ].map((module, index) => (
             <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
               <Card 
                 sx={{ 
@@ -318,6 +366,28 @@ const PublicUserDashboard = () => {
                     {module.description}
                   </Typography>
 
+                  {/* Status Display */}
+                  <Box sx={{ mb: 2 }}>
+                    {module.statusMessage && (
+                      <Chip 
+                        label={module.statusMessage?.toUpperCase()} 
+                        size="small" 
+                        color={module.statusColor}
+                        sx={{ mb: 1 }}
+                      />
+                    )}
+                    {module.isBlocked && module.statusMessage && (
+                      <Alert severity="error" sx={{ mt: 1 }}>
+                        {module.statusMessage}
+                      </Alert>
+                    )}
+                    {module.isMaintenance && module.statusMessage && (
+                      <Alert severity="warning" sx={{ mt: 1 }}>
+                        {module.statusMessage}
+                      </Alert>
+                    )}
+                  </Box>
+
                   <List dense sx={{ mb: 2 }}>
                     {module.features.map((feature, featureIndex) => (
                       <ListItem key={featureIndex} sx={{ py: 0.5, px: 0 }}>
@@ -336,10 +406,14 @@ const PublicUserDashboard = () => {
                     variant="contained"
                     color={module.color}
                     fullWidth
-                    onClick={() => navigate(module.path)}
+                    onClick={() => module.isActive ? navigate(module.path) : null}
+                    disabled={!module.isActive}
                     sx={{ mt: 'auto' }}
                   >
-                    Access {module.title}
+                    {module.isActive ? `Access ${module.title}` : 
+                     module.isBlocked ? 'Service Blocked' :
+                     module.isMaintenance ? 'Under Maintenance' :
+                     'Coming Soon'}
                   </Button>
                 </CardContent>
               </Card>

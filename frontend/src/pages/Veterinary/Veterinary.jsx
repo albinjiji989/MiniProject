@@ -35,7 +35,7 @@ import {
   Pets as PetsIcon,
 } from '@mui/icons-material'
 import { useAuth } from '../../contexts/AuthContext'
-import { petsAPI } from '../../services/api'
+import { petsAPI, veterinaryAPI } from '../../services/api'
 
 const Veterinary = () => {
   const { user, logout } = useAuth()
@@ -82,72 +82,55 @@ const Veterinary = () => {
     navigate('/dashboard')
   }
 
-  // Sample veterinary data
-  const clinics = [
-    {
-      id: 1,
-      name: 'PetCare Veterinary Clinic',
-      location: '123 Main Street, City',
-      phone: '(555) 123-4567',
-      rating: 4.8,
-      reviews: 156,
-      specialties: ['General Care', 'Surgery', 'Emergency'],
-      image: 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400'
-    },
-    {
-      id: 2,
-      name: 'Animal Health Center',
-      location: '456 Oak Avenue, City',
-      phone: '(555) 987-6543',
-      rating: 4.6,
-      reviews: 89,
-      specialties: ['Dental Care', 'Dermatology', 'Cardiology'],
-      image: 'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?w=400'
-    },
-    {
-      id: 3,
-      name: 'Emergency Pet Hospital',
-      location: '789 Pine Road, City',
-      phone: '(555) 456-7890',
-      rating: 4.9,
-      reviews: 234,
-      specialties: ['Emergency Care', 'Critical Care', 'Surgery'],
-      image: 'https://images.unsplash.com/photo-1574158622682-e40e69881006?w=400'
-    }
-  ]
+  const [clinics, setClinics] = React.useState([])
+  const [appointments, setAppointments] = React.useState([])
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState('')
 
-  const appointments = [
-    {
-      id: 1,
-      petName: 'Buddy',
-      petType: 'Dog',
-      clinic: 'PetCare Veterinary Clinic',
-      date: '2024-01-15',
-      time: '10:00 AM',
-      type: 'Checkup',
-      status: 'Scheduled'
-    },
-    {
-      id: 2,
-      petName: 'Luna',
-      petType: 'Cat',
-      clinic: 'Animal Health Center',
-      date: '2024-01-16',
-      time: '2:30 PM',
-      type: 'Vaccination',
-      status: 'Confirmed'
-    },
-    {
-      id: 3,
-      petName: 'Max',
-      petType: 'Dog',
-      clinic: 'Emergency Pet Hospital',
-      date: '2024-01-14',
-      time: '9:00 AM',
-      type: 'Emergency',
-      status: 'Completed'
+  React.useEffect(() => {
+    const loadVetData = async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const [clinicsRes, apptRes] = await Promise.all([
+          veterinaryAPI.getClinics().catch(() => ({ data: { data: { clinics: [] } } })),
+          veterinaryAPI.getAppointments().catch(() => ({ data: { data: { appointments: [] } } })),
+        ])
+        const rawClinics = clinicsRes.data?.data?.clinics || clinicsRes.data?.clinics || []
+        const normalizedClinics = rawClinics.map((c) => ({
+          id: c._id || c.id,
+          name: c.name || 'Clinic',
+          location: c.location || c.address || '-',
+          phone: c.phone || '-',
+          rating: c.rating || 0,
+          reviews: c.reviews || 0,
+          specialties: c.specialties || [],
+          image: c.image || 'https://via.placeholder.com/120?text=Clinic',
+        }))
+        setClinics(normalizedClinics)
+
+        const rawAppts = apptRes.data?.data?.appointments || apptRes.data?.appointments || []
+        const normalizedAppts = rawAppts.map((a) => ({
+          id: a._id || a.id,
+          petName: a.petName || (a.pet && a.pet.name) || 'Pet',
+          petType: a.petType || (a.pet && a.pet.species) || '-',
+          clinic: (a.clinic && a.clinic.name) || a.clinicName || '-',
+          date: a.date || '-',
+          time: a.time || '-',
+          type: a.type || 'Checkup',
+          status: a.status || 'Scheduled',
+        }))
+        setAppointments(normalizedAppts)
+      } catch (e) {
+        setError('Failed to load veterinary data')
+        setClinics([])
+        setAppointments([])
+      } finally {
+        setLoading(false)
+      }
     }
-  ]
+    loadVetData()
+  }, [])
 
   const Navbar = () => (
     <AppBar 

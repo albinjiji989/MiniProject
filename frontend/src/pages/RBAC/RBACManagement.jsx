@@ -249,13 +249,13 @@ const RBACManagement = () => {
 
   const getRoleColor = (role) => {
     const colors = {
-      super_admin: 'error',
-      adoption_admin: 'primary',
-      shelter_admin: 'secondary',
-      rescue_admin: 'warning',
-      veterinary_admin: 'info',
-      ecommerce_admin: 'success',
-      pharmacy_admin: 'default',
+      admin: 'error',
+      adoption_manager: 'primary',
+      shelter_manager: 'secondary',
+      rescue_manager: 'warning',
+      veterinary_manager: 'info',
+      ecommerce_manager: 'success',
+      pharmacy_manager: 'default',
       
       
     }

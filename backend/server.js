@@ -54,7 +54,10 @@ app.use('/api/pharmacy', require('./modules/pharmacy/routes'));
 app.use('/api/temporary-care', require('./modules/temporary-care/routes'));
 app.use('/api/veterinary', require('./modules/veterinary/routes'));
 app.use('/api/rbac', require('./routes/rbac/rbac'));
+app.use('/api/roles', require('./routes/rbac/roles'));
+app.use('/api/permissions', require('./routes/rbac/permissions'));
 app.use('/api/core', require('./routes/core/core'));
+app.use('/api/modules', require('./routes/modules'));
 app.use('/api/fix-admin', require('./routes/fix-admin'));
 
 // Health check endpoint

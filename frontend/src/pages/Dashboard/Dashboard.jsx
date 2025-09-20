@@ -1,16 +1,16 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import SuperAdminDashboard from './SuperAdminDashboard'
+import AdminDashboard from '../Admin/AdminDashboard'
 import StaffDashboard from './StaffDashboard'
-import PublicUserDashboard from './PublicUserDashboard'
-import AdoptionAdminDashboard from './AdoptionAdminDashboard'
-import VeterinaryAdminDashboard from './VeterinaryAdminDashboard'
-import PharmacyAdminDashboard from './PharmacyAdminDashboard'
-import EcommerceAdminDashboard from './EcommerceAdminDashboard'
-import ShelterAdminDashboard from './ShelterAdminDashboard'
-import TemporaryCareAdminDashboard from './TemporaryCareAdminDashboard'
-import RescueAdminDashboard from './RescueAdminDashboard'
+import PublicUserDashboard from '../../modules/public/PublicUserDashboard'
+import AdoptionManagerDashboard from '../../modules/managers/Adoption/AdoptionManagerDashboard'
+import VeterinaryManagerDashboard from '../../modules/managers/Veterinary/VeterinaryManagerDashboard'
+import PharmacyManagerDashboard from '../../modules/managers/Pharmacy/PharmacyManagerDashboard'
+import EcommerceManagerDashboard from '../../modules/managers/Ecommerce/EcommerceManagerDashboard'
+import ShelterManagerDashboard from '../../modules/managers/Shelter/ShelterManagerDashboard'
+import TemporaryCareManagerDashboard from '../../modules/managers/TemporaryCare/TemporaryCareManagerDashboard'
+import RescueManagerDashboard from '../../modules/managers/Rescue/RescueManagerDashboard'
 import TemporaryCareWorkerDashboard from './TemporaryCareWorkerDashboard'
 
 const Dashboard = () => {
@@ -25,45 +25,45 @@ const Dashboard = () => {
 
     const role = user.role
 
-    // Super Admin Dashboard
-    if (role === 'super_admin') {
-      return <SuperAdminDashboard />
+    // Admin Dashboard (formerly Super Admin)
+    if (role === 'admin') {
+      return <AdminDashboard />
     }
 
-    // Specific Module Admin Dashboards
-    if (role === 'shelter_admin') {
-      return <ShelterAdminDashboard />
+    // Specific Module Manager Dashboards
+    if (role === 'shelter_manager') {
+      return <ShelterManagerDashboard />
     }
 
-    if (role === 'temporary_care_admin') {
-      return <TemporaryCareAdminDashboard />
+    if (role === 'temporary-care_manager') {
+      return <TemporaryCareManagerDashboard />
     }
 
-    if (role === 'donation_admin') {
+    if (role === 'donation_manager') {
       return <PublicUserDashboard />
     }
 
-    if (role === 'ecommerce_admin') {
-      return <EcommerceAdminDashboard />
+    if (role === 'ecommerce_manager') {
+      return <EcommerceManagerDashboard />
     }
 
-    if (role === 'adoption_admin') {
-      return <AdoptionAdminDashboard />
+    if (role === 'adoption_manager') {
+      return <AdoptionManagerDashboard />
     }
     
-    if (role === 'rescue_admin') {
-      return <RescueAdminDashboard />
+    if (role === 'rescue_manager') {
+      return <RescueManagerDashboard />
     }
 
-    if (role === 'veterinary_admin') {
-      return <VeterinaryAdminDashboard />
+    if (role === 'veterinary_manager') {
+      return <VeterinaryManagerDashboard />
     }
 
-    if (role === 'pharmacy_admin') {
-      return <PharmacyAdminDashboard />
+    if (role === 'pharmacy_manager') {
+      return <PharmacyManagerDashboard />
     }
 
-    if (role === 'boarding_admin') {
+    if (role === 'boarding_manager') {
       return <PublicUserDashboard />
     }
 

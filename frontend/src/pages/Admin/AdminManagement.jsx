@@ -73,14 +73,14 @@ const AdminManagement = () => {
   const [menuAnchor, setMenuAnchor] = useState(null)
   const [menuAdmin, setMenuAdmin] = useState(null)
 
-  // Form state for creating/editing admin
+  // Form state for creating/editing manager
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     phone: '',
     assignedModule: '',
-    role: 'module_admin'
+    role: 'module_manager'
   })
 
   const modules = [
@@ -102,9 +102,9 @@ const AdminManagement = () => {
       setLoading(true)
       const response = await api.get('/rbac/users')
       if (response.data.success) {
-        // Filter only admin users
+        // Filter only admin and module manager users
         const adminUsers = response.data.data.users.filter(user => 
-          (typeof user.role === 'string' && user.role.includes('_admin')) || user.role === 'super_admin'
+          (typeof user.role === 'string' && user.role.includes('_manager')) || user.role === 'admin'
         )
         setAdmins(adminUsers)
       }
@@ -118,7 +118,7 @@ const AdminManagement = () => {
 
   const handleCreateAdmin = async () => {
     try {
-      const response = await api.post('/admin/create-module-admin', formData)
+      const response = await api.post('/admin/create-module-manager', formData)
       if (response.data.success) {
         setSuccess('Admin created successfully!')
         setCreateDialogOpen(false)
@@ -174,7 +174,7 @@ const AdminManagement = () => {
       password: '',
       phone: '',
       assignedModule: '',
-      role: 'module_admin'
+      role: 'module_manager'
     })
   }
 
@@ -199,9 +199,9 @@ const AdminManagement = () => {
 
   const getRoleColor = (role) => {
     switch (role) {
-      case 'super_admin':
+      case 'admin':
         return 'error'
-      case 'module_admin':
+      case 'module_manager':
         return 'primary'
       default:
         return 'default'
@@ -226,15 +226,15 @@ const AdminManagement = () => {
     <Container maxWidth="xl">
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600, mb: 2 }}>
-          Admin Management
+          Admin & Manager Management
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Manage system administrators and module administrators
+          Manage system administrators and module managers
         </Typography>
       </Box>
 
       {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={3} sx={{ mb: 4, justifyContent: 'center' }}>
         <Grid item xs={12} sm={6} md={3}>
           <Card>
             <CardContent>
@@ -258,10 +258,10 @@ const AdminManagement = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
                   <Typography color="textSecondary" gutterBottom>
-                    Module Admins
+                    Module Managers
                   </Typography>
                   <Typography variant="h4">
-                    {admins.filter(a => a.role === 'module_admin').length}
+                    {admins.filter(a => a.role === 'module_manager').length}
                   </Typography>
                 </Box>
                 <ModuleIcon sx={{ fontSize: 40, color: 'secondary.main' }} />
@@ -332,8 +332,8 @@ const AdminManagement = () => {
                   onChange={(e) => setFilterRole(e.target.value)}
                 >
                   <MenuItem value="all">All Roles</MenuItem>
-                  <MenuItem value="super_admin">Super Admin</MenuItem>
-                  <MenuItem value="module_admin">Module Admin</MenuItem>
+                  <MenuItem value="admin">Admin</MenuItem>
+                  <MenuItem value="module_manager">Module Manager</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -351,7 +351,7 @@ const AdminManagement = () => {
                   startIcon={<AddIcon />}
                   onClick={() => setCreateDialogOpen(true)}
                 >
-                  Add Admin
+                  Add Manager
                 </Button>
               </Box>
             </Grid>
@@ -359,13 +359,13 @@ const AdminManagement = () => {
         </CardContent>
       </Card>
 
-      {/* Admins Table */}
+      {/* Admins/Managers Table */}
       <Card>
         <TableContainer>
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Admin</TableCell>
+                <TableCell>User</TableCell>
                 <TableCell>Role</TableCell>
                 <TableCell>Module</TableCell>
                 <TableCell>Contact</TableCell>
@@ -469,9 +469,9 @@ const AdminManagement = () => {
         />
       </Card>
 
-      {/* Create Admin Dialog */}
+      {/* Create Manager Dialog */}
       <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Create New Admin</DialogTitle>
+        <DialogTitle>Create New Module Manager</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12} sm={6}>
@@ -531,7 +531,7 @@ const AdminManagement = () => {
         <DialogActions>
           <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleCreateAdmin} variant="contained">
-            Create Admin
+            Create Manager
           </Button>
         </DialogActions>
       </Dialog>
