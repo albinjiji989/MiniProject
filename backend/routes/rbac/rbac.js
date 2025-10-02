@@ -150,7 +150,7 @@ router.delete('/roles/:id', auth, async (req, res) => {
 // @access  Private (Super Admin)
 router.post('/roles/:id/permissions', [
   auth,
-  body('module').isIn(['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core']).withMessage('Invalid module'),
+  body('module').isIn(['adoption', 'petshop', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core']).withMessage('Invalid module'),
   body('actions').isArray().withMessage('Actions must be an array')
 ], async (req, res) => {
   try {
@@ -184,7 +184,7 @@ router.post('/roles/:id/permissions', [
 // @access  Private (Super Admin)
 router.delete('/roles/:id/permissions', [
   auth,
-  body('module').isIn(['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core']).withMessage('Invalid module'),
+  body('module').isIn(['adoption', 'petshop', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core']).withMessage('Invalid module'),
   body('actions').isArray().withMessage('Actions must be an array')
 ], async (req, res) => {
   try {
@@ -260,7 +260,7 @@ router.get('/users', auth, async (req, res) => {
 router.put('/users/:id/role', [
   auth,
   body('role').notEmpty().withMessage('Role is required'),
-  body('assignedModule').optional().isIn(['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding']).withMessage('Invalid module'),
+  body('assignedModule').optional().isIn(['adoption', 'petshop', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding']).withMessage('Invalid module'),
   body('supervisor').optional().isMongoId().withMessage('Invalid supervisor ID')
 ], async (req, res) => {
   try {
@@ -335,7 +335,7 @@ router.post('/permissions', [
   body('name').notEmpty().withMessage('Permission name is required'),
   body('displayName').notEmpty().withMessage('Display name is required'),
   body('description').notEmpty().withMessage('Description is required'),
-  body('module').isIn(['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core']).withMessage('Invalid module'),
+  body('module').isIn(['adoption', 'petshop', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core']).withMessage('Invalid module'),
   body('action').isIn(['create', 'read', 'update', 'delete', 'manage', 'approve', 'assign']).withMessage('Invalid action'),
   body('resource').notEmpty().withMessage('Resource is required')
 ], async (req, res) => {
@@ -389,8 +389,8 @@ router.get('/check-permission', auth, async (req, res) => {
 })
 
 // Helpers
-const allowedModules = ['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'temporary-care']
-const allowedModuleNames = ['Adoption', 'Shelter', 'Rescue', 'Veterinary', 'E-commerce', 'Pharmacy', 'Donation', 'Boarding', 'Temporary Care']
+const allowedModules = ['adoption', 'petshop', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'temporary-care']
+const allowedModuleNames = ['Adoption', 'Pet Shop', 'Rescue', 'Veterinary', 'E-commerce', 'Pharmacy', 'Donation', 'Boarding', 'Temporary Care']
 const moduleAdminRole = (module) => `${module}_manager`
 const moduleWorkerRole = (module) => `${module}_worker`
 
@@ -398,7 +398,7 @@ const moduleWorkerRole = (module) => `${module}_worker`
 const moduleNameToKey = (moduleName) => {
   const mapping = {
     'Adoption': 'adoption',
-    'Shelter': 'shelter', 
+    'Pet Shop': 'petshop', 
     'Rescue': 'rescue',
     'Veterinary': 'veterinary',
     'E-commerce': 'ecommerce',

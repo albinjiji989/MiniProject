@@ -1,14 +1,13 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import AdminDashboard from '../Admin/AdminDashboard'
 import StaffDashboard from './StaffDashboard'
-import PublicUserDashboard from '../../modules/public/PublicUserDashboard'
+import PublicUserDashboard from '../User/Dashboard'
 import AdoptionManagerDashboard from '../../modules/managers/Adoption/AdoptionManagerDashboard'
 import VeterinaryManagerDashboard from '../../modules/managers/Veterinary/VeterinaryManagerDashboard'
 import PharmacyManagerDashboard from '../../modules/managers/Pharmacy/PharmacyManagerDashboard'
 import EcommerceManagerDashboard from '../../modules/managers/Ecommerce/EcommerceManagerDashboard'
-import ShelterManagerDashboard from '../../modules/managers/Shelter/ShelterManagerDashboard'
+import PetShopManagerDashboard from '../../modules/managers/PetShop/PetShopManagerDashboard'
 import TemporaryCareManagerDashboard from '../../modules/managers/TemporaryCare/TemporaryCareManagerDashboard'
 import RescueManagerDashboard from '../../modules/managers/Rescue/RescueManagerDashboard'
 import TemporaryCareWorkerDashboard from './TemporaryCareWorkerDashboard'
@@ -16,6 +15,14 @@ import TemporaryCareWorkerDashboard from './TemporaryCareWorkerDashboard'
 const Dashboard = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
+
+  // Redirect admin users to proper admin dashboard
+  React.useEffect(() => {
+    if (user && user.role === 'admin') {
+      navigate('/admin/dashboard', { replace: true })
+      return
+    }
+  }, [user, navigate])
 
   // Route users to appropriate dashboard based on their role
   const renderDashboard = () => {
@@ -25,14 +32,14 @@ const Dashboard = () => {
 
     const role = user.role
 
-    // Admin Dashboard (formerly Super Admin)
+    // Admin users should be redirected to /admin/dashboard
     if (role === 'admin') {
-      return <AdminDashboard />
+      return <div>Redirecting to admin dashboard...</div>
     }
 
     // Specific Module Manager Dashboards
-    if (role === 'shelter_manager') {
-      return <ShelterManagerDashboard />
+    if (role === 'petshop_manager') {
+      return <PetShopManagerDashboard />
     }
 
     if (role === 'temporary-care_manager') {

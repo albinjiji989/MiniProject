@@ -70,7 +70,7 @@ router.post('/', auth, authorize('admin'), [
     .matches(/^[a-z_]+$/).withMessage('Permission name must contain only lowercase letters and underscores'),
   body('displayName').notEmpty().withMessage('Display name is required'),
   body('description').notEmpty().withMessage('Description is required'),
-  body('module').isIn(['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core']).withMessage('Invalid module'),
+  body('module').isIn(['adoption', 'petshop', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core']).withMessage('Invalid module'),
   body('action').isIn(['create', 'read', 'update', 'delete', 'manage', 'approve', 'assign']).withMessage('Invalid action'),
   body('resource').notEmpty().withMessage('Resource is required'),
   body('isActive').optional().isBoolean()
@@ -131,7 +131,7 @@ router.put('/:id', auth, authorize('admin'), [
   body('name').optional().matches(/^[a-z_]+$/).withMessage('Permission name must contain only lowercase letters and underscores'),
   body('displayName').optional().notEmpty().withMessage('Display name cannot be empty'),
   body('description').optional().notEmpty().withMessage('Description cannot be empty'),
-  body('module').optional().isIn(['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core']).withMessage('Invalid module'),
+  body('module').optional().isIn(['adoption', 'petshop', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core']).withMessage('Invalid module'),
   body('action').optional().isIn(['create', 'read', 'update', 'delete', 'manage', 'approve', 'assign']).withMessage('Invalid action'),
   body('resource').optional().notEmpty().withMessage('Resource cannot be empty'),
   body('isActive').optional().isBoolean()
@@ -262,7 +262,7 @@ router.delete('/:id', auth, authorize('admin'), async (req, res) => {
 // @access  Private (Admin only)
 router.get('/modules', auth, authorize('admin'), async (req, res) => {
   try {
-    const modules = ['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core'];
+    const modules = ['adoption', 'petshop', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core'];
     res.json({
       success: true,
       data: modules

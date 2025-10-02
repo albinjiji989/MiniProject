@@ -436,7 +436,7 @@ router.put('/:id/vaccination', auth, [
 // @desc    Add ownership history entry (and close previous open ownership if any)
 // @access  Private
 router.put('/:id/owners', auth, [
-  body('ownerType').optional().isIn(['public_user', 'shelter', 'adoption_center', 'rescue', 'temporary_care', 'veterinary', 'pharmacy', 'pet_shop', 'other']).withMessage('Invalid ownerType'),
+  body('ownerType').optional().isIn(['public_user', 'petshop', 'adoption_center', 'rescue', 'temporary_care', 'veterinary', 'pharmacy', 'pet_shop', 'other']).withMessage('Invalid ownerType'),
   body('ownerId').optional().isMongoId().withMessage('ownerId must be a valid id'),
   body('ownerName').optional().isString(),
   body('startDate').optional().isISO8601().withMessage('startDate must be a valid date'),

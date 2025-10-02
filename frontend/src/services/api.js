@@ -3,20 +3,49 @@ import axios from 'axios'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 // Create axios instance
-const api = axios.create({
+export const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
+// Export as apiClient for compatibility
+export const apiClient = api
+
+// Helper: retrieve token from multiple possible storage keys
+const TOKEN_KEYS = ['token', 'authToken', 'accessToken', 'jwt', 'jwtToken', 'access_token']
+const getAuthToken = () => {
+  for (const k of TOKEN_KEYS) {
+    const v = localStorage.getItem(k) || sessionStorage.getItem(k)
+    if (v) return v
+  }
+  return null
+}
+
+// Helper: clear all known token keys from both local and session storage
+const clearAllAuthTokens = () => {
+  try {
+    for (const k of TOKEN_KEYS) {
+      localStorage.removeItem(k)
+      sessionStorage.removeItem(k)
+    }
+    // also clear any cached user object if present
+    localStorage.removeItem('user')
+    sessionStorage.removeItem('user')
+  } catch (_) {}
+}
+
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token')
+    const token = getAuthToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    // Allow cookie-based auth if explicitly enabled
+    const useCookies = import.meta.env.VITE_API_COOKIES === 'true'
+    config.withCredentials = !!useCookies
     return config
   },
   (error) => {
@@ -29,8 +58,13 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
+      clearAllAuthTokens()
       window.location.href = '/login'
+    } else if (error.response?.status === 403) {
+      // Soft-block: keep user logged in but surface message via event
+      const msg = error.response?.data?.message || 'Access to this action is blocked by admin.'
+      try { window.dispatchEvent(new CustomEvent('auth:soft-block', { detail: { message: msg } })) } catch (_) {}
+      // Do not clear token; let UI disable actions
     }
     return Promise.reject(error)
   }
@@ -40,6 +74,9 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (credentials) => api.post('/auth/login', credentials),
   register: (userData) => api.post('/auth/register', userData),
+  // Force cookies on logout so the server can clear HttpOnly session cookie if used
+  logout: () => api.post('/auth/logout', {}, { withCredentials: true }),
+  firebaseLogin: (userData) => api.post('/auth/firebase-login', userData),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
   resetPasswordWithOtp: (payload) => api.post('/auth/reset-password', payload),
   getMe: () => api.get('/auth/me'),
@@ -53,8 +90,10 @@ export const usersAPI = {
   getUsers: (params) => api.get('/users', { params }),
   getUser: (id) => api.get(`/users/${id}`),
   createUser: (userData) => api.post('/users', userData),
-  updateUser: (id, userData) => api.put(`/users/${id}`, userData),
-  deleteUser: (id) => api.delete(`/users/${id}`),
+  update: (id, userData) => api.put(`/users/${id}`, userData),
+  updateUser: (id, userData) => api.put(`/users/${id}`, userData), // Alias
+  delete: (id) => api.delete(`/users/${id}`),
+  deleteUser: (id) => api.delete(`/users/${id}`), // Alias
   activateUser: (id) => api.put(`/users/${id}/activate`),
   getUsersByModule: (module) => api.get(`/users/module/${module}`),
   
@@ -67,6 +106,9 @@ export const usersAPI = {
   getUserPets: (id) => api.get(`/users/${id}/pets`),
   getUserStats: () => api.get('/users/stats'),
   getStats: () => api.get('/users/stats'), // Alias for AdminDashboard compatibility
+  // Per-user module access (block-list only; default is allow)
+  setModuleAccess: (userId, { blockedModules = [] }) =>
+    api.put(`/admin/users/${userId}/module-access`, { blockedModules }),
   
   // Bulk operations
   bulkUpdateStatus: (userIds, status) => api.put('/users/bulk/status', { userIds, status }),
@@ -87,6 +129,7 @@ export const petsAPI = {
   getHistory: (id) => api.get(`/pets/${id}/history`),
   searchNearby: (params) => api.get('/pets/search/nearby', { params }),
   getChangeLog: (id) => api.get(`/pets/${id}/changelog`),
+  getStats: () => api.get('/admin/pets/stats/overview'),
 }
 
 // Adoption API
@@ -98,17 +141,65 @@ export const adoptionAPI = {
   completeAdoption: (id, completionData) => api.put(`/adoption/${id}/complete`, completionData),
   addFollowUp: (id, followUpData) => api.post(`/adoption/${id}/follow-up`, followUpData),
   getStats: () => api.get('/adoption/stats/overview'),
+  
+  // Admin Analytics
+  getAdminStats: () => api.get('/adoption/admin/stats'),
+  getAllAdoptions: (params) => api.get('/adoption/admin/adoptions', { params }),
+  getPaymentReports: (params) => api.get('/adoption/admin/payments', { params }),
+  getAnalytics: () => api.get('/adoption/admin/analytics'),
+  getManagerAnalytics: () => api.get('/adoption/admin/manager-analytics'),
+  getUserAnalytics: () => api.get('/adoption/admin/user-analytics'),
+  getPetAnalytics: () => api.get('/adoption/admin/pet-analytics'),
 }
 
-// Shelter API
-export const shelterAPI = {
-  getStats: () => api.get('/shelter/stats'),
-  listAnimals: (params) => api.get('/shelter/animals', { params }),
-  listShelters: (params) => api.get('/shelter', { params }),
-  getShelter: (id) => api.get(`/shelter/${id}`),
-  createShelter: (shelterData) => api.post('/shelter', shelterData),
-  updateShelter: (id, shelterData) => api.put(`/shelter/${id}`, shelterData),
-  addPet: (id, petData) => api.post(`/shelter/${id}/pets`, petData),
+// PetShop API
+export const petShopAPI = {
+  getStats: () => api.get('/petshop/stats'),
+  listAnimals: (params) => api.get('/petshop/animals', { params }),
+  listPetShops: (params) => api.get('/petshop', { params }),
+  getPetShop: (id) => api.get(`/petshop/${id}`),
+  createPetShop: (petShopData) => api.post('/petshop', petShopData),
+  updatePetShop: (id, petShopData) => api.put(`/petshop/${id}`, petShopData),
+  addPetToPetShop: (id, petData) => api.post(`/petshop/${id}/pets`, petData),
+  addProduct: (id, productData) => api.post(`/petshop/${id}/products`, productData),
+  addService: (id, serviceData) => api.post(`/petshop/${id}/services`, serviceData),
+  // Manager: Purchase Orders
+  listOrders: (params) => api.get('/petshop/orders', { params }),
+  createOrder: (payload) => api.post('/petshop/orders', payload),
+  getOrder: (id) => api.get(`/petshop/orders/${id}`),
+  updateOrder: (id, payload) => api.put(`/petshop/orders/${id}`, payload),
+  submitOrder: (id) => api.post(`/petshop/orders/${id}/submit`),
+  receiveOrder: (id) => api.post(`/petshop/orders/${id}/receive`),
+  getInvoice: (id) => api.get(`/petshop/orders/${id}/invoice`),
+  // Manager: Inventory
+  listInventory: (params) => api.get('/petshop/inventory', { params }),
+  getInventoryItem: (id) => api.get(`/petshop/inventory/${id}`),
+  updateInventoryItem: (id, payload) => api.put(`/petshop/inventory/${id}`, payload),
+  deleteInventoryItem: (id) => api.delete(`/petshop/inventory/${id}`),
+  uploadInventoryImage: (id, file, { caption = '', isPrimary = false } = {}) => {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('caption', caption)
+    form.append('isPrimary', String(isPrimary))
+    return api.post(`/petshop/inventory/${id}/images`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+  // Public listings
+  listPublicListings: (params) => api.get('/petshop/public/listings', { params }),
+  getPublicListing: (id) => api.get(`/petshop/public/listings/${id}`),
+  createReservation: (payload) => api.post('/petshop/public/reservations', payload),
+  listReservations: () => api.get('/petshop/public/reservations'),
+  cancelReservation: (id) => api.post(`/petshop/public/reservations/${id}/cancel`),
+  // Payments - Razorpay
+  createRazorpayOrder: (payload) => api.post('/petshop/payments/razorpay/order', payload),
+  verifyRazorpay: (payload) => api.post('/petshop/payments/razorpay/verify', payload),
+  // Wishlist
+  addToWishlist: (itemId) => api.post('/petshop/public/wishlist', { itemId }),
+  listMyWishlist: () => api.get('/petshop/public/wishlist'),
+  removeFromWishlist: (itemId) => api.delete(`/petshop/public/wishlist/${itemId}`),
+  // Reviews
+  createReview: (payload) => api.post('/petshop/public/reviews', payload),
+  getItemReviews: (itemId) => api.get(`/petshop/public/reviews/item/${itemId}`),
+  getShopReviews: (shopId) => api.get(`/petshop/public/reviews/shop/${shopId}`),
 }
 
 // Rescue API
@@ -152,6 +243,30 @@ export const ecommerceAdminAPI = {
   createWorker: (payload) => api.post('/ecommerce/admin/workers', payload),
   updateWorker: (id, payload) => api.patch(`/ecommerce/admin/workers/${id}`, payload),
   deleteWorker: (id) => api.delete(`/ecommerce/admin/workers/${id}`),
+}
+
+// PetShop Admin API
+export const petShopAdminAPI = {
+  getSummary: () => api.get('/petshop/admin/analytics/summary'),
+  getSpeciesBreakdown: () => api.get('/petshop/admin/analytics/species-breakdown'),
+  getSalesSeries: (days = 14) => api.get('/petshop/admin/analytics/sales-series', { params: { days } }),
+  listReservations: (params) => api.get('/petshop/admin/reservations', { params }),
+  updateReservationStatus: (id, status) => api.put(`/petshop/admin/reservations/${id}/status`, { status }),
+  // New admin oversight
+  listShops: (params) => api.get('/petshop/admin/shops', { params }),
+  updateShopStatus: (id, payload) => api.put(`/petshop/admin/shops/${id}/status`, payload),
+  listAllListings: (params) => api.get('/petshop/admin/listings', { params }),
+  removeListing: (id) => api.delete(`/petshop/admin/listings/${id}`),
+  getSalesReport: (params) => api.get('/petshop/admin/reports/sales', { params }),
+  // Orders auditing
+  listOrders: (params) => api.get('/petshop/admin/orders', { params }),
+  transferOwnership: (orderId) => api.post(`/petshop/admin/orders/${orderId}/transfer-ownership`),
+}
+
+// PetShop Manager API (reservations)
+export const petShopManagerAPI = {
+  listReservations: (params) => api.get('/petshop/manager/reservations', { params }),
+  updateReservationStatus: (id, status) => api.put(`/petshop/manager/reservations/${id}/status`, { status }),
 }
 
 // Pharmacy API
@@ -200,18 +315,17 @@ export const veterinaryAPI = {
   updateMedicalRecord: (id, medicalRecordData) => api.put(`/veterinary/medical-records/${id}`, medicalRecordData),
 }
 
-// Export api as named export as well
-export { api }
-
-export default api
+// Pet System APIs
+export * from './petSystemAPI'
 
 // Modules API
 export const modulesAPI = {
   list: () => api.get('/modules'),
+  getAll: () => api.get('/modules'), // Alias for compatibility
   listAdmin: () => api.get('/modules/admin'),
   create: (payload) => api.post('/modules', payload),
   update: (id, payload) => api.patch(`/modules/${id}`, payload),
-  updateStatus: (id, status, message) => api.patch(`/modules/${id}/status`, { status, message }),
+  updateStatus: (id, { status, message }) => api.patch(`/modules/${id}/status`, { status, message }),
   remove: (id) => api.delete(`/modules/${id}`),
   delete: (id) => api.delete(`/modules/${id}`), // Alias for compatibility
   reorder: (modules) => api.patch('/modules/reorder', { modules })
@@ -251,4 +365,33 @@ export const managersAPI = {
   remove: (id) => api.delete(`/admin/managers/${id}`),
   invite: (payload) => api.post('/admin/invite-module-manager', payload),
   verify: (payload) => api.post('/admin/verify-module-manager', payload)
+}
+
+// Species API
+export const speciesAPI = {
+  list: () => api.get('/admin/species'),
+  create: (speciesData) => api.post('/admin/species', speciesData),
+  update: (id, speciesData) => api.put(`/admin/species/${id}`, speciesData),
+  delete: (id) => api.delete(`/admin/species/${id}`),
+  getStats: () => api.get('/admin/species/stats/overview'),
+}
+
+// Breeds API
+export const breedsAPI = {
+  list: () => api.get('/admin/breeds'),
+  create: (breedData) => api.post('/admin/breeds', breedData),
+  update: (id, breedData) => api.put(`/admin/breeds/${id}`, breedData),
+  delete: (id) => api.delete(`/admin/breeds/${id}`),
+  getStats: () => api.get('/admin/breeds/stats/overview'),
+}
+
+// Custom Breed Requests API
+export const customBreedRequestsAPI = {
+  list: () => api.get('/admin/custom-breed-requests'),
+  create: (requestData) => api.post('/admin/custom-breed-requests', requestData),
+  update: (id, requestData) => api.put(`/admin/custom-breed-requests/${id}`, requestData),
+  delete: (id) => api.delete(`/admin/custom-breed-requests/${id}`),
+  approve: (id) => api.put(`/admin/custom-breed-requests/${id}/approve`),
+  reject: (id) => api.put(`/admin/custom-breed-requests/${id}/reject`),
+  getStats: () => api.get('/admin/custom-breed-requests/stats/overview'),
 }

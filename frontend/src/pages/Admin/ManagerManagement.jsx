@@ -16,10 +16,6 @@ import {
   Paper,
   Chip,
   IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
   FormControl,
   InputLabel,
@@ -27,638 +23,818 @@ import {
   MenuItem,
   Alert,
   Snackbar,
+  CircularProgress,
+  Pagination,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Menu,
+  ListItemIcon,
+  
   Avatar,
-  LinearProgress,
+  Tooltip,
+  InputAdornment,
+  Switch,
+  FormControlLabel,
+  Divider,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
+  ListItemSecondaryAction,
 } from '@mui/material'
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  BusinessCenter as BusinessIcon,
-  PersonAdd as PersonAddIcon,
+  MoreVert as MoreVertIcon,
+  Search as SearchIcon,
+  BusinessCenter as ManagerIcon,
+  Email as EmailIcon,
+  Phone as PhoneIcon,
+  PersonAdd as InviteIcon,
   CheckCircle as CheckCircleIcon,
+  Block as BlockIcon,
+  Send as SendIcon,
   Cancel as CancelIcon,
+  Assignment as ModuleIcon,
+  LocationOn as LocationIcon,
 } from '@mui/icons-material'
-import AdminPageHeader from '../../components/Admin/AdminPageHeader'
-import AdminActionBar from '../../components/Admin/AdminActionBar'
-import AdminStatCard from '../../components/Admin/AdminStatCard'
-import { managersAPI, modulesAPI } from '../../services/api'
+import { useNavigate } from 'react-router-dom'
+import { managersAPI, modulesAPI, usersAPI } from '../../services/api'
 
 const ManagerManagement = () => {
+  const navigate = useNavigate()
+  
   const [loading, setLoading] = useState(true)
   const [managers, setManagers] = useState([])
   const [modules, setModules] = useState([])
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [invites, setInvites] = useState([])
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  
+  // Filters and pagination
+  const [searchTerm, setSearchTerm] = useState('')
+  const [moduleFilter, setModuleFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [showInactive, setShowInactive] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalManagers, setTotalManagers] = useState(0)
+  
+  // Menu and dialog state
+  const [anchorEl, setAnchorEl] = useState(null)
   const [selectedManager, setSelectedManager] = useState(null)
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' })
+  const [deleteDialog, setDeleteDialog] = useState(false)
+  const [managerToDelete, setManagerToDelete] = useState(null)
+  const [editDialog, setEditDialog] = useState(false)
+  const [editManager, setEditManager] = useState(null)
+  const [inviteDialog, setInviteDialog] = useState(false)
+  const [inviteStep, setInviteStep] = useState(1) // 1: details, 2: OTP
   
-  // Invite form state
-  const [inviteForm, setInviteForm] = useState({
-    email: '',
-    name: '',
-    assignedModule: '',
-    phone: ''
-  })
-  
-  // Verify form state
-  const [verifyForm, setVerifyForm] = useState({
-    email: '',
-    otp: ''
-  })
-  
-  // Dialog state for integrated flow
-  const [inviteStep, setInviteStep] = useState('invite') // 'invite' or 'verify'
-  
-  // Edit form state
-  const [editForm, setEditForm] = useState({
+  // Form data for editing and inviting
+  const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
-    assignedModule: '',
+    module: '',
+    address: '',
     isActive: true
   })
 
+  const [inviteData, setInviteData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    module: ''
+  })
 
-  const fetchData = async () => {
-    try {
-      setLoading(true)
-      const [managersResponse, modulesResponse] = await Promise.all([
-        managersAPI.list(),
-        modulesAPI.list()
-      ])
-      
-      // Ensure data is always an array - handle different response structures
-      const managersData = Array.isArray(managersResponse.data?.data?.managers) 
-        ? managersResponse.data.data.managers 
-        : Array.isArray(managersResponse.data?.managers) 
-          ? managersResponse.data.managers 
-          : Array.isArray(managersResponse.data) 
-            ? managersResponse.data 
-            : []
-      const modulesData = Array.isArray(modulesResponse.data?.data) 
-        ? modulesResponse.data.data 
-        : Array.isArray(modulesResponse.data) 
-          ? modulesResponse.data 
-          : []
-      
-      setManagers(managersData)
-      setModules(modulesData)
-      
-      setSnackbar({ 
-        open: true, 
-        message: `Loaded ${managersData.length} managers and ${modulesData.length} modules from database`, 
-        severity: 'success' 
-      })
-    } catch (error) {
-      console.error('Error fetching data:', error)
-      setSnackbar({ 
-        open: true, 
-        message: 'Failed to fetch data from database', 
-        severity: 'error' 
-      })
-      // Don't use fallback data, show empty state
-      setManagers([])
-      setModules([])
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [otpData, setOtpData] = useState({
+    email: '',
+    module: '',
+    otp: ''
+  })
+
+  // Modules are loaded once on mount; admin can only select existing ones
 
   useEffect(() => {
-    fetchData()
+    loadInitialData()
   }, [])
 
-  const handleSendInvite = async () => {
+  useEffect(() => {
+    loadManagers()
+    loadInvites()
+  }, [page, searchTerm, moduleFilter, statusFilter, showInactive])
+
+  const loadInitialData = async () => {
     try {
-      setLoading(true)
-      // This would call the invite API endpoint
-      setSnackbar({ 
-        open: true, 
-        message: 'Invitation sent successfully', 
-        severity: 'success' 
-      })
-      setInviteDialogOpen(false)
-      setInviteForm({ email: '', name: '', assignedModule: '', phone: '' })
-    } catch (error) {
-      setSnackbar({ 
-        open: true, 
-        message: 'Failed to send invitation', 
-        severity: 'error' 
-      })
+      const modulesRes = await modulesAPI.list()
+      setModules(modulesRes.data?.data || modulesRes.data || [])
+    } catch (err) {
+      console.error('Error loading modules:', err)
+    }
+  }
+
+  const handleOpenInviteDialog = () => {
+    setInviteDialog(true)
+  }
+
+  const loadManagers = async () => {
+    setLoading(true)
+    try {
+      const params = {
+        page,
+        limit: 10,
+        search: searchTerm,
+        module: moduleFilter,
+        isActive: showInactive ? undefined : true
+      }
+
+      const response = await managersAPI.list()
+      const data = response.data?.data || response.data
+      
+      const items = data.managers || data || []
+      setManagers(items)
+      setTotalPages(1)
+      setTotalManagers(items.length || 0)
+    } catch (err) {
+      setError('Failed to load managers')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleInvite = async () => {
+  const loadInvites = async () => {
     try {
-      setLoading(true)
-      
-      // Find the selected module to get its key
-      const selectedModule = modules.find(m => m._id === inviteForm.assignedModule)
-      if (!selectedModule) {
-        setSnackbar({ 
-          open: true, 
-          message: 'Please select a valid module', 
-          severity: 'error' 
-        })
-        return
-      }
-      
-      // Transform the data to match backend expectations
-      const inviteData = {
-        name: inviteForm.name,
-        email: inviteForm.email,
-        phone: inviteForm.phone,
-        module: selectedModule.key || selectedModule.name.toLowerCase().replace(' ', '-') // Use key or generate from name
-      }
-      
-      console.log('Sending invite data:', inviteData) // Debug log
-      
-      // Call the invite API endpoint
-      const response = await managersAPI.invite(inviteData)
-      setSnackbar({ 
-        open: true, 
-        message: 'OTP sent to candidate email', 
-        severity: 'success' 
-      })
-      // Transition to OTP verification step within the same dialog
-      setVerifyForm({ email: inviteForm.email, otp: '' })
-      setInviteStep('verify')
-    } catch (error) {
-      console.error('Invite error:', error) // Debug log
-      setSnackbar({ 
-        open: true, 
-        message: error?.response?.data?.message || 'Failed to send invite', 
-        severity: 'error' 
-      })
-    } finally {
-      setLoading(false)
+      setInvites([])
+    } catch (err) {
+      console.error('Error loading invites:', err)
     }
   }
 
-  const handleVerifyInvite = async () => {
-    try {
-      setLoading(true)
-      
-      // Find the selected module to get its key
-      const selectedModule = modules.find(m => m._id === inviteForm.assignedModule)
-      if (!selectedModule) {
-        setSnackbar({ 
-          open: true, 
-          message: 'Module information not found', 
-          severity: 'error' 
-        })
-        return
-      }
-      
-      // Transform the data to match backend expectations
-      const verifyData = {
-        email: verifyForm.email,
-        module: selectedModule.key || selectedModule.name.toLowerCase().replace(' ', '-'), // Use key or generate from name
-        otp: verifyForm.otp
-      }
-      
-      console.log('Sending verify data:', verifyData) // Debug log
-      
-      // Call the verify API endpoint
-      const response = await managersAPI.verify(verifyData)
-      setSnackbar({ 
-        open: true, 
-        message: 'Manager verified and created successfully', 
-        severity: 'success' 
-      })
-      // Close dialog and reset to invite step
-      setInviteDialogOpen(false)
-      setInviteStep('invite')
-      setInviteForm({ email: '', name: '', assignedModule: '', phone: '' })
-      setVerifyForm({ email: '', otp: '' })
-      fetchData()
-    } catch (error) {
-      console.error('Verify error:', error) // Debug log
-      setSnackbar({ 
-        open: true, 
-        message: error?.response?.data?.message || 'Failed to verify invitation', 
-        severity: 'error' 
-      })
-    } finally {
-      setLoading(false)
+  const handleSearch = (value) => {
+    setSearchTerm(value)
+    setPage(1)
+  }
+
+  const handleFilterChange = (filterType, value) => {
+    switch (filterType) {
+      case 'module':
+        setModuleFilter(value)
+        break
+      case 'status':
+        setStatusFilter(value)
+        break
+      default:
+        break
     }
+    setPage(1)
+  }
+
+  const handleMenuOpen = (event, manager) => {
+    setAnchorEl(event.currentTarget)
+    setSelectedManager(manager)
+  }
+
+  const handleMenuClose = () => {
+    setAnchorEl(null)
+    setSelectedManager(null)
   }
 
   const handleEditManager = (manager) => {
-    setSelectedManager(manager)
-    setEditForm({
+    setEditManager(manager)
+    setFormData({
       name: manager.name || '',
       email: manager.email || '',
       phone: manager.phone || '',
-      assignedModule: manager.assignedModule || '',
+      module: manager.assignedModule || '',
+      address: manager.address || '',
       isActive: manager.isActive !== false
     })
-    setEditDialogOpen(true)
-  }
-
-  const handleBackToInvite = () => {
-    setInviteStep('invite')
-    setVerifyForm({ email: '', otp: '' })
-  }
-
-  const handleCloseInviteDialog = () => {
-    setInviteDialogOpen(false)
-    setInviteStep('invite')
-    setInviteForm({ email: '', name: '', assignedModule: '', phone: '' })
-    setVerifyForm({ email: '', otp: '' })
+    setEditDialog(true)
   }
 
   const handleUpdateManager = async () => {
     try {
-      setLoading(true)
-      await managersAPI.update(selectedManager._id, editForm)
-      setSnackbar({ 
-        open: true, 
-        message: 'Manager updated successfully', 
-        severity: 'success' 
-      })
-      setEditDialogOpen(false)
-      setSelectedManager(null)
-      fetchData()
-    } catch (error) {
-      setSnackbar({ 
-        open: true, 
-        message: 'Failed to update manager', 
-        severity: 'error' 
-      })
-    } finally {
-      setLoading(false)
+      await managersAPI.update(editManager._id, formData)
+      setSuccess('Manager updated successfully!')
+      setEditDialog(false)
+      loadManagers()
+    } catch (err) {
+      setError('Failed to update manager')
     }
   }
 
-  const handleDeleteManager = async (managerId) => {
-    if (window.confirm('Are you sure you want to delete this manager?')) {
-      try {
-        setLoading(true)
-        await managersAPI.remove(managerId)
-        setSnackbar({ 
-          open: true, 
-          message: 'Manager deleted successfully', 
-          severity: 'success' 
-        })
-        fetchData()
-      } catch (error) {
-        setSnackbar({ 
-          open: true, 
-          message: 'Failed to delete manager', 
-          severity: 'error' 
-        })
-      } finally {
-        setLoading(false)
+  const handleDeleteManager = async () => {
+    if (!managerToDelete) return
+    
+    try {
+      await managersAPI.remove(managerToDelete._id)
+      setSuccess('Manager deleted successfully!')
+      setDeleteDialog(false)
+      setManagerToDelete(null)
+      loadManagers()
+    } catch (err) {
+      setError('Failed to delete manager')
+    }
+  }
+
+  const handleToggleStatus = async (manager) => {
+    try {
+      await managersAPI.update(manager._id, { isActive: !manager.isActive })
+      setSuccess(`Manager ${manager.isActive ? 'deactivated' : 'activated'} successfully!`)
+      loadManagers()
+    } catch (err) {
+      setError('Failed to update manager status')
+    }
+  }
+
+  const handleSendInvite = async () => {
+    try {
+      // Validate required fields
+      if (!inviteData.name || !inviteData.email || !inviteData.module) {
+        setError('Name, email, and module are required')
+        return
       }
+
+      // Send OTP to candidate email
+      await managersAPI.invite(inviteData)
+      setSuccess('OTP sent to candidate email!')
+      
+      // Move to step 2 (OTP verification)
+      setOtpData({
+        email: inviteData.email,
+        module: inviteData.module,
+        otp: ''
+      })
+      setInviteStep(2)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to send invitation')
     }
   }
 
-  const getModuleName = (moduleId) => {
-    const module = Array.isArray(modules) ? modules.find(m => m._id === moduleId) : null
-    return module ? module.name : 'Unknown Module'
+  const handleVerifyOtp = async () => {
+    try {
+      if (!otpData.otp || otpData.otp.length !== 6) {
+        setError('Please enter a valid 6-digit OTP')
+        return
+      }
+
+      await managersAPI.verify(otpData)
+      setSuccess('Manager created successfully! Credentials sent to email.')
+      setInviteDialog(false)
+      setInviteStep(1)
+      setInviteData({ name: '', email: '', phone: '', module: '' })
+      setOtpData({ email: '', module: '', otp: '' })
+      loadManagers()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to verify OTP')
+    }
   }
 
-  if (loading) {
+  const handleCancelInvite = () => {
+    setInviteDialog(false)
+    setInviteStep(1)
+    setInviteData({ name: '', email: '', phone: '', module: '' })
+    setOtpData({ email: '', module: '', otp: '' })
+  }
+
+
+  const getModuleColor = (module) => {
+    const colors = {
+      'adoption': 'success',
+      'shelter': 'info',
+      'rescue': 'warning',
+      'ecommerce': 'primary',
+      'pharmacy': 'secondary',
+      'temporary-care': 'error',
+      'veterinary': 'default'
+    }
+    return colors[module] || 'default'
+  }
+
+  const getModuleDisplayName = (module) => {
+    if (!module) return 'N/A'
+    return module.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  if (loading && managers.length === 0) {
     return (
-      <Container maxWidth="xl">
-        <Box sx={{ mt: 4 }}>
-          <LinearProgress />
-          <Typography variant="h6" sx={{ mt: 2, textAlign: 'center' }}>
-            Loading manager data...
-          </Typography>
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
         </Box>
       </Container>
     )
   }
 
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ mt: 4 }}>
-        {/* Page Header */}
-        <AdminPageHeader
-          title="Manager Management"
-          description="Manage module managers, their permissions, and assigned modules across the system"
-          icon={BusinessIcon}
-          color="#f59e0b"
-          stats={`Total Managers: ${Array.isArray(managers) ? managers.length : 0} • Active: ${Array.isArray(managers) ? managers.filter(m => m.isActive !== false).length : 0} • Available Modules: ${Array.isArray(modules) ? modules.length : 0}`}
-        />
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      <Box mb={4} display="flex" justifyContent="space-between" alignItems="center">
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
+            Manager Management
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            Manage module managers and invitations ({totalManagers} total)
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          startIcon={<InviteIcon />}
+          onClick={handleOpenInviteDialog}
+        >
+          Invite Manager
+        </Button>
+      </Box>
 
-        {/* Action Bar */}
-        <AdminActionBar
-          actions={[
-            {
-              label: 'Invite Manager',
-              icon: <PersonAddIcon />,
-              variant: 'outlined',
-              onClick: () => setInviteDialogOpen(true),
-              sx: { borderColor: 'primary.main', color: 'primary.main' }
-            },
-            {
-              label: 'Verify Invitation',
-              icon: <CheckCircleIcon />,
-              variant: 'contained',
-              onClick: () => setVerifyDialogOpen(true),
-              sx: { bgcolor: 'primary.main', '&:hover': { bgcolor: 'primary.dark' } }
-            }
-          ]}
-        />
+      {/* Pending Invitations */}
+      {invites.length > 0 && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+              Pending Invitations ({invites.length})
+            </Typography>
+            <List>
+              {invites.map((invite) => (
+                <ListItem key={invite._id} divider>
+                  <ListItemAvatar>
+                    <Avatar sx={{ bgcolor: 'warning.main' }}>
+                      <EmailIcon />
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={invite.email}
+                    secondary={
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">
+                          Module: {getModuleDisplayName(invite.module)}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Sent: {new Date(invite.createdAt).toLocaleDateString()}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                  <ListItemSecondaryAction>
+                    <IconButton
+                      edge="end"
+                      onClick={() => handleCancelInvite(invite._id)}
+                      color="error"
+                    >
+                      <CancelIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))}
+            </List>
+          </CardContent>
+        </Card>
+      )}
 
-        {/* Statistics Cards */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="Total Managers"
-              value={Array.isArray(managers) ? managers.length : 0}
-              icon={BusinessIcon}
-              color="#f59e0b"
+      {/* Filters */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={4}>
+              <TextField
+                fullWidth
+                placeholder="Search managers..."
+                value={searchTerm}
+                onChange={(e) => handleSearch(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                }}
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="Active Managers"
-              value={Array.isArray(managers) ? managers.filter(m => m.isActive !== false).length : 0}
-              icon={CheckCircleIcon}
-              color="#22c55e"
-            />
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth>
+                <InputLabel>Module</InputLabel>
+                <Select
+                  value={moduleFilter}
+                  onChange={(e) => handleFilterChange('module', e.target.value)}
+                >
+                  <MenuItem value="">All Modules</MenuItem>
+                  {modules.map((m) => (
+                    <MenuItem key={m._id} value={m.name}>
+                      {getModuleDisplayName(m.name)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={statusFilter}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                >
+                  <MenuItem value="">All Status</MenuItem>
+                  <MenuItem value="active">Active</MenuItem>
+                  <MenuItem value="inactive">Inactive</MenuItem>
+                </Select>
+              </FormControl>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="Inactive Managers"
-              value={Array.isArray(managers) ? managers.filter(m => m.isActive === false).length : 0}
-              icon={CancelIcon}
-              color="#ef4444"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="Available Modules"
-              value={Array.isArray(modules) ? modules.length : 0}
-              icon={BusinessIcon}
-              color="#8b5cf6"
+            <Grid item xs={12} md={2}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showInactive}
+                    onChange={(e) => setShowInactive(e.target.checked)}
+                  />
+                }
+                label="Show Inactive"
             />
           </Grid>
         </Grid>
+        </CardContent>
+      </Card>
 
         {/* Managers Table */}
-        <Card sx={{ 
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255,255,255,0.2)',
-          borderRadius: 3,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
-        }}>
+      <Card>
           <CardContent>
-            <Typography variant="h6" sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
-              <BusinessIcon sx={{ mr: 1 }} />
-              Module Managers
-            </Typography>
-            
-            {!Array.isArray(managers) || managers.length === 0 ? (
-              <Alert severity="info">No managers found. Invite your first manager to get started.</Alert>
-            ) : (
               <TableContainer>
                 <Table>
                   <TableHead>
                     <TableRow>
                       <TableCell>Manager</TableCell>
-                      <TableCell>Email</TableCell>
-                      <TableCell>Phone</TableCell>
-                      <TableCell>Assigned Module</TableCell>
+                  <TableCell>Module</TableCell>
+                  <TableCell>Contact</TableCell>
                       <TableCell>Status</TableCell>
+                  <TableCell>Last Login</TableCell>
+                  <TableCell>Joined</TableCell>
                       <TableCell>Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {Array.isArray(managers) ? managers.map((manager) => (
-                      <TableRow key={manager._id}>
+                {managers.map((manager) => (
+                  <TableRow key={manager._id} hover>
                         <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Avatar sx={{ mr: 2, bgcolor: 'primary.main' }}>
-                              {manager.name?.charAt(0)?.toUpperCase() || 'M'}
+                      <Box display="flex" alignItems="center" gap={2}>
+                        <Avatar sx={{ bgcolor: 'primary.main' }}>
+                          <ManagerIcon />
                             </Avatar>
                             <Box>
-                              <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                                {manager.name || 'Unknown'}
+                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                            {manager.name}
                               </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                ID: {manager._id?.slice(-8)}
+                          <Typography variant="caption" color="text.secondary">
+                            ID: {manager._id.slice(-8)}
                               </Typography>
                             </Box>
                           </Box>
                         </TableCell>
-                        <TableCell>{manager.email || 'N/A'}</TableCell>
-                        <TableCell>{manager.phone || 'N/A'}</TableCell>
                         <TableCell>
                           <Chip 
-                            label={getModuleName(manager.assignedModule)} 
+                        icon={<ModuleIcon />}
+                        label={getModuleDisplayName(manager.assignedModule)}
+                        color={getModuleColor(manager.assignedModule)}
                             size="small" 
-                            color="primary"
                           />
+                        </TableCell>
+                    <TableCell>
+                      <Box>
+                        <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                          <EmailIcon fontSize="small" color="action" />
+                          <Typography variant="body2">
+                            {manager.email}
+                          </Typography>
+                        </Box>
+                        {manager.phone && (
+                          <Box display="flex" alignItems="center" gap={1}>
+                            <PhoneIcon fontSize="small" color="action" />
+                            <Typography variant="body2">
+                              {manager.phone}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
                         </TableCell>
                         <TableCell>
                           <Chip 
-                            label={manager.isActive !== false ? 'Active' : 'Inactive'} 
+                        label={manager.isActive ? 'Active' : 'Inactive'}
+                        color={manager.isActive ? 'success' : 'error'}
                             size="small" 
-                            color={manager.isActive !== false ? 'success' : 'error'}
                           />
                         </TableCell>
                         <TableCell>
-                          <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Typography variant="body2">
+                        {manager.lastLogin ? new Date(manager.lastLogin).toLocaleDateString() : 'Never'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {new Date(manager.createdAt).toLocaleDateString()}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Box display="flex" gap={1}>
+                        <Tooltip title="Edit Manager">
                             <IconButton 
                               size="small" 
                               onClick={() => handleEditManager(manager)}
-                              sx={{ color: 'primary.main' }}
+                            color="primary"
                             >
                               <EditIcon />
                             </IconButton>
+                        </Tooltip>
+                        <Tooltip title={manager.isActive ? 'Deactivate' : 'Activate'}>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleToggleStatus(manager)}
+                            color={manager.isActive ? 'warning' : 'success'}
+                          >
+                            {manager.isActive ? <BlockIcon /> : <CheckCircleIcon />}
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="More Actions">
                             <IconButton 
                               size="small" 
-                              onClick={() => handleDeleteManager(manager._id)}
-                              sx={{ color: 'error.main' }}
+                            onClick={(e) => handleMenuOpen(e, manager)}
                             >
-                              <DeleteIcon />
+                            <MoreVertIcon />
                             </IconButton>
+                        </Tooltip>
                           </Box>
                         </TableCell>
                       </TableRow>
-                    )) : null}
+                ))}
                   </TableBody>
                 </Table>
               </TableContainer>
+
+          {managers.length === 0 && !loading && (
+            <Box textAlign="center" py={4}>
+              <Typography variant="h6" color="text.secondary">
+                No managers found
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Try adjusting your filters or invite a new manager
+              </Typography>
+            </Box>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Box display="flex" justifyContent="center" mt={3}>
+              <Pagination
+                count={totalPages}
+                page={page}
+                onChange={(e, value) => setPage(value)}
+                color="primary"
+              />
+            </Box>
             )}
           </CardContent>
         </Card>
-      </Box>
 
-      {/* Invite Manager Dialog - Integrated Flow */}
-      <Dialog open={inviteDialogOpen} onClose={handleCloseInviteDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {inviteStep === 'invite' ? 'Invite Module Manager' : 'Verify OTP'}
-        </DialogTitle>
+      {/* Edit Manager Dialog */}
+      <Dialog open={editDialog} onClose={() => setEditDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Edit Manager</DialogTitle>
         <DialogContent>
-          {inviteStep === 'invite' ? (
-            <Box sx={{ mt: 2, display: 'grid', gap: 2 }}>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
               <TextField
-                label="Manager Name"
-                value={inviteForm.name}
-                onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })}
                 fullWidth
-                required
+                label="Name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <TextField
-                label="Email Address"
+                fullWidth
+                label="Email"
                 type="email"
-                value={inviteForm.email}
-                onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-                fullWidth
-                required
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               />
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <TextField
-                label="Phone Number"
-                value={inviteForm.phone}
-                onChange={(e) => setInviteForm({ ...inviteForm, phone: e.target.value })}
                 fullWidth
+                label="Phone"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               />
-              <FormControl fullWidth required>
-                <InputLabel>Assigned Module</InputLabel>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Module</InputLabel>
                 <Select
-                  label="Assigned Module"
-                  value={inviteForm.assignedModule}
-                  onChange={(e) => setInviteForm({ ...inviteForm, assignedModule: e.target.value })}
+                  value={formData.module}
+                  onChange={(e) => setFormData({ ...formData, module: e.target.value })}
                 >
-                  {(Array.isArray(modules) && modules.length > 0) ? modules.map((module) => (
-                    <MenuItem key={module._id} value={module._id}>
-                      {module.name}
+                  {modules.map((m) => (
+                    <MenuItem key={m._id} value={m.name}>
+                      {getModuleDisplayName(m.name)}
                     </MenuItem>
-                  )) : (
-                    <MenuItem disabled>No modules available</MenuItem>
-                  )}
+                  ))}
                 </Select>
               </FormControl>
-            </Box>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Address"
+                multiline
+                rows={2}
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.isActive}
+                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  />
+                }
+                label="Active"
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialog(false)}>Cancel</Button>
+          <Button onClick={handleUpdateManager} variant="contained">
+            Update Manager
+              </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Invite Manager Dialog */}
+      <Dialog open={inviteDialog} onClose={handleCancelInvite} maxWidth="md" fullWidth>
+        <DialogTitle>
+          {inviteStep === 1 ? 'Invite New Manager' : 'Verify OTP'}
+        </DialogTitle>
+        <DialogContent>
+          {inviteStep === 1 ? (
+            // Step 1: Enter manager details
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Name *"
+                  value={inviteData.name}
+                  onChange={(e) => setInviteData({ ...inviteData, name: e.target.value })}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Email Address *"
+                  type="email"
+                  value={inviteData.email}
+                  onChange={(e) => setInviteData({ ...inviteData, email: e.target.value })}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Phone Number"
+                  value={inviteData.phone}
+                  onChange={(e) => setInviteData({ ...inviteData, phone: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Module *</InputLabel>
+                  <Select
+                    value={inviteData.module}
+                    onChange={(e) => setInviteData({ ...inviteData, module: e.target.value })}
+                  >
+                    {modules.length === 0 ? (
+                      <MenuItem disabled>No modules available</MenuItem>
+                    ) : (
+                      modules.map((m) => (
+                        <MenuItem key={m._id} value={m.key || m.name}>
+                          {getModuleDisplayName(m.name)}
+                        </MenuItem>
+                      ))
+                    )}
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
           ) : (
-            <Box sx={{ mt: 2, display: 'grid', gap: 2 }}>
-              <Alert severity="info" sx={{ mb: 2 }}>
-                OTP has been sent to <strong>{inviteForm.email}</strong>. Please check your email and enter the OTP below.
-              </Alert>
-              <TextField
-                label="Email Address"
-                type="email"
-                value={verifyForm.email}
-                onChange={(e) => setVerifyForm({ ...verifyForm, email: e.target.value })}
-                fullWidth
-                required
-                disabled
-              />
-              <TextField
-                label="OTP Code"
-                value={verifyForm.otp}
-                onChange={(e) => setVerifyForm({ ...verifyForm, otp: e.target.value })}
-                fullWidth
-                required
-                placeholder="Enter 6-digit OTP"
-                inputProps={{ maxLength: 6 }}
-              />
-            </Box>
+            // Step 2: Enter OTP
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12}>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  OTP has been sent to <strong>{otpData.email}</strong>. Please check the email and enter the 6-digit code below.
+                </Alert>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Enter 6-digit OTP *"
+                  value={otpData.otp}
+                  onChange={(e) => setOtpData({ ...otpData, otp: e.target.value })}
+                  inputProps={{ maxLength: 6 }}
+                  placeholder="123456"
+                  required
+                />
+              </Grid>
+            </Grid>
           )}
         </DialogContent>
         <DialogActions>
-          {inviteStep === 'invite' ? (
-            <>
-              <Button onClick={handleCloseInviteDialog}>Cancel</Button>
-              <Button 
-                variant="contained" 
-                onClick={handleInvite}
-                disabled={!inviteForm.name || !inviteForm.email || !inviteForm.assignedModule}
-              >
-                Send Invitation
-              </Button>
-            </>
+          <Button onClick={handleCancelInvite}>Cancel</Button>
+          {inviteStep === 1 ? (
+            <Button onClick={handleSendInvite} variant="contained" startIcon={<SendIcon />}>
+              Send OTP
+            </Button>
           ) : (
-            <>
-              <Button onClick={handleBackToInvite}>Back</Button>
-              <Button onClick={handleCloseInviteDialog}>Cancel</Button>
-              <Button 
-                variant="contained" 
-                onClick={handleVerifyInvite}
-                disabled={!verifyForm.email || !verifyForm.otp}
-              >
-                Verify & Create Manager
-              </Button>
-            </>
+            <Button onClick={handleVerifyOtp} variant="contained" startIcon={<CheckCircleIcon />}>
+              Verify & Create Manager
+            </Button>
           )}
         </DialogActions>
       </Dialog>
 
+      {/* Actions Menu */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={() => { handleEditManager(selectedManager); handleMenuClose(); }}>
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Edit Manager</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => { handleToggleStatus(selectedManager); handleMenuClose(); }}>
+          <ListItemIcon>
+            {selectedManager?.isActive ? <BlockIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
+          </ListItemIcon>
+          <ListItemText>
+            {selectedManager?.isActive ? 'Deactivate' : 'Activate'}
+          </ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => { setManagerToDelete(selectedManager); setDeleteDialog(true); handleMenuClose(); }}>
+          <ListItemIcon>
+            <DeleteIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Delete Manager</ListItemText>
+        </MenuItem>
+      </Menu>
 
-      {/* Edit Manager Dialog */}
-      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit Manager</DialogTitle>
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialog} onClose={() => setDeleteDialog(false)}>
+        <DialogTitle>Delete Manager</DialogTitle>
         <DialogContent>
-          <Box sx={{ mt: 2, display: 'grid', gap: 2 }}>
-            <TextField
-              label="Manager Name"
-              value={editForm.name}
-              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-              fullWidth
-              required
-            />
-            <TextField
-              label="Email Address"
-              type="email"
-              value={editForm.email}
-              onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-              fullWidth
-              required
-            />
-            <TextField
-              label="Phone Number"
-              value={editForm.phone}
-              onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-              fullWidth
-            />
-            <FormControl fullWidth required>
-              <InputLabel>Assigned Module</InputLabel>
-              <Select
-                label="Assigned Module"
-                value={editForm.assignedModule}
-                onChange={(e) => setEditForm({ ...editForm, assignedModule: e.target.value })}
-              >
-                {(Array.isArray(modules) && modules.length > 0) ? modules.map((module) => (
-                  <MenuItem key={module._id} value={module._id}>
-                    {module.name}
-                  </MenuItem>
-                )) : (
-                  <MenuItem disabled>No modules available</MenuItem>
-                )}
-              </Select>
-            </FormControl>
-          </Box>
+          <Typography>
+            Are you sure you want to delete "{managerToDelete?.name}"? This action cannot be undone.
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-          <Button 
-            variant="contained" 
-            onClick={handleUpdateManager}
-            disabled={!editForm.name || !editForm.email || !editForm.assignedModule}
-          >
-            Update Manager
+          <Button onClick={() => setDeleteDialog(false)}>Cancel</Button>
+          <Button onClick={handleDeleteManager} color="error" variant="contained">
+            Delete
           </Button>
         </DialogActions>
       </Dialog>
 
+      {/* Error/Success Messages */}
+      {error && (
+        <Snackbar
+          open={!!error}
+          autoHideDuration={6000}
+          onClose={() => setError('')}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <Alert onClose={() => setError('')} severity="error" sx={{ width: '100%' }}>
+            {error}
+          </Alert>
+        </Snackbar>
+      )}
+
+      {success && (
       <Snackbar
-        open={snackbar.open}
+          open={!!success}
         autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        message={snackbar.message}
-      />
+          onClose={() => setSuccess('')}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <Alert onClose={() => setSuccess('')} severity="success" sx={{ width: '100%' }}>
+            {success}
+          </Alert>
+        </Snackbar>
+      )}
     </Container>
   )
 }
 
 export default ManagerManagement
+

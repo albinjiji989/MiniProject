@@ -24,7 +24,7 @@ import {
   Pets as PetsIcon,
   Favorite as AdoptionIcon,
   Home as HomeIcon,
-  Home as ShelterIcon,
+  Store as PetShopIcon,
   Report as RescueIcon,
   ShoppingCart as EcommerceIcon,
   LocalPharmacy as PharmacyIcon,
@@ -46,8 +46,26 @@ const Landing = () => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
+  
   const handleMobileMenuToggle = () => {
     setMobileMenuOpen(!mobileMenuOpen)
+  }
+
+  const handleLoginClick = () => {
+    if (isNavigating) return
+    setIsNavigating(true)
+    navigate('/login')
+    // Reset after a short delay to allow for navigation
+    setTimeout(() => setIsNavigating(false), 1000)
+  }
+
+  const handleRegisterClick = () => {
+    if (isNavigating) return
+    setIsNavigating(true)
+    navigate('/register')
+    // Reset after a short delay to allow for navigation
+    setTimeout(() => setIsNavigating(false), 1000)
   }
 
 
@@ -58,9 +76,9 @@ const Landing = () => {
       description: 'Streamline pet adoption processes with comprehensive application tracking and approval workflows.'
     },
     {
-      icon: <ShelterIcon sx={{ fontSize: 40, color: '#2196f3' }} />,
-      title: 'Shelter Management',
-      description: 'Manage shelter capacity, staff, and facilities with real-time occupancy tracking.'
+      icon: <PetShopIcon sx={{ fontSize: 40, color: '#2196f3' }} />,
+      title: 'Pet Shop Management',
+      description: 'Manage pet shop inventory, services, staff, and capacity with real-time tracking.'
     },
     {
       icon: <RescueIcon sx={{ fontSize: 40, color: '#ff9800' }} />,
@@ -152,21 +170,23 @@ const Landing = () => {
               </Button>
               <Button
                 color="inherit"
-                onClick={() => navigate('/login')}
+                onClick={handleLoginClick}
+                disabled={isNavigating}
                 sx={{ color: '#333', fontWeight: 600 }}
               >
-                Login
+                {isNavigating ? 'Loading...' : 'Login'}
               </Button>
               <Button
                 variant="contained"
-                onClick={() => navigate('/register')}
+                onClick={handleRegisterClick}
+                disabled={isNavigating}
                 sx={{ 
                   background: 'linear-gradient(135deg, #6a11cb 0%, #2575fc 100%)',
                   boxShadow: '0 8px 24px rgba(37, 117, 252, 0.35)',
                   '&:hover': { background: 'linear-gradient(135deg, #5c0fc0 0%, #1e6ae6 100%)' }
                 }}
               >
-                Register
+                {isNavigating ? 'Loading...' : 'Register'}
               </Button>
             </Box>
           )}
@@ -253,7 +273,7 @@ const Landing = () => {
                 </Typography>
                 
                 <Typography variant="h6" sx={{ mb: 4, opacity: 0.9, lineHeight: 1.7 }}>
-                  From adoption to veterinary care, rescues to pharmacy, shelters to temporary care —
+                  From adoption to veterinary care, rescues to pharmacy, pet shops to temporary care —
                   manage it all with a modern, centralized system built for pet welfare organizations.
                 </Typography>
                 
@@ -262,7 +282,8 @@ const Landing = () => {
                     variant="contained"
                     size="large"
                     endIcon={<ArrowForwardIcon />}
-                    onClick={() => navigate('/register')}
+                    onClick={handleRegisterClick}
+                    disabled={isNavigating}
                     sx={{
                       background: 'linear-gradient(135deg, #6a11cb 0%, #2575fc 100%)',
                       boxShadow: '0 12px 30px rgba(37, 117, 252, 0.4)',
@@ -272,7 +293,7 @@ const Landing = () => {
                       fontSize: '1.1rem'
                     }}
                   >
-                    Get Started
+                    {isNavigating ? 'Loading...' : 'Get Started'}
                   </Button>
                   <Button
                     variant="outlined"
@@ -488,7 +509,8 @@ const Landing = () => {
               variant="contained"
               size="large"
               endIcon={<ArrowForwardIcon />}
-              onClick={() => navigate('/register')}
+              onClick={handleRegisterClick}
+              disabled={isNavigating}
               sx={{
                 backgroundColor: '#4caf50',
                 '&:hover': { backgroundColor: '#388e3c' },
@@ -497,7 +519,7 @@ const Landing = () => {
                 fontSize: '1.2rem'
               }}
             >
-              Join Now
+              {isNavigating ? 'Loading...' : 'Join Now'}
             </Button>
           </Box>
         </Container>

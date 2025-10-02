@@ -9,7 +9,7 @@ import {
   Alert
 } from '@mui/material';
 import { PhotoCamera as PhotoCameraIcon, Save as SaveIcon } from '@mui/icons-material';
-import api from '../../services/api';
+import { api } from '../../services/api';
 
 const ProfilePicture = ({ profileData, onUpdateSuccess, onUpdateError }) => {
   const [profilePicture, setProfilePicture] = useState(profileData.profilePicture || '');

@@ -18,7 +18,7 @@ const roleSchema = new mongoose.Schema({
   permissions: [{
     module: {
       type: String,
-      enum: ['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core'],
+      enum: ['adoption', 'petshop', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core'],
       required: true
     },
     actions: [{

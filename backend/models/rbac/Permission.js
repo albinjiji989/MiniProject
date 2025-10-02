@@ -17,7 +17,7 @@ const permissionSchema = new mongoose.Schema({
   },
   module: {
     type: String,
-    enum: ['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core'],
+    enum: ['adoption', 'petshop', 'rescue', 'veterinary', 'ecommerce', 'pharmacy', 'donation', 'boarding', 'rbac', 'core'],
     required: true
   },
   action: {

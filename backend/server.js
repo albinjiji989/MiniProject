@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -45,9 +46,20 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/pets', require('./routes/pets'));
 app.use('/api/user-dashboard', require('./routes/userDashboard'));
 
+// Pet System Routes
+app.use('/api/admin/species', require('./routes/admin/species'));
+app.use('/api/admin/breeds', require('./routes/admin/breeds'));
+app.use('/api/admin/pet-categories', require('./routes/admin/pet-categories'));
+app.use('/api/admin/pet-details', require('./routes/admin/pet-details'));
+app.use('/api/admin/custom-breed-requests', require('./routes/admin/custom-breed-requests'));
+app.use('/api/admin/pets', require('./routes/admin/pets'));
+app.use('/api/admin/medical-records', require('./routes/admin/medical-records'));
+app.use('/api/admin/ownership-history', require('./routes/admin/ownership-history'));
+app.use('/api/user/pets', require('./routes/user/pets'));
+
 // Management System Routes
 app.use('/api/adoption', require('./modules/adoption/routes'));
-app.use('/api/shelter', require('./modules/shelter/routes'));
+app.use('/api/petshop', require('./modules/petshop/routes'));
 app.use('/api/rescue', require('./modules/rescue/routes'));
 app.use('/api/ecommerce', require('./modules/ecommerce/routes'));
 app.use('/api/pharmacy', require('./modules/pharmacy/routes'));
@@ -58,7 +70,9 @@ app.use('/api/roles', require('./routes/rbac/roles'));
 app.use('/api/permissions', require('./routes/rbac/permissions'));
 app.use('/api/core', require('./routes/core/core'));
 app.use('/api/modules', require('./routes/modules'));
-app.use('/api/fix-admin', require('./routes/fix-admin'));
+
+// Static assets for module uploads (e.g., Petshop images)
+app.use('/modules/petshop/uploads', express.static(path.join(__dirname, 'modules', 'petshop', 'uploads')));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

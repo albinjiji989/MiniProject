@@ -8,7 +8,7 @@ import { useForm } from 'react-hook-form'
 
 const Register = () => {
 	const navigate = useNavigate()
-    const { signUpWithEmail, signUpWithGoogle, error } = useAuth()
+    const { register: registerUser, signUpWithGoogle, error } = useAuth()
 	const [showPassword, setShowPassword] = useState(false)
 	const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 	const [isLoading, setIsLoading] = useState(false)
@@ -30,7 +30,7 @@ const Register = () => {
 			password: data.password,
             phone: data.phone
 		}
-        const result = await signUpWithEmail(userData)
+        const result = await registerUser(userData)
 		setIsLoading(false)
         if (result.success) {
             if (result.message) {

@@ -52,7 +52,7 @@ const ModuleAdminRegister = () => {
   // Available modules for admin registration
   const availableModules = [
     { value: 'adoption', label: 'Adoption Management', description: 'Manage pet adoptions' },
-    { value: 'shelter', label: 'Shelter Management', description: 'Manage animal shelters' },
+    { value: 'petshop', label: 'Pet Shop Management', description: 'Manage pet shops (products, services, staff)' },
     { value: 'rescue', label: 'Rescue Operations', description: 'Manage rescue operations' },
     { value: 'veterinary', label: 'Veterinary Services', description: 'Manage veterinary care' },
     { value: 'ecommerce', label: 'E-commerce', description: 'Manage online store' },

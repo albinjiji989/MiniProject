@@ -1,0 +1,449 @@
+import React, { useState } from 'react'
+import {
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Box,
+  Typography,
+  Divider,
+  Avatar,
+  Chip,
+  IconButton,
+  Collapse,
+  useTheme,
+  useMediaQuery
+} from '@mui/material'
+import {
+  Dashboard as DashboardIcon,
+  Inventory as InventoryIcon,
+  ShoppingCart as OrdersIcon,
+  Assessment as ReportsIcon,
+  People as StaffIcon,
+  Settings as SettingsIcon,
+  Store as StoreIcon,
+  Pets as PetsIcon,
+  LocalShipping as DeliveryIcon,
+  Receipt as InvoiceIcon,
+  BookOnline as ReservationsIcon,
+  Person as ProfileIcon,
+  Help as HelpIcon,
+  Logout as LogoutIcon,
+  ExpandLess,
+  ExpandMore,
+  ChevronLeft as ChevronLeftIcon,
+  TrendingUp as AnalyticsIcon,
+  Notifications as NotificationsIcon
+} from '@mui/icons-material'
+import { useNavigate, useLocation } from 'react-router-dom'
+
+const DRAWER_WIDTH = 280
+
+const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
+  const theme = useTheme()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+  
+  const [expandedItems, setExpandedItems] = useState({
+    inventory: false,
+    orders: false,
+    reports: false
+  })
+
+  const handleExpand = (item) => {
+    setExpandedItems(prev => ({
+      ...prev,
+      [item]: !prev[item]
+    }))
+  }
+
+  const getModuleTitle = (type) => {
+    const titles = {
+      petshop: 'PetShop Manager',
+      adoption: 'Adoption Manager',
+      ecommerce: 'Ecommerce Manager',
+      pharmacy: 'Pharmacy Manager',
+      rescue: 'Rescue Manager',
+      veterinary: 'Veterinary Manager',
+      'temporary-care': 'Temporary Care Manager'
+    }
+    return titles[type] || 'Manager Portal'
+  }
+
+  const getModuleColor = (type) => {
+    const colors = {
+      petshop: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      adoption: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+      ecommerce: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+      pharmacy: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+      rescue: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+      veterinary: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+      'temporary-care': 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)'
+    }
+    return colors[type] || colors.petshop
+  }
+
+  const navigationItems = [
+    {
+      title: 'Dashboard',
+      icon: <DashboardIcon />,
+      path: `/manager/${moduleType}/dashboard`,
+      active: location.pathname === `/manager/${moduleType}/dashboard`
+    },
+    {
+      title: 'Inventory Management',
+      icon: <InventoryIcon />,
+      expandable: true,
+      expanded: expandedItems.inventory,
+      children: [
+        {
+          title: 'Pet Inventory',
+          icon: <PetsIcon />,
+          path: `/manager/${moduleType}/inventory`,
+          active: location.pathname.includes('/inventory')
+        },
+        {
+          title: 'Add Stock',
+          icon: <InventoryIcon />,
+          path: `/manager/${moduleType}/add-stock`,
+          active: location.pathname.includes('/add-stock')
+        },
+        {
+          title: 'Manage Inventory',
+          icon: <SettingsIcon />,
+          path: `/manager/${moduleType}/manage-inventory`,
+          active: location.pathname.includes('/manage-inventory')
+        },
+        {
+          title: 'Pricing Rules',
+          icon: <SettingsIcon />,
+          path: `/manager/${moduleType}/pricing-rules`,
+          active: location.pathname.includes('/pricing-rules')
+        }
+      ]
+    },
+    {
+      title: 'Orders & Sales',
+      icon: <OrdersIcon />,
+      expandable: true,
+      expanded: expandedItems.orders,
+      children: [
+        {
+          title: 'All Orders',
+          icon: <OrdersIcon />,
+          path: `/manager/${moduleType}/orders`,
+          active: location.pathname.includes('/orders')
+        },
+        {
+          title: 'Reservations',
+          icon: <ReservationsIcon />,
+          path: `/manager/${moduleType}/reservations`,
+          active: location.pathname.includes('/reservations')
+        },
+        {
+          title: 'Invoices',
+          icon: <InvoiceIcon />,
+          path: `/manager/${moduleType}/invoices`,
+          active: location.pathname.includes('/invoices')
+        },
+        {
+          title: 'Delivery',
+          icon: <DeliveryIcon />,
+          path: `/manager/${moduleType}/delivery`,
+          active: location.pathname.includes('/delivery')
+        }
+      ]
+    },
+    {
+      title: 'Analytics & Reports',
+      icon: <ReportsIcon />,
+      expandable: true,
+      expanded: expandedItems.reports,
+      children: [
+        {
+          title: 'Sales Analytics',
+          icon: <AnalyticsIcon />,
+          path: `/manager/${moduleType}/analytics`,
+          active: location.pathname.includes('/analytics')
+        },
+        {
+          title: 'Performance Reports',
+          icon: <ReportsIcon />,
+          path: `/manager/${moduleType}/reports`,
+          active: location.pathname.includes('/reports')
+        },
+        {
+          title: 'Customer Insights',
+          icon: <AnalyticsIcon />,
+          path: `/manager/${moduleType}/insights`,
+          active: location.pathname.includes('/insights')
+        }
+      ]
+    },
+    {
+      title: 'Staff Management',
+      icon: <StaffIcon />,
+      path: `/manager/${moduleType}/staff`,
+      active: location.pathname.includes('/staff')
+    },
+    {
+      title: 'Store Settings',
+      icon: <StoreIcon />,
+      path: `/manager/${moduleType}/settings`,
+      active: location.pathname.includes('/settings')
+    }
+  ]
+
+  const bottomItems = [
+    {
+      title: 'Notifications',
+      icon: <NotificationsIcon />,
+      path: `/manager/${moduleType}/notifications`,
+      badge: 3
+    },
+    {
+      title: 'Profile',
+      icon: <ProfileIcon />,
+      path: `/manager/${moduleType}/profile`
+    },
+    {
+      title: 'Help & Support',
+      icon: <HelpIcon />,
+      path: `/manager/${moduleType}/help`
+    }
+  ]
+
+  const handleNavigation = (path) => {
+    navigate(path)
+    if (isMobile) {
+      onClose()
+    }
+  }
+
+  const drawerContent = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <Box sx={{ 
+        p: 3, 
+        background: getModuleColor(moduleType),
+        color: 'white'
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+            {getModuleTitle(moduleType)}
+          </Typography>
+          {isMobile && (
+            <IconButton onClick={onClose} sx={{ color: 'white' }}>
+              <ChevronLeftIcon />
+            </IconButton>
+          )}
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Avatar 
+            sx={{ 
+              width: 48, 
+              height: 48,
+              bgcolor: 'rgba(255,255,255,0.2)',
+              border: '2px solid rgba(255,255,255,0.3)'
+            }}
+          >
+            {user?.name?.charAt(0) || 'M'}
+          </Avatar>
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+              {user?.name || 'Manager'}
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.8 }}>
+              {user?.email || 'manager@example.com'}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Navigation Items */}
+      <Box sx={{ flex: 1, overflow: 'auto', py: 1 }}>
+        <List>
+          {navigationItems.map((item, index) => (
+            <React.Fragment key={index}>
+              <ListItem disablePadding>
+                <ListItemButton
+                  onClick={() => item.expandable ? handleExpand(item.title.toLowerCase().replace(' ', '')) : handleNavigation(item.path)}
+                  sx={{
+                    mx: 1,
+                    borderRadius: 2,
+                    mb: 0.5,
+                    bgcolor: item.active ? 'primary.main' : 'transparent',
+                    color: item.active ? 'white' : 'inherit',
+                    '&:hover': {
+                      bgcolor: item.active ? 'primary.dark' : 'action.hover'
+                    }
+                  }}
+                >
+                  <ListItemIcon sx={{ 
+                    color: item.active ? 'white' : 'primary.main',
+                    minWidth: 40
+                  }}>
+                    {item.icon}
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={item.title}
+                    primaryTypographyProps={{
+                      fontWeight: item.active ? 'bold' : 'normal',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                  {item.expandable && (
+                    item.expanded ? <ExpandLess /> : <ExpandMore />
+                  )}
+                </ListItemButton>
+              </ListItem>
+              
+              {item.expandable && (
+                <Collapse in={item.expanded} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding>
+                    {item.children?.map((child, childIndex) => (
+                      <ListItem key={childIndex} disablePadding>
+                        <ListItemButton
+                          onClick={() => handleNavigation(child.path)}
+                          sx={{
+                            pl: 4,
+                            mx: 1,
+                            borderRadius: 2,
+                            mb: 0.5,
+                            bgcolor: child.active ? 'primary.main' : 'transparent',
+                            color: child.active ? 'white' : 'inherit',
+                            '&:hover': {
+                              bgcolor: child.active ? 'primary.dark' : 'action.hover'
+                            }
+                          }}
+                        >
+                          <ListItemIcon sx={{ 
+                            color: child.active ? 'white' : 'text.secondary',
+                            minWidth: 32
+                          }}>
+                            {child.icon}
+                          </ListItemIcon>
+                          <ListItemText 
+                            primary={child.title}
+                            primaryTypographyProps={{
+                              fontSize: '0.85rem',
+                              fontWeight: child.active ? 'bold' : 'normal'
+                            }}
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                    ))}
+                  </List>
+                </Collapse>
+              )}
+            </React.Fragment>
+          ))}
+        </List>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Bottom Items */}
+        <List>
+          {bottomItems.map((item, index) => (
+            <ListItem key={index} disablePadding>
+              <ListItemButton
+                onClick={() => handleNavigation(item.path)}
+                sx={{
+                  mx: 1,
+                  borderRadius: 2,
+                  mb: 0.5,
+                  '&:hover': {
+                    bgcolor: 'action.hover'
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ color: 'text.secondary', minWidth: 40 }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText 
+                  primary={item.title}
+                  primaryTypographyProps={{ fontSize: '0.9rem' }}
+                />
+                {item.badge && (
+                  <Chip 
+                    label={item.badge} 
+                    size="small" 
+                    color="error"
+                    sx={{ height: 20, minWidth: 20 }}
+                  />
+                )}
+              </ListItemButton>
+            </ListItem>
+          ))}
+          
+          <ListItem disablePadding>
+            <ListItemButton
+              onClick={() => {
+                localStorage.removeItem('token')
+                navigate('/login')
+              }}
+              sx={{
+                mx: 1,
+                borderRadius: 2,
+                color: 'error.main',
+                '&:hover': {
+                  bgcolor: 'error.lighter'
+                }
+              }}
+            >
+              <ListItemIcon sx={{ color: 'error.main', minWidth: 40 }}>
+                <LogoutIcon />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Logout"
+                primaryTypographyProps={{ fontSize: '0.9rem' }}
+              />
+            </ListItemButton>
+          </ListItem>
+        </List>
+      </Box>
+
+      {/* Footer */}
+      <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+        <Typography variant="caption" color="textSecondary" align="center" display="block">
+          © 2024 PetCare Manager
+        </Typography>
+        <Typography variant="caption" color="textSecondary" align="center" display="block">
+          Version 2.0.1
+        </Typography>
+      </Box>
+    </Box>
+  )
+
+  return (
+    <Drawer
+      variant={isMobile ? 'temporary' : 'persistent'}
+      anchor="left"
+      open={open}
+      onClose={onClose}
+      sx={{
+        width: open ? DRAWER_WIDTH : 0,
+        flexShrink: 0,
+        '& .MuiDrawer-paper': {
+          width: DRAWER_WIDTH,
+          boxSizing: 'border-box',
+          borderRight: '1px solid',
+          borderColor: 'divider',
+          top: isMobile ? 0 : '64px',
+          height: isMobile ? '100vh' : 'calc(100vh - 64px)',
+          zIndex: isMobile ? 1300 : 1200
+        },
+      }}
+      ModalProps={{
+        keepMounted: true,
+      }}
+    >
+      {drawerContent}
+    </Drawer>
+  )
+}
+
+export default ManagerSidebar

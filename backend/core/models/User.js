@@ -16,6 +16,9 @@ const userSchema = new mongoose.Schema({
   profilePicture: { type: String, default: null },
   role: { type: String, default: 'public_user' },
   assignedModule: { type: String, default: null },
+  // Store identity for module managers (e.g., PSP1xxxxx)
+  storeId: { type: String, index: true, sparse: true },
+  storeName: { type: String, default: '' },
   isActive: { type: Boolean, default: true },
   mustChangePassword: { type: Boolean, default: false },
   resetPasswordToken: { type: String, default: null },

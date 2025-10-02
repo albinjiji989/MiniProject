@@ -39,6 +39,8 @@ const auth = async (req, res, next) => {
       id: user._id.toString(), // ensure compatibility with routes expecting req.user.id
       role: user.role,
       assignedModule: userDetails ? userDetails.assignedModule : null,
+      allowedModules: userDetails?.allowedModules || [],
+      blockedModules: userDetails?.blockedModules || [],
       storeId: userDetails ? userDetails.storeId : null,
       storeName: userDetails ? userDetails.storeName : null,
       storeLocation: userDetails ? userDetails.storeLocation : null
@@ -91,6 +93,14 @@ const authorizeModule = (moduleName) => {
     // Check if user has access to the specific module
     const moduleManagerRole = `${moduleName}_manager`;
     const moduleWorkerRole = `${moduleName}_worker`;
+    const isExplicitlyBlocked = (req.user.blockedModules || []).includes(moduleName)
+
+    // Default is allowed unless explicitly blocked.
+    if (isExplicitlyBlocked) {
+      return res.status(403).json({ success: false, message: `Access to ${moduleName} is blocked for your account.` })
+    }
+
+    // Role/assignment-based access (managers/workers assigned to module)
     if (
       req.user.role === moduleManagerRole ||
       req.user.assignedModule === moduleName ||

@@ -7,6 +7,15 @@ import {
   Card,
   CardContent,
   Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
+  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -18,42 +27,39 @@ import {
   MenuItem,
   Alert,
   Snackbar,
-  LinearProgress,
-  Chip,
-  FormControlLabel,
   Switch,
-  Tabs,
-  Tab,
+  FormControlLabel,
+  Menu,
+  ListItemIcon,
+  ListItemText,
+  Avatar,
+  Tooltip,
 } from '@mui/material'
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Settings as SettingsIcon,
+  MoreVert as MoreVertIcon,
   Business as ModuleIcon,
   CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon,
   Warning as WarningIcon,
-  Schedule as ScheduleIcon,
+  Block as BlockIcon,
+  Build as BuildIcon,
+  PlayArrow as PlayIcon,
+  Pause as PauseIcon,
 } from '@mui/icons-material'
-import AdminPageHeader from '../../components/Admin/AdminPageHeader'
-import AdminActionBar from '../../components/Admin/AdminActionBar'
-import AdminStatCard from '../../components/Admin/AdminStatCard'
 import { modulesAPI } from '../../services/api'
 
 const ModuleManagement = () => {
   const [loading, setLoading] = useState(true)
   const [modules, setModules] = useState([])
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' })
-  
-  // Dialog states
-  const [manageModulesOpen, setManageModulesOpen] = useState(false)
-  const [moduleDialogTab, setModuleDialogTab] = useState(0)
-  const [editModuleDialog, setEditModuleDialog] = useState({ open: false, module: null })
-  const [moduleStatusDialog, setModuleStatusDialog] = useState({ open: false, module: null, status: '', message: '' })
-  
-  // Form states
-  const [newModule, setNewModule] = useState({
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingModule, setEditingModule] = useState(null)
+  const [anchorEl, setAnchorEl] = useState(null)
+  const [selectedModule, setSelectedModule] = useState(null)
+  const [formData, setFormData] = useState({
     key: '',
     name: '',
     description: '',
@@ -61,54 +67,35 @@ const ModuleManagement = () => {
     color: '#64748b',
     status: 'coming_soon',
     hasManagerDashboard: false,
-    isCoreModule: false
-  })
-  
-  const [editModule, setEditModule] = useState({
-    name: '',
-    description: '',
-    icon: 'Business',
-    color: '#64748b',
-    status: 'coming_soon',
-    hasManagerDashboard: false,
-    isCoreModule: false
+    maintenanceMessage: '',
+    blockReason: '',
+    displayOrder: 0
   })
 
-  const fetchModules = async () => {
+  useEffect(() => {
+    loadModules()
+  }, [])
+
+  const loadModules = async () => {
     try {
       setLoading(true)
-      const response = await modulesAPI.list()
-      // Ensure modules is always an array - handle different response structures
-      const modulesData = Array.isArray(response.data?.data) 
-        ? response.data.data 
-        : Array.isArray(response.data) 
-          ? response.data 
-          : []
-      setModules(modulesData)
-    } catch (error) {
-      console.error('Error fetching modules:', error)
-      setSnackbar({ 
-        open: true, 
-        message: 'Failed to load modules', 
-        severity: 'error' 
-      })
-      // Set empty array on error to prevent filter errors
-      setModules([])
+      const response = await modulesAPI.listAdmin()
+      const data = response.data?.data || response.data || []
+      // Debug: inspect what backend returned
+      // eslint-disable-next-line no-console
+      console.log('Admin modules response:', response.data)
+      setModules(Array.isArray(data) ? data : [])
+    } catch (err) {
+      // Show backend error message if available
+      setError(err?.response?.data?.message || 'Failed to load modules')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    fetchModules()
-  }, [])
-
-  const createNewModule = async () => {
-    try {
-      setLoading(true)
-      await modulesAPI.create(newModule)
-      setSnackbar({ open: true, message: 'New module created successfully', severity: 'success' })
-      setNewModule({
+  const handleAddModule = () => {
+    setEditingModule(null)
+    setFormData({
         key: '',
         name: '',
         description: '',
@@ -116,568 +103,485 @@ const ModuleManagement = () => {
         color: '#64748b',
         status: 'coming_soon',
         hasManagerDashboard: false,
-        isCoreModule: false
-      })
-      setModuleDialogTab(0)
-      fetchModules()
-    } catch (error) {
-      setSnackbar({ 
-        open: true, 
-        message: error?.response?.data?.message || 'Failed to create module', 
-        severity: 'error' 
-      })
-    } finally {
-      setLoading(false)
-    }
+      maintenanceMessage: '',
+      blockReason: '',
+      displayOrder: 0
+    })
+    setDialogOpen(true)
   }
 
-  const updateModule = async () => {
-    try {
-      setLoading(true)
-      await modulesAPI.update(editModuleDialog.module._id, editModule)
-      setSnackbar({ open: true, message: 'Module updated successfully', severity: 'success' })
-      setEditModuleDialog({ open: false, module: null })
-      setEditModule({
-        name: '',
-        description: '',
-        icon: 'Business',
-        color: '#64748b',
-        status: 'coming_soon',
-        hasManagerDashboard: false,
-        isCoreModule: false
-      })
-      fetchModules()
-    } catch (error) {
-      setSnackbar({ 
-        open: true, 
-        message: error?.response?.data?.message || 'Failed to update module', 
-        severity: 'error' 
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const updateModuleStatus = async (moduleId, status, message = '') => {
-    try {
-      setLoading(true)
-      await modulesAPI.updateStatus(moduleId, status, message)
-      setSnackbar({ open: true, message: 'Module status updated successfully', severity: 'success' })
-      setModuleStatusDialog({ open: false, module: null, status: '', message: '' })
-      fetchModules()
-    } catch (error) {
-      setSnackbar({ 
-        open: true, 
-        message: error?.response?.data?.message || 'Failed to update module status', 
-        severity: 'error' 
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const deleteModule = async (moduleId) => {
-    if (window.confirm('Are you sure you want to delete this module?')) {
-      try {
-        setLoading(true)
-        await modulesAPI.delete(moduleId)
-        setSnackbar({ open: true, message: 'Module deleted successfully', severity: 'success' })
-        fetchModules()
-      } catch (error) {
-        setSnackbar({ 
-          open: true, 
-          message: error?.response?.data?.message || 'Failed to delete module', 
-          severity: 'error' 
-      })
-      } finally {
-        setLoading(false)
-      }
-    }
-  }
-
-  const editModuleHandler = (module) => {
-    setEditModule({
+  const handleEditModule = (module) => {
+    setEditingModule(module)
+    setFormData({
+      key: module.key,
       name: module.name,
       description: module.description || '',
       icon: module.icon || 'Business',
       color: module.color || '#64748b',
       status: module.status || 'coming_soon',
       hasManagerDashboard: module.hasManagerDashboard || false,
-      isCoreModule: module.isCoreModule || false
+      maintenanceMessage: module.maintenanceMessage || '',
+      blockReason: module.blockReason || '',
+      displayOrder: module.displayOrder || 0
     })
-    setEditModuleDialog({ open: true, module })
+    setDialogOpen(true)
   }
 
-  const getModuleStatusColor = (status) => {
+  const handleSubmit = async () => {
+    try {
+      if (editingModule) {
+        await modulesAPI.update(editingModule._id, formData)
+        setSuccess('Module updated successfully!')
+      } else {
+        await modulesAPI.create(formData)
+        setSuccess('Module created successfully!')
+      }
+      setDialogOpen(false)
+      loadModules()
+    } catch (err) {
+      setError('Failed to save module')
+    }
+  }
+
+  const handleDeleteModule = async (moduleId) => {
+    if (window.confirm('Are you sure you want to delete this module?')) {
+      try {
+        await modulesAPI.delete(moduleId)
+        setSuccess('Module deleted successfully!')
+        loadModules()
+      } catch (err) {
+        setError('Failed to delete module')
+      }
+    }
+  }
+
+  const handleStatusChange = async (moduleId, newStatus, message = '') => {
+    try {
+      await modulesAPI.updateStatus(moduleId, { status: newStatus, message })
+      setSuccess(`Module status updated to ${newStatus}`)
+      loadModules()
+    } catch (err) {
+      setError('Failed to update module status')
+    }
+  }
+
+  const getStatusColor = (status) => {
     switch (status) {
       case 'active': return 'success'
-      case 'blocked': return 'error'
       case 'maintenance': return 'warning'
-      case 'coming_soon': return 'default'
+      case 'blocked': return 'error'
+      case 'coming_soon': return 'info'
       default: return 'default'
     }
   }
 
-  const getModuleStatusText = (status) => {
-    switch (status) {
-      case 'active': return 'Active'
-      case 'blocked': return 'Blocked'
-      case 'maintenance': return 'Maintenance'
-      case 'coming_soon': return 'Coming Soon'
-      default: return 'Unknown'
-    }
-  }
-
-  const getModuleStatusIcon = (status) => {
+  const getStatusIcon = (status) => {
     switch (status) {
       case 'active': return <CheckCircleIcon />
-      case 'blocked': return <CancelIcon />
-      case 'maintenance': return <WarningIcon />
-      case 'coming_soon': return <ScheduleIcon />
+      case 'maintenance': return <BuildIcon />
+      case 'blocked': return <BlockIcon />
+      case 'coming_soon': return <WarningIcon />
       default: return <ModuleIcon />
     }
   }
 
-  if (loading && (!modules || modules.length === 0)) {
+  const handleMenuOpen = (event, module) => {
+    setAnchorEl(event.currentTarget)
+    setSelectedModule(module)
+  }
+
+  const handleMenuClose = () => {
+    setAnchorEl(null)
+    setSelectedModule(null)
+  }
+
+  const moduleIcons = [
+    'Business', 'Pets', 'Home', 'LocalHospital', 'ShoppingCart', 
+    'LocalPharmacy', 'Support', 'Favorite', 'Report', 'Settings'
+  ]
+
+  const moduleColors = [
+    '#64748b', '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+    '#8b5cf6', '#06b6d4', '#84cc16', '#f97316', '#ec4899'
+  ]
+
+  if (loading) {
     return (
-      <Container maxWidth="xl">
-        <Box sx={{ mt: 4 }}>
-          <LinearProgress />
-          <Typography variant="h6" sx={{ mt: 2, textAlign: 'center' }}>
-            Loading module data...
-          </Typography>
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <Typography>Loading modules...</Typography>
+        </Box>
+      </Container>
+    )
+  }
+
+  if (!loading && modules.length === 0) {
+    return (
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px" flexDirection="column" gap={2}>
+          <Typography variant="h6">No modules found</Typography>
+          <Typography variant="body2" color="text.secondary">If modules exist in DB, ensure the admin endpoint /api/modules/admin returns them.</Typography>
         </Box>
       </Container>
     )
   }
 
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ mt: 4 }}>
-        {/* Page Header */}
-        <AdminPageHeader
-          title="Module Management"
-          description="Configure system modules, manage their status, and control module availability across the platform"
-          icon={ModuleIcon}
-          color="#22c55e"
-          stats={`Total Modules: ${modules?.length || 0} • Active: ${modules?.filter(m => m.status === 'active')?.length || 0} • In Maintenance: ${modules?.filter(m => m.status === 'maintenance')?.length || 0}`}
-        />
-
-        {/* Action Bar */}
-        <AdminActionBar
-          actions={[
-            {
-              label: 'Add New Module',
-              icon: <AddIcon />,
-              variant: 'outlined',
-              onClick: () => { setModuleDialogTab(1); setManageModulesOpen(true) },
-              sx: { borderColor: 'primary.main', color: 'primary.main' }
-            },
-            {
-              label: 'Manage Existing',
-              icon: <SettingsIcon />,
-              variant: 'contained',
-              onClick: () => { setModuleDialogTab(0); setManageModulesOpen(true) },
-              sx: { bgcolor: 'primary.main', '&:hover': { bgcolor: 'primary.dark' } }
-            }
-          ]}
-        />
-
-        {/* Statistics Cards */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="Total Modules"
-              value={modules?.length || 0}
-              icon={ModuleIcon}
-              color="#8b5cf6"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="Active Modules"
-              value={modules?.filter(m => m.status === 'active')?.length || 0}
-              icon={CheckCircleIcon}
-              color="#22c55e"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="In Maintenance"
-              value={modules?.filter(m => m.status === 'maintenance')?.length || 0}
-              icon={WarningIcon}
-              color="#f59e0b"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="Coming Soon"
-              value={modules?.filter(m => m.status === 'coming_soon')?.length || 0}
-              icon={ScheduleIcon}
-              color="#06b6d4"
-            />
-          </Grid>
-        </Grid>
-
-        {/* Modules Grid */}
-        <Card sx={{ 
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255,255,255,0.2)',
-          borderRadius: 3,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
-        }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
-              <ModuleIcon sx={{ mr: 1 }} />
-              System Modules
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      <Box mb={4} display="flex" justifyContent="space-between" alignItems="center">
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
+            Module Management
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            Configure and manage system modules
             </Typography>
-            
-            {(!modules || modules.length === 0) ? (
-              <Alert severity="info">No modules found. Create your first module to get started.</Alert>
-            ) : (
-              <Grid container spacing={3}>
-                {modules?.map((module) => (
-                  <Grid item xs={12} sm={6} md={4} key={module._id || module.key}>
-                    <Card sx={{ 
-                      backgroundColor: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: 2,
-                      transition: 'transform 0.2s ease-in-out',
-                      '&:hover': { transform: 'translateY(-4px)' }
-                    }}>
-                      <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Box sx={{ 
-                              p: 1, 
-                              borderRadius: '50%', 
-                              backgroundColor: `${module.color}20`,
-                              color: module.color,
-                              mr: 2
-                            }}>
-                              {getModuleStatusIcon(module.status)}
-                            </Box>
-                            <Box>
-                              <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                                {module.name}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {module.key}
-                              </Typography>
-                            </Box>
-                          </Box>
-                          <Chip 
-                            size="small" 
-                            label={getModuleStatusText(module.status)} 
-                            color={getModuleStatusColor(module.status)}
-                          />
-                        </Box>
-                        
-                        {module.description && (
-                          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-                            {module.description}
-                          </Typography>
-                        )}
-                        
-                        <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                          {module.hasManagerDashboard && (
-                            <Chip label="Manager Dashboard" size="small" color="info" />
-                          )}
-                          {module.isCoreModule && (
-                            <Chip label="Core Module" size="small" color="warning" />
-                          )}
-                        </Box>
-                        
-                        {module.status === 'maintenance' && module.maintenanceMessage && (
-                          <Alert severity="warning" sx={{ mb: 2, fontSize: '0.75rem' }}>
-                            {module.maintenanceMessage}
-                          </Alert>
-                        )}
-                        
-                        {module.status === 'blocked' && module.blockReason && (
-                          <Alert severity="error" sx={{ mb: 2, fontSize: '0.75rem' }}>
-                            {module.blockReason}
-                          </Alert>
-                        )}
-                        
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                          <Button 
-                            size="small" 
-                            startIcon={<EditIcon />}
-                            onClick={() => editModuleHandler(module)}
-                            variant="outlined"
-                          >
-                            Edit
-                          </Button>
-                          <Button 
-                            size="small" 
-                            startIcon={<SettingsIcon />}
-                            onClick={() => {
-                              setModuleStatusDialog({ 
-                                open: true, 
-                                module, 
-                                status: module.status || 'coming_soon',
-                                message: module.maintenanceMessage || module.blockReason || ''
-                              });
-                            }}
-                            variant="outlined"
-                          >
-                            Status
-                          </Button>
-                          {!module.isCoreModule && (
-                            <Button 
-                              size="small" 
-                              startIcon={<DeleteIcon />}
-                              color="error"
-                              onClick={() => deleteModule(module._id)}
-                              variant="outlined"
-                            >
-                              Delete
-                            </Button>
-                          )}
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-            )}
-          </CardContent>
-        </Card>
+        </Box>
+        {/* Add Module disabled by requirement */}
       </Box>
 
-      {/* Module Management Dialog */}
-      <Dialog open={manageModulesOpen} onClose={() => setManageModulesOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Module Management</DialogTitle>
-        <DialogContent>
-          <Tabs value={moduleDialogTab} onChange={(e, v) => setModuleDialogTab(v)} sx={{ mb: 2 }}>
-            <Tab label="Manage Existing" />
-            <Tab label="Add New Module" />
-          </Tabs>
-
-          {moduleDialogTab === 0 && (
-            <Box>
-              {(!modules || modules.length === 0) ? (
-                <Typography variant="body2" color="text.secondary">No modules found.</Typography>
-              ) : (
-                <Grid container spacing={2}>
-                  {modules?.map((m) => (
-                    <Grid item xs={12} sm={6} key={m._id || m.key}>
-                      <Card sx={{ 
-                        background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
-                        backdropFilter: 'blur(10px)',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        borderRadius: 2
-                      }}>
-                        <CardContent>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Box>
-                              <Typography variant="subtitle1">{m.name}</Typography>
-                              <Typography variant="body2" color="text.secondary">{m.key}</Typography>
+      {/* Module Cards Grid */}
+      <Grid container spacing={3} mb={4}>
+        {modules.map((module) => (
+          <Grid item xs={12} sm={6} md={4} lg={3} key={module._id}>
+            <Card 
+              sx={{ 
+                height: '100%',
+                      transition: 'transform 0.2s ease-in-out',
+                      '&:hover': { transform: 'translateY(-4px)' }
+              }}
+            >
+                      <CardContent>
+                <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
+                  <Avatar 
+                    sx={{ 
+                      bgcolor: module.color,
+                      width: 48,
+                      height: 48
+                    }}
+                  >
+                    <ModuleIcon />
+                  </Avatar>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => handleMenuOpen(e, module)}
+                  >
+                    <MoreVertIcon />
+                  </IconButton>
                             </Box>
-                            <Chip size="small" label={m.status || 'coming_soon'} color={m.status === 'active' ? 'success' : (m.status === 'blocked' ? 'error' : (m.status === 'maintenance' ? 'warning' : 'default'))} />
-                          </Box>
-                          {m.description && (
-                            <Typography variant="body2" sx={{ mt: 1 }}>{m.description}</Typography>
+                
+                <Typography variant="h6" component="h3" gutterBottom sx={{ fontWeight: 'bold' }}>
+                                {module.name}
+                              </Typography>
+                
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  {module.description || 'No description available'}
+                              </Typography>
+                
+                <Box display="flex" justifyContent="space-between" alignItems="center">
+                          <Chip 
+                    icon={getStatusIcon(module.status)}
+                    label={module.status.replace('_', ' ').toUpperCase()}
+                    color={getStatusColor(module.status)}
+                            size="small" 
+                          />
+                  <Typography variant="caption" color="text.secondary">
+                    Order: {module.displayOrder}
+                  </Typography>
+                        </Box>
+                        
+                          {module.hasManagerDashboard && (
+                  <Chip
+                    label="Has Dashboard"
+                            size="small" 
+                    color="primary"
+                    sx={{ mt: 1 }}
+                  />
                           )}
                         </CardContent>
                       </Card>
                     </Grid>
                   ))}
                 </Grid>
-              )}
-            </Box>
-          )}
 
-          {moduleDialogTab === 1 && (
-            <Box component="form" sx={{ mt: 1, display: 'grid', gap: 2 }} onSubmit={(e)=>{ e.preventDefault(); createNewModule(); }}>
-              <TextField label="Key" value={newModule.key} onChange={(e)=>setNewModule({ ...newModule, key: e.target.value })} fullWidth required />
-              <TextField label="Name" value={newModule.name} onChange={(e)=>setNewModule({ ...newModule, name: e.target.value })} fullWidth required />
-              <TextField label="Description" value={newModule.description} onChange={(e)=>setNewModule({ ...newModule, description: e.target.value })} fullWidth multiline rows={3} />
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Icon</InputLabel>
-                    <Select label="Icon" value={newModule.icon} onChange={(e)=>setNewModule({ ...newModule, icon: e.target.value })}>
-                      <MenuItem value="Business">Business</MenuItem>
-                      <MenuItem value="Pets">Pets</MenuItem>
-                      <MenuItem value="Store">Store</MenuItem>
-                      <MenuItem value="LocalHospital">Hospital</MenuItem>
-                      <MenuItem value="Home">Home</MenuItem>
-                      <MenuItem value="VolunteerActivism">Volunteer</MenuItem>
-                      <MenuItem value="ShoppingCart">Shopping</MenuItem>
-                      <MenuItem value="Medication">Medication</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField label="Color" type="color" value={newModule.color} onChange={(e)=>setNewModule({ ...newModule, color: e.target.value })} fullWidth />
-                </Grid>
-              </Grid>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select label="Status" value={newModule.status} onChange={(e)=>setNewModule({ ...newModule, status: e.target.value })}>
-                  <MenuItem value="active">Active</MenuItem>
-                  <MenuItem value="coming_soon">Coming Soon</MenuItem>
-                  <MenuItem value="maintenance">Maintenance</MenuItem>
-                  <MenuItem value="blocked">Blocked</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControlLabel control={<Switch checked={!!newModule.hasManagerDashboard} onChange={(e)=>setNewModule({ ...newModule, hasManagerDashboard: e.target.checked })} />} label="Has Manager Dashboard" />
-              <FormControlLabel control={<Switch checked={!!newModule.isCoreModule} onChange={(e)=>setNewModule({ ...newModule, isCoreModule: e.target.checked })} />} label="Core Module" />
+      {/* Module Details Table */}
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+            Module Details
+          </Typography>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Key</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Dashboard</TableCell>
+                  <TableCell>Order</TableCell>
+                  <TableCell>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {modules.map((module) => (
+                  <TableRow key={module._id}>
+                    <TableCell>
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <Avatar sx={{ bgcolor: module.color, width: 32, height: 32 }}>
+                          <ModuleIcon fontSize="small" />
+                        </Avatar>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          {module.name}
+                        </Typography>
             </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setManageModulesOpen(false)}>Close</Button>
-          {moduleDialogTab === 1 && (
-            <Button variant="contained" onClick={createNewModule}>Create</Button>
-          )}
-        </DialogActions>
-      </Dialog>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" fontFamily="monospace">
+                        {module.key}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        icon={getStatusIcon(module.status)}
+                        label={module.status.replace('_', ' ').toUpperCase()}
+                        color={getStatusColor(module.status)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={module.hasManagerDashboard ? 'Yes' : 'No'}
+                        color={module.hasManagerDashboard ? 'success' : 'default'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {module.displayOrder}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleEditModule(module)}
+                        color="primary"
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      {/* Delete disabled by requirement */}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </CardContent>
+      </Card>
 
-      {/* Edit Module Dialog */}
-      <Dialog open={editModuleDialog.open} onClose={() => setEditModuleDialog({ open: false, module: null })} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit Module</DialogTitle>
+      {/* Module Form Dialog */}
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          Edit Module
+        </DialogTitle>
         <DialogContent>
-          <Box component="form" sx={{ mt: 1, display: 'grid', gap: 2 }}>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+                <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Module Key"
+                value={formData.key}
+                disabled
+                helperText="Unique identifier"
+              />
+                </Grid>
+                <Grid item xs={12} sm={6}>
             <TextField 
-              label="Name" 
-              value={editModule.name} 
-              onChange={(e) => setEditModule({ ...editModule, name: e.target.value })} 
               fullWidth 
-              required 
+                label="Module Name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             />
+            </Grid>
+            <Grid item xs={12}>
             <TextField 
+                fullWidth
               label="Description" 
-              value={editModule.description} 
-              onChange={(e) => setEditModule({ ...editModule, description: e.target.value })} 
-              fullWidth 
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               multiline 
               rows={3} 
             />
-            <Grid container spacing={2}>
+            </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
                   <InputLabel>Icon</InputLabel>
                   <Select 
-                    label="Icon" 
-                    value={editModule.icon} 
-                    onChange={(e) => setEditModule({ ...editModule, icon: e.target.value })}
-                  >
-                    <MenuItem value="Business">Business</MenuItem>
-                    <MenuItem value="Pets">Pets</MenuItem>
-                    <MenuItem value="Store">Store</MenuItem>
-                    <MenuItem value="LocalHospital">Hospital</MenuItem>
-                    <MenuItem value="Home">Home</MenuItem>
-                    <MenuItem value="VolunteerActivism">Volunteer</MenuItem>
-                    <MenuItem value="ShoppingCart">Shopping</MenuItem>
-                    <MenuItem value="Medication">Medication</MenuItem>
+                  value={formData.icon}
+                  onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+                >
+                  {moduleIcons.map((icon) => (
+                    <MenuItem key={icon} value={icon}>
+                      {icon}
+                    </MenuItem>
+                  ))}
                   </Select>
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField 
-                  label="Color" 
-                  type="color" 
-                  value={editModule.color} 
-                  onChange={(e) => setEditModule({ ...editModule, color: e.target.value })} 
-                  fullWidth 
-                />
+              <FormControl fullWidth>
+                <InputLabel>Color</InputLabel>
+                <Select
+                  value={formData.color}
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                >
+                  {moduleColors.map((color) => (
+                    <MenuItem key={color} value={color}>
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <Box
+                          sx={{
+                            width: 20,
+                            height: 20,
+                            backgroundColor: color,
+                            borderRadius: '50%'
+                          }}
+                        />
+                        {color}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               </Grid>
-            </Grid>
+            <Grid item xs={12} sm={6}>
             <FormControl fullWidth>
               <InputLabel>Status</InputLabel>
               <Select 
-                label="Status" 
-                value={editModule.status} 
-                onChange={(e) => setEditModule({ ...editModule, status: e.target.value })}
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
               >
+                  <MenuItem value="coming_soon">Coming Soon</MenuItem>
                 <MenuItem value="active">Active</MenuItem>
+                  <MenuItem value="maintenance">Maintenance</MenuItem>
                 <MenuItem value="blocked">Blocked</MenuItem>
-                <MenuItem value="maintenance">Maintenance</MenuItem>
-                <MenuItem value="coming_soon">Coming Soon</MenuItem>
               </Select>
             </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Display Order"
+                type="number"
+                value={formData.displayOrder}
+                onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) || 0 })}
+              />
+            </Grid>
+            <Grid item xs={12}>
             <FormControlLabel
               control={
                 <Switch 
-                  checked={editModule.hasManagerDashboard} 
-                  onChange={(e) => setEditModule({ ...editModule, hasManagerDashboard: e.target.checked })}
+                    checked={formData.hasManagerDashboard}
+                    onChange={(e) => setFormData({ ...formData, hasManagerDashboard: e.target.checked })}
                 />
               }
               label="Has Manager Dashboard"
             />
-            <FormControlLabel
-              control={
-                <Switch 
-                  checked={editModule.isCoreModule} 
-                  onChange={(e) => setEditModule({ ...editModule, isCoreModule: e.target.checked })}
+            </Grid>
+            {formData.status === 'maintenance' && (
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Maintenance Message"
+                  value={formData.maintenanceMessage}
+                  onChange={(e) => setFormData({ ...formData, maintenanceMessage: e.target.value })}
+                  multiline
+                  rows={2}
                 />
-              }
-              label="Core Module"
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditModuleDialog({ open: false, module: null })}>Cancel</Button>
-          <Button variant="contained" onClick={updateModule}>Update</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Module Status Management Dialog */}
-      <Dialog open={moduleStatusDialog.open} onClose={() => setModuleStatusDialog({ open: false, module: null, status: '', message: '' })} maxWidth="sm" fullWidth>
-        <DialogTitle>Change Module Status</DialogTitle>
-        <DialogContent>
-          <Box sx={{ mt: 1, display: 'grid', gap: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Module: <strong>{moduleStatusDialog.module?.name}</strong>
-            </Typography>
-            <FormControl fullWidth>
-              <InputLabel>New Status</InputLabel>
-              <Select 
-                label="New Status" 
-                value={moduleStatusDialog.status} 
-                onChange={(e) => setModuleStatusDialog({ ...moduleStatusDialog, status: e.target.value })}
-              >
-                <MenuItem value="active">Active</MenuItem>
-                <MenuItem value="blocked">Blocked</MenuItem>
-                <MenuItem value="maintenance">Maintenance</MenuItem>
-                <MenuItem value="coming_soon">Coming Soon</MenuItem>
-              </Select>
-            </FormControl>
-            {(moduleStatusDialog.status === 'maintenance' || moduleStatusDialog.status === 'blocked') && (
-              <TextField 
-                label={moduleStatusDialog.status === 'maintenance' ? 'Maintenance Message' : 'Block Reason'} 
-                value={moduleStatusDialog.message} 
-                onChange={(e) => setModuleStatusDialog({ ...moduleStatusDialog, message: e.target.value })} 
-                fullWidth 
-                multiline 
-                rows={3} 
-                required 
-              />
+              </Grid>
             )}
-          </Box>
+            {formData.status === 'blocked' && (
+              <Grid item xs={12}>
+              <TextField 
+                fullWidth 
+                  label="Block Reason"
+                  value={formData.blockReason}
+                  onChange={(e) => setFormData({ ...formData, blockReason: e.target.value })}
+                multiline 
+                  rows={2}
+              />
+              </Grid>
+            )}
+          </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setModuleStatusDialog({ open: false, module: null, status: '', message: '' })}>Cancel</Button>
-          <Button 
-            variant="contained" 
-            onClick={() => updateModuleStatus(moduleStatusDialog.module._id, moduleStatusDialog.status, moduleStatusDialog.message)}
-            disabled={!moduleStatusDialog.status || ((moduleStatusDialog.status === 'maintenance' || moduleStatusDialog.status === 'blocked') && !moduleStatusDialog.message)}
-          >
-            Update Status
-          </Button>
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleSubmit} variant="contained">Update</Button>
         </DialogActions>
       </Dialog>
 
+      {/* Module Actions Menu */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={() => { handleEditModule(selectedModule); handleMenuClose(); }}>
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Edit Module</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => { handleStatusChange(selectedModule?._id, 'active'); handleMenuClose(); }}>
+          <ListItemIcon>
+            <PlayIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Activate</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => { handleStatusChange(selectedModule?._id, 'maintenance', 'Under maintenance'); handleMenuClose(); }}>
+          <ListItemIcon>
+            <PauseIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Set Maintenance</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => { handleStatusChange(selectedModule?._id, 'blocked', 'Module blocked'); handleMenuClose(); }}>
+          <ListItemIcon>
+            <BlockIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Block Module</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => { handleDeleteModule(selectedModule?._id); handleMenuClose(); }}>
+          <ListItemIcon>
+            <DeleteIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Delete Module</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Error/Success Messages */}
+      {error && (
+        <Snackbar
+          open={!!error}
+          autoHideDuration={6000}
+          onClose={() => setError('')}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <Alert onClose={() => setError('')} severity="error" sx={{ width: '100%' }}>
+            {error}
+          </Alert>
+        </Snackbar>
+      )}
+
+      {success && (
       <Snackbar
-        open={snackbar.open}
+          open={!!success}
         autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        message={snackbar.message}
-      />
+          onClose={() => setSuccess('')}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <Alert onClose={() => setSuccess('')} severity="success" sx={{ width: '100%' }}>
+            {success}
+          </Alert>
+        </Snackbar>
+      )}
     </Container>
   )
 }

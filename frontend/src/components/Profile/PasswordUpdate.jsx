@@ -10,7 +10,7 @@ import {
   Divider
 } from '@mui/material';
 import { Lock as LockIcon, Security as SecurityIcon } from '@mui/icons-material';
-import api from '../../services/api';
+import { api } from '../../services/api';
 
 const PasswordUpdate = ({ profileData, onUpdateSuccess, onUpdateError }) => {
   const [formData, setFormData] = useState({

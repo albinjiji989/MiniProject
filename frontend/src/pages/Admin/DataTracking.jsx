@@ -235,7 +235,7 @@ const DataTracking = () => {
       case 'worker': return <WorkIcon />
       case 'adoption': return <PetsIcon />
       case 'rescue': return <PetsIcon />
-      case 'shelter': return <BusinessIcon />
+      case 'petshop': return <BusinessIcon />
       default: return <HistoryIcon />
     }
   }
@@ -262,7 +262,7 @@ const DataTracking = () => {
       case 'worker': return '#06b6d4'
       case 'adoption': return '#06b6d4'
       case 'rescue': return '#ef4444'
-      case 'shelter': return '#10b981'
+      case 'petshop': return '#10b981'
       default: return '#64748b'
     }
   }

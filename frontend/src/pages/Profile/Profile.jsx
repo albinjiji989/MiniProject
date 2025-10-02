@@ -10,7 +10,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
-import api from '../../services/api';
+import { api } from '../../services/api';
 import ProfileDetails from '../../components/Profile/ProfileDetails';
 import PasswordUpdate from '../../components/Profile/PasswordUpdate';
 import ProfilePicture from '../../components/Profile/ProfilePicture';

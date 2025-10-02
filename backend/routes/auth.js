@@ -202,6 +202,11 @@ router.post('/login', [
       });
     }
 
+    // Check active status
+    if (user.isActive === false) {
+      return res.status(403).json({ success: false, message: 'Account is deactivated. Contact support.' });
+    }
+
     // Get user role
     const userRole = user.role;
 
@@ -304,6 +309,9 @@ router.post('/firebase-login', [
         user.provider = normalizedProvider;
       }
       await user.save();
+      if (user.isActive === false) {
+        return res.status(403).json({ success: false, message: 'Account is deactivated. Contact support.' });
+      }
       console.log('User updated successfully');
     } else {
       // Create new user
@@ -321,6 +329,9 @@ router.post('/firebase-login', [
           role: 'public_user'
         });
         await user.save();
+        if (user.isActive === false) {
+          return res.status(403).json({ success: false, message: 'Account is deactivated. Contact support.' });
+        }
         console.log('User created successfully');
 
         // Send welcome email (fire-and-forget)
@@ -675,6 +686,47 @@ router.post('/force-password', [
   } catch (error) {
     console.error('Force password error:', error);
     res.status(500).json({ success: false, message: 'Server error during password update' });
+  }
+});
+
+// @route   POST /api/auth/logout
+// @desc    Logout user and invalidate token
+// @access  Private
+router.post('/logout', auth, async (req, res) => {
+  try {
+    // Update user's last logout time
+    await User.findByIdAndUpdate(req.user.id, { 
+      lastLogout: new Date() 
+    });
+
+    // Log the logout activity
+    const Activity = require('../core/models/Activity');
+    try {
+      await Activity.create({
+        userId: req.user.id,
+        type: 'logout',
+        description: 'User logged out successfully',
+        metadata: {
+          timestamp: new Date(),
+          userAgent: req.get('User-Agent'),
+          ip: req.ip || req.connection.remoteAddress
+        }
+      });
+    } catch (activityError) {
+      console.error('Error logging logout activity:', activityError);
+      // Don't fail logout if activity logging fails
+    }
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during logout'
+    });
   }
 });
 

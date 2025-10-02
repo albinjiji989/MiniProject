@@ -22,7 +22,7 @@ const userSchema = new mongoose.Schema({
   unitLocation: { type: String },
   assignedModule: { 
     type: String, 
-    enum: ['adoption', 'shelter', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary-care', 'veterinary', 'donation'],
+    enum: ['adoption', 'petshop', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary-care', 'veterinary', 'donation'],
     required: function() { return ['module_manager', 'module_worker', 'temporary_care_manager', 'temporary_care_worker'].includes(this.role); }
   },
   supervisor: { 

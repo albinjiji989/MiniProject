@@ -12,7 +12,7 @@ router.post('/', auth, authorize('admin'), [
   body('name').notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('Please provide a valid email'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('role').isIn(['admin', 'adoption_manager', 'shelter_manager', 'rescue_manager', 'ecommerce_manager', 'pharmacy_manager', 'boarding_manager', 'temporary_care_manager', 'veterinary_manager', 'public_user', 'module_worker']).withMessage('Invalid role'),
+  body('role').isIn(['admin', 'adoption_manager', 'petshop_manager', 'rescue_manager', 'ecommerce_manager', 'pharmacy_manager', 'boarding_manager', 'temporary_care_manager', 'veterinary_manager', 'public_user', 'module_worker']).withMessage('Invalid role'),
   body('phone').optional().notEmpty().withMessage('Phone cannot be empty')
 ], async (req, res) => {
   try {
@@ -87,11 +87,25 @@ router.get('/', auth, authorize('admin'), async (req, res) => {
     if (role) filter.role = role;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
 
-    const users = await User.find(filter)
+    const usersRaw = await User.find(filter)
       .select('-password')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
+
+    // Enrich with UserDetails (allowed/blocked modules, assignedModule, etc.)
+    const UserDetails = require('../models/UserDetails');
+    const users = await Promise.all(
+      usersRaw.map(async (u) => {
+        const details = await UserDetails.findOne({ userId: u._id }).lean();
+        return {
+          ...u.toObject(),
+          assignedModule: details?.assignedModule || u.assignedModule || null,
+          allowedModules: details?.allowedModules || [],
+          blockedModules: details?.blockedModules || [],
+        };
+      })
+    );
 
     const total = await User.countDocuments(filter);
 
@@ -277,14 +291,24 @@ router.get('/:id', auth, authorize('admin'), async (req, res) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: 'Invalid user id' });
     }
-    const user = await User.findById(req.params.id).select('-password');
+    const userDoc = await User.findById(req.params.id).select('-password');
     
-    if (!user) {
+    if (!userDoc) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
+
+    // Attach UserDetails
+    const UserDetails = require('../models/UserDetails');
+    const details = await UserDetails.findOne({ userId: userDoc._id }).lean();
+    const user = {
+      ...userDoc.toObject(),
+      assignedModule: details?.assignedModule || userDoc.assignedModule || null,
+      allowedModules: details?.allowedModules || [],
+      blockedModules: details?.blockedModules || [],
+    };
 
     res.json({
       success: true,
@@ -307,7 +331,7 @@ router.get('/:id', auth, authorize('admin'), async (req, res) => {
 router.put('/:id', auth, authorize('admin'), [
   body('name').optional().notEmpty().withMessage('Name cannot be empty'),
   body('email').optional().isEmail().withMessage('Please provide a valid email'),
-  body('role').optional().isIn(['admin', 'adoption_manager', 'shelter_manager', 'rescue_manager', 'ecommerce_manager', 'pharmacy_manager', 'boarding_manager', 'temporary_care_manager', 'veterinary_manager', 'public_user', 'module_worker']).withMessage('Invalid role'),
+  body('role').optional().isIn(['admin', 'adoption_manager', 'petshop_manager', 'rescue_manager', 'ecommerce_manager', 'pharmacy_manager', 'boarding_manager', 'temporary_care_manager', 'veterinary_manager', 'public_user', 'module_worker']).withMessage('Invalid role'),
   body('phone').optional().notEmpty().withMessage('Phone cannot be empty')
 ], async (req, res) => {
   try {
@@ -434,7 +458,7 @@ router.put('/:id/activate', auth, authorize('admin'), async (req, res) => {
 router.get('/module/:module', auth, authorize('admin'), async (req, res) => {
   try {
     const { module } = req.params;
-    const validModules = ['adoption', 'shelter', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary_care', 'veterinary'];
+    const validModules = ['adoption', 'petshop', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary_care', 'veterinary'];
     
     if (!validModules.includes(module)) {
       return res.status(400).json({
@@ -518,14 +542,23 @@ router.get('/public', auth, authorize('admin'), async (req, res) => {
 // @access  Private (Admin only)
 router.get('/:id/details', auth, authorize('admin'), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    const userDoc = await User.findById(req.params.id).select('-password');
     
-    if (!user) {
+    if (!userDoc) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
+
+    const UserDetails = require('../models/UserDetails');
+    const details = await UserDetails.findOne({ userId: userDoc._id }).lean();
+    const user = {
+      ...userDoc.toObject(),
+      assignedModule: details?.assignedModule || userDoc.assignedModule || null,
+      allowedModules: details?.allowedModules || [],
+      blockedModules: details?.blockedModules || [],
+    };
 
     // Get user's pets (if Pet model exists)
     let pets = [];

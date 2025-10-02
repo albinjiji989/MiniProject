@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react'
-import { authAPI, api } from '../services/api'
+import React, { createContext, useContext, useReducer, useEffect } from 'react'
+import { authAPI } from '../services/api'
 import firebaseAuth from '../services/firebaseAuth'
 
 const AuthContext = createContext()
@@ -55,17 +55,27 @@ const authReducer = (state, action) => {
 
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState)
-  const firebaseSessionHandledRef = useRef(false)
 
+  const TOKEN_KEYS = ['token', 'authToken', 'accessToken', 'jwt', 'jwtToken', 'access_token']
+  const clearAllAuthTokens = () => {
+    try {
+      for (const k of TOKEN_KEYS) {
+        localStorage.removeItem(k)
+        sessionStorage.removeItem(k)
+      }
+      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
+    } catch (_) {}
+  }
+
+  // Simple initialization - verify token with backend; if cookies enabled, try session-based auth
   useEffect(() => {
-    const initAuth = async () => {
-      const token = localStorage.getItem('token')
-      if (token) {
-        try {
-          dispatch({ type: 'AUTH_START' })
-          console.log('Checking existing token:', token.substring(0, 20) + '...')
-          const response = await authAPI.getMe()
-          console.log('getMe response:', response.data)
+    const token = localStorage.getItem('token')
+    const cookiesEnabled = import.meta.env.VITE_API_COOKIES === 'true'
+    if (token) {
+      // Verify token with backend
+      authAPI.getMe()
+        .then(response => {
           dispatch({
             type: 'AUTH_SUCCESS',
             payload: {
@@ -73,49 +83,59 @@ export const AuthProvider = ({ children }) => {
               token
             }
           })
-          console.log('Auth state restored successfully')
-        } catch (error) {
-          console.error('Token verification failed:', error)
+        })
+        .catch(() => {
+          // Token is invalid, clear it
           localStorage.removeItem('token')
-          dispatch({
-            type: 'AUTH_FAILURE',
-            payload: error.response?.data?.message || 'Authentication failed'
-          })
-        }
-      } else {
-        dispatch({ type: 'AUTH_FAILURE', payload: null })
-      }
+          dispatch({ type: 'AUTH_FAILURE', payload: null })
+        })
+    } else if (cookiesEnabled) {
+      // Try cookie-based session restore
+      authAPI.getMe()
+        .then(response => {
+          const user = response.data?.data?.user
+          if (user) {
+            dispatch({ type: 'AUTH_SUCCESS', payload: { user, token: null } })
+          } else {
+            dispatch({ type: 'AUTH_FAILURE', payload: null })
+          }
+        })
+        .catch(() => {
+          dispatch({ type: 'AUTH_FAILURE', payload: null })
+        })
+    } else {
+      dispatch({ type: 'AUTH_FAILURE', payload: null })
     }
 
-
-    // Listen for Firebase auth state changes
+    // Listen for Firebase auth state changes (for Google auth)
     const unsubscribe = firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
-      if (firebaseUser) {
-        // If we already have a backend session (token) or handled a Firebase session, skip
-        const existingToken = localStorage.getItem('token')
-        if (existingToken || firebaseSessionHandledRef.current) {
-          return
-        }
-        // User is signed in with Firebase
+      // If a logout was just initiated, skip any auto-login
+      if (sessionStorage.getItem('auth_logout') === '1') {
+        // Best-effort: ensure firebase is signed out
+        try { await firebaseAuth.signOut() } catch (_) {}
+        sessionStorage.removeItem('auth_logout')
+        return
+      }
+
+      // If user is on the login page and there's no token, do not auto-create a session from Firebase
+      const onLoginPage = typeof window !== 'undefined' && window.location?.pathname?.toLowerCase().includes('/login')
+      const googleFlow = sessionStorage.getItem('auth_google_flow') === '1'
+      if (onLoginPage && !localStorage.getItem('token') && !googleFlow) {
+        return
+      }
+
+      if (firebaseUser && !localStorage.getItem('token')) {
+        // User signed in with Firebase, create backend session
         try {
-          dispatch({ type: 'AUTH_START' })
-          // Prevent auto-login to backend for unverified email/password accounts
-          const providers = (firebaseUser.providerData || []).map(p => p.providerId)
-          const isPasswordProvider = providers.includes('password')
-          if (isPasswordProvider && !firebaseUser.emailVerified) {
-            // Skip backend session creation until verified
-            dispatch({ type: 'AUTH_FAILURE', payload: null })
-            return
-          }
           const userData = {
             name: firebaseUser.displayName,
             email: firebaseUser.email,
             firebaseUid: firebaseUser.uid,
             profileImage: firebaseUser.photoURL,
-            provider: providers[0] || 'firebase'
+            provider: 'google'
           }
           
-          const response = await api.post('/auth/firebase-login', userData)
+          const response = await authAPI.firebaseLogin(userData)
           const { user, token } = response.data.data
           
           localStorage.setItem('token', token)
@@ -123,26 +143,29 @@ export const AuthProvider = ({ children }) => {
             type: 'AUTH_SUCCESS',
             payload: { user, token }
           })
-          firebaseSessionHandledRef.current = true
+          // Clear google flow flag after successful session creation
+          sessionStorage.removeItem('auth_google_flow')
         } catch (error) {
           console.error('Firebase auth error:', error)
+          // If account is deactivated, clear session and surface a message
+          const msg = error?.response?.data?.message || error.message || 'Firebase authentication failed'
+          const status = error?.response?.status
+          if (status === 403 || String(msg).toLowerCase().includes('deactivated')) {
+            try { await firebaseAuth.signOut() } catch (_) {}
+            localStorage.removeItem('token')
+            sessionStorage.setItem('auth_deactivated', '1')
+            sessionStorage.setItem('auth_deactivated_msg', msg)
+            try { window.dispatchEvent(new CustomEvent('auth:deactivated', { detail: { message: msg } })) } catch (_) {}
+          }
           dispatch({
             type: 'AUTH_FAILURE',
-            payload: error.response?.data?.message || 'Firebase authentication failed'
+            payload: msg
           })
-        // Sign out of Firebase to avoid repeated onAuthStateChanged loops
-        try { await firebaseAuth.signOut() } catch (_) {}
+          // Clear google flow flag on failure as well
+          sessionStorage.removeItem('auth_google_flow')
         }
-      } else {
-        // User is signed out
-        if (!localStorage.getItem('token')) {
-          dispatch({ type: 'AUTH_FAILURE', payload: null })
-        }
-        firebaseSessionHandledRef.current = false
       }
     })
-
-    initAuth()
 
     return () => unsubscribe()
   }, [])
@@ -151,19 +174,28 @@ export const AuthProvider = ({ children }) => {
     try {
       dispatch({ type: 'AUTH_START' })
       const response = await authAPI.login(credentials)
-      console.log('Login response:', response.data)
-      const { user, token } = response.data.data
+      const data = response.data?.data || {}
+      const cookiesEnabled = import.meta.env.VITE_API_COOKIES === 'true'
       
-      localStorage.setItem('token', token)
-      dispatch({
-        type: 'AUTH_SUCCESS',
-        payload: { user, token }
-      })
+      // If token present (JWT flow)
+      if (data.token) {
+        localStorage.setItem('token', data.token)
+        dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user, token: data.token } })
+      } else if (cookiesEnabled) {
+        // Cookie session flow: fetch user via /auth/me
+        const me = await authAPI.getMe()
+        const user = me.data?.data?.user
+        if (user) {
+          dispatch({ type: 'AUTH_SUCCESS', payload: { user, token: null } })
+        } else {
+          throw new Error('Session established but user not returned')
+        }
+      } else {
+        throw new Error('No token returned from login and cookies are disabled')
+      }
       
-      console.log('Login successful, user:', user)
       return { success: true }
     } catch (error) {
-      console.error('Login error:', error)
       const errorMessage = error.response?.data?.message || 'Login failed'
       dispatch({
         type: 'AUTH_FAILURE',
@@ -197,10 +229,42 @@ export const AuthProvider = ({ children }) => {
   }
 
   const logout = async () => {
-    try { await firebaseAuth.signOut() } catch (_) {}
-    localStorage.removeItem('token')
-    firebaseSessionHandledRef.current = false
+    try {
+      // Set a guard to prevent onAuthStateChanged from re-logging instantly
+      sessionStorage.setItem('auth_logout', '1')
+      // Call backend logout endpoint
+      const token = localStorage.getItem('token')
+      if (token) {
+        try {
+          await authAPI.logout()
+        } catch (error) {
+          console.error('Backend logout error:', error)
+        }
+      }
+      
+      // Sign out from Firebase
+      try {
+        await firebaseAuth.signOut()
+      } catch (error) {
+        console.error('Firebase logout error:', error)
+      }
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      // Clear all auth data
+      clearAllAuthTokens()
+      // keep the guard for this navigation tick, it will be removed by listener
+      dispatch({ type: 'LOGOUT' })
+      
+      // Redirect to login
+      window.location.href = '/login'
+    }
+  }
+
+  const clearAuthState = () => {
+    clearAllAuthTokens()
     dispatch({ type: 'LOGOUT' })
+    window.location.href = '/login'
   }
 
   const updateProfile = async (profileData) => {
@@ -227,21 +291,50 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Firebase Authentication Methods
+  // Google Authentication Methods
   const loginWithGoogle = async (role = 'public_user') => {
     try {
       dispatch({ type: 'AUTH_START' })
+      // Mark that we're in Google auth flow so onAuthStateChanged is allowed on /login
+      sessionStorage.setItem('auth_google_flow', '1')
       const result = await firebaseAuth.signInWithGoogle(role)
       
       if (result.success) {
-        // We no longer expect a token immediately; onAuthStateChanged will
-        // post to /auth/firebase-login and populate user/token.
-        return { success: true }
+        // If it's a redirect, we need to wait for the auth state change
+        if (result.redirect) {
+          return { success: true, message: 'Redirecting to Google...' }
+        }
+        
+        // If we have user data, proceed with backend login
+        if (result.user) {
+          const userData = {
+            name: result.user.displayName,
+            email: result.user.email,
+            firebaseUid: result.user.uid,
+            profileImage: result.user.photoURL,
+            provider: 'google'
+          }
+          
+          const response = await authAPI.firebaseLogin(userData)
+          const { user, token } = response.data.data
+          
+          localStorage.setItem('token', token)
+          dispatch({
+            type: 'AUTH_SUCCESS',
+            payload: { user, token }
+          })
+          
+          return { success: true }
+        } else {
+          // No user data means we need to get it from Firebase auth state
+          return { success: true, message: 'Google authentication successful' }
+        }
       } else {
         dispatch({
           type: 'AUTH_FAILURE',
           payload: result.error
         })
+        sessionStorage.removeItem('auth_google_flow')
         return { success: false, error: result.error }
       }
     } catch (error) {
@@ -250,10 +343,10 @@ export const AuthProvider = ({ children }) => {
         type: 'AUTH_FAILURE',
         payload: errorMessage
       })
+      sessionStorage.removeItem('auth_google_flow')
       return { success: false, error: errorMessage }
     }
   }
-
 
   const signUpWithGoogle = async (role = 'public_user', assignedModule = null) => {
     try {
@@ -261,8 +354,37 @@ export const AuthProvider = ({ children }) => {
       const result = await firebaseAuth.signUpWithGoogle(role, assignedModule)
       
       if (result.success) {
-        // Same as login: wait for onAuthStateChanged to complete backend session
-        return { success: true }
+        // If it's a redirect, we need to wait for the auth state change
+        if (result.redirect) {
+          return { success: true, message: 'Redirecting to Google...' }
+        }
+        
+        // If we have user data, proceed with backend login
+        if (result.user) {
+          const userData = {
+            name: result.user.displayName,
+            email: result.user.email,
+            firebaseUid: result.user.uid,
+            profileImage: result.user.photoURL,
+            provider: 'google',
+            role,
+            assignedModule
+          }
+          
+          const response = await authAPI.firebaseLogin(userData)
+          const { user, token } = response.data.data
+          
+          localStorage.setItem('token', token)
+          dispatch({
+            type: 'AUTH_SUCCESS',
+            payload: { user, token }
+          })
+          
+          return { success: true }
+        } else {
+          // No user data means we need to get it from Firebase auth state
+          return { success: true, message: 'Google signup successful' }
+        }
       } else {
         dispatch({
           type: 'AUTH_FAILURE',
@@ -280,102 +402,24 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  const loginWithEmail = async (credentials) => {
+  // Password Reset Methods
+  const forgotPassword = async (email) => {
     try {
-      dispatch({ type: 'AUTH_START' })
-      const result = await firebaseAuth.signInWithEmail(credentials.email, credentials.password)
-      
-      if (result.success) {
-        localStorage.setItem('token', result.token)
-        dispatch({
-          type: 'AUTH_SUCCESS',
-          payload: { user: result.user, token: result.token }
-        })
-        return { success: true }
-      } else {
-        dispatch({
-          type: 'AUTH_FAILURE',
-          payload: result.error
-        })
-        return { success: false, error: result.error }
-      }
+      const response = await authAPI.forgotPassword(email)
+      return { success: true, message: response.data.message }
     } catch (error) {
-      const errorMessage = error.message || 'Email login failed'
-      dispatch({
-        type: 'AUTH_FAILURE',
-        payload: errorMessage
-      })
+      const errorMessage = error.response?.data?.message || 'Failed to send reset email'
       return { success: false, error: errorMessage }
     }
   }
 
-  const signUpWithEmail = async (userData) => {
+  const resetPasswordWithOtp = async (email, otp, newPassword) => {
     try {
-      dispatch({ type: 'AUTH_START' })
-      const result = await firebaseAuth.signUpWithEmail(userData.email, userData.password, userData)
-      
-      if (result.success) {
-        if (result.token) {
-          localStorage.setItem('token', result.token)
-          dispatch({
-            type: 'AUTH_SUCCESS',
-            payload: { user: result.user, token: result.token }
-          })
-        } else {
-          dispatch({ type: 'AUTH_FAILURE', payload: null })
-        }
-        return { success: true, message: result.message }
-      } else {
-        dispatch({
-          type: 'AUTH_FAILURE',
-          payload: result.error
-        })
-        return { success: false, error: result.error }
-      }
+      const response = await authAPI.resetPasswordWithOtp({ email, otp, password: newPassword, confirmPassword: newPassword })
+      return { success: true, message: response.data.message }
     } catch (error) {
-      const errorMessage = error.message || 'Email signup failed'
-      dispatch({
-        type: 'AUTH_FAILURE',
-        payload: errorMessage
-      })
+      const errorMessage = error.response?.data?.message || 'Password reset failed'
       return { success: false, error: errorMessage }
-    }
-  }
-
-  const resetPassword = async (email) => {
-    try {
-      const result = await firebaseAuth.resetPassword(email)
-      return result
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  }
-
-  // OTP Password Reset via Firebase Functions
-  const requestPasswordResetOTP = async (email) => {
-    try {
-      return await firebaseAuth.requestPasswordResetOTP(email)
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  }
-
-  const verifyOTPAndResetPassword = async ({ email, otp, newPassword }) => {
-    try {
-      return await firebaseAuth.verifyOTPAndResetPassword(email, otp, newPassword)
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  }
-
-  const logoutFirebase = async () => {
-    try {
-      await firebaseAuth.signOut()
-      localStorage.removeItem('token')
-      dispatch({ type: 'LOGOUT' })
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: error.message }
     }
   }
 
@@ -384,17 +428,15 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    clearAuthState,
     updateProfile,
     changePassword,
-    // Firebase methods
+    // Google authentication
     loginWithGoogle,
     signUpWithGoogle,
-    loginWithEmail,
-    signUpWithEmail,
-    resetPassword,
-    requestPasswordResetOTP,
-    verifyOTPAndResetPassword,
-    logoutFirebase
+    // Password reset
+    forgotPassword,
+    resetPasswordWithOtp
   }
 
   return (

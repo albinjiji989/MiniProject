@@ -16,10 +16,6 @@ import {
   Paper,
   Chip,
   IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
   FormControl,
   InputLabel,
@@ -27,617 +23,325 @@ import {
   MenuItem,
   Alert,
   Snackbar,
+  CircularProgress,
+  Pagination,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Menu,
+  ListItemIcon,
+  ListItemText,
   Avatar,
-  LinearProgress,
-  Checkbox,
+  Tooltip,
+  InputAdornment,
+  Switch,
+  FormControlLabel,
   Tabs,
   Tab,
-  TablePagination,
-  InputAdornment,
-  Tooltip,
+  Checkbox,
+  FormGroup,
+  FormHelperText,
 } from '@mui/material'
-import AdminPageHeader from '../../components/Admin/AdminPageHeader'
-import AdminActionBar from '../../components/Admin/AdminActionBar'
-import AdminStatCard from '../../components/Admin/AdminStatCard'
 import {
-  Search as SearchIcon,
-  FilterList as FilterIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Visibility as ViewIcon,
-  People as UsersIcon,
+  MoreVert as MoreVertIcon,
+  Search as SearchIcon,
+  Person as UserIcon,
+  AdminPanelSettings as AdminIcon,
+  BusinessCenter as ManagerIcon,
   PersonAdd as PersonAddIcon,
+  Block as BlockIcon,
   CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon,
-  Download as DownloadIcon,
-  Refresh as RefreshIcon,
-  Person as PersonIcon,
   Email as EmailIcon,
   Phone as PhoneIcon,
-  Pets as PetsIcon,
+  LocationOn as LocationIcon,
 } from '@mui/icons-material'
 import { usersAPI, rolesAPI } from '../../services/api'
 
+const ALL_MODULES = [
+  'adoption',
+  'shelter',
+  'rescue',
+  'ecommerce',
+  'pharmacy',
+  'temporary-care',
+  'veterinary',
+  'donation',
+]
+
 const UserManagement = () => {
+  
   const [loading, setLoading] = useState(true)
-  const [publicUsers, setPublicUsers] = useState([])
-  const [userStats, setUserStats] = useState({})
-  const [selectedUsers, setSelectedUsers] = useState([])
+  const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
-  const [userDetailsTab, setUserDetailsTab] = useState(0)
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' })
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   
-  // Pagination and filtering
-  const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(10)
+  // Filters and pagination
   const [searchTerm, setSearchTerm] = useState('')
+  const [roleFilter, setRoleFilter] = useState('public_user') // Default to public users only
   const [statusFilter, setStatusFilter] = useState('')
+  const [showInactive, setShowInactive] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalUsers, setTotalUsers] = useState(0)
   
-  // Dialog states
-  const [userDetailsOpen, setUserDetailsOpen] = useState(false)
-  const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false)
-  const [editUserDialogOpen, setEditUserDialogOpen] = useState(false)
+  // Menu and dialog state
+  const [anchorEl, setAnchorEl] = useState(null)
   const [selectedUser, setSelectedUser] = useState(null)
-  const [userPets, setUserPets] = useState([])
-  const [userActivities, setUserActivities] = useState([])
+  const [deleteDialog, setDeleteDialog] = useState(false)
+  const [userToDelete, setUserToDelete] = useState(null)
+  const [editDialog, setEditDialog] = useState(false)
+  const [editUser, setEditUser] = useState(null)
+  const [formErrors, setFormErrors] = useState({})
   
-  // Create user form state
-  const [newUser, setNewUser] = useState({
-    name: '',
-    email: '',
-    password: '',
-    phone: '',
-    role: 'public_user',
-    address: '',
-    assignedModules: [],
-    isActive: true
-  })
-  
-  // Edit user form state
-  const [editUser, setEditUser] = useState({
+  // Form data for editing
+  const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     role: '',
     address: '',
-    assignedModules: [],
-    isActive: true
+    isActive: true,
   })
 
-  const fetchPublicUsers = async () => {
-    try {
-      setLoading(true)
-      const response = await usersAPI.getPublicUsers({
-        page: page + 1,
-        limit: rowsPerPage,
-        search: searchTerm,
-        status: statusFilter
-      })
-      
-      // Handle different response structures
-      let users = []
-      if (response.data) {
-        if (response.data.data && response.data.data.users) {
-          users = response.data.data.users
-        } else if (response.data.users) {
-          users = response.data.users
-        } else if (Array.isArray(response.data)) {
-          users = response.data
-        }
-      }
-      
-      // If no users found, try to get from response.data directly
-      if (users.length === 0 && response.data && Array.isArray(response.data)) {
-        users = response.data
-      }
-      
-      setPublicUsers(users)
-      
-    } catch (error) {
-      console.error('Error fetching public users:', error)
-      setSnackbar({ 
-        open: true, 
-        message: error?.response?.data?.message || 'Failed to load users', 
-        severity: 'error' 
-      })
-      setPublicUsers([])
-    } finally {
-      setLoading(false)
-    }
+  // Module access: default allow; admin can block per-module (boolean)
+  const [moduleAccess, setModuleAccess] = useState({})
+
+  const syncAccessFromLists = (_allowed, blocked) => {
+    const initial = {}
+    ALL_MODULES.forEach((m) => {
+      initial[m] = Array.isArray(blocked) && blocked.includes(m)
+    })
+    setModuleAccess(initial)
   }
 
-  const fetchUserStats = async () => {
-    try {
-      const response = await usersAPI.getUserStats()
-      
-      // Handle different response structures
-      let stats = {}
-      if (response.data) {
-        if (response.data.data) {
-          stats = response.data.data
-        } else {
-          stats = response.data
-        }
-      }
-      
-      // If no stats found, create default stats
-      if (!stats || Object.keys(stats).length === 0) {
-        stats = {
-          publicUsers: 0,
-          publicActiveUsers: 0,
-          publicInactiveUsers: 0
-        }
-      }
-      
-      setUserStats(stats)
-    } catch (error) {
-      console.error('Error fetching user stats:', error)
-      setUserStats({})
-    }
-  }
-
-  const fetchRoles = async () => {
-    try {
-      const response = await rolesAPI.list()
-      setRoles(Array.isArray(response.data) ? response.data : [])
-    } catch (error) {
-      console.error('Error fetching roles:', error)
-      setRoles([])
-    }
-  }
-
-  const fetchUserDetails = async (userId) => {
-    try {
-      const [petsResponse, activitiesResponse] = await Promise.all([
-        usersAPI.getUserPets(userId),
-        usersAPI.getUserActivities(userId)
-      ])
-      
-      // Handle pets response
-      let pets = []
-      if (petsResponse.data) {
-        if (Array.isArray(petsResponse.data)) {
-          pets = petsResponse.data
-        } else if (petsResponse.data.pets) {
-          pets = petsResponse.data.pets
-        } else if (petsResponse.data.data) {
-          pets = petsResponse.data.data
-        }
-      }
-      
-      // Handle activities response
-      let activities = []
-      if (activitiesResponse.data) {
-        if (Array.isArray(activitiesResponse.data)) {
-          activities = activitiesResponse.data
-        } else if (activitiesResponse.data.activities) {
-          activities = activitiesResponse.data.activities
-        } else if (activitiesResponse.data.data) {
-          activities = activitiesResponse.data.data
-        }
-      }
-      
-      
-      setUserPets(pets)
-      setUserActivities(activities)
-    } catch (error) {
-      console.error('Error fetching user details:', error)
-      setUserPets([])
-      setUserActivities([])
-    }
+  const deriveListsFromAccess = () => {
+    const blocked = []
+    Object.entries(moduleAccess).forEach(([m, isBlocked]) => {
+      if (isBlocked) blocked.push(m)
+    })
+    return { blockedModules: blocked }
   }
 
   useEffect(() => {
-    fetchPublicUsers()
-  }, [page, rowsPerPage, searchTerm, statusFilter])
-
-  useEffect(() => {
-    fetchUserStats()
-    fetchRoles()
+    loadInitialData()
   }, [])
 
-  const handleViewUserDetails = async (user) => {
+  useEffect(() => {
+    loadUsers()
+  }, [page, searchTerm, roleFilter, statusFilter, showInactive])
+
+  const loadInitialData = async () => {
+    try {
+      const rolesRes = await rolesAPI.list()
+      setRoles(rolesRes.data?.data || rolesRes.data || [])
+    } catch (err) {
+      console.error('Error loading roles:', err)
+    }
+  }
+
+  const loadUsers = async () => {
+    setLoading(true)
+    try {
+      const params = {
+        page,
+        limit: 10,
+        search: searchTerm,
+        role: roleFilter || 'public_user', // Default to public users only
+        isActive: statusFilter === 'inactive' ? false : statusFilter === 'active' ? true : (showInactive ? undefined : true)
+      }
+
+      const response = await usersAPI.getUsers(params)
+      const data = response.data?.data || []
+      const pagination = response.data?.pagination || {}
+
+      setUsers(Array.isArray(data) ? data : (data.users || []))
+      setTotalPages(pagination.pages || 1)
+      setTotalUsers(pagination.total || 0)
+    } catch (err) {
+      setError('Failed to load users')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSearch = (value) => {
+    setSearchTerm(value)
+    setPage(1)
+  }
+
+  const handleFilterChange = (filterType, value) => {
+    switch (filterType) {
+      case 'status':
+        setStatusFilter(value)
+        break
+      default:
+        break
+    }
+    setPage(1)
+  }
+
+
+  const handleMenuOpen = (event, user) => {
+    setAnchorEl(event.currentTarget)
     setSelectedUser(user)
-    setUserDetailsOpen(true)
-    setUserDetailsTab(0)
-    await fetchUserDetails(user._id)
   }
 
-  const handleToggleUserStatus = async (userId, currentStatus) => {
-    try {
-      setLoading(true)
-      await usersAPI.toggleUserStatus(userId, !currentStatus)
-      setSnackbar({ 
-        open: true, 
-        message: `User ${!currentStatus ? 'activated' : 'deactivated'} successfully`, 
-        severity: 'success' 
-      })
-      fetchPublicUsers()
-      fetchUserStats()
-    } catch (error) {
-      setSnackbar({ 
-        open: true, 
-        message: 'Failed to update user status', 
-        severity: 'error' 
-      })
-    } finally {
-      setLoading(false)
-    }
+  const handleMenuClose = () => {
+    setAnchorEl(null)
+    setSelectedUser(null)
   }
 
-  const handleDeleteUserPermanent = async (userId) => {
-    if (window.confirm('Are you sure you want to permanently delete this user? This action cannot be undone.')) {
-      try {
-        setLoading(true)
-        await usersAPI.deleteUserPermanent(userId)
-        setSnackbar({ 
-          open: true, 
-          message: 'User deleted permanently', 
-          severity: 'success' 
-        })
-        fetchPublicUsers()
-        fetchUserStats()
-      } catch (error) {
-        setSnackbar({ 
-          open: true, 
-          message: 'Failed to delete user', 
-          severity: 'error' 
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
-  }
-
-  const handleSelectUser = (userId) => {
-    setSelectedUsers(prev => 
-      prev.includes(userId) 
-        ? prev.filter(id => id !== userId)
-        : [...prev, userId]
-    )
-  }
-
-  const handleSelectAllUsers = () => {
-    if (selectedUsers.length === (Array.isArray(publicUsers) ? publicUsers.length : 0)) {
-      setSelectedUsers([])
-    } else {
-      setSelectedUsers(Array.isArray(publicUsers) ? publicUsers.map(user => user._id) : [])
-    }
-  }
-
-  const handleBulkUpdateStatus = async (status) => {
-    if (selectedUsers.length === 0) return
-    
-    try {
-      setLoading(true)
-      await usersAPI.bulkUpdateStatus(selectedUsers, status)
-      setSnackbar({ 
-        open: true, 
-        message: `Bulk ${status ? 'activation' : 'deactivation'} completed`, 
-        severity: 'success' 
-      })
-      setSelectedUsers([])
-      fetchPublicUsers()
-      fetchUserStats()
-    } catch (error) {
-      setSnackbar({ 
-        open: true, 
-        message: 'Failed to update user statuses', 
-        severity: 'error' 
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleBulkDelete = async () => {
-    if (selectedUsers.length === 0) return
-    
-    if (window.confirm(`Are you sure you want to permanently delete ${selectedUsers.length} users? This action cannot be undone.`)) {
-      try {
-        setLoading(true)
-        await usersAPI.bulkDelete(selectedUsers)
-        setSnackbar({ 
-          open: true, 
-          message: 'Bulk deletion completed', 
-          severity: 'success' 
-        })
-        setSelectedUsers([])
-        fetchPublicUsers()
-        fetchUserStats()
-      } catch (error) {
-        setSnackbar({ 
-          open: true, 
-          message: 'Failed to delete users', 
-          severity: 'error' 
-      })
-      } finally {
-        setLoading(false)
-      }
-    }
-  }
-
-  const handleCreateUser = async () => {
-    try {
-      if (!newUser.name || !newUser.email || !newUser.password) {
-        setSnackbar({ 
-          open: true, 
-          message: 'Please fill in all required fields', 
-          severity: 'error' 
-        })
-        return
-      }
-
-      setLoading(true)
-      const userData = {
-        ...newUser,
-        role: newUser.role || 'public_user',
-        isActive: newUser.isActive !== false
-      }
-      
-      await usersAPI.createUser(userData)
-      setSnackbar({ 
-        open: true, 
-        message: 'User created successfully', 
-        severity: 'success' 
-      })
-      setCreateUserDialogOpen(false)
-      setNewUser({
-        name: '',
-        email: '',
-        password: '',
-        phone: '',
-        role: 'public_user',
-        address: '',
-        assignedModules: [],
-        isActive: true
-      })
-      fetchPublicUsers()
-      fetchUserStats()
-    } catch (error) {
-      setSnackbar({ 
-        open: true, 
-        message: error?.response?.data?.message || 'Failed to create user', 
-        severity: 'error' 
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleEditUser = (user) => {
-    setSelectedUser(user)
-    setEditUser({
+  const handleEditUser = async (user) => {
+    setEditUser(user)
+    setFormData({
       name: user.name || '',
       email: user.email || '',
       phone: user.phone || '',
       role: user.role || '',
       address: user.address || '',
-      assignedModules: user.assignedModules || [],
-      isActive: user.isActive
+      isActive: user.isActive !== false
     })
-    setEditUserDialogOpen(true)
+    setFormErrors({})
+    setEditDialog(true)
+    // Fetch fresh details to ensure latest module access
+    try {
+      const res = await usersAPI.getUser(user._id)
+      const fresh = res?.data?.data?.user || user
+      syncAccessFromLists([], fresh.blockedModules || [])
+    } catch (e) {
+      syncAccessFromLists([], user.blockedModules || [])
+    }
   }
 
   const handleUpdateUser = async () => {
+    const errors = {}
+    if (!formData.name?.trim()) errors.name = 'Name is required'
+    if (!formData.email?.trim()) errors.email = 'Email is required'
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
+      return
+    }
+
     try {
-      if (!editUser.name || !editUser.email) {
-        setSnackbar({ 
-          open: true, 
-          message: 'Please fill in all required fields', 
-          severity: 'error' 
-        })
-        return
+      // Build payload excluding empty strings/undefined to avoid 400 validation errors
+      const payload = {}
+      if (formData.name && formData.name.trim()) payload.name = formData.name.trim()
+      if (formData.email && formData.email.trim()) payload.email = formData.email.trim()
+      if (formData.phone && String(formData.phone).trim()) payload.phone = String(formData.phone).trim()
+      if (formData.address && String(formData.address).trim()) payload.address = String(formData.address).trim()
+      if (typeof formData.isActive === 'boolean') payload.isActive = formData.isActive
+      if (formData.role && formData.role.trim()) payload.role = formData.role.trim()
+
+      if (Object.keys(payload).length > 0) {
+        await usersAPI.updateUser(editUser._id, payload)
       }
 
-      setLoading(true)
-      const userData = {
-        ...editUser,
-        isActive: editUser.isActive !== false
-      }
-      
-      await usersAPI.updateUser(selectedUser._id, userData)
-      setSnackbar({ 
-        open: true, 
-        message: 'User updated successfully', 
-        severity: 'success' 
-      })
-      setEditUserDialogOpen(false)
-      setSelectedUser(null)
-      fetchPublicUsers()
-      fetchUserStats()
-    } catch (error) {
-      setSnackbar({ 
-        open: true, 
-        message: error?.response?.data?.message || 'Failed to update user', 
-        severity: 'error' 
-      })
-    } finally {
-      setLoading(false)
+      // Update module access regardless of user payload
+      const { blockedModules } = deriveListsFromAccess()
+      await usersAPI.setModuleAccess(editUser._id, { blockedModules })
+
+      setSuccess('User updated successfully!')
+      setEditDialog(false)
+      loadUsers()
+    } catch (err) {
+      setError('Failed to update user')
     }
   }
 
-  const handleChangePage = (event, newPage) => {
-    setPage(newPage)
-  }
-
-  const handleChangeRowsPerPage = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10))
-    setPage(0)
-  }
-
-  const handleRefresh = () => {
-    fetchPublicUsers()
-    fetchUserStats()
-  }
-
-  const handleExportUsers = () => {
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return
+    
     try {
-      // Create CSV content
-      const headers = ['Name', 'Email', 'Phone', 'Status', 'Role', 'Joined Date', 'Last Active']
-      const csvContent = [
-        headers.join(','),
-        ...publicUsers.map(user => [
-          `"${user.name || ''}"`,
-          `"${user.email || ''}"`,
-          `"${user.phone || ''}"`,
-          `"${user.isActive !== false ? 'Active' : 'Inactive'}"`,
-          `"${user.role || 'public_user'}"`,
-          `"${user.createdAt ? new Date(user.createdAt).toLocaleDateString() : ''}"`,
-          `"${user.lastActive ? new Date(user.lastActive).toLocaleDateString() : ''}"`
-        ].join(','))
-      ].join('\n')
-
-      // Create and download file
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-      const link = document.createElement('a')
-      const url = URL.createObjectURL(blob)
-      link.setAttribute('href', url)
-      link.setAttribute('download', `users_export_${new Date().toISOString().split('T')[0]}.csv`)
-      link.style.visibility = 'hidden'
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-
-      setSnackbar({
-        open: true,
-        message: `Exported ${publicUsers.length} users successfully`,
-        severity: 'success'
-      })
-    } catch (error) {
-      setSnackbar({
-        open: true,
-        message: 'Failed to export users',
-        severity: 'error'
-      })
+      await usersAPI.deleteUser(userToDelete._id)
+      setSuccess('User deleted successfully!')
+      setDeleteDialog(false)
+      setUserToDelete(null)
+      loadUsers()
+    } catch (err) {
+      setError('Failed to delete user')
     }
   }
 
-  const getUserPetCount = async (userId) => {
+  const handleToggleStatus = async (user) => {
     try {
-      const response = await usersAPI.getUserPets(userId)
-      let pets = []
-      if (response.data) {
-        if (Array.isArray(response.data)) {
-          pets = response.data
-        } else if (response.data.pets) {
-          pets = response.data.pets
-        } else if (response.data.data) {
-          pets = response.data.data
-        }
-      }
-      return pets.length
-    } catch (error) {
-      console.error('Error fetching user pets count:', error)
-      return 0
+      await usersAPI.updateUser(user._id, { isActive: !user.isActive })
+      setSuccess(`User ${user.isActive ? 'deactivated' : 'activated'} successfully!`)
+      loadUsers()
+    } catch (err) {
+      setError('Failed to update user status')
     }
   }
 
-  if (loading && (!Array.isArray(publicUsers) || publicUsers.length === 0)) {
+  const getRoleColor = (role) => {
+    if (role === 'admin') return 'error'
+    if (role.includes('manager')) return 'warning'
+    if (role === 'public_user') return 'info'
+    return 'default'
+  }
+
+  const getRoleIcon = (role) => {
+    if (role === 'admin') return <AdminIcon />
+    if (role.includes('manager')) return <ManagerIcon />
+    return <UserIcon />
+  }
+
+  const getRoleDisplayName = (role) => {
+    if (role === 'admin') return 'Admin'
+    if (role === 'public_user') return 'Public User'
+    if (role.includes('manager')) {
+      return role.replace('_manager', '').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) + ' Manager'
+    }
+    return role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  const setAccess = (moduleKey, isBlocked) => {
+    setModuleAccess(prev => ({ ...prev, [moduleKey]: isBlocked }))
+  }
+
+  const bulkSetAccess = (isBlocked) => {
+    const next = {}
+    ALL_MODULES.forEach((m) => { next[m] = isBlocked })
+    setModuleAccess(next)
+  }
+
+  if (loading && users.length === 0) {
     return (
-      <Container maxWidth="xl">
-        <Box sx={{ mt: 4 }}>
-          <LinearProgress />
-          <Typography variant="h6" sx={{ mt: 2, textAlign: 'center' }}>
-            Loading user data...
-          </Typography>
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
         </Box>
       </Container>
     )
   }
 
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ mt: 4 }}>
-        {/* Header */}
-        <AdminPageHeader
-          title="User Management"
-          description="Manage public users, their accounts, and permissions across the Pet Welfare System"
-          icon={UsersIcon}
-          color="#3b82f6"
-          stats={`Total Users: ${userStats.publicUsers || 0} • Active: ${userStats.publicActiveUsers || 0} • Inactive: ${userStats.publicInactiveUsers || 0}`}
-        />
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      <Box mb={4} display="flex" justifyContent="space-between" alignItems="center">
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
+            Public User Management
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            Manage public users and their accounts ({totalUsers} total)
+          </Typography>
+        </Box>
+      </Box>
 
-        {/* Action Bar */}
-        <AdminActionBar
-          actions={[
-            {
-              label: 'Refresh',
-              icon: <RefreshIcon />,
-              variant: 'outlined',
-              onClick: handleRefresh,
-              sx: { borderColor: 'success.main', color: 'success.main' }
-            },
-            {
-              label: 'Export Users',
-              icon: <DownloadIcon />,
-              variant: 'outlined',
-              onClick: handleExportUsers,
-              sx: { borderColor: 'primary.main', color: 'primary.main' }
-            },
-            {
-              label: 'Add New User',
-              icon: <PersonAddIcon />,
-              variant: 'contained',
-              onClick: () => setCreateUserDialogOpen(true),
-              sx: { bgcolor: 'primary.main', '&:hover': { bgcolor: 'primary.dark' } }
-            }
-          ]}
-        />
 
-        {/* Statistics Cards */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="Total Users"
-              value={userStats.publicUsers || 0}
-              icon={UsersIcon}
-              color="#3b82f6"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="Active Users"
-              value={userStats.publicActiveUsers || 0}
-              icon={CheckCircleIcon}
-              color="#22c55e"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="Inactive Users"
-              value={userStats.publicInactiveUsers || 0}
-              icon={CancelIcon}
-              color="#ef4444"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <AdminStatCard
-              title="Total Pets"
-              value={userStats.totalPets || 0}
-              icon={UsersIcon}
-              color="#8b5cf6"
-            />
-          </Grid>
-        </Grid>
-
-        {/* Search and Filter */}
-        <Card sx={{ 
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255,255,255,0.2)',
-          borderRadius: 3,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-          mb: 3
-        }}>
+      {/* Filters */}
+      <Card sx={{ mb: 3 }}>
           <CardContent>
             <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} sm={6} md={4}>
+            <Grid item xs={12} md={4}>
                 <TextField
                   fullWidth
                   placeholder="Search users..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => handleSearch(e.target.value)}
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
@@ -647,626 +351,365 @@ const UserManagement = () => {
                   }}
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth>
-                  <InputLabel>Status Filter</InputLabel>
-                  <Select
-                    label="Status Filter"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <MenuItem value="">All Users</MenuItem>
-                    <MenuItem value="active">Active Only</MenuItem>
-                    <MenuItem value="inactive">Inactive Only</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={12} md={5}>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  {selectedUsers.length > 0 && (
-                    <>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => handleBulkUpdateStatus(true)}
-                        sx={{ borderColor: 'success.main', color: 'success.main' }}
-                      >
-                        Activate ({selectedUsers.length})
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => handleBulkUpdateStatus(false)}
-                        sx={{ borderColor: 'warning.main', color: 'warning.main' }}
-                      >
-                        Deactivate ({selectedUsers.length})
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="error"
-                        onClick={handleBulkDelete}
-                      >
-                        Delete ({selectedUsers.length})
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="text"
-                        onClick={() => setSelectedUsers([])}
-                        sx={{ color: 'text.secondary' }}
-                      >
-                        Clear Selection
-                      </Button>
-                    </>
-                  )}
-                </Box>
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={statusFilter}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                >
+                  <MenuItem value="">All Status</MenuItem>
+                  <MenuItem value="active">Active</MenuItem>
+                  <MenuItem value="inactive">Inactive</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={2}>
+              <FormControlLabel
+                control={
+                <Switch
+                  checked={showInactive}
+                  onChange={(e) => {
+                    setShowInactive(e.target.checked)
+                  }}
+                />
+                }
+                label="Show Inactive"
+              />
               </Grid>
             </Grid>
           </CardContent>
         </Card>
 
         {/* Users Table */}
-        <Card sx={{ 
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255,255,255,0.2)',
-          borderRadius: 3,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
-        }}>
+      <Card>
           <CardContent>
-            <Typography variant="h6" sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
-              <UsersIcon sx={{ mr: 1 }} />
-              Public Users
-            </Typography>
-            
-            {!Array.isArray(publicUsers) || publicUsers.length === 0 ? (
-              <Alert severity="info">No users found matching your criteria.</Alert>
-            ) : (
-              <>
                 <TableContainer>
                   <Table>
                     <TableHead>
                       <TableRow>
-                        <TableCell padding="checkbox">
-                          <Checkbox
-                            checked={selectedUsers.length === (Array.isArray(publicUsers) ? publicUsers.length : 0) && (Array.isArray(publicUsers) ? publicUsers.length : 0) > 0}
-                            indeterminate={selectedUsers.length > 0 && selectedUsers.length < (Array.isArray(publicUsers) ? publicUsers.length : 0)}
-                            onChange={handleSelectAllUsers}
-                          />
-                        </TableCell>
                         <TableCell>User</TableCell>
-                        <TableCell>Email</TableCell>
-                        <TableCell>Phone</TableCell>
-                        <TableCell>Pets</TableCell>
+                  <TableCell>Role</TableCell>
+                  <TableCell>Contact</TableCell>
                         <TableCell>Status</TableCell>
+                  <TableCell>Last Login</TableCell>
+                  <TableCell>Joined</TableCell>
                         <TableCell>Actions</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {Array.isArray(publicUsers) ? publicUsers.map((user) => (
-                        <TableRow key={user._id}>
-                          <TableCell padding="checkbox">
-                            <Checkbox
-                              checked={selectedUsers.includes(user._id)}
-                              onChange={() => handleSelectUser(user._id)}
-                            />
-                          </TableCell>
+                {users.map((user) => (
+                  <TableRow key={user._id} hover>
                           <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                              <Avatar sx={{ mr: 2, bgcolor: 'primary.main' }}>
-                                {user.name?.charAt(0)?.toUpperCase() || 'U'}
+                      <Box display="flex" alignItems="center" gap={2}>
+                        <Avatar sx={{ bgcolor: 'primary.main' }}>
+                          {getRoleIcon(user.role)}
                               </Avatar>
                               <Box>
-                                <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                                  {user.name || 'Unknown'}
+                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                            {user.name}
                                 </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  ID: {user._id?.slice(-8)}
+                          <Typography variant="caption" color="text.secondary">
+                            ID: {user._id.slice(-8)}
                                 </Typography>
                               </Box>
                             </Box>
                           </TableCell>
-                          <TableCell>{user.email || 'N/A'}</TableCell>
-                          <TableCell>{user.phone || 'N/A'}</TableCell>
                           <TableCell>
                             <Chip 
-                              label={user.petCount || 0} 
+                        icon={getRoleIcon(user.role)}
+                        label={getRoleDisplayName(user.role)}
+                        color={getRoleColor(user.role)}
                               size="small" 
-                              color="primary"
                             />
+                          </TableCell>
+                    <TableCell>
+                      <Box>
+                        <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                          <EmailIcon fontSize="small" color="action" />
+                          <Typography variant="body2">
+                            {user.email}
+                          </Typography>
+                        </Box>
+                        {user.phone && (
+                          <Box display="flex" alignItems="center" gap={1}>
+                            <PhoneIcon fontSize="small" color="action" />
+                            <Typography variant="body2">
+                              {user.phone}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
                           </TableCell>
                           <TableCell>
                             <Chip 
-                              label={user.isActive !== false ? 'Active' : 'Inactive'} 
+                        label={user.isActive ? 'Active' : 'Inactive'}
+                        color={user.isActive ? 'success' : 'error'}
                               size="small" 
-                              color={user.isActive !== false ? 'success' : 'error'}
                             />
                           </TableCell>
                           <TableCell>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                              <Tooltip title="View Details">
-                                <IconButton 
-                                  size="small" 
-                                  onClick={() => handleViewUserDetails(user)}
-                                  sx={{ color: 'primary.main' }}
-                                >
-                                  <ViewIcon />
-                                </IconButton>
-                              </Tooltip>
+                      <Typography variant="body2">
+                        {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {new Date(user.createdAt).toLocaleDateString()}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Box display="flex" gap={1}>
                               <Tooltip title="Edit User">
                                 <IconButton 
                                   size="small" 
                                   onClick={() => handleEditUser(user)}
-                                  sx={{ color: 'info.main' }}
+                            color="primary"
                                 >
                                   <EditIcon />
                                 </IconButton>
                               </Tooltip>
-                              <Tooltip title={user.isActive !== false ? 'Deactivate' : 'Activate'}>
+                        <Tooltip title={user.isActive ? 'Deactivate' : 'Activate'}>
                                 <IconButton 
                                   size="small" 
-                                  onClick={() => handleToggleUserStatus(user._id, user.isActive)}
-                                  sx={{ color: user.isActive !== false ? 'warning.main' : 'success.main' }}
+                            onClick={() => handleToggleStatus(user)}
+                            color={user.isActive ? 'warning' : 'success'}
                                 >
-                                  {user.isActive !== false ? <CancelIcon /> : <CheckCircleIcon />}
+                            {user.isActive ? <BlockIcon /> : <CheckCircleIcon />}
                                 </IconButton>
                               </Tooltip>
-                              <Tooltip title="Delete Permanently">
+                        <Tooltip title="More Actions">
                                 <IconButton 
                                   size="small" 
-                                  onClick={() => handleDeleteUserPermanent(user._id)}
-                                  sx={{ color: 'error.main' }}
+                            onClick={(e) => handleMenuOpen(e, user)}
                                 >
-                                  <DeleteIcon />
+                            <MoreVertIcon />
                                 </IconButton>
                               </Tooltip>
                             </Box>
                           </TableCell>
                         </TableRow>
-                      )) : null}
+                ))}
                     </TableBody>
                   </Table>
                 </TableContainer>
                 
-                <TablePagination
-                  rowsPerPageOptions={[5, 10, 25, 50]}
-                  component="div"
-                  count={userStats.publicUsers || 0}
-                  rowsPerPage={rowsPerPage}
-                  page={page}
-                  onPageChange={handleChangePage}
-                  onRowsPerPageChange={handleChangeRowsPerPage}
-                />
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </Box>
-
-      {/* User Details Dialog */}
-      <Dialog open={userDetailsOpen} onClose={() => setUserDetailsOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>User Details - {selectedUser?.name}</DialogTitle>
-        <DialogContent>
-          <Tabs value={userDetailsTab} onChange={(e, v) => setUserDetailsTab(v)} sx={{ mb: 2 }}>
-            <Tab label="Profile" />
-            <Tab label="Pets" />
-            <Tab label="Activities" />
-          </Tabs>
-
-          {userDetailsTab === 0 && selectedUser && (
-            <Box sx={{ mt: 2 }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">Name</Typography>
-                  <Typography variant="body1">{selectedUser.name || 'N/A'}</Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">Email</Typography>
-                  <Typography variant="body1">{selectedUser.email || 'N/A'}</Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">Phone</Typography>
-                  <Typography variant="body1">{selectedUser.phone || 'N/A'}</Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">Status</Typography>
-                  <Chip 
-                    label={selectedUser.isActive !== false ? 'Active' : 'Inactive'} 
-                    color={selectedUser.isActive !== false ? 'success' : 'error'}
-                    size="small"
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">Joined</Typography>
-                  <Typography variant="body1">
-                    {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString() : 'N/A'}
+          {users.length === 0 && !loading && (
+            <Box textAlign="center" py={4}>
+              <Typography variant="h6" color="text.secondary">
+                No users found
                   </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">Last Active</Typography>
-                  <Typography variant="body1">
-                    {selectedUser.lastActive ? new Date(selectedUser.lastActive).toLocaleDateString() : 'N/A'}
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Try adjusting your filters
                   </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">User ID</Typography>
-                  <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                    {selectedUser._id || 'N/A'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">Role</Typography>
-                  <Chip 
-                    label={selectedUser.role || 'public_user'} 
-                    color="primary"
-                    size="small"
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2" color="text.secondary">Address</Typography>
-                  <Typography variant="body1">{selectedUser.address || 'N/A'}</Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  <Box sx={{ 
-                    p: 2, 
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)', 
-                    borderRadius: 2, 
-                    border: '1px solid rgba(59, 130, 246, 0.2)' 
-                  }}>
-                    <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                      User Statistics
-                    </Typography>
-                    <Grid container spacing={2}>
-                      <Grid item xs={6}>
-                        <Typography variant="body2" color="text.secondary">Total Pets</Typography>
-                        <Typography variant="h6" color="primary.main">
-                          {userPets.length}
-                        </Typography>
-                      </Grid>
-                      <Grid item xs={6}>
-                        <Typography variant="body2" color="text.secondary">Total Activities</Typography>
-                        <Typography variant="h6" color="primary.main">
-                          {userActivities.length}
-                        </Typography>
-                      </Grid>
-                    </Grid>
-                  </Box>
-                </Grid>
-              </Grid>
             </Box>
           )}
 
-          {userDetailsTab === 1 && (
-            <Box sx={{ mt: 2 }}>
-              {userPets.length === 0 ? (
-                <Alert severity="info">No pets found for this user.</Alert>
-              ) : (
-                <TableContainer>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Pet Name</TableCell>
-                        <TableCell>Type</TableCell>
-                        <TableCell>Breed</TableCell>
-                        <TableCell>Age</TableCell>
-                        <TableCell>Gender</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell>Added</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {userPets.map((pet) => (
-                        <TableRow key={pet._id}>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
-                                {pet.name?.charAt(0)?.toUpperCase() || 'P'}
-                              </Avatar>
-                              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                                {pet.name || 'Unknown'}
-                              </Typography>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Chip label={pet.type || 'Unknown'} size="small" color="secondary" />
-                          </TableCell>
-                          <TableCell>{pet.breed || 'Mixed'}</TableCell>
-                          <TableCell>{pet.age ? `${pet.age} years` : 'Unknown'}</TableCell>
-                          <TableCell>
-                            <Chip 
-                              label={pet.gender || 'Unknown'} 
-                              size="small" 
-                              color={pet.gender === 'Male' ? 'info' : pet.gender === 'Female' ? 'warning' : 'default'}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Chip 
-                              label={pet.status || 'Active'} 
-                              size="small" 
-                              color={pet.status === 'Active' ? 'success' : pet.status === 'Adopted' ? 'primary' : 'default'}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {pet.createdAt ? new Date(pet.createdAt).toLocaleDateString() : 'N/A'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Box display="flex" justifyContent="center" mt={3}>
+              <Pagination
+                count={totalPages}
+                page={page}
+                onChange={(e, value) => setPage(value)}
+                color="primary"
+              />
             </Box>
           )}
-
-          {userDetailsTab === 2 && (
-            <Box sx={{ mt: 2 }}>
-              {userActivities.length === 0 ? (
-                <Alert severity="info">No activities found for this user.</Alert>
-              ) : (
-                <TableContainer>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Activity</TableCell>
-                        <TableCell>Type</TableCell>
-                        <TableCell>Date & Time</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell>Details</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {userActivities.map((activity) => (
-                        <TableRow key={activity._id}>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                              {activity.description || activity.action || 'Unknown Activity'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Chip 
-                              label={activity.type || 'General'} 
-                              size="small" 
-                              color={
-                                activity.type === 'Login' ? 'success' :
-                                activity.type === 'Logout' ? 'warning' :
-                                activity.type === 'Profile Update' ? 'info' :
-                                activity.type === 'Pet Added' ? 'primary' :
-                                'default'
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {activity.createdAt ? new Date(activity.createdAt).toLocaleDateString() : 'N/A'}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {activity.createdAt ? new Date(activity.createdAt).toLocaleTimeString() : ''}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Chip 
-                              label={activity.status || 'Completed'} 
-                              size="small" 
-                              color={activity.status === 'Success' ? 'success' : activity.status === 'Failed' ? 'error' : 'primary'}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" color="text.secondary">
-                              {activity.details || activity.metadata || 'No additional details'}
-                            </Typography>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setUserDetailsOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Create User Dialog */}
-      <Dialog open={createUserDialogOpen} onClose={() => setCreateUserDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Create New User</DialogTitle>
-        <DialogContent>
-          <Box sx={{ mt: 2, display: 'grid', gap: 2 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Full Name"
-                  value={newUser.name}
-                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                  fullWidth
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Email Address"
-                  type="email"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  fullWidth
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Password"
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  fullWidth
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Phone Number"
-                  value={newUser.phone}
-                  onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Role</InputLabel>
-                  <Select
-                    label="Role"
-                    value={newUser.role}
-                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                  >
-                    {Array.isArray(roles) ? roles
-                      .filter(role => role.isActive !== false)
-                      .map((role) => (
-                        <MenuItem key={role._id} value={role.name}>
-                          {role.displayName || role.name}
-                        </MenuItem>
-                      )) : (
-                        <MenuItem value="public_user">Public User</MenuItem>
-                      )}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    label="Status"
-                    value={newUser.isActive ? 'active' : 'inactive'}
-                    onChange={(e) => setNewUser({ ...newUser, isActive: e.target.value === 'active' })}
-                  >
-                    <MenuItem value="active">Active</MenuItem>
-                    <MenuItem value="inactive">Inactive</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  label="Address"
-                  multiline
-                  rows={2}
-                  value={newUser.address}
-                  onChange={(e) => setNewUser({ ...newUser, address: e.target.value })}
-                  fullWidth
-                />
-              </Grid>
-            </Grid>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateUserDialogOpen(false)}>Cancel</Button>
-          <Button 
-            variant="contained" 
-            onClick={handleCreateUser}
-            disabled={!newUser.name || !newUser.email || !newUser.password || loading}
-          >
-            {loading ? 'Creating...' : 'Create User'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </CardContent>
+      </Card>
 
       {/* Edit User Dialog */}
-      <Dialog open={editUserDialogOpen} onClose={() => setEditUserDialogOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={editDialog} onClose={() => setEditDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle>Edit User</DialogTitle>
         <DialogContent>
-          <Box sx={{ mt: 2, display: 'grid', gap: 2 }}>
-            <Grid container spacing={2}>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12} sm={6}>
                 <TextField
-                  label="Full Name"
-                  value={editUser.name}
-                  onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
                   fullWidth
-                  required
+                label="Name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  error={!!formErrors.name}
+                  helperText={formErrors.name}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
-                  label="Email Address"
-                  type="email"
-                  value={editUser.email}
-                  onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
                   fullWidth
-                  required
+                label="Email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  error={!!formErrors.email}
+                  helperText={formErrors.email}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
-                  label="Phone Number"
-                  value={editUser.phone}
-                  onChange={(e) => setEditUser({ ...editUser, phone: e.target.value })}
                   fullWidth
+                label="Phone"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth>
                   <InputLabel>Role</InputLabel>
                   <Select
-                    label="Role"
-                    value={editUser.role}
-                    onChange={(e) => setEditUser({ ...editUser, role: e.target.value })}
-                  >
-                    {Array.isArray(roles) ? roles
-                      .filter(role => role.isActive !== false)
-                      .map((role) => (
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                >
+                  <MenuItem value="admin">Admin</MenuItem>
+                  <MenuItem value="public_user">Public User</MenuItem>
+                  {roles.filter(r => r.name.includes('manager')).map((role) => (
                         <MenuItem key={role._id} value={role.name}>
-                          {role.displayName || role.name}
+                      {getRoleDisplayName(role.name)}
                         </MenuItem>
-                      )) : (
-                        <MenuItem value="public_user">Public User</MenuItem>
-                      )}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    label="Status"
-                    value={editUser.isActive ? 'active' : 'inactive'}
-                    onChange={(e) => setEditUser({ ...editUser, isActive: e.target.value === 'active' })}
-                  >
-                    <MenuItem value="active">Active</MenuItem>
-                    <MenuItem value="inactive">Inactive</MenuItem>
+                  ))}
                   </Select>
                 </FormControl>
               </Grid>
               <Grid item xs={12}>
                 <TextField
+                fullWidth
                   label="Address"
                   multiline
                   rows={2}
-                  value={editUser.address}
-                  onChange={(e) => setEditUser({ ...editUser, address: e.target.value })}
-                  fullWidth
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 />
               </Grid>
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.isActive}
+                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  />
+                }
+                label="Active"
+              />
             </Grid>
-          </Box>
+
+            {/* Module Access */}
+            <Grid item xs={12}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mt: 1 }}>
+                Module Access Controls
+              </Typography>
+              <Box display="flex" gap={1} sx={{ mb: 1 }}>
+                <Button size="small" variant="contained" color="success" onClick={() => bulkSetAccess(false)}>Allow All</Button>
+                <Button size="small" variant="contained" color="error" onClick={() => bulkSetAccess(true)}>Block All</Button>
+              </Box>
+              <Grid container spacing={1}>
+                {ALL_MODULES.map((m) => (
+                  <Grid key={`row-${m}`} item xs={12} md={6}>
+                    <Card variant="outlined">
+                      <CardContent sx={{ py: 1.5 }}>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" gap={2}>
+                          <Typography sx={{ minWidth: 140 }}>
+                            {m.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </Typography>
+                          <Box display="flex" alignItems="center" gap={2}>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color={moduleAccess[m] ? 'error' : 'success'}
+                              onClick={() => setAccess(m, !moduleAccess[m])}
+                            >
+                              {moduleAccess[m] ? 'Blocked' : 'Allowed'}
+                            </Button>
+                          </Box>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+              <FormHelperText sx={{ mt: 1 }}>
+                Default is allowed. Check “Block” to deny access to a module.
+              </FormHelperText>
+            </Grid>
+          </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditUserDialogOpen(false)}>Cancel</Button>
-          <Button 
-            variant="contained" 
-            onClick={handleUpdateUser}
-            disabled={!editUser.name || !editUser.email || loading}
-          >
-            {loading ? 'Updating...' : 'Update User'}
+          <Button onClick={() => setEditDialog(false)}>Cancel</Button>
+          <Button onClick={handleUpdateUser} variant="contained">
+            Update User
           </Button>
         </DialogActions>
       </Dialog>
 
+      {/* Actions Menu */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={() => { handleEditUser(selectedUser); handleMenuClose(); }}>
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Edit User</ListItemText>
+                        </MenuItem>
+        <MenuItem onClick={() => { handleToggleStatus(selectedUser); handleMenuClose(); }}>
+          <ListItemIcon>
+            {selectedUser?.isActive ? <BlockIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
+          </ListItemIcon>
+          <ListItemText>
+            {selectedUser?.isActive ? 'Deactivate' : 'Activate'}
+          </ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => { setUserToDelete(selectedUser); setDeleteDialog(true); handleMenuClose(); }}>
+          <ListItemIcon>
+            <DeleteIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Delete User</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialog} onClose={() => setDeleteDialog(false)}>
+        <DialogTitle>Delete User</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete "{userToDelete?.name}"? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialog(false)}>Cancel</Button>
+          <Button onClick={handleDeleteUser} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Error/Success Messages */}
+      {error && (
       <Snackbar
-        open={snackbar.open}
+          open={!!error}
         autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        message={snackbar.message}
-      />
+          onClose={() => setError('')}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <Alert onClose={() => setError('')} severity="error" sx={{ width: '100%' }}>
+            {error}
+          </Alert>
+        </Snackbar>
+      )}
+
+      {success && (
+        <Snackbar
+          open={!!success}
+          autoHideDuration={6000}
+          onClose={() => setSuccess('')}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <Alert onClose={() => setSuccess('')} severity="success" sx={{ width: '100%' }}>
+            {success}
+          </Alert>
+        </Snackbar>
+      )}
     </Container>
   )
 }

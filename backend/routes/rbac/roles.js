@@ -327,7 +327,7 @@ router.post('/initialize', auth, authorize('admin'), async (req, res) => {
           { module: 'core', actions: ['manage'] },
           { module: 'rbac', actions: ['manage'] },
           { module: 'adoption', actions: ['manage'] },
-          { module: 'shelter', actions: ['manage'] },
+          { module: 'petshop', actions: ['manage'] },
           { module: 'rescue', actions: ['manage'] },
           { module: 'veterinary', actions: ['manage'] },
           { module: 'ecommerce', actions: ['manage'] },
@@ -343,7 +343,7 @@ router.post('/initialize', auth, authorize('admin'), async (req, res) => {
         level: 1,
         permissions: [
           { module: 'adoption', actions: ['read'] },
-          { module: 'shelter', actions: ['read'] },
+          { module: 'petshop', actions: ['read'] },
           { module: 'rescue', actions: ['read'] }
         ],
         isSystemRole: true,

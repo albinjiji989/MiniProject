@@ -7,10 +7,10 @@ const userDetailsSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
-  assignedModule: {
-    type: String,
-    enum: ['adoption', 'shelter', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary-care', 'veterinary', 'donation'],
-    required: false
+  assignedModule: { 
+    type: String, 
+    enum: ['adoption', 'petshop', 'rescue', 'ecommerce', 'pharmacy', 'temporary-care', 'veterinary'], 
+    required: function() { return this.parent().role && this.parent().role.endsWith('_manager'); }
   },
   // Store/Location information for module-specific users (Multi-tenant support)
   storeId: {
@@ -113,12 +113,16 @@ const userDetailsSchema = new mongoose.Schema({
   // Additional metadata
   assignedModules: [{
     type: String,
-    enum: ['adoption', 'shelter', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary_care', 'veterinary']
+    enum: ['adoption', 'petshop', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary_care', 'veterinary']
   }],
   permissions: [{
     module: String,
     actions: [String] // ['read', 'write', 'delete', 'admin']
-  }]
+  }],
+  // Per-user access control: default allow; admin can block modules
+  blockedModules: [{ type: String, enum: ['adoption','petshop','rescue','ecommerce','pharmacy','boarding','temporary-care','veterinary','donation'] }],
+  // kept for backward compatibility but no longer used by logic
+  allowedModules: { type: [String], default: [] }
 }, {
   timestamps: true
 });

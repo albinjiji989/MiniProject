@@ -11,6 +11,13 @@ const Module = require('../core/models/Module');
 
 const router = express.Router();
 
+// Mount nested admin routes
+try {
+  router.use('/users', require('./admin/users'));
+} catch (e) {
+  // Optional: sub-router may not exist in some environments
+}
+
 // @route   POST /api/admin/create-module-admin
 // @desc    Create module manager (Admin only)
 // @access  Private (Admin)
@@ -36,7 +43,7 @@ router.post('/create-module-admin', [
   body('assignedModule')
     .notEmpty()
     .withMessage('Assigned module is required')
-    .isIn(['adoption', 'shelter', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary-care', 'veterinary', 'donation'])
+    .isIn(['adoption', 'petshop', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary-care', 'veterinary', 'donation'])
     .withMessage('Invalid assigned module'),
   body('phone')
     .notEmpty()
@@ -165,7 +172,7 @@ router.post('/create-module-manager', [
   body('assignedModule')
     .notEmpty()
     .withMessage('Assigned module is required')
-    .isIn(['adoption', 'shelter', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary-care', 'veterinary', 'donation'])
+    .isIn(['adoption', 'petshop', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary-care', 'veterinary', 'donation'])
     .withMessage('Invalid assigned module'),
   body('phone')
     .notEmpty()
@@ -350,7 +357,7 @@ router.post('/invite-module-admin', [
   body('name').notEmpty(),
   body('email').isEmail(),
   body('phone').optional(),
-  body('module').isIn(['adoption','shelter','rescue','ecommerce','pharmacy','boarding','temporary-care','veterinary','donation'])
+  body('module').isIn(['adoption','petshop','rescue','ecommerce','pharmacy','boarding','temporary-care','veterinary','donation'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -390,12 +397,19 @@ router.post('/invite-module-manager', [
   body('name').notEmpty(),
   body('email').isEmail(),
   body('phone').optional(),
-  body('module').isIn(['adoption','shelter','rescue','ecommerce','pharmacy','boarding','temporary-care','veterinary','donation'])
+  body('module').isIn(['adoption','petshop','rescue','ecommerce','pharmacy','boarding','temporary-care','veterinary','donation'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, message: 'Validation errors', errors: errors.array() });
+      console.log('Validation errors:', errors.array());
+      console.log('Request body:', req.body);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Validation errors', 
+        errors: errors.array(),
+        hint: 'Module must be one of: adoption, petshop, rescue, ecommerce, pharmacy, boarding, temporary-care, veterinary, donation'
+      });
     }
     const { name, email, phone, module } = req.body;
     const existingUser = await User.findOne({ email });

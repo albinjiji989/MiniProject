@@ -15,7 +15,7 @@ import {
   Dashboard as DashboardIcon,
   Pets as PetsIcon,
   Favorite as AdoptionIcon,
-  Home as ShelterIcon,
+  Store as PetShopIcon,
   Report as RescueIcon,
   ShoppingCart as EcommerceIcon,
   LocalPharmacy as PharmacyIcon,
@@ -44,7 +44,7 @@ const getMenuItems = (userRole) => {
       { text: 'Core System', icon: <SettingsIcon />, path: '/core', roles: ['admin'] },
       { text: 'Users', icon: <UsersIcon />, path: '/users', roles: ['admin'] },
       { text: 'Adoption', icon: <AdoptionIcon />, path: '/adoption', roles: ['adoption_manager', 'admin'] },
-      { text: 'Shelter', icon: <ShelterIcon />, path: '/shelter', roles: ['shelter_manager', 'admin'] },
+      { text: 'Pet Shop', icon: <PetShopIcon />, path: '/petshop', roles: ['petshop_manager', 'admin'] },
       { text: 'Rescue', icon: <RescueIcon />, path: '/rescue', roles: ['rescue_manager', 'admin'] },
       { text: 'E-Commerce', icon: <EcommerceIcon />, path: '/ecommerce', roles: ['ecommerce_manager', 'admin'] },
       { text: 'Pharmacy', icon: <PharmacyIcon />, path: '/pharmacy', roles: ['pharmacy_manager', 'admin'] },
@@ -66,8 +66,8 @@ const getMenuItems = (userRole) => {
     if (userRole === 'veterinary_manager') {
       moduleItems.push({ text: 'Veterinary Management', icon: <VeterinaryIcon />, path: '/veterinary', roles: ['veterinary_manager'] })
     }
-    if (userRole === 'shelter_manager') {
-      moduleItems.push({ text: 'Shelter Management', icon: <ShelterIcon />, path: '/shelter', roles: ['shelter_manager'] })
+    if (userRole === 'petshop_manager') {
+      moduleItems.push({ text: 'Pet Shop Management', icon: <PetShopIcon />, path: '/petshop', roles: ['petshop_manager'] })
     }
     if (userRole === 'rescue_manager') {
       moduleItems.push({ text: 'Rescue Management', icon: <RescueIcon />, path: '/rescue', roles: ['rescue_manager'] })

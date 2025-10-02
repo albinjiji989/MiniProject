@@ -6,10 +6,9 @@ import { useAuth } from '../../contexts/AuthContext'
 
 import BrandMark from '../../components/BrandMark'
 
-// UnifiedAuth placeholder using existing auth flows
-// If you already have components/UnifiedAuth, replace this with that import.
+// UnifiedAuth component for login
 const UnifiedAuth = ({ mode = 'signin', onSuccess, onError }) => {
-  const { loginWithEmail, loginWithGoogle } = useAuth()
+  const { login, loginWithGoogle } = useAuth()
   const [busy, setBusy] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -18,7 +17,7 @@ const UnifiedAuth = ({ mode = 'signin', onSuccess, onError }) => {
   const submit = async (e) => {
     e.preventDefault()
     setBusy(true)
-    const res = await loginWithEmail({ email, password })
+    const res = await login({ email, password })
     setBusy(false)
     if (res.success) onSuccess(res.user || {})
     else onError(res.error || 'Login failed')
@@ -26,10 +25,15 @@ const UnifiedAuth = ({ mode = 'signin', onSuccess, onError }) => {
 
   const google = async () => {
     setBusy(true)
-    const res = await loginWithGoogle()
-    setBusy(false)
-    if (res.success) onSuccess(res.user || {})
-    else onError(res.error || 'Google login failed')
+    try {
+      const res = await loginWithGoogle()
+      setBusy(false)
+      if (res.success) onSuccess(res.user || {})
+      else onError(res.error || 'Google login failed')
+    } catch (error) {
+      setBusy(false)
+      onError('Google authentication is currently unavailable. Please use email/password login.')
+    }
   }
 
   return (
@@ -80,37 +84,78 @@ const UnifiedAuth = ({ mode = 'signin', onSuccess, onError }) => {
 const LoginPage = () => {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [deactivatedOpen, setDeactivatedOpen] = useState(false)
+  const [deactivatedMessage, setDeactivatedMessage] = useState('Your account has been deactivated by an administrator. Please contact support or the admin to restore access.')
   const navigate = useNavigate()
   const location = useLocation()
   const { user, token } = useAuth()
 
-  const isAuthenticated = !!token
-  const userType = user?.role
+  // Consider authenticated if we have a user (cookie session) or a token (JWT)
+  const isAuthenticated = !!(user || token)
 
   useEffect(() => {
     if (location.state?.message) setSuccess(location.state.message)
     if (isAuthenticated) {
-      // Let App.jsx handle the routing based on user role
-      // This prevents double redirects
-      if (user?.role === 'admin') {
+      // Redirect based on role
+      const role = user?.role || ''
+      if (role === 'admin' || role === 'super_admin') {
         navigate('/admin/dashboard', { replace: true })
+      } else if (role === 'adoption_manager') {
+        navigate('/manager/adoption/dashboard', { replace: true })
+      } else if (role === 'rescue_manager') {
+        navigate('/manager/rescue/dashboard', { replace: true })
+      } else if (role === 'petshop_manager') {
+        navigate('/manager/petshop/dashboard', { replace: true })
+      } else if (role === 'veterinary_manager') {
+        navigate('/manager/veterinary/dashboard', { replace: true })
+      } else if (role === 'pharmacy_manager') {
+        navigate('/manager/pharmacy/dashboard', { replace: true })
+      } else if (role === 'ecommerce_manager') {
+        navigate('/manager/ecommerce/dashboard', { replace: true })
+      } else if (role === 'temporary-care_manager') {
+        navigate('/manager/temporary-care/dashboard', { replace: true })
+      } else if (typeof role === 'string' && role.endsWith('_manager')) {
+        // Fallback for any other manager roles
+        navigate('/manager/dashboard', { replace: true })
       } else {
-        navigate('/dashboard', { replace: true })
+        navigate('/User/dashboard', { replace: true })
       }
     }
+    // Show deactivated note if flagged by context init
+    const showIfFlagged = () => {
+      const flag = sessionStorage.getItem('auth_deactivated')
+      if (flag) {
+        sessionStorage.removeItem('auth_deactivated')
+        const msg = sessionStorage.getItem('auth_deactivated_msg') || 'Your account has been deactivated by an administrator. Please contact support or the admin to restore access.'
+        sessionStorage.removeItem('auth_deactivated_msg')
+        setDeactivatedMessage(msg)
+        setDeactivatedOpen(true)
+      }
+    }
+    showIfFlagged()
+    const onDeactivated = (e) => {
+      const msg = (e?.detail?.message) || 'Your account has been deactivated by an administrator. Please contact support or the admin to restore access.'
+      setDeactivatedMessage(msg)
+      setDeactivatedOpen(true)
+    }
+    window.addEventListener('auth:deactivated', onDeactivated)
+    return () => window.removeEventListener('auth:deactivated', onDeactivated)
   }, [isAuthenticated, navigate, location.state, user])
 
   const handleAuthSuccess = (userData) => {
-    const roleName = (userData.displayRole || userData.role || 'user').replace('_', ' ')
-    setSuccess(`Welcome back, ${userData.name || 'user'}! (${roleName}) Redirecting...`)
+    // No success banner; navigation is handled by isAuthenticated effect
     setError('')
-    // Let the useEffect handle the redirect to prevent double redirects
-    // The useEffect will trigger when the user state updates
+    setDeactivatedOpen(false)
   }
 
   const handleAuthError = (errorMessage) => {
-    setError(errorMessage)
-    setSuccess('')
+    const msg = String(errorMessage || '')
+    setError(msg)
+    const lower = msg.toLowerCase()
+    if (lower.includes('deactivated') || lower.includes('blocked') || lower.includes('disabled') || lower.includes('inactive')) {
+      setDeactivatedMessage('Your account is blocked or deactivated by an administrator. Please contact support or the admin to restore access.')
+      setDeactivatedOpen(true)
+    }
   }
 
   return (
@@ -159,7 +204,7 @@ const LoginPage = () => {
             Welcome back to our pet community
           </Typography>
           <Typography variant="body1" sx={{ opacity: 0.95, mb: 3, fontSize: { md: '1rem' } }}>
-            Connect with shelters, find veterinary care, and help create a better world for our furry friends.
+            Connect with pet shops, find veterinary care, and help create a better world for our furry friends.
           </Typography>
           <Box sx={{ display: 'grid', gap: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -204,6 +249,7 @@ const LoginPage = () => {
                 {success}
               </Alert>
             )}
+            {/* No success alert */}
 
             <UnifiedAuth mode="signin" onSuccess={handleAuthSuccess} onError={handleAuthError} />
 
@@ -214,6 +260,16 @@ const LoginPage = () => {
             </Box>
           </Paper>
         </Container>
+      </Box>
+      {/* Deactivated Account Dialog */}
+      <Box>
+        <div role="dialog" aria-modal="true" hidden={!deactivatedOpen}>
+          <Paper elevation={3} sx={{ position: 'fixed', inset: 0, m: 'auto', width: 360, p: 3, borderRadius: 2 }}>
+            <Typography variant="h6" sx={{ mb: 1, fontWeight: 700 }}>Account Deactivated</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{deactivatedMessage}</Typography>
+            <Button fullWidth variant="contained" onClick={() => setDeactivatedOpen(false)}>OK</Button>
+          </Paper>
+        </div>
       </Box>
     </Box>
   )

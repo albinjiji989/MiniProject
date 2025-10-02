@@ -85,7 +85,7 @@ const AdminManagement = () => {
 
   const modules = [
     { key: 'adoption', name: 'Adoption' },
-    { key: 'shelter', name: 'Shelter' },
+    { key: 'petshop', name: 'Pet Shop' },
     { key: 'rescue', name: 'Rescue' },
     { key: 'ecommerce', name: 'E-Commerce' },
     { key: 'pharmacy', name: 'Pharmacy' },

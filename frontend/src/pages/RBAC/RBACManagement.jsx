@@ -108,7 +108,7 @@ const RBACManagement = () => {
   }, [])
 
   const managementModules = useMemo(() => (
-    ['adoption', 'shelter', 'rescue', 'veterinary', 'ecommerce', 'pharmacy']
+    ['adoption', 'petshop', 'rescue', 'veterinary', 'ecommerce', 'pharmacy']
   ), [])
 
   const moduleOptions = useMemo(() => {
@@ -251,7 +251,7 @@ const RBACManagement = () => {
     const colors = {
       admin: 'error',
       adoption_manager: 'primary',
-      shelter_manager: 'secondary',
+      petshop_manager: 'secondary',
       rescue_manager: 'warning',
       veterinary_manager: 'info',
       ecommerce_manager: 'success',
@@ -588,7 +588,7 @@ const RBACManagement = () => {
                   onChange={(e) => setUserForm({ ...userForm, assignedModule: e.target.value })}
                 >
                   <MenuItem value="adoption">Adoption</MenuItem>
-                  <MenuItem value="shelter">Shelter</MenuItem>
+                  <MenuItem value="petshop">Pet Shop</MenuItem>
                   <MenuItem value="rescue">Rescue</MenuItem>
                   <MenuItem value="veterinary">Veterinary</MenuItem>
                   <MenuItem value="ecommerce">E-Commerce</MenuItem>
@@ -621,7 +621,7 @@ const RBACManagement = () => {
                   onChange={(e) => setModuleAdminForm({ ...moduleAdminForm, module: e.target.value })}
                 >
                   <MenuItem value="adoption">Adoption</MenuItem>
-                  <MenuItem value="shelter">Shelter</MenuItem>
+                  <MenuItem value="petshop">Pet Shop</MenuItem>
                   <MenuItem value="rescue">Rescue</MenuItem>
                   <MenuItem value="veterinary">Veterinary</MenuItem>
                   <MenuItem value="ecommerce">E-Commerce</MenuItem>
@@ -682,7 +682,7 @@ const RBACManagement = () => {
                   onChange={(e) => setModuleStaffForm({ ...moduleStaffForm, module: e.target.value })}
                 >
                   <MenuItem value="adoption">Adoption</MenuItem>
-                  <MenuItem value="shelter">Shelter</MenuItem>
+                  <MenuItem value="petshop">Pet Shop</MenuItem>
                   <MenuItem value="rescue">Rescue</MenuItem>
                   <MenuItem value="veterinary">Veterinary</MenuItem>
                   <MenuItem value="ecommerce">E-Commerce</MenuItem>

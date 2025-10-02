@@ -1,3 +1,3 @@
-export { default } from '../../pages/Dashboard/PublicUserDashboard'
+export { default } from '../../pages/User/PublicUserDashboard'
 
 
