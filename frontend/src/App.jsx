@@ -149,19 +149,19 @@ function App() {
                 ? <Navigate to="/admin/dashboard" replace />
                 : ((typeof user.role === 'string' && user.role.endsWith('_manager') && user.needsStoreSetup)
                     ? <Navigate to="/manager/store-setup" replace />
-                    : (user.role === 'adoption_manager'
+                    : ((typeof user.role === 'string' && user.role.trim() === 'adoption_manager')
                     ? <Navigate to="/manager/adoption/dashboard" replace />
-                    : (user.role === 'petshop_manager'
+                    : ((typeof user.role === 'string' && user.role.trim() === 'petshop_manager')
                         ? <Navigate to="/manager/petshop/dashboard" replace />
-                        : (user.role === 'ecommerce_manager'
+                        : ((typeof user.role === 'string' && user.role.trim() === 'ecommerce_manager')
                             ? <Navigate to="/manager/ecommerce/dashboard" replace />
-                            : (user.role === 'pharmacy_manager'
+                            : ((typeof user.role === 'string' && user.role.trim() === 'pharmacy_manager')
                                 ? <Navigate to="/manager/pharmacy/dashboard" replace />
-                                : (user.role === 'rescue_manager'
+                                : ((typeof user.role === 'string' && user.role.trim() === 'rescue_manager')
                                     ? <Navigate to="/manager/rescue/dashboard" replace />
-                                    : (user.role === 'veterinary_manager'
+                                    : ((typeof user.role === 'string' && user.role.trim() === 'veterinary_manager')
                                         ? <Navigate to="/manager/veterinary/dashboard" replace />
-                                        : (user.role === 'temporary_care_manager'
+                                        : ((typeof user.role === 'string' && user.role.trim() === 'temporary_care_manager')
                                             ? <Navigate to="/manager/temporary-care/dashboard" replace />
                                             : (typeof user.role === 'string' && user.role.endsWith('_manager')
                                                 ? <Navigate to="/manager/dashboard" replace />
@@ -206,19 +206,19 @@ function App() {
                 ? <Navigate to="/admin/dashboard" replace />
                 : ((typeof user.role === 'string' && user.role.endsWith('_manager') && user.needsStoreSetup)
                     ? <Navigate to="/manager/store-setup" replace />
-                    : (user.role === 'adoption_manager'
+                    : ((typeof user.role === 'string' && user.role.trim() === 'adoption_manager')
                     ? <Navigate to="/manager/adoption/dashboard" replace />
-                    : (user.role === 'petshop_manager'
+                    : ((typeof user.role === 'string' && user.role.trim() === 'petshop_manager')
                         ? <Navigate to="/manager/petshop/dashboard" replace />
-                        : (user.role === 'ecommerce_manager'
+                        : ((typeof user.role === 'string' && user.role.trim() === 'ecommerce_manager')
                             ? <Navigate to="/manager/ecommerce/dashboard" replace />
-                            : (user.role === 'pharmacy_manager'
+                            : ((typeof user.role === 'string' && user.role.trim() === 'pharmacy_manager')
                                 ? <Navigate to="/manager/pharmacy/dashboard" replace />
-                                : (user.role === 'rescue_manager'
+                                : ((typeof user.role === 'string' && user.role.trim() === 'rescue_manager')
                                     ? <Navigate to="/manager/rescue/dashboard" replace />
-                                    : (user.role === 'veterinary_manager'
+                                    : ((typeof user.role === 'string' && user.role.trim() === 'veterinary_manager')
                                         ? <Navigate to="/manager/veterinary/dashboard" replace />
-                                        : (user.role === 'temporary_care_manager'
+                                        : ((typeof user.role === 'string' && user.role.trim() === 'temporary_care_manager')
                                             ? <Navigate to="/manager/temporary-care/dashboard" replace />
                                             : (typeof user.role === 'string' && user.role.endsWith('_manager')
                                                 ? <Navigate to="/manager/dashboard" replace />
@@ -234,23 +234,25 @@ function App() {
             : (user
             ? (user.role === 'admin' || user.role === 'super_admin'
                 ? <Navigate to="/admin/dashboard" replace />
-                : (user.role === 'adoption_manager'
+                : ((typeof user.role === 'string' && user.role.endsWith('_manager') && user.needsStoreSetup)
+                    ? <Navigate to="/manager/store-setup" replace />
+                    : ((typeof user.role === 'string' && user.role.trim() === 'adoption_manager')
                     ? <Navigate to="/manager/adoption/dashboard" replace />
-                    : (user.role === 'petshop_manager'
+                    : ((typeof user.role === 'string' && user.role.trim() === 'petshop_manager')
                         ? <Navigate to="/manager/petshop/dashboard" replace />
-                        : (user.role === 'ecommerce_manager'
+                        : ((typeof user.role === 'string' && user.role.trim() === 'ecommerce_manager')
                             ? <Navigate to="/manager/ecommerce/dashboard" replace />
-                            : (user.role === 'pharmacy_manager'
+                            : ((typeof user.role === 'string' && user.role.trim() === 'pharmacy_manager')
                                 ? <Navigate to="/manager/pharmacy/dashboard" replace />
-                                : (user.role === 'rescue_manager'
+                                : ((typeof user.role === 'string' && user.role.trim() === 'rescue_manager')
                                     ? <Navigate to="/manager/rescue/dashboard" replace />
-                                    : (user.role === 'veterinary_manager'
+                                    : ((typeof user.role === 'string' && user.role.trim() === 'veterinary_manager')
                                         ? <Navigate to="/manager/veterinary/dashboard" replace />
-                                        : (user.role === 'temporary_care_manager'
+                                        : ((typeof user.role === 'string' && user.role.trim() === 'temporary_care_manager')
                                             ? <Navigate to="/manager/temporary-care/dashboard" replace />
                                             : (typeof user.role === 'string' && user.role.endsWith('_manager')
                                                 ? <Navigate to="/manager/dashboard" replace />
-                                                : <Navigate to="/User/dashboard" replace />)))))))))
+                                                : <Navigate to="/User/dashboard" replace />))))))))))
             : <Register />)
         } 
       />

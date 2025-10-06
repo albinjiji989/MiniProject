@@ -19,6 +19,16 @@ router.get('/pets', userController.getAvailablePets);
 router.get('/pets/:id', userController.getPetDetails);
 router.get('/pets/search', userController.searchPets);
 
+// Manager Routes - Adoption Manager only
+router.get('/manager/pets', auth, authorize('adoption_manager'), managerController.getManagerPets);
+router.get('/manager/pets/:id', auth, authorize('adoption_manager'), managerController.getPetById);
+router.get('/manager/pets/:id/media', auth, authorize('adoption_manager'), managerController.getPetMedia);
+router.get('/manager/reports', auth, authorize('adoption_manager'), managerController.getManagerReports);
+
+// Manager Upload Routes - Adoption Manager only
+router.post('/manager/pets/upload', auth, authorize('adoption_manager'), upload.single('file'), managerController.uploadPetPhoto);
+router.post('/manager/pets/upload-document', auth, authorize('adoption_manager'), upload.single('file'), managerController.uploadPetDocument);
+
 // REST aliases per specification
 // POST /adoption/pets → Add pet for adoption (Manager)
 router.post('/pets', auth, authorize('adoption_manager'), managerController.createPet);
@@ -60,8 +70,8 @@ router.patch('/requests/:id', auth, authorize('adoption_manager'), managerContro
 router.get('/manager/applications', auth, authorize('adoption_manager'), managerController.getManagerApplications);
 // Manager: get single application details
 router.get('/manager/applications/:id', auth, authorize('adoption_manager'), managerController.getApplicationById);
+// Simplified handover routes - only schedule and complete
 router.post('/manager/applications/:id/handover/schedule', auth, authorize('adoption_manager'), managerController.scheduleHandover);
-router.patch('/manager/applications/:id/handover', auth, authorize('adoption_manager'), managerController.updateHandover);
 router.post('/manager/applications/:id/handover/complete', auth, authorize('adoption_manager'), managerController.completeHandover);
 
 // User Handover Routes
@@ -71,17 +81,6 @@ router.get('/user/applications/:id/handover', auth, async (req, res) => {
     const app = await AdoptionRequest.findOne({ _id: req.params.id, userId: req.user.id, isActive: true }).select('handover status contractURL');
     if (!app) return res.status(404).json({ success: false, error: 'Application not found' });
     return res.json({ success: true, data: { handover: app.handover || {}, status: app.status, contractURL: app.contractURL || null } });
-  } catch (e) { return res.status(500).json({ success: false, error: e.message }); }
-});
-router.post('/user/applications/:id/handover/confirm', auth, async (req, res) => {
-  try {
-    const AdoptionRequest = require('../models/AdoptionRequest');
-    const app = await AdoptionRequest.findOne({ _id: req.params.id, userId: req.user.id, isActive: true });
-    if (!app) return res.status(404).json({ success: false, error: 'Application not found' });
-    app.handover = app.handover || {};
-    app.handover.confirmedByUserAt = new Date();
-    await app.save();
-    return res.json({ success: true, message: 'Handover confirmed by user' });
   } catch (e) { return res.status(500).json({ success: false, error: e.message }); }
 });
 

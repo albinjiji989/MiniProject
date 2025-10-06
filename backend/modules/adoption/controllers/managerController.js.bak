@@ -5,9 +5,6 @@ const paymentService = require('../../../core/services/paymentService');
 const { sendMail } = require('../../../core/utils/email');
 const { sendSMS } = require('../../../core/utils/sms');
 const csvParser = require('csv-parser');
-const crypto = require('crypto');
-const path = require('path');
-const fs = require('fs');
 
 // Helper to parse CSV buffer
 const parseCSVBuffer = (buffer) => new Promise((resolve, reject) => {
@@ -992,371 +989,12 @@ Pet Adoption Center`
   }
 }
 
-// CSV import endpoint: expects multipart/form-data with field name 'file'
-const importPetsCSV = async (req, res) => {
-  try {
-    if (!req.file || !req.file.buffer) {
-      return res.status(400).json({ success: false, error: 'CSV file is required (field name: file)' });
-    }
-    const rows = await parseCSVBuffer(req.file.buffer);
-    if (!rows || rows.length === 0) {
-      return res.status(400).json({ success: false, error: 'CSV appears empty' });
-    }
-
-    // Map CSV columns to model fields; support common header variants and handle BOM
-    const normalize = (row, key) => {
-      const candidates = [key, key.toLowerCase(), key.replace(/([A-Z])/g, '_$1').toLowerCase()];
-      const found = Object.keys(row).find(k => {
-        // Remove BOM (\uFEFF) and other invisible characters, then normalize
-        const cleanKey = String(k).replace(/^\uFEFF/, '').replace(/^\ufeff/, '').trim().toLowerCase();
-        return candidates.includes(cleanKey);
-      });
-      const value = found ? row[found] : undefined;
-      return value ? String(value).trim() : undefined;
-    };
-
-    // Clean the row keys to remove BOM from the actual data
-    const cleanedRows = rows.map(row => {
-      const cleanedRow = {};
-      Object.keys(row).forEach(key => {
-        const cleanKey = key.replace(/^\uFEFF/, '').replace(/^\ufeff/, '').trim();
-        cleanedRow[cleanKey] = row[key];
-      });
-      return cleanedRow;
-    });
-
-    // Debug: Add header information to help troubleshoot
-    let debugInfo = '';
-    if (cleanedRows.length > 0) {
-      const originalHeaders = Object.keys(rows[0]);
-      const cleanedHeaders = Object.keys(cleanedRows[0]);
-      debugInfo = `Original headers: [${originalHeaders.map(h => `"${h}"`).join(', ')}] | Cleaned headers: [${cleanedHeaders.join(', ')}]`;
-      console.log('CSV Debug:', debugInfo);
-    }
-
-    const results = {
-      totalRows: cleanedRows.length,
-      successful: [],
-      failed: [],
-      warnings: []
-    };
-
-    // Process each row individually with detailed error handling
-    for (let i = 0; i < cleanedRows.length; i++) {
-      const row = cleanedRows[i];
-      const rowNumber = i + 2; // +2 because CSV row 1 is headers, and we're 0-indexed
-      
-      try {
-        // Extract and validate required fields
-        const name = normalize(row, 'name');
-        const breed = normalize(row, 'breed');
-        const species = normalize(row, 'species') || normalize(row, 'type');
-        
-        // Check for required fields
-        const missingFields = [];
-        if (!name) missingFields.push('name');
-        if (!breed) missingFields.push('breed');
-        if (!species) missingFields.push('species');
-        
-        if (missingFields.length > 0) {
-          results.failed.push({
-            row: rowNumber,
-            data: row,
-            reason: `Missing required fields: ${missingFields.join(', ')}`,
-            error: 'MISSING_REQUIRED_FIELDS'
-          });
-          continue;
-        }
-
-        // Process optional fields with smart defaults and validation
-        const processedData = {
-          name,
-          breed,
-          species,
-          createdBy: req.user.id,
-          images: [],
-          status: 'available'
-        };
-
-        // Age handling
-        const ageValue = normalize(row, 'age');
-        if (ageValue) {
-          const ageNum = Number(ageValue);
-          if (!isNaN(ageNum) && ageNum >= 0) {
-            processedData.age = ageNum;
-          } else {
-            results.warnings.push({
-              row: rowNumber,
-              field: 'age',
-              value: ageValue,
-              message: 'Invalid age value, defaulting to 0'
-            });
-            processedData.age = 0;
-          }
-        } else {
-          processedData.age = 0;
-        }
-
-        // Age unit handling
-        const ageUnitValue = normalize(row, 'ageUnit');
-        if (ageUnitValue) {
-          const ageUnitLower = ageUnitValue.toLowerCase();
-          if (['months', 'years'].includes(ageUnitLower)) {
-            processedData.ageUnit = ageUnitLower;
-          } else {
-            results.warnings.push({
-              row: rowNumber,
-              field: 'ageUnit',
-              value: ageUnitValue,
-              message: 'Invalid age unit, defaulting to months'
-            });
-            processedData.ageUnit = 'months';
-          }
-        } else {
-          processedData.ageUnit = 'months';
-        }
-
-        // Gender handling
-        const genderValue = normalize(row, 'gender');
-        if (genderValue) {
-          const genderLower = genderValue.toLowerCase();
-          if (['male', 'female'].includes(genderLower)) {
-            processedData.gender = genderLower;
-          } else {
-            results.warnings.push({
-              row: rowNumber,
-              field: 'gender',
-              value: genderValue,
-              message: 'Invalid gender, defaulting to male'
-            });
-            processedData.gender = 'male';
-          }
-        } else {
-          processedData.gender = 'male';
-        }
-
-        // Color handling
-        processedData.color = normalize(row, 'color') || 'unknown';
-
-        // Weight handling
-        const weightValue = normalize(row, 'weight');
-        if (weightValue) {
-          const weightNum = Number(weightValue);
-          if (!isNaN(weightNum) && weightNum >= 0) {
-            processedData.weight = weightNum;
-          } else {
-            results.warnings.push({
-              row: rowNumber,
-              field: 'weight',
-              value: weightValue,
-              message: 'Invalid weight value, defaulting to 0'
-            });
-            processedData.weight = 0;
-          }
-        } else {
-          processedData.weight = 0;
-        }
-
-        // Health status handling
-        const healthStatusValue = normalize(row, 'healthStatus');
-        if (healthStatusValue) {
-          const healthStatusLower = healthStatusValue.toLowerCase();
-          if (['excellent', 'good', 'fair', 'needs_attention'].includes(healthStatusLower)) {
-            processedData.healthStatus = healthStatusLower;
-          } else {
-            results.warnings.push({
-              row: rowNumber,
-              field: 'healthStatus',
-              value: healthStatusValue,
-              message: 'Invalid health status, defaulting to good'
-            });
-            processedData.healthStatus = 'good';
-          }
-        } else {
-          processedData.healthStatus = 'good';
-        }
-
-        // Vaccination status handling
-        const vaccinationStatusValue = normalize(row, 'vaccinationStatus');
-        if (vaccinationStatusValue) {
-          const vaccinationStatusLower = vaccinationStatusValue.toLowerCase();
-          if (['up_to_date', 'partial', 'not_vaccinated'].includes(vaccinationStatusLower)) {
-            processedData.vaccinationStatus = vaccinationStatusLower;
-          } else {
-            results.warnings.push({
-              row: rowNumber,
-              field: 'vaccinationStatus',
-              value: vaccinationStatusValue,
-              message: 'Invalid vaccination status, defaulting to not_vaccinated'
-            });
-            processedData.vaccinationStatus = 'not_vaccinated';
-          }
-        } else {
-          processedData.vaccinationStatus = 'not_vaccinated';
-        }
-
-        // Temperament handling
-        const temperamentValue = normalize(row, 'temperament');
-        if (temperamentValue) {
-          const temperamentLower = temperamentValue.toLowerCase();
-          if (['calm', 'energetic', 'playful', 'shy', 'aggressive', 'friendly'].includes(temperamentLower)) {
-            processedData.temperament = temperamentLower;
-          } else {
-            results.warnings.push({
-              row: rowNumber,
-              field: 'temperament',
-              value: temperamentValue,
-              message: 'Invalid temperament, defaulting to friendly'
-            });
-            processedData.temperament = 'friendly';
-          }
-        } else {
-          processedData.temperament = 'friendly';
-        }
-
-        // Description handling
-        processedData.description = normalize(row, 'description') || 'No description provided';
-
-        // Adoption fee handling
-        const adoptionFeeValue = normalize(row, 'adoptionFee');
-        if (adoptionFeeValue) {
-          const adoptionFeeNum = Number(adoptionFeeValue);
-          if (!isNaN(adoptionFeeNum) && adoptionFeeNum >= 0) {
-            processedData.adoptionFee = adoptionFeeNum;
-          } else {
-            results.warnings.push({
-              row: rowNumber,
-              field: 'adoptionFee',
-              value: adoptionFeeValue,
-              message: 'Invalid adoption fee, defaulting to 0'
-            });
-            processedData.adoptionFee = 0;
-          }
-        } else {
-          processedData.adoptionFee = 0;
-        }
-
-        // Try to save the pet
-        const pet = new AdoptionPet(processedData);
-        const savedPet = await pet.save();
-        
-        results.successful.push({
-          row: rowNumber,
-          petId: savedPet._id,
-          name: savedPet.name,
-          breed: savedPet.breed,
-          species: savedPet.species
-        });
-
-      } catch (error) {
-        results.failed.push({
-          row: rowNumber,
-          data: row,
-          reason: error.message,
-          error: 'DATABASE_ERROR'
-        });
-      }
-    }
-
-    // Prepare response with detailed results
-    const response = {
-      success: true,
-      message: `Import completed: ${results.successful.length} successful, ${results.failed.length} failed, ${results.warnings.length} warnings`,
-      data: {
-        totalRows: results.totalRows,
-        successful: results.successful.length,
-        failed: results.failed.length,
-        warnings: results.warnings.length,
-        debugInfo: debugInfo,
-        detectedHeaders: cleanedRows.length > 0 ? Object.keys(cleanedRows[0]) : [],
-        details: {
-          successfulPets: results.successful,
-          failedRows: results.failed,
-          warnings: results.warnings
-        }
-      }
-    };
-
-    // Return appropriate status code
-    if (results.successful.length === 0) {
-      return res.status(400).json({
-        ...response,
-        success: false,
-        message: 'No pets were successfully imported'
-      });
-    } else if (results.failed.length > 0) {
-      return res.status(207).json(response); // 207 Multi-Status for partial success
-    } else {
-      return res.status(200).json(response);
-    }
-
-  } catch (error) {
-    console.error('Import CSV error:', error);
-    res.status(500).json({ success: false, error: 'Failed to import CSV: ' + error.message });
-  }
-}
-
-// Upload pet photo
-const uploadPetPhoto = async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' })
-    const allowed = ['image/jpeg','image/png','image/webp','image/gif']
-    if (!allowed.includes(req.file.mimetype)) {
-      return res.status(400).json({ success: false, error: 'Only image files are allowed' })
-    }
-    const extMap = {
-      'image/jpeg': '.jpg',
-      'image/png': '.png',
-      'image/webp': '.webp',
-      'image/gif': '.gif'
-    }
-    const filename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${extMap[req.file.mimetype] || ''}`
-    // Organize by module/area/role/user under uploads
-    const uploadDir = path.join(__dirname, '..', 'uploads', 'photos', 'pets', 'managers', String(req.user.id))
-    try { fs.mkdirSync(uploadDir, { recursive: true }) } catch (_) {}
-    const filePath = path.join(uploadDir, filename)
-    fs.writeFileSync(filePath, req.file.buffer)
-    const url = `/modules/adoption/uploads/photos/pets/managers/${req.user.id}/${filename}`
-    return res.status(201).json({ success: true, data: { url, name: filename, type: req.file.mimetype } })
-  } catch (e) {
-    return res.status(500).json({ success: false, error: e.message })
-  }
-}
-
-// Upload pet document
-const uploadPetDocument = async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' })
-    const allowed = ['image/jpeg','image/png','image/jpg','application/pdf']
-    if (!allowed.includes(req.file.mimetype)) {
-      return res.status(400).json({ success: false, error: 'Only images or PDF files are allowed' })
-    }
-    const extMap = {
-      'image/jpeg': '.jpg',
-      'image/jpg': '.jpg',
-      'image/png': '.png',
-      'application/pdf': '.pdf'
-    }
-    const filename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${extMap[req.file.mimetype] || ''}`
-    // Organize by module/area/role/user under documents
-    const uploadDir = path.join(__dirname, '..', 'uploads', 'documents', 'pets', 'managers', String(req.user.id))
-    try { fs.mkdirSync(uploadDir, { recursive: true }) } catch (_) {}
-    const filePath = path.join(uploadDir, filename)
-    fs.writeFileSync(filePath, req.file.buffer)
-    const url = `/modules/adoption/uploads/documents/pets/managers/${req.user.id}/${filename}`
-    return res.status(201).json({ success: true, data: { url, name: filename, type: req.file.mimetype } })
-  } catch (e) {
-    return res.status(500).json({ success: false, error: e.message })
-  }
-}
-
 module.exports = {
   getManagerPets,
   createPet,
   updatePet,
   deletePet,
   getPetById,
-  getPetMedia,
   importPetsCSV,
   getManagerApplications,
   getApplicationById,
@@ -1419,7 +1057,260 @@ module.exports = {
   // Complete handover with OTP verification
   completeHandover,
   // CSV import endpoint: expects multipart/form-data with field name 'file'
-  importPetsCSV,
-  uploadPetPhoto,
-  uploadPetDocument,
+  importPetsCSV
+};
+
+      // Debug: Add header information to help troubleshoot
+      let debugInfo = '';
+      if (cleanedRows.length > 0) {
+        const originalHeaders = Object.keys(rows[0]);
+        const cleanedHeaders = Object.keys(cleanedRows[0]);
+        debugInfo = `Original headers: [${originalHeaders.map(h => `"${h}"`).join(', ')}] | Cleaned headers: [${cleanedHeaders.join(', ')}]`;
+        console.log('CSV Debug:', debugInfo);
+      }
+
+      const results = {
+        totalRows: cleanedRows.length,
+        successful: [],
+        failed: [],
+        warnings: []
+      };
+
+      // Process each row individually with detailed error handling
+      for (let i = 0; i < cleanedRows.length; i++) {
+        const row = cleanedRows[i];
+        const rowNumber = i + 2; // +2 because CSV row 1 is headers, and we're 0-indexed
+        
+        try {
+          // Extract and validate required fields
+          const name = normalize(row, 'name');
+          const breed = normalize(row, 'breed');
+          const species = normalize(row, 'species') || normalize(row, 'type');
+          
+          // Check for required fields
+          const missingFields = [];
+          if (!name) missingFields.push('name');
+          if (!breed) missingFields.push('breed');
+          if (!species) missingFields.push('species');
+          
+          if (missingFields.length > 0) {
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              reason: `Missing required fields: ${missingFields.join(', ')}`,
+              error: 'MISSING_REQUIRED_FIELDS'
+            });
+            continue;
+          }
+
+          // Process optional fields with smart defaults and validation
+          const processedData = {
+            name,
+            breed,
+            species,
+            createdBy: req.user.id,
+            images: [],
+            status: 'available'
+          };
+
+          // Age handling
+          const ageValue = normalize(row, 'age');
+          if (ageValue) {
+            const ageNum = Number(ageValue);
+            if (!isNaN(ageNum) && ageNum >= 0) {
+              processedData.age = ageNum;
+            } else {
+              results.warnings.push({
+                row: rowNumber,
+                field: 'age',
+                value: ageValue,
+                message: 'Invalid age value, defaulting to 0'
+              });
+              processedData.age = 0;
+            }
+          } else {
+            processedData.age = 0;
+          }
+
+          // Age unit handling
+          const ageUnitValue = normalize(row, 'ageUnit');
+          if (ageUnitValue) {
+            const ageUnitLower = ageUnitValue.toLowerCase();
+            if (['months', 'years'].includes(ageUnitLower)) {
+              processedData.ageUnit = ageUnitLower;
+            } else {
+              results.warnings.push({
+                row: rowNumber,
+                field: 'ageUnit',
+                value: ageUnitValue,
+                message: 'Invalid age unit, defaulting to months'
+              });
+              processedData.ageUnit = 'months';
+            }
+          } else {
+            processedData.ageUnit = 'months';
+          }
+
+          // Gender handling
+          const genderValue = normalize(row, 'gender');
+          if (genderValue) {
+            const genderLower = genderValue.toLowerCase();
+            if (['male', 'female'].includes(genderLower)) {
+              processedData.gender = genderLower;
+            } else {
+              results.warnings.push({
+                row: rowNumber,
+                field: 'gender',
+                value: genderValue,
+                message: 'Invalid gender, defaulting to male'
+              });
+              processedData.gender = 'male';
+            }
+          } else {
+            processedData.gender = 'male';
+          }
+
+          // Color handling
+          processedData.color = normalize(row, 'color') || 'unknown';
+
+          // Weight handling
+          const weightValue = normalize(row, 'weight');
+          if (weightValue) {
+            const weightNum = Number(weightValue);
+            if (!isNaN(weightNum) && weightNum >= 0) {
+              processedData.weight = weightNum;
+            } else {
+              results.warnings.push({
+                row: rowNumber,
+                field: 'weight',
+                value: weightValue,
+                message: 'Invalid weight value, defaulting to 0'
+              });
+              processedData.weight = 0;
+            }
+          } else {
+            processedData.weight = 0;
+          }
+
+          // Health status handling
+          const healthStatusValue = normalize(row, 'healthStatus');
+          if (healthStatusValue) {
+            const healthStatusLower = healthStatusValue.toLowerCase();
+            if (['excellent', 'good', 'fair', 'needs_attention'].includes(healthStatusLower)) {
+              processedData.healthStatus = healthStatusLower;
+            } else {
+              results.warnings.push({
+                row: rowNumber,
+                field: 'healthStatus',
+                value: healthStatusValue,
+                message: 'Invalid health status, defaulting to good'
+              });
+              processedData.healthStatus = 'good';
+            }
+          } else {
+            processedData.healthStatus = 'good';
+          }
+
+          // Vaccination status handling
+          const vaccinationStatusValue = normalize(row, 'vaccinationStatus');
+          if (vaccinationStatusValue) {
+            const vaccinationStatusLower = vaccinationStatusValue.toLowerCase();
+            if (['up_to_date', 'partial', 'not_vaccinated'].includes(vaccinationStatusLower)) {
+              processedData.vaccinationStatus = vaccinationStatusLower;
+            } else {
+              results.warnings.push({
+                row: rowNumber,
+                field: 'vaccinationStatus',
+                value: vaccinationStatusValue,
+                message: 'Invalid vaccination status, defaulting to not_vaccinated'
+              });
+              processedData.vaccinationStatus = 'not_vaccinated';
+            }
+          } else {
+            processedData.vaccinationStatus = 'not_vaccinated';
+          }
+
+          // Temperament handling
+          const temperamentValue = normalize(row, 'temperament');
+          if (temperamentValue) {
+            const temperamentLower = temperamentValue.toLowerCase();
+            if (['calm', 'energetic', 'playful', 'shy', 'aggressive', 'friendly'].includes(temperamentLower)) {
+              processedData.temperament = temperamentLower;
+            } else {
+              results.warnings.push({
+                row: rowNumber,
+                field: 'temperament',
+                value: temperamentValue,
+                message: 'Invalid temperament, defaulting to friendly'
+              });
+              processedData.temperament = 'friendly';
+            }
+          } else {
+            processedData.temperament = 'friendly';
+          }
+
+          // Description handling
+          processedData.description = normalize(row, 'description') || 'No description provided';
+
+          // Adoption fee handling
+          const adoptionFeeValue = normalize(row, 'adoptionFee');
+          if (adoptionFeeValue) {
+            const adoptionFeeNum = Number(adoptionFeeValue);
+            if (!isNaN(adoptionFeeNum) && adoptionFeeNum >= 0) {
+              processedData.adoptionFee = adoptionFeeNum;
+            } else {
+              results.warnings.push({
+                row: rowNumber,
+                field: 'adoptionFee',
+                value: adoptionFeeValue,
+                message: 'Invalid adoption fee, defaulting to 0'
+              });
+              processedData.adoptionFee = 0;
+            }
+          } else {
+            processedData.adoptionFee = 0;
+          }
+
+          // Try to save the pet
+          const pet = new AdoptionPet(processedData);
+          const savedPet = await pet.save();
+          
+          results.successful.push({
+            row: rowNumber,
+            petId: savedPet._id,
+            name: savedPet.name,
+            breed: savedPet.breed,
+            species: savedPet.species
+          });
+
+        } catch (error) {
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            reason: error.message,
+            error: 'DATABASE_ERROR'
+          });
+        }
+      }
+
+      // Prepare response with detailed results
+      const response = {
+        success: true,
+        message: `Import completed: ${results.successful.length} successful, ${results.failed.length} failed, ${results.warnings.length} warnings`,
+        data: {
+          totalRows: results.totalRows,
+          successful: results.successful.length,
+          failed: results.failed.length,
+          warnings: results.warnings.length,
+          debugInfo: debugInfo,
+          detectedHeaders: cleanedRows.length > 0 ? Object.keys(cleanedRows[0]) : [],
+          details: {
+            successfulPets: results.successful,
+            failedRows: results.failed,
+            warnings: results.warnings
+          }
+        }
+      }
+    }
+  }
 };

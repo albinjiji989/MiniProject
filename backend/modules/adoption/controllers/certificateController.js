@@ -57,7 +57,7 @@ async function generateCertificate(req, res) {
 
     // Optional notify adopter
     try {
-      await sendMail?.(application?.email || '', 'Adoption Certificate Ready', 'Your adoption certificate is ready to download.');
+      await sendMail({to: application?.email || '', subject: 'Adoption Certificate Ready', html: 'Your adoption certificate is ready to download.'});
     } catch (e) {}
 
     return res.status(201).json({ success: true, data: certificate });

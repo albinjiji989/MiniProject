@@ -409,21 +409,28 @@ const AdoptionApplications = () => {
               {handoverData ? (
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 1 }}>
                   <Typography variant="body2"><strong>Status:</strong> {handoverData.handover?.status || handoverData.status || '-'}</Typography>
-                  <Typography variant="body2"><strong>Method:</strong> {handoverData.handover?.method || '-'}</Typography>
                   <Typography variant="body2"><strong>Scheduled At:</strong> {handoverData.handover?.scheduledAt ? new Date(handoverData.handover.scheduledAt).toLocaleString() : '-'}</Typography>
-                  <Typography variant="body2"><strong>Location:</strong> {handoverData.handover?.location?.address || '-'}</Typography>
+                  <Typography variant="body2"><strong>Location:</strong> Adoption Center - Main Branch, 123 Pet Welfare Road, Animal City</Typography>
+                  <Typography variant="body2"><strong>Contact:</strong> +91-9876543210</Typography>
                   <Typography variant="body2"><strong>Notes:</strong> {handoverData.handover?.notes || '-'}</Typography>
                   {handoverData.handover?.confirmedByUserAt && (
                     <Typography variant="body2" color="success.main"><strong>Confirmed:</strong> {new Date(handoverData.handover.confirmedByUserAt).toLocaleString()}</Typography>
+                  )}
+                  {handoverData.handover?.status === 'scheduled' && (
+                    <Box sx={{ mt: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>Important Information</Typography>
+                      <Typography variant="body2">
+                        Please note that pet pickup is only available at our adoption center. 
+                        You must present the OTP sent to your email when picking up your pet.
+                        Arrive 15 minutes before your scheduled time.
+                      </Typography>
+                    </Box>
                   )}
                 </Box>
               ) : (
                 <Typography variant="body2">No handover information available.</Typography>
               )}
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
-                {handoverData?.handover?.status === 'scheduled' && !handoverData?.handover?.confirmedByUserAt && (
-                  <Button variant="contained" color="success" onClick={() => handleConfirmHandover(selectedApplication)}>Confirm Received</Button>
-                )}
                 <Button onClick={() => setHandoverOpen(false)}>Close</Button>
               </Box>
             </CardContent>

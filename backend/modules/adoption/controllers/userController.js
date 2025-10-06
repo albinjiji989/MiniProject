@@ -181,7 +181,7 @@ const submitApplication = async (req, res) => {
       const managers = await User.find({ role: 'adoption_manager', isActive: true }).select('email');
       for (const manager of managers) {
         if (manager?.email) {
-          await sendMail(manager.email, 'New Adoption Application', `A new adoption application has been submitted for ${pet.name}. Please review it in the manager dashboard.`);
+          await sendMail({to: manager.email, subject: 'New Adoption Application', html: `A new adoption application has been submitted for ${pet.name}. Please review it in the manager dashboard.`});
         }
       }
     } catch (_) {}
@@ -412,7 +412,7 @@ const verifyUserPayment = async (req, res) => {
       try {
         const applicant = await User.findById(application.userId).select('email phone name')
         if (applicant?.email) {
-          await sendMail(applicant.email, 'Adoption Completed', `Hi ${applicant.name || ''}, your adoption application for ${pet.name} has been completed successfully. Please check your dashboard for more details.`)
+          await sendMail({to: applicant.email, subject: 'Adoption Completed', html: `Hi ${applicant.name || ''}, your adoption application for ${pet.name} has been completed successfully. Please check your dashboard for more details.`})
         }
         if (applicant?.phone) {
           await sendSMS(applicant.phone, `Your adoption for ${pet.name} is completed. Check your dashboard for details.`)

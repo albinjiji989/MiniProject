@@ -9,26 +9,41 @@ const DashboardRedirect = () => {
   if (!token) return <Navigate to="/login" replace />
 
   const role = user?.role || ''
-  // Map each manager role to its landing path
-  const map = {
-    adoption_manager: '/manager/adoption/dashboard',
-    ecommerce_manager: '/manager/ecommerce/dashboard',
-    pharmacy_manager: '/manager/pharmacy/dashboard',
-    rescue_manager: '/manager/rescue/dashboard',
-    petshop_manager: '/manager/petshop/dashboard',
-    'temporary-care_manager': '/manager/temporary-care/dashboard',
-    veterinary_manager: '/manager/veterinary/dashboard',
+  
+  // Direct mapping for specific manager roles
+  if (role === 'adoption_manager') {
+    return <Navigate to="/manager/adoption/dashboard" replace />
+  }
+  if (role === 'petshop_manager') {
+    return <Navigate to="/manager/petshop/dashboard" replace />
+  }
+  if (role === 'ecommerce_manager') {
+    return <Navigate to="/manager/ecommerce/dashboard" replace />
+  }
+  if (role === 'pharmacy_manager') {
+    return <Navigate to="/manager/pharmacy/dashboard" replace />
+  }
+  if (role === 'rescue_manager') {
+    return <Navigate to="/manager/rescue/dashboard" replace />
+  }
+  if (role === 'veterinary_manager') {
+    return <Navigate to="/manager/veterinary/dashboard" replace />
+  }
+  if (role === 'temporary_care_manager' || role === 'temporary-care_manager') {
+    return <Navigate to="/manager/temporary-care/dashboard" replace />
   }
 
-  if (role.endsWith('_manager')) {
-    const target = map[role] || '/User/dashboard'
-    return <Navigate to={target} replace />
+  // Fallback for any other manager roles
+  if (typeof role === 'string' && role.endsWith('_manager')) {
+    return <Navigate to="/manager/dashboard" replace />
   }
 
-  // Non-manager fallback
+  // Admin roles
   if (role === 'admin' || role === 'super_admin') {
     return <Navigate to="/admin/dashboard" replace />
   }
+  
+  // Default fallback
   return <Navigate to="/User/dashboard" replace />
 }
 
