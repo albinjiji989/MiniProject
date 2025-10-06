@@ -5,6 +5,12 @@ import {
   Container,
   Typography,
   Button,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Pagination,
   Grid,
   Card,
   CardContent,
@@ -34,7 +40,7 @@ import {
   Pets as PetsIcon,
 } from '@mui/icons-material'
 import { useAuth } from '../../../contexts/AuthContext'
-import { apiClient } from '../../../services/api'
+import { apiClient, resolveMediaUrl } from '../../../services/api'
 
 const Adoption = () => {
   const { user, logout } = useAuth()
@@ -44,6 +50,10 @@ const Adoption = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [pets, setPets] = React.useState([])
+  const [page, setPage] = React.useState(1)
+  const [limit, setLimit] = React.useState(12)
+  const [total, setTotal] = React.useState(0)
+  const [filters, setFilters] = React.useState({ species: '', breed: '', gender: '', age: '' })
 
   const handleMobileMenuToggle = () => {
     setMobileMenuOpen(!mobileMenuOpen)
@@ -58,40 +68,56 @@ const Adoption = () => {
     navigate('/dashboard')
   }
 
+  const loadPets = React.useCallback(async () => {
+    try {
+      setLoading(true)
+      // Use adoption public list with pagination
+      const res = await apiClient.get('/adoption/public/pets', { params: { page, limit, ...filters } })
+      const raw = res?.data?.data?.pets || res?.data?.pets || res?.data || []
+      const normalized = (Array.isArray(raw) ? raw : []).map((p) => ({
+        id: p._id || p.id,
+        name: p.name || p.petName || 'Pet',
+        breed: p.breed || p.petBreed || p.species || 'Unknown',
+        age: p.age || p.ageYears || 0,
+        ageUnit: p.ageUnit || 'months',
+        gender: p.gender || 'Unknown',
+        image: resolveMediaUrl((p.images?.[0]?.url) || p.image || p.photoUrl || '' ) || 'https://via.placeholder.com/400x300?text=Pet',
+        status: p.status || p.currentStatus || 'available',
+        description: p.description || 'No description provided.',
+        code: p.petCode || p.code || p.pet_code || '',
+        adoptionFee: p.adoptionFee || 0,
+        species: p.species || 'Unknown',
+        color: p.color || 'Unknown',
+        healthStatus: p.healthStatus || 'good',
+        temperament: p.temperament || 'friendly'
+      }))
+      setPets(normalized)
+      const pag = res?.data?.data?.pagination
+      setTotal(pag?.total || normalized.length)
+    } catch (e) {
+      console.error('Error loading adoption pets:', e)
+      setPets([])
+      setTotal(0)
+    } finally {
+      setLoading(false)
+    }
+  }, [page, limit, filters])
+
   React.useEffect(() => {
-    const loadPets = async () => {
+    const loadInitial = async () => {
       try {
         setLoading(true)
-        // Use adoption API instead of generic pets API
-        const res = await apiClient.get('/adoption/public/pets', { params: { limit: 50 } })
-        const raw = res?.data?.data?.pets || res?.data?.pets || res?.data || []
-        const normalized = (Array.isArray(raw) ? raw : []).map((p) => ({
-          id: p._id || p.id,
-          name: p.name || p.petName || 'Pet',
-          breed: p.breed || p.petBreed || p.species || 'Unknown',
-          age: p.age || p.ageYears || 0,
-          ageUnit: p.ageUnit || 'months',
-          gender: p.gender || 'Unknown',
-          image: p.images?.[0] || p.image || p.photoUrl || 'https://via.placeholder.com/400x300?text=Pet',
-          status: p.status || p.currentStatus || 'available',
-          description: p.description || 'No description provided.',
-          code: p.petCode || p.code || p.pet_code || '',
-          adoptionFee: p.adoptionFee || 0,
-          species: p.species || 'Unknown',
-          color: p.color || 'Unknown',
-          healthStatus: p.healthStatus || 'good',
-          temperament: p.temperament || 'friendly'
-        }))
-        setPets(normalized)
+        await loadPets()
       } catch (e) {
-        console.error('Error loading adoption pets:', e)
-        setPets([])
+        // handled in loadPets
       } finally {
         setLoading(false)
       }
     }
-    loadPets()
-  }, [])
+    loadInitial()
+  }, [loadPets])
+
+  const applyFilters = () => { setPage(1); loadPets() }
 
   const Navbar = () => (
     <AppBar 
@@ -210,20 +236,27 @@ const Adoption = () => {
           </Box>
           
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <Button
-              variant="outlined"
-              startIcon={<SearchIcon />}
-              sx={{ borderColor: '#4caf50', color: '#4caf50' }}
-            >
-              Search
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<FilterIcon />}
-              sx={{ borderColor: '#4caf50', color: '#4caf50' }}
-            >
-              Filter
-            </Button>
+            <TextField size="small" label="Species" value={filters.species} onChange={(e)=>setFilters(f=>({...f, species:e.target.value}))} />
+            <TextField size="small" label="Breed" value={filters.breed} onChange={(e)=>setFilters(f=>({...f, breed:e.target.value}))} />
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <InputLabel id="gender">Gender</InputLabel>
+              <Select labelId="gender" label="Gender" value={filters.gender} onChange={(e)=>setFilters(f=>({...f, gender:e.target.value}))}>
+                <MenuItem value="">Any</MenuItem>
+                <MenuItem value="male">Male</MenuItem>
+                <MenuItem value="female">Female</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel id="age">Age</InputLabel>
+              <Select labelId="age" label="Age" value={filters.age} onChange={(e)=>setFilters(f=>({...f, age:e.target.value}))}>
+                <MenuItem value="">Any</MenuItem>
+                <MenuItem value={12}>0–12 months</MenuItem>
+                <MenuItem value={24}>13–24 months</MenuItem>
+                <MenuItem value={36}>25–36 months</MenuItem>
+                <MenuItem value={37}>36+ months</MenuItem>
+              </Select>
+            </FormControl>
+            <Button variant="outlined" startIcon={<FilterIcon />} sx={{ borderColor: '#4caf50', color: '#4caf50' }} onClick={applyFilters}>Apply</Button>
             <Button
               variant="contained"
               startIcon={<AddIcon />}
@@ -292,6 +325,12 @@ const Adoption = () => {
 
         {/* Pets Grid */}
         <Grid container spacing={3}>
+          {loading && (
+            <Grid item xs={12}><Typography>Loading...</Typography></Grid>
+          )}
+          {!loading && pets.length === 0 && (
+            <Grid item xs={12}><Typography color="text.secondary">No pets found.</Typography></Grid>
+          )}
           {pets.map((pet) => (
             <Grid item xs={12} sm={6} md={4} lg={3} key={pet.id}>
               <Card 
@@ -342,6 +381,7 @@ const Adoption = () => {
                     size="small" 
                     variant="outlined"
                     sx={{ borderColor: '#4caf50', color: '#4caf50' }}
+                    onClick={() => navigate(`/User/adoption/${pet.id}`)}
                   >
                     View Details
                   </Button>
@@ -349,6 +389,7 @@ const Adoption = () => {
                     size="small" 
                     variant="contained"
                     sx={{ backgroundColor: '#4caf50', '&:hover': { backgroundColor: '#388e3c' } }}
+                    onClick={() => navigate(`/User/adoption/apply/applicant?petId=${pet.id}`)}
                   >
                     Adopt
                   </Button>
@@ -357,6 +398,11 @@ const Adoption = () => {
             </Grid>
           ))}
         </Grid>
+
+        <Box sx={{ display:'flex', justifyContent:'space-between', alignItems:'center', mt: 3 }}>
+          <Typography variant="caption" color="text.secondary">Total: {total}</Typography>
+          <Pagination count={Math.max(1, Math.ceil(total/limit))} page={page} onChange={(_,p)=>setPage(p)} size="small" />
+        </Box>
       </Container>
     </Box>
   )

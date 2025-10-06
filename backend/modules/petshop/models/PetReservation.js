@@ -7,10 +7,7 @@ const petReservationSchema = new mongoose.Schema({
   
   // Reservation details
   reservationCode: { 
-    type: String, 
-    unique: true, 
-    sparse: true,
-    index: true
+    type: String
   },
   
   // Enhanced status workflow
@@ -19,12 +16,14 @@ const petReservationSchema = new mongoose.Schema({
     enum: [
       'pending',           // User created reservation
       'manager_review',    // Sent to manager for review
-      'approved',          // Manager approved
+      'approved',          // Manager approved - waiting for user decision
       'rejected',          // Manager rejected
-      'payment_pending',   // Approved, waiting for payment
+      'going_to_buy',      // User confirmed they want to buy
+      'payment_pending',   // Ready for payment
       'paid',             // Payment completed
-      'ready_pickup',     // Pet ready for pickup
-      'completed',        // Pet picked up
+      'ready_pickup',     // Pet ready for pickup/delivery
+      'delivered',        // Pet delivered to user
+      'at_owner',         // Pet is now with owner (final status)
       'cancelled'         // Cancelled by user or manager
     ], 
     default: 'pending' 
@@ -67,7 +66,6 @@ const petReservationSchema = new mongoose.Schema({
     paidAt: { type: Date }
   },
   
-  // Timeline tracking
   timeline: [{
     status: { type: String },
     timestamp: { type: Date, default: Date.now },
@@ -75,12 +73,35 @@ const petReservationSchema = new mongoose.Schema({
     notes: { type: String, trim: true }
   }],
   
+  // User decision tracking
+  userDecision: {
+    wantsToBuy: { type: Boolean }, // User's decision after manager approval
+    decisionDate: { type: Date },
+    decisionNotes: { type: String, trim: true },
+    remindersSent: { type: Number, default: 0 }
+  },
+  
+  // Delivery tracking
+  deliveryInfo: {
+    method: { type: String, enum: ['pickup', 'delivery'], default: 'pickup' },
+    address: {
+      street: String,
+      city: String,
+      state: String,
+      zipCode: String,
+      phone: String
+    },
+    scheduledDate: Date,
+    actualDate: Date,
+    deliveryNotes: String
+  },
+  
+  // Additional notes
   notes: { type: String, trim: true },
   internalNotes: { type: String, trim: true }, // Manager-only notes
   
   // Expiry for pending reservations
   expiresAt: { type: Date },
-  
 }, { timestamps: true })
 
 petReservationSchema.index({ itemId: 1, userId: 1, status: 1 })

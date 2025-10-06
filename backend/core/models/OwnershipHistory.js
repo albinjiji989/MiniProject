@@ -8,11 +8,11 @@ const OwnershipHistorySchema = new mongoose.Schema({
     required: [true, 'Pet reference is required']
   },
   
-  // Previous Owner Information
+  // Previous Owner Information (optional for first-time ownership)
   previousOwner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, 'Previous owner is required']
+    required: false
   },
   
   // New Owner Information

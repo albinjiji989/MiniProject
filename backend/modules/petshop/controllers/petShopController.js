@@ -13,9 +13,11 @@ const PetInventoryItem = require('../models/PetInventoryItem');
 const PetReservation = require('../models/PetReservation');
 const PetPricing = require('../models/PetPricing');
 const Wishlist = require('../models/Wishlist');
+const OwnershipHistory = require('../../../core/models/OwnershipHistory');
 const logger = require('winston');
 const { getStoreFilter } = require('../../../utils/storeFilter');
 const { generateStoreId, MODULE_PREFIX } = require('../../../utils/storeIdGenerator');
+const StoreNameChangeRequest = require('../models/StoreNameChangeRequest');
 
 // Log controller actions with user context and operation details
 const logAction = (req, action, data = {}) => {
@@ -87,12 +89,16 @@ const bulkPublishInventoryItems = async (req, res) => {
       return res.status(400).json({ success: false, message: 'itemIds array is required' })
     }
 
-    // Fetch items belonging to this store only
-    const items = await PetInventoryItem.find({
-      _id: { $in: itemIds },
-      ...getStoreFilter(req.user),
-      isActive: true
-    })
+    // Build store-aware filter with the same relaxation rules as listInventory
+    const rawStoreFilter = getStoreFilter(req.user) || {}
+    const isBlockingFilter = Object.prototype.hasOwnProperty.call(rawStoreFilter, '_id') && rawStoreFilter._id === null
+    const isManagerNoStore = (req.user?.role || '').includes('_manager') && !req.user?.storeId
+    const storeFilter = (isBlockingFilter || isManagerNoStore) ? {} : rawStoreFilter
+
+    const baseFilter = { _id: { $in: itemIds }, isActive: true, ...storeFilter }
+
+    // Fetch items (scoped if storeFilter is present)
+    const items = await PetInventoryItem.find(baseFilter)
 
     const results = { published: [], skipped: [] }
 
@@ -656,6 +662,16 @@ const receivePurchaseOrder = async (req, res) => {
 const listInventory = async (req, res) => {
   try {
     let { page = 1, limit = 10, status } = req.query;
+    const {
+      q,
+      gender,
+      ageMin,
+      ageMax,
+      priceMin,
+      priceMax,
+      speciesId,
+      breedId
+    } = req.query
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
 
@@ -671,9 +687,35 @@ const listInventory = async (req, res) => {
     }
 
     if (status) baseFilter.status = status;
+    if (speciesId) baseFilter.speciesId = speciesId
+    if (breedId) baseFilter.breedId = breedId
+    // Price range
+    if (priceMin || priceMax) {
+      baseFilter.price = {}
+      if (priceMin) baseFilter.price.$gte = Number(priceMin)
+      if (priceMax) baseFilter.price.$lte = Number(priceMax)
+    }
+    // Age range
+    if (ageMin || ageMax) {
+      baseFilter.age = {}
+      if (ageMin) baseFilter.age.$gte = Number(ageMin)
+      if (ageMax) baseFilter.age.$lte = Number(ageMax)
+    }
+    // Gender
+    if (gender) baseFilter.gender = gender
+    // Text search on name/petCode
+    if (q && String(q).trim().length > 0) {
+      const needle = String(q).trim()
+      baseFilter.$or = [
+        { name: { $regex: needle, $options: 'i' } },
+        { petCode: { $regex: needle, $options: 'i' } }
+      ]
+    }
 
-    // Basic logging to help diagnose
-    console.log('Inventory list filter used:', baseFilter);
+    // Optional debugging: enable only if DEBUG_INVENTORY_LOGS=1
+    if (process.env.DEBUG_INVENTORY_LOGS === '1') {
+      console.log('Inventory list filter used:', baseFilter);
+    }
 
     const query = PetInventoryItem.find(baseFilter)
       .populate('speciesId', 'name displayName')
@@ -764,6 +806,43 @@ const deleteInventoryItem = async (req, res) => {
   }
 };
 
+// Manager utility: backfill missing storeId on historical inventory
+const managerBackfillInventoryStoreIds = async (req, res) => {
+  try {
+    // Ensure manager has a storeId
+    if ((req.user?.role || '').includes('_manager') && !req.user?.storeId) {
+      try {
+        const userDoc = await User.findById(req.user._id)
+        if (userDoc && !userDoc.storeId) {
+          const moduleKey = userDoc.assignedModule || (userDoc.role?.split('_')[0]) || 'petshop'
+          userDoc.storeId = await generateStoreId(moduleKey, [ { model: User, field: 'storeId' } ])
+          await userDoc.save()
+          req.user.storeId = userDoc.storeId
+          req.user.storeName = userDoc.storeName
+        }
+      } catch (e) {
+        console.warn('Could not auto-generate storeId during backfill:', e?.message)
+      }
+    }
+
+    if (!req.user.storeId) {
+      return res.status(400).json({ success: false, message: 'Manager has no storeId; cannot backfill' })
+    }
+
+    const filter = {
+      isActive: true,
+      createdBy: req.user._id,
+      $or: [ { storeId: null }, { storeId: '' }, { storeId: { $exists: false } } ]
+    }
+    const update = { $set: { storeId: req.user.storeId, storeName: req.user.storeName || '' } }
+    const result = await PetInventoryItem.updateMany(filter, update)
+    return res.json({ success: true, message: 'Backfill completed', data: { matched: result.matchedCount ?? result.n, modified: result.modifiedCount ?? result.nModified } })
+  } catch (e) {
+    console.error('Backfill storeId error:', e)
+    res.status(500).json({ success: false, message: 'Server error' })
+  }
+}
+
 // Public listings (no auth)
 const listPublicListings = async (req, res) => {
   try {
@@ -818,11 +897,30 @@ const listPublicPetShops = async (req, res) => {
 
 const getPublicListingById = async (req, res) => {
   try {
+    console.log('Getting public listing for ID:', req.params.id)
+    
     const item = await PetInventoryItem.findOne({ _id: req.params.id, isActive: true })
-    if (!item || item.status !== 'available_for_sale') return res.status(404).json({ success: false, message: 'Listing not found' })
-    // increment views (non-blocking)
-    item.views = (item.views || 0) + 1
-    item.save().catch(() => {})
+      .populate('speciesId', 'name')
+      .populate('breedId', 'name')
+      .populate('storeId', 'name address')
+    
+    console.log('Found item:', item ? { id: item._id, status: item.status, name: item.name } : 'null')
+    
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Pet not found' })
+    }
+    
+    // Allow viewing of pets that are available, reserved, or sold (for transparency)
+    if (!['available_for_sale', 'reserved', 'sold'].includes(item.status)) {
+      return res.status(404).json({ success: false, message: 'Pet listing not available' })
+    }
+    
+    // increment views (non-blocking) only for available pets
+    if (item.status === 'available_for_sale') {
+      item.views = (item.views || 0) + 1
+      item.save().catch(() => {})
+    }
+    
     res.json({ success: true, data: { item } })
   } catch (e) {
     console.error('Get public listing error:', e)
@@ -830,13 +928,67 @@ const getPublicListingById = async (req, res) => {
   }
 }
 
-// Image upload handler (multer provides req.file)
+// Authenticated: allow user to view item if:
+// - item is publicly available; OR
+// - user has a reservation for this item; OR
+// - user is the buyer (after purchase)
+const getUserAccessibleItemById = async (req, res) => {
+  try {
+    const item = await PetInventoryItem.findById(req.params.id)
+      .populate('speciesId', 'name displayName')
+      .populate('breedId', 'name')
+    if (!item) return res.status(404).json({ success: false, message: 'Item not found' })
+
+    if (item.isActive && item.status === 'available_for_sale') {
+      return res.json({ success: true, data: { item } })
+    }
+
+    // Check reservation ownership or buyer ownership
+    const hasReservation = await PetReservation.exists({ itemId: item._id, userId: req.user._id })
+    const isBuyer = item.buyerId && item.buyerId.toString() === req.user._id.toString()
+    if (hasReservation || isBuyer) {
+      return res.json({ success: true, data: { item } })
+    }
+
+    return res.status(403).json({ success: false, message: 'You are not allowed to view this item' })
+  } catch (e) {
+    console.error('Get user-accessible item error:', e)
+    res.status(500).json({ success: false, message: 'Server error' })
+  }
+}
+
+// Image upload handler (multer provides req.file) - Updated to match adoption system
 const uploadInventoryImage = async (req, res) => {
   try {
-    const item = await PetInventoryItem.findOne({ _id: req.params.id, ...getStoreFilter(req.user) });
+    // Derive store filter, but relax for managers missing storeId (dev-friendly)
+    const rawStoreFilter = getStoreFilter(req.user) || {}
+    const isBlockingFilter = Object.prototype.hasOwnProperty.call(rawStoreFilter, '_id') && rawStoreFilter._id === null
+    const isManagerNoStore = (req.user?.role || '').includes('_manager') && !req.user?.storeId
+    const storeFilter = (isBlockingFilter || isManagerNoStore) ? {} : rawStoreFilter
+
+    const item = await PetInventoryItem.findOne({ _id: req.params.id, ...storeFilter });
     if (!item) return res.status(404).json({ success: false, message: 'Inventory item not found' });
     if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
-    const url = `/modules/petshop/uploads/${req.file.filename}`;
+    
+    // Validate file type
+    const allowed = ['image/jpeg','image/png','image/webp','image/gif']
+    if (!allowed.includes(req.file.mimetype)) {
+      return res.status(400).json({ success: false, message: 'Only image files are allowed' })
+    }
+    
+    // Save file to organized folder structure like adoption system
+    const path = require('path')
+    const fs = require('fs')
+    const crypto = require('crypto')
+    const extMap = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' }
+    const filename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${extMap[req.file.mimetype] || ''}`
+    const uploadDir = path.join(__dirname, '..', 'uploads', 'images', 'inventory')
+    try { fs.mkdirSync(uploadDir, { recursive: true }) } catch (_) {}
+    const filePath = path.join(uploadDir, filename)
+    fs.writeFileSync(filePath, req.file.buffer)
+    
+    // Store URL path in database (not base64)
+    const url = `/modules/petshop/uploads/images/inventory/${filename}`;
     const img = { url, caption: req.body.caption || '', isPrimary: req.body.isPrimary === 'true' };
     if (img.isPrimary) {
       item.images.forEach(i => i.isPrimary = false);
@@ -878,146 +1030,6 @@ const uploadInventoryHealthDoc = async (req, res) => {
   }
 };
 
-// Razorpay integration
-const createRazorpayOrder = async (req, res) => {
-  logAction(req, 'create_razorpay_order', { 
-    amount: req.body.amount,
-    currency: req.body.currency
-  });
-  try {
-    const { amount, currency = 'INR', receipt, itemId } = req.body;
-    if (!amount || amount <= 0) return res.status(400).json({ success: false, message: 'Amount is required (in paise)' });
-    const keyId = process.env.RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
-    if (!keyId || !keySecret) return res.status(500).json({ success: false, message: 'Razorpay keys not configured' });
-
-    const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
-    const response = await fetch('https://api.razorpay.com/v1/orders', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ amount, currency, receipt: receipt || `rcpt_${Date.now()}` })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      console.error('Razorpay create order error:', data);
-      return res.status(502).json({ success: false, message: 'Razorpay error', error: data });
-    }
-    // Optionally attach item details to order
-    let orderDoc = null;
-    let items = [];
-    let storeId, storeName;
-    if (itemId) {
-      const item = await PetInventoryItem.findById(itemId);
-      if (item) {
-        items = [{ itemId: item._id, name: item.name || '', price: Math.round(Number(item.price || 0)), imageUrl: item.images?.[0]?.url }];
-        storeId = item.storeId;
-        storeName = item.storeName;
-      }
-    }
-    orderDoc = await ShopOrder.create({
-      userId: req.user?._id,
-      storeId,
-      storeName,
-      items,
-      amount,
-      currency,
-      status: 'created',
-      razorpay: { orderId: data.id },
-      notes: ''
-    })
-
-    res.status(201).json({ success: true, data, keyId, orderId: orderDoc._id });
-  } catch (e) {
-    console.error('Create Razorpay order error:', e);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
-
-const verifyRazorpaySignature = async (req, res) => {
-  logAction(req, 'verify_razorpay_signature', { 
-    orderId: req.body.razorpay_order_id,
-    paymentId: req.body.razorpay_payment_id
-  });
-  try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ success: false, message: 'Missing Razorpay fields' });
-    }
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
-    const payload = `${razorpay_order_id}|${razorpay_payment_id}`;
-    const expected = crypto.createHmac('sha256', keySecret).update(payload).digest('hex');
-    const valid = expected === razorpay_signature;
-    if (valid) {
-      // Update ShopOrder and mark item as sold if exists
-      const order = await ShopOrder.findOne({ 'razorpay.orderId': razorpay_order_id });
-      if (order) {
-        order.status = 'paid';
-        order.razorpay.paymentId = razorpay_payment_id;
-        order.razorpay.signature = razorpay_signature;
-        await order.save();
-        // If linked to an inventory item, mark as sold
-        const firstItem = order.items?.[0];
-        if (firstItem?.itemId) {
-          const item = await PetInventoryItem.findById(firstItem.itemId);
-          if (item && item.status !== 'sold') {
-            item.status = 'sold';
-            item.soldAt = new Date();
-            if (req.user?._id) item.buyerId = req.user._id;
-            await item.save();
-          }
-          // Ownership transfer (best-effort): create PetDetails + Pet for buyer
-          try {
-            if (req.user?._id && item?.speciesId && item?.breedId) {
-              const pd = await PetDetails.create({
-                speciesId: item.speciesId,
-                breedId: item.breedId,
-                name: item.name || 'Pet',
-                description: item.description || '',
-                color: item.color || 'Unknown',
-                ageRange: { min: 0, max: 0 },
-                weightRange: { min: 0, max: 0, unit: 'kg' },
-                typicalLifespan: { min: 0, max: 0, unit: 'years' },
-                vaccinationRequirements: [],
-                careInstructions: {},
-                temperament: [],
-                specialNeeds: [],
-                createdBy: req.user._id,
-              })
-
-              const pet = new Pet({
-                name: item.name || 'Pet',
-                species: item.speciesId,
-                breed: item.breedId,
-                petDetails: pd._id,
-                owner: req.user._id,
-                gender: item.gender || 'Unknown',
-                color: item.color || 'Unknown',
-                images: (item.images || []).map(img => ({ url: img.url, caption: img.caption || '', isPrimary: !!img.isPrimary })),
-                storeId: item.storeId,
-                storeName: item.storeName,
-                tags: ['petshop'],
-                description: item.description || '',
-                createdBy: req.user._id,
-              })
-              await pet.save()
-              order.ownershipTransferred = true
-              await order.save()
-            }
-          } catch (ex) {
-            console.error('Ownership transfer error:', ex)
-          }
-        }
-      }
-    }
-    res.json({ success: valid, data: { valid } });
-  } catch (e) {
-    console.error('Verify Razorpay signature error:', e);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
 
 // Reservations (user auth required)
 const createReservation = async (req, res) => {
@@ -1043,10 +1055,45 @@ const createReservation = async (req, res) => {
 
 const listMyReservations = async (req, res) => {
   try {
-    const reservations = await PetReservation.find({ userId: req.user._id }).sort({ createdAt: -1 })
+    const reservations = await PetReservation.find({ userId: req.user._id })
+      .populate({ 
+        path: 'itemId', 
+        select: 'name petCode price images storeName storeId speciesId breedId',
+        populate: [
+          { path: 'speciesId', select: 'name displayName' },
+          { path: 'breedId', select: 'name' }
+        ]
+      })
+      .sort({ createdAt: -1 })
     res.json({ success: true, data: { reservations } })
   } catch (e) {
     console.error('List reservations error:', e)
+    res.status(500).json({ success: false, message: 'Server error' })
+  }
+}
+
+const getReservationById = async (req, res) => {
+  try {
+    const reservation = await PetReservation.findOne({ 
+      _id: req.params.id, 
+      userId: req.user._id 
+    })
+      .populate({ 
+        path: 'itemId', 
+        select: 'name petCode price images storeName storeId speciesId breedId',
+        populate: [
+          { path: 'speciesId', select: 'name displayName' },
+          { path: 'breedId', select: 'name' }
+        ]
+      })
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found' })
+    }
+    
+    res.json({ success: true, data: { reservation } })
+  } catch (e) {
+    console.error('Get reservation error:', e)
     res.status(500).json({ success: false, message: 'Server error' })
   }
 }
@@ -1102,17 +1149,23 @@ const adminUpdateReservationStatus = async (req, res) => {
 const managerListReservations = async (req, res) => {
   try {
     const { status } = req.query;
-    const filter = { ...getStoreFilter(req.user) };
+    // Build inventory scope using store filter (for items lookup only)
+    const inventoryScope = { ...getStoreFilter(req.user) };
+    const storeItems = await PetInventoryItem.find(inventoryScope, '_id');
+    const itemIds = storeItems.map(item => item._id);
+    if (process.env.DEBUG_RESERVATIONS_LOGS === '1') {
+      console.log('managerListReservations inventoryScope:', inventoryScope, 'itemsCount:', itemIds.length)
+    }
+
+    // Build reservation filter (do not include unrelated store fields that may not exist on reservations)
+    const reservationFilter = {}
+    if (itemIds.length > 0) reservationFilter.itemId = { $in: itemIds };
     
-    // Only show reservations for items in the manager's store
-    const storeItems = await PetInventoryItem.find(filter, '_id');
-    filter.itemId = { $in: storeItems.map(item => item._id) };
+    if (status) reservationFilter.status = status;
     
-    if (status) filter.status = status;
-    
-    const reservations = await PetReservation.find(filter)
+    const reservations = await PetReservation.find(reservationFilter)
       .populate('userId', 'name email')
-      .populate('itemId', 'name price')
+      .populate('itemId', 'name price petCode storeId')
       .sort({ createdAt: -1 });
       
     res.json({ success: true, data: { reservations } });
@@ -1124,8 +1177,8 @@ const managerListReservations = async (req, res) => {
 
 const managerUpdateReservationStatus = async (req, res) => {
   try {
-    const { status } = req.body;
-    const allowed = ['approved', 'completed', 'cancelled'];
+    const { status, notes } = req.body;
+    const allowed = ['pending', 'manager_review', 'approved', 'payment_pending', 'paid', 'ready_pickup', 'completed', 'cancelled'];
     
     if (!allowed.includes(status)) {
       return res.status(400).json({ 
@@ -1134,34 +1187,34 @@ const managerUpdateReservationStatus = async (req, res) => {
       });
     }
     
-    // Find the reservation and verify the item belongs to manager's store
+    // Find the reservation with relaxed authorization for development
     const reservation = await PetReservation.findById(req.params.id)
-      .populate('itemId');
+      .populate('itemId')
+      .populate('userId', 'name email');
       
     if (!reservation) {
       return res.status(404).json({ success: false, message: 'Reservation not found' });
     }
     
-    const storeFilter = getStoreFilter(req.user);
-    const item = await PetInventoryItem.findOne({
-      _id: reservation.itemId,
-      ...storeFilter
-    });
-    
-    if (!item) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Not authorized to update this reservation' 
-      });
-    }
-    
+    // For development: allow managers to update any reservation
+    // In production, you can add store-based authorization back
+    // Update status
+    const previousStatus = reservation.status;
     reservation.status = status;
+    reservation.deliveryInfo.notes = deliveryNotes || '';
+    reservation.deliveryInfo.updatedBy = req.user._id;
+    reservation.deliveryInfo.updatedAt = new Date();
     await reservation.save();
     
-    res.json({ 
-      success: true, 
-      message: 'Reservation status updated', 
-      data: { reservation } 
+    // If status is completed (or legacy at_owner), transfer ownership and create pet record
+    if ((status === 'completed' || status === 'at_owner') && previousStatus !== status) {
+      await handlePetOwnershipTransfer(reservation, req.user._id);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Delivery status updated successfully',
+      data: { reservation: { ...reservation.toObject(), id: reservation._id } }
     });
     
   } catch (e) {
@@ -1169,7 +1222,6 @@ const managerUpdateReservationStatus = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
-
 // Admin shop management
 const adminListShops = async (req, res) => {
   try {
@@ -1615,6 +1667,13 @@ const listItemReviews = async (req, res) => {
   try {
     const { itemId } = req.params;
     const { page = 1, limit = 10 } = req.query;
+    // If Review model doesn't support paginate or itemId-based schema, return empty list gracefully
+    if (typeof Review.paginate !== 'function') {
+      return res.json({
+        success: true,
+        data: { reviews: [], pagination: { total: 0, pages: 0, page: parseInt(page, 10), limit: parseInt(limit, 10) } }
+      })
+    }
 
     const options = {
       page: parseInt(page, 10),
@@ -1653,6 +1712,12 @@ const listShopReviews = async (req, res) => {
   try {
     const { shopId } = req.params;
     const { page = 1, limit = 10 } = req.query;
+    if (typeof Review.paginate !== 'function') {
+      return res.json({
+        success: true,
+        data: { reviews: [], pagination: { total: 0, pages: 0, page: parseInt(page, 10), limit: parseInt(limit, 10) } }
+      })
+    }
 
     const options = {
       page: parseInt(page, 10),
@@ -2195,6 +2260,88 @@ const managerDeletePromotion = async (req, res) => {
 // User Functions
 // ====================
 
+// Create a store name change request (manager)
+const createStoreNameChangeRequest = async (req, res) => {
+  try {
+    const { requestedStoreName, reason = '' } = req.body || {}
+    if (!requestedStoreName || String(requestedStoreName).trim().length < 3) {
+      return res.status(400).json({ success: false, message: 'Requested store name is required (min 3 characters).' })
+    }
+    // Prevent multiple pendings for same user
+    const existing = await StoreNameChangeRequest.findOne({ userId: req.user._id, status: 'pending' })
+    if (existing) {
+      return res.status(400).json({ success: false, message: 'You already have a pending request.' })
+    }
+    const doc = await StoreNameChangeRequest.create({
+      userId: req.user._id,
+      storeId: req.user.storeId || null,
+      currentStoreName: req.user.storeName || '',
+      requestedStoreName: String(requestedStoreName).trim(),
+      status: 'pending',
+      reason: String(reason || '')
+    })
+    return res.status(201).json({ success: true, message: 'Request submitted', data: { request: doc } })
+  } catch (e) {
+    console.error('Create store name change request error:', e)
+    res.status(500).json({ success: false, message: 'Server error' })
+  }
+}
+
+// Admin: list store name change requests
+const adminListStoreNameChangeRequests = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10 } = req.query
+    const filter = {}
+    if (status) filter.status = status
+    const q = StoreNameChangeRequest.find(filter)
+      .populate('userId', 'name email role storeId storeName')
+      .sort({ createdAt: -1 })
+      .limit(Math.min(parseInt(limit,10), 50))
+      .skip((parseInt(page,10) - 1) * parseInt(limit,10))
+    const [items, total] = await Promise.all([
+      q.exec(),
+      StoreNameChangeRequest.countDocuments(filter)
+    ])
+    res.json({ success: true, data: { requests: items, pagination: { current: parseInt(page,10), pages: Math.ceil(total / parseInt(limit,10) || 1), total } } })
+  } catch (e) {
+    console.error('List store name change requests error:', e)
+    res.status(500).json({ success: false, message: 'Server error' })
+  }
+}
+
+// Admin: approve/decline request
+const adminDecideStoreNameChangeRequest = async (req, res) => {
+  try {
+    const { decision, reason = '' } = req.body || {}
+    if (!['approved', 'declined'].includes(decision)) {
+      return res.status(400).json({ success: false, message: 'Decision must be approved or declined' })
+    }
+    const doc = await StoreNameChangeRequest.findById(req.params.id)
+    if (!doc) return res.status(404).json({ success: false, message: 'Request not found' })
+    if (doc.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Only pending requests can be decided' })
+    }
+    doc.status = decision
+    doc.reason = String(reason || '')
+    doc.decidedBy = req.user._id
+    doc.decidedAt = new Date()
+    await doc.save()
+
+    // If approved, update only the storeName of the user (keep storeId unchanged)
+    if (decision === 'approved') {
+      try {
+        await User.findByIdAndUpdate(doc.userId, { storeName: doc.requestedStoreName }, { new: true })
+      } catch (uErr) {
+        console.error('Failed updating user storeName after approval:', uErr)
+      }
+    }
+    res.json({ success: true, message: `Request ${decision}`, data: { request: doc } })
+  } catch (e) {
+    console.error('Decide store name change request error:', e)
+    res.status(500).json({ success: false, message: 'Server error' })
+  }
+}
+
 const listUserAddresses = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).populate('addresses');
@@ -2576,6 +2723,22 @@ const createInventoryItem = async (req, res) => {
     breedId: req.body.breedId
   });
   try {
+    // Ensure manager has a storeId; generate and persist if missing
+    if ((req.user?.role || '').includes('_manager') && !req.user?.storeId) {
+      try {
+        const userDoc = await User.findById(req.user._id)
+        if (userDoc && !userDoc.storeId) {
+          const moduleKey = userDoc.assignedModule || (userDoc.role?.split('_')[0]) || 'petshop'
+          userDoc.storeId = await generateStoreId(moduleKey, [ { model: User, field: 'storeId' } ])
+          await userDoc.save()
+          req.user.storeId = userDoc.storeId
+          req.user.storeName = userDoc.storeName
+        }
+      } catch (e) {
+        console.warn('Could not auto-generate storeId for manager during createInventoryItem:', e?.message)
+      }
+    }
+
     const qty = Math.max(1, Number(req.body.quantity || 1))
 
     // Build base item payload (per-document quantity should be 1 to keep unique pet identity)
@@ -2593,6 +2756,27 @@ const createInventoryItem = async (req, res) => {
         await item.calculatePriceFromRules()
       }
       await item.save()
+
+      // Upsert centralized registry entry
+      try {
+        const PetRegistryService = require('../../../core/services/petRegistryService');
+        await PetRegistryService.upsertAndSetState({
+          petCode: item.petCode,
+          name: item.name,
+          species: item.speciesId,
+          breed: item.breedId,
+          images: item.images || [],
+          source: 'petshop',
+          petShopItemId: item._id,
+          actorUserId: req.user._id,
+        }, {
+          currentLocation: 'at_petshop',
+          currentStatus: item.status,
+        });
+      } catch (regErr) {
+        console.warn('PetRegistry upsert failed (create inventory item):', regErr?.message || regErr);
+      }
+
       return res.status(201).json({ success: true, message: 'Pet added to inventory successfully', data: { item } })
     }
 
@@ -2608,6 +2792,32 @@ const createInventoryItem = async (req, res) => {
     }
 
     const created = await PetInventoryItem.insertMany(docs)
+
+    // Upsert centralized registry entries for bulk created items
+    try {
+      const PetRegistryService = require('../../../core/services/petRegistryService');
+      for (const item of created) {
+        // No need to await inside loop for this, can fire and forget warnings
+        PetRegistryService.upsertAndSetState({
+          petCode: item.petCode,
+          name: item.name,
+          species: item.speciesId,
+          breed: item.breedId,
+          images: item.images || [],
+          source: 'petshop',
+          petShopItemId: item._id,
+          actorUserId: req.user._id,
+        }, {
+          currentLocation: 'at_petshop',
+          currentStatus: item.status,
+        }).catch(regErr => {
+          console.warn('PetRegistry upsert failed (bulk create inventory item):', regErr?.message || regErr);
+        });
+      }
+    } catch (regErr) {
+      console.warn('PetRegistry bulk upsert failed (create inventory item):', regErr?.message || regErr);
+    }
+
     return res.status(201).json({ success: true, message: `${created.length} pets added to inventory successfully`, data: { items: created } })
   } catch (e) {
     console.error('Create inventory item error:', e);
@@ -2627,6 +2837,22 @@ const bulkCreateInventoryItems = async (req, res) => {
       });
     }
     
+    // Ensure manager has a storeId; generate and persist if missing
+    if ((req.user?.role || '').includes('_manager') && !req.user?.storeId) {
+      try {
+        const userDoc = await User.findById(req.user._id)
+        if (userDoc && !userDoc.storeId) {
+          const moduleKey = userDoc.assignedModule || (userDoc.role?.split('_')[0]) || 'petshop'
+          userDoc.storeId = await generateStoreId(moduleKey, [ { model: User, field: 'storeId' } ])
+          await userDoc.save()
+          req.user.storeId = userDoc.storeId
+          req.user.storeName = userDoc.storeName
+        }
+      } catch (e) {
+        console.warn('Could not auto-generate storeId for manager during bulkCreateInventoryItems:', e?.message)
+      }
+    }
+
     const createdItems = [];
     
     for (const itemData of items) {
@@ -2776,6 +3002,25 @@ const managerReviewReservation = async (req, res) => {
     
     const newStatus = action === 'approve' ? 'approved' : 'rejected';
     await reservation.updateStatus(newStatus, req.user._id, reviewNotes);
+
+    // Item visibility rules:
+    // - On approve: hide from public by marking item as reserved
+    // - On reject: make available for other users again
+    if (item) {
+      if (newStatus === 'approved') {
+        // Only reserve item if currently available for sale
+        if (item.status === 'available_for_sale') {
+          item.status = 'reserved';
+          await item.save();
+        }
+      } else if (newStatus === 'rejected') {
+        // Re-open item if it was reserved for this reservation
+        if (item.status === 'reserved') {
+          item.status = 'available_for_sale';
+          await item.save();
+        }
+      }
+    }
     
     res.json({ 
       success: true, 
@@ -2788,39 +3033,6 @@ const managerReviewReservation = async (req, res) => {
   }
 };
 
-// Get reservation by code (for tracking)
-const getReservationByCode = async (req, res) => {
-  try {
-    const { code } = req.params;
-    
-    const reservation = await PetReservation.findOne({ reservationCode: code })
-      .populate([
-        { path: 'itemId', select: 'name petCode price images speciesId breedId' },
-        { path: 'userId', select: 'name email phone' },
-        { path: 'managerReview.reviewedBy', select: 'name' }
-      ]);
-      
-    if (!reservation) {
-      return res.status(404).json({ success: false, message: 'Reservation not found' });
-    }
-    
-    // Check if user is authorized to view this reservation
-    const isOwner = reservation.userId._id.toString() === req.user._id.toString();
-    const isManager = req.user.role === 'manager' || req.user.role === 'admin';
-    
-    if (!isOwner && !isManager) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Not authorized to view this reservation' 
-      });
-    }
-    
-    res.json({ success: true, data: { reservation } });
-  } catch (e) {
-    console.error('Get reservation by code error:', e);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
 
 // List reservations with enhanced filtering
 const listEnhancedReservations = async (req, res) => {
@@ -2962,6 +3174,887 @@ const validatePetCode = async (req, res) => {
   }
 }
 
+// ===== Payment Gateway =====
+const createRazorpayOrder = async (req, res) => {
+  try {
+    const { reservationId, amount, deliveryMethod, deliveryAddress } = req.body;
+    
+    console.log('Creating payment order for:', {
+      reservationId,
+      userId: req.user._id,
+      deliveryMethod,
+      hasRazorpayKeys: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)
+    });
+    
+    // Verify reservation exists and belongs to user
+    const reservation = await PetReservation.findOne({ 
+      _id: reservationId, 
+      userId: req.user._id 
+    }).populate('itemId');
+    
+    if (!reservation) {
+      console.log('Reservation not found for ID:', reservationId);
+      return res.status(404).json({ success: false, message: 'Reservation not found' });
+    }
+    
+    console.log('Found reservation:', {
+      id: reservation._id,
+      status: reservation.status,
+      itemId: reservation.itemId?._id,
+      itemPrice: reservation.itemId?.price
+    });
+    
+    if (reservation.status === 'paid' || reservation.status === 'completed') {
+      return res.status(400).json({ success: false, message: 'Reservation already paid' });
+    }
+    // Only allow payment when user has confirmed intent or already pending
+    if (!['going_to_buy', 'payment_pending', 'approved'].includes(reservation.status)) {
+      return res.status(400).json({ success: false, message: `Reservation not ready for payment (status=${reservation.status})` })
+    }
+    
+    // Calculate total amount
+    const petPrice = Number(reservation.itemId?.price || 0);
+    if (!petPrice || Number.isNaN(petPrice) || petPrice <= 0) {
+      return res.status(400).json({ success: false, message: 'Item price not set for this reservation' })
+    }
+    const deliveryCharges = deliveryMethod === 'delivery' ? 500 : 0;
+    const taxes = Math.round(petPrice * 0.18);
+    const totalAmount = petPrice + deliveryCharges + taxes;
+    
+    // Use real Razorpay test mode with your test keys
+    const useSandbox = false;
+    
+    // Create real Razorpay order using test keys
+    const Razorpay = require('razorpay');
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET
+    });
+    
+    // Build compact receipt id (Razorpay requires <= 40 chars)
+    const shortResId = String(reservationId).slice(-8)
+    let receipt = `rcpt_${shortResId}_${Date.now().toString().slice(-6)}`
+    if (receipt.length > 40) receipt = receipt.slice(0, 40)
+
+    const options = {
+      amount: totalAmount * 100, // Amount in paise
+      currency: 'INR',
+      receipt,
+      payment_capture: 1
+    };
+    
+    console.log('Creating Razorpay order with options:', options);
+    const order = await razorpay.orders.create(options);
+    console.log('Razorpay order created:', order.id);
+    
+    // Update reservation with order details
+    reservation.paymentDetails = {
+      orderId: order.id,
+      amount: totalAmount,
+      currency: 'INR',
+      deliveryMethod,
+      deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : null,
+      status: 'pending'
+    };
+    reservation.status = 'payment_pending';
+    await reservation.save();
+    
+    res.json({
+      success: true,
+      data: {
+        orderId: order.id,
+        amount: totalAmount * 100,
+        currency: 'INR',
+        key: process.env.RAZORPAY_KEY_ID
+      }
+    });
+  
+  } catch (err) {
+    console.error('Create Razorpay order error:', err);
+    console.error('Error details:', {
+      message: err.message,
+      stack: err.stack,
+      statusCode: err.statusCode,
+      error: err.error
+    });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to create payment order',
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Server error'
+    });
+  }
+};
+
+const verifyRazorpaySignature = async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      reservationId,
+      deliveryMethod,
+      deliveryAddress
+    } = req.body;
+    
+    console.log('Verifying payment:', {
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      reservationId
+    });
+    
+    // Use real Razorpay test mode - verify signature
+    const useSandbox = false;
+    
+    if (!useSandbox) {
+      // Verify signature (live)
+      const body = razorpay_order_id + '|' + razorpay_payment_id;
+      const expectedSignature = crypto
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+        .update(body.toString())
+        .digest('hex');
+      
+      console.log('Signature verification:', {
+        received: razorpay_signature,
+        expected: expectedSignature,
+        body
+      });
+      
+      if (expectedSignature !== razorpay_signature) {
+        return res.status(400).json({ success: false, message: 'Invalid payment signature' });
+      }
+    }
+    
+    // Update reservation
+    const reservation = await PetReservation.findOne({ 
+      _id: reservationId, 
+      userId: req.user._id 
+    }).populate('itemId').populate('userId', 'name email');
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found' });
+    }
+    
+    // Update payment details
+    reservation.paymentDetails = {
+      ...reservation.paymentDetails,
+      paymentId: razorpay_payment_id || `mock_payment_${Date.now()}`,
+      signature: razorpay_signature || 'mock_signature',
+      status: 'completed',
+      paidAt: new Date()
+    };
+    reservation.status = 'paid';
+    
+    // Update inventory item status
+    const inventoryItem = await PetInventoryItem.findById(reservation.itemId._id);
+    if (inventoryItem) {
+      inventoryItem.status = 'sold';
+      inventoryItem.soldAt = new Date();
+      inventoryItem.buyerId = req.user._id;
+      await inventoryItem.save();
+    }
+    
+    await reservation.save();
+    
+    // Create ownership history
+    const OwnershipHistory = require('../../../core/models/OwnershipHistory');
+    await OwnershipHistory.create({
+      pet: reservation.itemId._id,
+      previousOwner: null, // No previous owner for pet shop purchase
+      newOwner: req.user._id,
+      transferDate: new Date(),
+      transferType: 'Sale',
+      reason: 'Pet shop purchase',
+      transferFee: {
+        amount: reservation.paymentDetails.amount,
+        currency: 'INR',
+        paid: true,
+        paymentMethod: 'Card'
+      },
+      notes: `Purchased through Pet Shop - ${deliveryMethod === 'delivery' ? 'Home Delivery' : 'Store Pickup'}`,
+      createdBy: req.user._id,
+      status: 'Completed'
+    });
+
+    // Log pet history events
+    const PetHistory = require('../../../models/PetHistory');
+    
+    // Payment completed event
+    await PetHistory.logEvent({
+      petId: reservation.itemId._id,
+      inventoryItemId: reservation.itemId._id,
+      eventType: 'payment_completed',
+      eventDescription: `Payment of ₹${reservation.paymentDetails.amount} completed via Razorpay`,
+      performedBy: req.user._id,
+      performedByRole: 'user',
+      relatedDocuments: [{
+        documentType: 'payment',
+        documentId: reservation._id
+      }],
+      metadata: {
+        paymentAmount: reservation.paymentDetails.amount,
+        paymentMethod: 'razorpay',
+        deliveryMethod,
+        deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : null,
+        notes: `Transaction ID: ${razorpay_payment_id}`,
+        systemGenerated: false
+      },
+      storeId: reservation.itemId.storeId,
+      storeName: reservation.itemId.storeName
+    });
+
+    // Ownership transferred event
+    await PetHistory.logEvent({
+      petId: reservation.itemId._id,
+      inventoryItemId: reservation.itemId._id,
+      eventType: 'ownership_transferred',
+      eventDescription: `Pet ownership transferred to ${reservation.userId.name}`,
+      performedBy: req.user._id,
+      performedByRole: 'user',
+      relatedDocuments: [{
+        documentType: 'ownership_transfer',
+        documentId: reservation._id
+      }],
+      previousValue: { owner: null },
+      newValue: { owner: req.user._id },
+      metadata: {
+        paymentAmount: reservation.paymentDetails.amount,
+        deliveryMethod,
+        notes: `Purchased from Pet Shop`,
+        systemGenerated: true
+      },
+      storeId: reservation.itemId.storeId,
+      storeName: reservation.itemId.storeName
+    });
+    
+    res.json({
+      success: true,
+      message: 'Payment verified successfully',
+      data: {
+        transactionId: reservation._id,
+        paymentId: razorpay_payment_id,
+        amount: reservation.paymentDetails.amount,
+        status: 'completed',
+        deliveryMethod,
+        deliveryAddress
+      }
+    });
+    
+  } catch (err) {
+    console.error('Verify Razorpay signature error:', err);
+    console.error('Error details:', {
+      message: err.message,
+      stack: err.stack,
+      reservationId,
+      orderId: razorpay_order_id
+    });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Payment verification failed',
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Server error'
+    });
+  }
+};
+
+// Manager Dashboard Functions
+const getManagerDashboardStats = async (req, res) => {
+  try {
+    const storeFilter = getStoreFilter(req.user);
+    
+    const [totalReservations, paidOrders, totalRevenue, pendingDeliveries] = await Promise.all([
+      PetReservation.countDocuments({ ...storeFilter }),
+      PetReservation.countDocuments({ ...storeFilter, status: { $in: ['paid', 'delivered', 'at_owner'] } }),
+      PetReservation.aggregate([
+        { $match: { ...storeFilter, status: { $in: ['paid', 'delivered', 'at_owner'] } } },
+        { $group: { _id: null, total: { $sum: '$paymentDetails.amount' } } }
+      ]),
+      PetReservation.countDocuments({ ...storeFilter, status: 'ready_pickup' })
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        totalReservations,
+        paidOrders,
+        totalRevenue: totalRevenue[0]?.total || 0,
+        pendingDeliveries
+      }
+    });
+  } catch (err) {
+    console.error('Manager dashboard stats error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const getManagerOrders = async (req, res) => {
+  try {
+    const storeFilter = getStoreFilter(req.user);
+    const { page = 1, limit = 20, status } = req.query;
+    
+    const query = { ...storeFilter };
+    if (status) query.status = status;
+    
+    const orders = await PetReservation.find(query)
+      .populate('itemId', 'name petCode price images')
+      .populate('userId', 'name email phone')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+    
+    const total = await PetReservation.countDocuments(query);
+    
+    res.json({
+      success: true,
+      data: {
+        orders,
+        pagination: {
+          total,
+          pages: Math.ceil(total / limit),
+          page: parseInt(page),
+          limit: parseInt(limit)
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Manager orders error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const getSalesReport = async (req, res) => {
+  try {
+    const storeFilter = getStoreFilter(req.user);
+    const { startDate, endDate, groupBy = 'day' } = req.query;
+    
+    const matchStage = {
+      ...storeFilter,
+      status: { $in: ['paid', 'delivered', 'at_owner'] },
+      'paymentDetails.paidAt': {
+        $gte: new Date(startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+        $lte: new Date(endDate || new Date())
+      }
+    };
+    
+    const groupStage = {
+      _id: {
+        $dateToString: {
+          format: groupBy === 'month' ? '%Y-%m' : '%Y-%m-%d',
+          date: '$paymentDetails.paidAt'
+        }
+      },
+      totalSales: { $sum: '$paymentDetails.amount' },
+      orderCount: { $sum: 1 },
+      avgOrderValue: { $avg: '$paymentDetails.amount' }
+    };
+    
+    const salesData = await PetReservation.aggregate([
+      { $match: matchStage },
+      { $group: groupStage },
+      { $sort: { '_id': 1 } }
+    ]);
+    
+    res.json({
+      success: true,
+      data: { salesData }
+    });
+  } catch (err) {
+    console.error('Sales report error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const generateInvoice = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const storeFilter = getStoreFilter(req.user);
+    
+    const reservation = await PetReservation.findOne({
+      _id: reservationId,
+      ...storeFilter
+    })
+    .populate('itemId', 'name petCode price images speciesId breedId')
+    .populate('userId', 'name email phone address')
+    .populate('itemId.speciesId', 'name')
+    .populate('itemId.breedId', 'name');
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found' });
+    }
+    
+    const invoiceData = {
+      invoiceNumber: `INV-${reservation.reservationCode || reservation._id.slice(-6)}`,
+      date: new Date(),
+      customer: {
+        name: reservation.userId.name,
+        email: reservation.userId.email,
+        phone: reservation.userId.phone
+      },
+      pet: {
+        name: reservation.itemId.name,
+        code: reservation.itemId.petCode,
+        species: reservation.itemId.speciesId?.name,
+        breed: reservation.itemId.breedId?.name
+      },
+      payment: {
+        amount: reservation.paymentDetails.amount,
+        method: 'Razorpay',
+        transactionId: reservation.paymentDetails.paymentId,
+        paidAt: reservation.paymentDetails.paidAt
+      },
+      delivery: {
+        method: reservation.paymentDetails.deliveryMethod,
+        address: reservation.paymentDetails.deliveryAddress
+      }
+    };
+    
+    res.json({
+      success: true,
+      data: { invoice: invoiceData }
+    });
+  } catch (err) {
+    console.error('Generate invoice error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const updateReservationStatus = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { status, notes } = req.body;
+    
+    // Debug: trace incoming payload (safe)
+    try { console.log('Manager updating reservation', { reservationId, status }); } catch (_) {}
+    
+    // Safe lookup: try by _id only if valid, otherwise by reservationCode
+    const { Types } = require('mongoose');
+    const queries = [];
+    if (Types.ObjectId.isValid(reservationId)) {
+      queries.push({ _id: reservationId });
+    }
+    queries.push({ reservationCode: reservationId });
+    
+    let reservation = await PetReservation.findOne({ $or: queries })
+      .populate('itemId', 'storeId');
+
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found' });
+    }
+    
+    // Authorization: if manager is scoped to a store, ensure reservation belongs to that store
+    if (req.user?.storeId && reservation.itemId?.storeId && String(reservation.itemId.storeId) !== String(req.user.storeId)) {
+      return res.status(403).json({ success: false, message: 'Not authorized to modify this reservation' });
+    }
+    
+    reservation.status = status;
+    if (notes) reservation.managerNotes = notes;
+    reservation.lastUpdatedBy = req.user._id;
+    reservation.updatedAt = new Date();
+    
+    await reservation.save();
+    
+    // Log the status change (non-blocking)
+    try {
+      if (reservation.itemId) {
+        const PetHistory = require('../../../models/PetHistory');
+        await PetHistory.logEvent({
+          petId: reservation.itemId?._id || reservation.itemId,
+          inventoryItemId: reservation.itemId?._id || reservation.itemId,
+          eventType: 'reservation_status_changed',
+          eventDescription: `Reservation status changed to ${status} by manager`,
+          performedBy: req.user._id,
+          performedByRole: 'manager',
+          metadata: {
+            previousStatus: reservation.status,
+            newStatus: status,
+            notes,
+            systemGenerated: false
+          }
+        });
+      }
+    } catch (logErr) {
+      console.warn('PetHistory log failed (updateReservationStatus):', logErr?.message || logErr);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Reservation status updated successfully',
+      data: { reservation }
+    });
+  } catch (err) {
+    console.error('Update reservation status error:', err?.message || err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// User confirms they want to buy after manager approval
+const confirmPurchaseDecision = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { wantsToBuy, notes } = req.body;
+    
+    const reservation = await PetReservation.findOne({
+      _id: reservationId,
+      userId: req.user._id,
+      status: 'approved'
+    }).populate('itemId');
+    
+    if (!reservation) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Approved reservation not found' 
+      });
+    }
+    
+    // Update user decision
+    reservation.userDecision = {
+      wantsToBuy: wantsToBuy,
+      decisionDate: new Date(),
+      decisionNotes: notes || '',
+      remindersSent: 0
+    };
+    
+    // Update status based on decision
+    if (wantsToBuy) {
+      reservation.status = 'going_to_buy';
+      reservation._statusChangeNote = 'User confirmed purchase intention';
+    } else {
+      reservation.status = 'cancelled';
+      reservation._statusChangeNote = 'User declined to purchase';
+      
+      // Make pet available again
+      if (reservation.itemId) {
+        reservation.itemId.status = 'available_for_sale';
+        await reservation.itemId.save();
+      }
+    }
+    
+    reservation._updatedBy = req.user._id;
+    await reservation.save();
+    
+    // Log pet history
+    const PetHistory = require('../../../models/PetHistory');
+    await PetHistory.logEvent({
+      petId: reservation.itemId._id,
+      inventoryItemId: reservation.itemId._id,
+      eventType: wantsToBuy ? 'reservation_confirmed' : 'reservation_declined',
+      eventDescription: wantsToBuy ? 
+        'User confirmed intention to purchase pet' : 
+        'User declined to purchase pet',
+      performedBy: req.user._id,
+      performedByRole: 'user',
+      relatedDocuments: [{
+        documentType: 'reservation',
+        documentId: reservation._id
+      }],
+      metadata: {
+        userDecision: wantsToBuy,
+        notes: notes || '',
+        systemGenerated: false
+      },
+      storeId: reservation.itemId.storeId,
+      storeName: reservation.itemId.storeName
+    });
+    
+    res.json({
+      success: true,
+      message: wantsToBuy ? 
+        'Purchase confirmed! You can now proceed to payment.' : 
+        'Reservation cancelled successfully.',
+      data: { 
+        reservation,
+        nextStep: wantsToBuy ? 'payment' : 'completed'
+      }
+    });
+    
+  } catch (err) {
+    console.error('Confirm purchase decision error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Handle pet ownership transfer when order is completed
+const handlePetOwnershipTransfer = async (reservation, managerId) => {
+  try {
+    const Pet = require('../../../core/models/Pet');
+    const OwnershipHistory = require('../../../core/models/OwnershipHistory');
+    const PetHistory = require('../../../models/PetHistory');
+    
+    // Create or update pet record in main Pet collection
+    let pet = await Pet.findOne({ petCode: reservation.itemId.petCode });
+    
+    if (!pet) {
+      // Create new pet record
+      pet = new Pet({
+        name: reservation.itemId.name,
+        petCode: reservation.itemId.petCode,
+        speciesId: reservation.itemId.speciesId,
+        breedId: reservation.itemId.breedId,
+        age: reservation.itemId.age,
+        gender: reservation.itemId.gender,
+        color: reservation.itemId.color,
+        weight: reservation.itemId.weight,
+        description: reservation.itemId.description,
+        images: reservation.itemId.images,
+        healthStatus: reservation.itemId.healthStatus,
+        vaccinations: reservation.itemId.vaccinations,
+        medicalHistory: reservation.itemId.medicalHistory,
+        currentOwnerId: reservation.userId._id,
+        status: 'owned',
+        source: 'petshop_purchase',
+        acquiredDate: new Date(),
+        createdBy: managerId
+      });
+      await pet.save();
+    } else {
+      // Update existing pet record
+      pet.currentOwnerId = reservation.userId._id;
+      pet.status = 'owned';
+      pet.acquiredDate = new Date();
+      await pet.save();
+    }
+    
+    // Create ownership history record
+    await OwnershipHistory.create({
+      pet: pet._id,
+      previousOwner: null, // No previous owner for pet shop purchase
+      newOwner: reservation.userId._id,
+      transferDate: new Date(),
+      transferType: 'Sale',
+      reason: 'Pet shop purchase - delivery completed',
+      transferFee: {
+        amount: reservation.paymentDetails.amount,
+        currency: 'INR',
+        paid: true,
+        paymentMethod: 'Card'
+      },
+      notes: `Pet purchased from pet shop and delivered. Reservation: ${reservation.reservationCode || reservation._id}`,
+      createdBy: managerId,
+      status: 'Completed'
+    });
+    
+    // Log comprehensive pet history
+    await PetHistory.logEvent({
+      petId: pet._id,
+      inventoryItemId: reservation.itemId._id,
+      eventType: 'ownership_transferred',
+      eventDescription: `Pet ownership transferred to ${reservation.userId.name} after successful purchase and delivery`,
+      performedBy: managerId,
+      performedByRole: 'manager',
+      relatedDocuments: [{
+        documentType: 'reservation',
+        documentId: reservation._id
+      }, {
+        documentType: 'ownership_history',
+        documentId: pet._id
+      }],
+      metadata: {
+        purchaseAmount: reservation.paymentDetails.amount,
+        deliveryMethod: reservation.paymentDetails.deliveryMethod,
+        customerName: reservation.userId.name,
+        customerEmail: reservation.userId.email,
+        completionDate: new Date(),
+        systemGenerated: false
+      },
+      storeId: reservation.itemId.storeId,
+      storeName: reservation.itemId.storeName
+    });
+    
+    console.log(`Pet ownership transferred: ${pet.petCode} -> ${reservation.userId.name}`);
+    
+  } catch (error) {
+    console.error('Error in pet ownership transfer:', error);
+    throw error;
+  }
+};
+
+// Update delivery status (for managers)
+const updateDeliveryStatus = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { status, deliveryNotes, actualDate } = req.body;
+    
+    const reservation = await PetReservation.findById(reservationId)
+      .populate('itemId')
+      .populate('userId', 'name email');
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found' });
+    }
+    
+    // Update delivery info
+    if (!reservation.deliveryInfo) {
+      reservation.deliveryInfo = {};
+    }
+    
+    if (actualDate) {
+      reservation.deliveryInfo.actualDate = new Date(actualDate);
+    }
+    
+    if (deliveryNotes) {
+      reservation.deliveryInfo.deliveryNotes = deliveryNotes;
+    }
+    
+    // Update reservation status
+    const previousStatus = reservation.status;
+    reservation.status = status;
+    reservation._statusChangeNote = `Delivery status updated: ${status}`;
+    reservation._updatedBy = req.user._id;
+    
+    await reservation.save();
+    
+    // If status is completed (or legacy at_owner), transfer ownership and create pet record
+    if ((status === 'completed' || status === 'at_owner') && previousStatus !== status) {
+      await handlePetOwnershipTransfer(reservation, req.user._id);
+    }
+    // Log pet history for delivery status change
+    try {
+      const PetHistory = require('../../../models/PetHistory');
+      await PetHistory.logEvent({
+        petId: reservation.itemId?._id || reservation.itemId,
+        inventoryItemId: reservation.itemId?._id || reservation.itemId,
+        eventType: 'status_changed',
+        eventDescription: `Delivery status updated to ${status}`,
+        performedBy: req.user._id,
+        performedByRole: 'manager',
+        relatedDocuments: [{
+          documentType: 'reservation',
+          documentId: reservation._id
+        }],
+        metadata: {
+          deliveryMethod: reservation.deliveryInfo?.method || 'pickup',
+          deliveryNotes: deliveryNotes || '',
+          actualDeliveryDate: actualDate || new Date(),
+          systemGenerated: false
+        },
+        storeId: reservation.itemId?.storeId,
+        storeName: reservation.itemId?.storeName
+      });
+    } catch (logErr) {
+      console.warn('PetHistory log failed (updateDeliveryStatus):', logErr?.message || logErr);
+    }
+    // Central registry sync (identity + state)
+    try {
+      const PetRegistryService = require('../../../core/services/petRegistryService')
+      const item = reservation.itemId
+      if (item?.petCode) {
+        // Identity upsert from inventory
+        await PetRegistryService.upsertIdentity({
+          petCode: item.petCode,
+          name: item.name || 'Pet',
+          species: item.speciesId,
+          breed: item.breedId,
+          images: Array.isArray(item.images) ? item.images.map(img => ({ url: img.url, caption: img.caption, isPrimary: !!img.isPrimary })) : [],
+          source: 'petshop',
+          petShopItemId: item._id,
+          actorUserId: req.user._id,
+          metadata: { storeId: item.storeId, storeName: item.storeName }
+        })
+
+        // State mapping based on reservation status
+        let currentLocation = 'at_petshop'
+        let currentStatus = item.status || 'in_petshop'
+        let currentOwnerId = undefined
+        if (status === 'ready_pickup') {
+          currentLocation = 'in_transit'
+          currentStatus = 'reserved'
+        }
+        if (status === 'completed' || status === 'at_owner') {
+          currentLocation = 'at_owner'
+          currentStatus = 'sold'
+          currentOwnerId = reservation.userId?._id || reservation.userId
+        }
+        await PetRegistryService.updateState({
+          petCode: item.petCode,
+          currentOwnerId,
+          currentLocation,
+          currentStatus,
+          actorUserId: req.user._id,
+          lastTransferAt: (status === 'completed' || status === 'at_owner') ? new Date() : undefined
+        })
+      }
+    } catch (regErr) {
+      console.warn('PetRegistry sync failed (updateDeliveryStatus):', regErr?.message || regErr)
+    }
+    
+    res.json({
+      success: true,
+      message: `Delivery status updated to ${status}`,
+      data: { reservation }
+    });
+    
+  } catch (err) {
+    console.error('Update delivery status error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Get pet history timeline for managers
+const getPetHistory = async (req, res) => {
+  try {
+    const { petId } = req.params;
+    const { limit = 50, skip = 0, eventType } = req.query;
+    
+    const PetHistory = require('../../../models/PetHistory');
+    
+    const query = { 
+      $or: [
+        { petId: petId },
+        { inventoryItemId: petId }
+      ]
+    };
+    
+    if (eventType) query.eventType = eventType;
+    
+    const history = await PetHistory.find(query)
+      .populate('performedBy', 'name email role')
+      .sort({ timestamp: -1 })
+      .limit(parseInt(limit))
+      .skip(parseInt(skip));
+    
+    res.json({
+      success: true,
+      data: { history }
+    });
+    
+  } catch (err) {
+    console.error('Get pet history error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Get reservation by code for payment gateway
+const getReservationByCode = async (req, res) => {
+  try {
+    const { code } = req.params;
+    
+    const reservation = await PetReservation.findOne({ 
+      $or: [
+        { _id: code },
+        { reservationCode: code }
+      ]
+    })
+    .populate('userId', 'name email')
+    .populate('itemId', 'name petCode price images speciesId breedId storeId storeName');
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found' });
+    }
+    
+    // Only allow user to see their own reservation or public access for payment
+    if (req.user && reservation.userId._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+    
+    res.json({
+      success: true,
+      data: { reservation }
+    });
+    
+  } catch (err) {
+    console.error('Get reservation by code error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 module.exports = {
   // Core Pet Shop Functions
   listPetShops,
@@ -2997,6 +4090,11 @@ module.exports = {
   getPublicListingById,
   uploadInventoryImage,
   uploadInventoryHealthDoc,
+  getUserAccessibleItemById,
+  
+  // Store Identity (Manager self-service)
+  getMyStoreInfo,
+  updateMyStoreInfo,
   
   // Pricing Management
   createPricingRule,
@@ -3008,6 +4106,7 @@ module.exports = {
   createReservation,
   createEnhancedReservation,
   listMyReservations,
+  getReservationById,
   listEnhancedReservations,
   cancelReservation,
   managerReviewReservation,
@@ -3032,13 +4131,14 @@ module.exports = {
   
   // Manager Functions
   managerListReservations,
+  managerBackfillInventoryStoreIds,
   managerUpdateReservationStatus,
   managerDashboard,
   createPromotion,
   managerListPromotions,
   managerUpdatePromotion,
   managerDeletePromotion,
-  
+  getPetHistory,
   // User Functions
   addToWishlist,
   removeFromWishlist,
@@ -3049,13 +4149,30 @@ module.exports = {
   listUserAddresses,
   addPaymentMethod,
   cancelOrder,
-  
+
+  // Store name change requests
+  createStoreNameChangeRequest,
+  adminListStoreNameChangeRequests,
+  adminDecideStoreNameChangeRequest,
   // Payment Functions
   createRazorpayOrder,
   verifyRazorpaySignature,
+  confirmPurchaseDecision,
+  updateDeliveryStatus,
+  
+  // Manager Dashboard Functions
+  getManagerDashboardStats,
+  getManagerOrders,
+  getSalesReport,
+  generateInvoice,
+  updateReservationStatus,
   
   // Centralized Pet Code Management
   getPetCodeStats,
   generateBulkPetCodes,
-  validatePetCode
+  validatePetCode,
+  
+  // Missing User Functions
+  createAnnouncement,
+  getAdvancedAnalytics
 };

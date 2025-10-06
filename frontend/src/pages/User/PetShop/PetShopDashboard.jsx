@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Box,
   Typography,
@@ -63,12 +64,14 @@ import {
   FilterList as FilterIcon,
   Sort as SortIcon
 } from '@mui/icons-material'
-import { apiClient } from '../../../services/api'
+import ModuleDashboardLayout from '../../../components/Module/ModuleDashboardLayout'
 import { useAuth } from '../../../contexts/AuthContext'
+import { apiClient, resolveMediaUrl } from '../../../services/api'
 
 const PetShopDashboard = () => {
   const theme = useTheme()
-  const { user } = useAuth()
+  const navigate = useNavigate()
+  const { user: currentUser } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tabValue, setTabValue] = useState(0)
@@ -129,7 +132,7 @@ const PetShopDashboard = () => {
         apiClient.get('/petshop/public/listings?limit=12'),
         apiClient.get('/petshop/public/shops?limit=8'),
         apiClient.get('/petshop/public/wishlist'),
-        apiClient.get('/petshop/public/reservations/enhanced')
+        apiClient.get('/petshop/public/reservations')
       ])
       
       setStats(statsRes.data.data)
@@ -150,14 +153,37 @@ const PetShopDashboard = () => {
     setTabValue(newValue)
   }
 
+  // Unified layout config
+  const quickActions = [
+    { label: 'Browse', onClick: () => setTabValue(1), color: 'bg-emerald-600' },
+    { label: 'Wishlist', onClick: () => setTabValue(3), color: 'bg-blue-600' },
+    { label: 'Reservations', onClick: () => navigate('/User/petshop/reservations'), color: 'bg-indigo-600' },
+  ]
+  const statCards = [
+    { label: 'Pet Shops', value: stats.totalPetShops || 0, icon: '🏪' },
+    { label: 'Available Pets', value: stats.availableForSale || 0, icon: '🐾' },
+    { label: 'My Wishlist', value: stats.myWishlistItems || 0, icon: '❤️' },
+  ]
+  const tabDefs = [
+    { key: 'featured', label: 'Featured Pets' },
+    { key: 'browse', label: 'Browse All' },
+    { key: 'shops', label: 'Pet Shops' },
+    { key: 'activity', label: 'My Activity' },
+  ]
+  const activeTabKey = tabDefs[tabValue]?.key || 'featured'
+  const onUnifiedTabChange = (key) => {
+    const idx = tabDefs.findIndex(t => t.key === key)
+    setTabValue(idx >= 0 ? idx : 0)
+  }
+
   const handleReservePet = (pet) => {
     setSelectedPet(pet)
     setReservationData(prev => ({
       ...prev,
       contactInfo: {
         ...prev.contactInfo,
-        phone: user?.phone || '',
-        email: user?.email || ''
+        phone: currentUser?.phone || '',
+        email: currentUser?.email || ''
       }
     }))
     setReservationStep(0)
@@ -171,7 +197,7 @@ const PetShopDashboard = () => {
         ...reservationData
       }
       
-      const response = await apiClient.post('/petshop/public/reservations/enhanced', payload)
+      const response = await apiClient.post('/petshop/public/reservations', payload)
       
       setSnackbar({
         open: true,
@@ -250,224 +276,18 @@ const PetShopDashboard = () => {
   }
 
   return (
-    <Box sx={{ 
-      minHeight: '100vh',
-      bgcolor: 'background.default',
-      pt: 2
-    }}>
-      {/* Simple Top Bar */}
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        mb: 4,
-        px: 3,
-        py: 2,
-        bgcolor: 'background.paper',
-        boxShadow: 1,
-        borderRadius: 2
-      }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-          PetShop Dashboard
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button variant="outlined" startIcon={<SearchIcon />}>
-            Search
-          </Button>
-          <Button variant="contained" startIcon={<FilterIcon />}>
-            Filter
-          </Button>
-        </Box>
-      </Box>
-
-      {/* Main Content Container */}
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', pt: 2 }}>
       <Container maxWidth="xl" sx={{ px: 3 }}>
-        {/* Hero Section */}
-        <Box sx={{ 
-          mb: 4,
-          background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.secondary.main, 0.1)} 100%)`,
-          borderRadius: 3,
-          p: 4,
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          <Typography variant="h3" sx={{ 
-            mb: 2, 
-            fontWeight: 800,
-            color: 'primary.main'
-          }}>
-            Find Your Perfect Pet
-          </Typography>
-          <Typography variant="h6" color="textSecondary" sx={{ mb: 3, maxWidth: 600 }}>
-            Discover amazing pets from trusted pet shops and reserve your new companion today
-          </Typography>
-          
-          {/* Search Bar */}
-          <Paper sx={{ 
-            p: 1, 
-            display: 'flex', 
-            alignItems: 'center',
-            maxWidth: 500,
-            boxShadow: 2
-          }}>
-            <SearchIcon sx={{ color: 'text.secondary', mr: 1, ml: 1 }} />
-            <InputBase
-              placeholder="Search pets, breeds, or shops..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              sx={{ flex: 1, px: 1 }}
-            />
-            <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-            <IconButton onClick={() => setFilterOpen(true)}>
-              <FilterIcon />
-            </IconButton>
-            <Button variant="contained" sx={{ ml: 1 }}>
-              Search
-            </Button>
-          </Paper>
-        </Box>
-
-        {/* Stats Cards */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-              color: 'white'
-            }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box>
-                    <Typography variant="body2" sx={{ opacity: 0.9, mb: 1 }}>
-                      Pet Shops Available
-                    </Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                      {loading ? '...' : (stats.totalPetShops || 0)}
-                    </Typography>
-                  </Box>
-                  <PetShopIcon sx={{ fontSize: 40, opacity: 0.7 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ 
-              background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', 
-              color: 'white'
-            }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box>
-                    <Typography variant="body2" sx={{ opacity: 0.9, mb: 1 }}>
-                      Available Pets
-                    </Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                      {loading ? '...' : (stats.availableForSale || 0)}
-                    </Typography>
-                  </Box>
-                  <PetsIcon sx={{ fontSize: 40, opacity: 0.7 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ 
-              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', 
-              color: 'white'
-            }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box>
-                    <Typography variant="body2" sx={{ opacity: 0.9, mb: 1 }}>
-                      My Wishlist
-                    </Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                      {loading ? '...' : (stats.myWishlistItems || 0)}
-                    </Typography>
-                  </Box>
-                  <FavoriteIcon sx={{ fontSize: 40, opacity: 0.7 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ 
-              background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', 
-              color: 'white'
-            }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box>
-                    <Typography variant="body2" sx={{ opacity: 0.9, mb: 1 }}>
-                      My Reservations
-                    </Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                      {loading ? '...' : (stats.myReservations || 0)}
-                    </Typography>
-                  </Box>
-                  <ReserveIcon sx={{ fontSize: 40, opacity: 0.7 }} />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-
-      {/* Navigation Tabs */}
-      <Paper sx={{ mb: 4, borderRadius: 2 }}>
-        <Tabs 
-          value={tabValue} 
-          onChange={handleTabChange}
-          variant="fullWidth"
-          sx={{
-            '& .MuiTab-root': {
-              fontWeight: 600,
-              textTransform: 'none',
-              fontSize: '1rem',
-              py: 2
-            },
-            '& .Mui-selected': {
-              color: 'primary.main'
-            }
-          }}
+        <ModuleDashboardLayout
+          title="Pet Shop"
+          description="Browse pets, manage wishlist and reservations"
+          actions={quickActions}
+          stats={statCards}
+          tabs={tabDefs}
+          activeTab={activeTabKey}
+          onTabChange={onUnifiedTabChange}
         >
-          <Tab 
-            label="Featured Pets" 
-            icon={<StarIcon />}
-            iconPosition="start"
-          />
-          <Tab 
-            label="Browse All" 
-            icon={<PetsIcon />}
-            iconPosition="start"
-          />
-          <Tab 
-            label="Pet Shops" 
-            icon={<PetShopIcon />}
-            iconPosition="start"
-          />
-          <Tab 
-            label={
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                My Activity
-                {reservations.length > 0 && (
-                  <Chip 
-                    label={reservations.length} 
-                    size="small" 
-                    color="primary"
-                    sx={{ height: 20, minWidth: 20 }}
-                  />
-                )}
-              </Box>
-            }
-            icon={<ReserveIcon />}
-            iconPosition="start"
-          />
-        </Tabs>
-      </Paper>
 
-      {/* Featured Pets Section */}
       {tabValue === 0 && (
         <Box>
           <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
@@ -498,7 +318,7 @@ const PetShopDashboard = () => {
                     <CardMedia
                       component="img"
                       height="200"
-                      image={pet.images?.[0]?.url || '/api/placeholder/300/200'}
+                      image={resolveMediaUrl(pet.images?.[0]?.url) || `${window.location.origin}/api/placeholder/300/200`}
                       alt={pet.name || 'Pet'}
                       sx={{ objectFit: 'cover' }}
                     />
@@ -552,7 +372,6 @@ const PetShopDashboard = () => {
         </Box>
       )}
 
-      {/* Browse All Tab */}
       {tabValue === 1 && (
         <Box>
           <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
@@ -568,7 +387,7 @@ const PetShopDashboard = () => {
                   <CardMedia
                     component="img"
                     height="150"
-                    image={pet.images?.[0]?.url || '/api/placeholder/300/200'}
+                    image={resolveMediaUrl(pet.images?.[0]?.url) || `${window.location.origin}/api/placeholder/300/200`}
                     alt={pet.name || 'Pet'}
                   />
                   <CardContent>
@@ -595,7 +414,6 @@ const PetShopDashboard = () => {
         </Box>
       )}
 
-      {/* Pet Shops Tab */}
       {tabValue === 2 && (
         <Box>
           <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
@@ -627,7 +445,6 @@ const PetShopDashboard = () => {
         </Box>
       )}
 
-      {/* My Activity Tab */}
       {tabValue === 3 && (
         <Box>
           <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
@@ -712,7 +529,11 @@ const PetShopDashboard = () => {
                       )}
                     </Box>
                   )}
-                  <Button variant="outlined" sx={{ mt: 2 }}>
+                  <Button 
+                    variant="outlined" 
+                    sx={{ mt: 2 }}
+                    onClick={() => navigate('/User/petshop/reservations')}
+                  >
                     View All Reservations
                   </Button>
                 </CardContent>
@@ -721,6 +542,9 @@ const PetShopDashboard = () => {
           </Grid>
         </Box>
       )}
+
+        </ModuleDashboardLayout>
+      </Container>
 
       {/* Reservation Dialog */}
       <Dialog 
@@ -933,7 +757,6 @@ const PetShopDashboard = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-      </Container>
     </Box>
   )
 }

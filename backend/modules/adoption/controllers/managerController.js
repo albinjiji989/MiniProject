@@ -20,13 +20,83 @@ const parseCSVBuffer = (buffer) => new Promise((resolve, reject) => {
       .on('data', (data) => results.push(data))
       .on('end', () => resolve(results))
       .on('error', (err) => reject(err));
-  } catch (err) { reject(err); }
+  } catch (err) {
+    reject(err);
+  }
 });
+
+// Special-case parser for poorly formatted stringified arrays/objects: extract URLs
+const extractUrls = (text) => {
+  if (typeof text !== 'string') return []
+  const urls = []
+  const re = /(https?:\/\/[^\s'"\]\)]+)/(g)
+  let m
+  // eslint-disable-next-line no-cond-assign
+  while ((m = re.exec(text)) !== null) {
+    if (m[1]) urls.push(m[1])
+  }
+  return urls
+}
+
+// Coerce incoming value into array. Supports:
+// - already-array
+// - JSON string of array
+// - JSON string of object
+// - plain string URL (or extract first URL)
+const ensureArray = (val) => {
+  if (Array.isArray(val)) return val
+  if (typeof val === 'string') {
+    const s = val.trim()
+    try {
+      const parsed = JSON.parse(s)
+      if (Array.isArray(parsed)) return parsed
+      if (parsed && typeof parsed === 'object') return [parsed]
+    } catch (_) {
+      const urls = extractUrls(s)
+      if (urls.length) return urls
+      if (s) return [s]
+    }
+  }
+  if (val && typeof val === 'object') return [val]
+  return []
+}
+
+// Internal helper: transfer ownership after handover completion
+async function transferOwnershipInternal(application) {
+  try {
+    const pet = await AdoptionPet.findById(application.petId)
+    if (pet) {
+      pet.status = 'adopted'
+      pet.adopterUserId = application.userId
+      pet.adoptionDate = new Date()
+      await pet.save()
+    }
+    // Update centralized registry if available
+    try {
+      const PetRegistryService = require('../../../core/services/petRegistryService');
+      await PetRegistryService.updateState({
+        petCode: pet?.petCode,
+        currentOwnerId: application.userId,
+        currentLocation: 'at_owner',
+        currentStatus: 'owned',
+        actorUserId: application.userId,
+        lastTransferAt: new Date()
+      })
+    } catch (_) {}
+  } catch (err) {
+    // Surface minimal info; do not throw to avoid blocking primary flow
+    console.warn('Ownership transfer failed:', err?.message || err)
+  }
+}
 
 // Manager Controllers
 const getManagerPets = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, search } = req.query;
+    const rawPage = parseInt(req.query.page, 10)
+    const rawLimit = parseInt(req.query.limit, 10)
+    const page = Math.max(isNaN(rawPage) ? 1 : rawPage, 1)
+    const limit = Math.min(Math.max(isNaN(rawLimit) ? 10 : rawLimit, 1), 100)
+    const { status, search, fields, lean } = req.query;
     const query = { isActive: true };
 
     if (status) query.status = status;
@@ -39,11 +109,67 @@ const getManagerPets = async (req, res) => {
       ];
     }
 
-    const pets = await AdoptionPet.find(query)
-      .populate('adopterUserId', 'name email')
+    // Projection
+    let selectFields = '_id name breed species status ageDisplay petCode images age ageUnit'
+    if (fields && typeof fields === 'string') {
+      selectFields = fields.split(',').map(f => f.trim()).filter(Boolean).join(' ')
+      if (!selectFields.includes('_id')) selectFields = `_id ${selectFields}`
+      // Ensure raw age fields are present so we can compute ageDisplay for lean queries
+      if (!selectFields.includes(' age ')) selectFields += ' age'
+      if (!selectFields.includes(' ageUnit ')) selectFields += ' ageUnit'
+    }
+
+    let q = AdoptionPet.find(query)
+      .select(selectFields)
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(limit)
+      .skip((page - 1) * limit)
+
+    if (String(lean).toLowerCase() === 'true') q = q.lean()
+
+    let pets = await q
+
+    // If images included, trim to first for list if caller didn't explicitly request otherwise
+    // Helper to compute age display when lean results don't include virtuals
+    const computeAgeDisplay = (age, ageUnit) => {
+      const n = Number(age) || 0
+      switch (ageUnit) {
+        case 'years':
+          return `${n} year${n !== 1 ? 's' : ''}`
+        case 'months': {
+          const years = Math.floor(n / 12)
+          const months = n % 12
+          if (years > 0 && months > 0) return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`
+          if (years > 0) return `${years} year${years !== 1 ? 's' : ''}`
+          return `${months} month${months !== 1 ? 's' : ''}`
+        }
+        case 'weeks':
+          return `${n} week${n !== 1 ? 's' : ''}`
+        case 'days':
+          return `${n} day${n !== 1 ? 's' : ''}`
+        default:
+          return `${n}`
+      }
+    }
+
+    if (Array.isArray(pets)) {
+      pets = pets.map(p => {
+        if (p.images && Array.isArray(p.images)) {
+          const first = p.images[0]
+          const next = { ...p, images: first ? [first] : [] }
+          // Backfill ageDisplay if missing (common when using lean queries)
+          if (!next.ageDisplay && (next.age !== undefined || next.ageUnit !== undefined)) {
+            next.ageDisplay = computeAgeDisplay(next.age, next.ageUnit)
+          }
+          return next
+        }
+        const next = { ...p }
+        if (!next.ageDisplay && (next.age !== undefined || next.ageUnit !== undefined)) {
+          next.ageDisplay = computeAgeDisplay(next.age, next.ageUnit)
+        }
+        return next
+      })
+    }
 
     const total = await AdoptionPet.countDocuments(query);
 
@@ -52,7 +178,7 @@ const getManagerPets = async (req, res) => {
       data: {
         pets,
         pagination: {
-          current: parseInt(page),
+          current: page,
           pages: Math.ceil(total / limit),
           total
         }
@@ -75,20 +201,97 @@ const getNewPetCode = async (req, res) => {
   }
 };
 
+// Helper: sanitize incoming images/documents so we never store base64 in DB
+const sanitizeMedia = (input, isDocument = false) => {
+  const arr = Array.isArray(input) ? input : []
+  const out = []
+  for (const item of arr) {
+    const obj = typeof item === 'string' ? { url: item } : (item || {})
+    const url = typeof obj.url === 'string' ? obj.url.trim() : ''
+    // reject data URLs or excessively long inline values
+    if (!url || url.startsWith('data:') || url.length > 1024) continue
+    // allow only URLs/paths we serve (absolute http(s) or our /modules/* path)
+    if (/^https?:\/\//i.test(url) || url.startsWith('/modules/')) {
+      if (isDocument) {
+        // For documents, include required fields
+        out.push({ 
+          url, 
+          name: obj.name || url.split('/').pop() || 'document',
+          type: obj.type || 'application/pdf',
+          uploadedAt: obj.uploadedAt || new Date()
+        })
+      } else {
+        // For images
+        out.push({ url, caption: obj.caption || '', isPrimary: !!obj.isPrimary })
+      }
+    }
+  }
+  return out
+}
+
 const createPet = async (req, res) => {
   try {
-    const petData = {
-      ...req.body,
-      createdBy: req.user.id
-    };
-
+    const petData = { ...req.body, createdBy: req.user.id };
+    
+    // Debug logging
+    console.log('Raw documents received:', typeof req.body?.documents, req.body?.documents);
+    
+    // Enforce images/documents as URL paths only
+    petData.images = sanitizeMedia(ensureArray(req.body?.images), false)
+    petData.documents = sanitizeMedia(ensureArray(req.body?.documents), true)
+    
+    console.log('Processed documents:', petData.documents);
+    console.log('AdoptionPet schema paths:', Object.keys(AdoptionPet.schema.paths));
+    console.log('Documents schema:', AdoptionPet.schema.paths.documents);
+    
     const pet = new AdoptionPet(petData);
     await pet.save();
 
+    // Respond immediately to avoid blocking UI on downstream integrations
     res.status(201).json({
       success: true,
       data: pet,
       message: 'Pet added successfully'
+    });
+
+    // Fire-and-forget: Upsert centralized registry entry without blocking the response
+    // Capture minimal data needed to avoid accessing mutated req/pet later
+    const _petSnapshot = {
+      id: pet._id,
+      petCode: pet.petCode,
+      name: pet.name,
+      images: pet.images || [],
+      speciesName: pet.species,
+      breedName: pet.breed,
+    }
+    const _actorUserId = req.user.id
+
+    setImmediate(async () => {
+      try {
+        const PetRegistryService = require('../../../core/services/petRegistryService');
+        const Species = require('../../../core/models/Species');
+        const Breed = require('../../../core/models/Breed');
+
+        // AdoptionPet uses string names for species/breed, registry needs ObjectIds.
+        const speciesDoc = await Species.findOne({ name: { $regex: new RegExp(`^${_petSnapshot.speciesName}$`, 'i') } });
+        const breedDoc = await Breed.findOne({ name: { $regex: new RegExp(`^${_petSnapshot.breedName}$`, 'i') } });
+
+        await PetRegistryService.upsertAndSetState({
+          petCode: _petSnapshot.petCode,
+          name: _petSnapshot.name,
+          species: speciesDoc ? speciesDoc._id : undefined,
+          breed: breedDoc ? breedDoc._id : undefined,
+          images: _petSnapshot.images,
+          source: 'adoption',
+          adoptionPetId: _petSnapshot.id,
+          actorUserId: _actorUserId,
+        }, {
+          currentLocation: 'at_adoption_center',
+          currentStatus: 'available',
+        });
+      } catch (regErr) {
+        console.warn('PetRegistry upsert failed (create adoption pet):', regErr?.message || regErr);
+      }
     });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
@@ -97,9 +300,18 @@ const createPet = async (req, res) => {
 
 const getPetById = async (req, res) => {
   try {
-    const pet = await AdoptionPet.findById(req.params.id)
-      .populate('adopterUserId', 'name email phone')
-      .populate('createdBy', 'name email');
+    const { fields, lean } = req.query
+    let selectFields = undefined
+    if (fields && typeof fields === 'string') {
+      selectFields = fields.split(',').map(f => f.trim()).filter(Boolean).join(' ')
+      if (selectFields && !selectFields.includes('_id')) selectFields = `_id ${selectFields}`
+    }
+    let q = AdoptionPet.findById(req.params.id)
+    if (selectFields) q = q.select(selectFields)
+    q = q.populate('adopterUserId', 'name email phone').populate('createdBy', 'name email')
+    if (String(lean).toLowerCase() === 'true') q = q.lean()
+
+    const pet = await q
 
     if (!pet) {
       return res.status(404).json({ success: false, error: 'Pet not found' });
@@ -111,11 +323,29 @@ const getPetById = async (req, res) => {
   }
 };
 
+// Media-only endpoint
+const getPetMedia = async (req, res) => {
+  try {
+    const pet = await AdoptionPet.findById(req.params.id).select('_id images documents').lean()
+    if (!pet) return res.status(404).json({ success: false, error: 'Pet not found' })
+    res.json({ success: true, data: { images: pet.images || [], documents: pet.documents || [] } })
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+}
+
 const updatePet = async (req, res) => {
   try {
+    const update = { ...req.body, updatedBy: req.user.id }
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'images')) {
+      update.images = sanitizeMedia(ensureArray(req.body.images), false)
+    }
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'documents')) {
+      update.documents = sanitizeMedia(ensureArray(req.body.documents), true)
+    }
     const pet = await AdoptionPet.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, updatedBy: req.user.id },
+      update,
       { new: true, runValidators: true }
     );
 
@@ -135,8 +365,13 @@ const updatePet = async (req, res) => {
 
 const deletePet = async (req, res) => {
   try {
+    const { Types } = require('mongoose')
+    const id = req.params.id
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, error: 'Invalid pet id' })
+    }
     const pet = await AdoptionPet.findByIdAndUpdate(
-      req.params.id,
+      id,
       { isActive: false },
       { new: true }
     );
@@ -153,6 +388,25 @@ const deletePet = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+// Bulk delete (soft-delete) pets by ids
+const bulkDeletePets = async (req, res) => {
+  try {
+    const { ids } = req.body || {}
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'ids must be a non-empty array' })
+    }
+    const { Types } = require('mongoose')
+    const validIds = ids.filter(id => Types.ObjectId.isValid(id))
+    if (validIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'No valid ids provided' })
+    }
+    const result = await AdoptionPet.updateMany({ _id: { $in: validIds } }, { $set: { isActive: false } })
+    return res.json({ success: true, data: { requested: ids.length, valid: validIds.length, modified: result.modifiedCount || result.nModified || 0 } })
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+}
 
 const getManagerApplications = async (req, res) => {
   try {
@@ -220,6 +474,15 @@ const approveApplication = async (req, res) => {
       });
     }
 
+    // Manager-side document checklist enforcement
+    const docCount = ((application.documents || []).length) || ((application.applicationData?.documents || []).length) || 0
+    if (docCount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'At least one applicant document (e.g., ID or address proof) is required before approval.'
+      })
+    }
+
     await application.approve(req.user.id, notes);
 
     // Reserve the pet
@@ -229,14 +492,16 @@ const approveApplication = async (req, res) => {
       await pet.save();
     }
 
-    // Send notification to user
+    // Send notification to user (safe guards)
     const user = await User.findById(application.userId);
     if (user) {
-      await sendMail(user.email, 'Adoption Application Approved', 
-        `Your adoption application for ${pet?.name} has been approved. Please proceed with payment.`);
-      
-      if (user.phone) {
-        await sendSMS(user.phone, `Your adoption application for ${pet?.name} has been approved. Please check your email for payment details.`);
+      const toEmail = typeof user.email === 'string' && user.email.includes('@') ? user.email : ''
+      const subject = 'Adoption Application Approved'
+      if (toEmail && subject) {
+        try { await sendMail(toEmail, subject, `Your adoption application for ${pet?.name || 'the pet'} has been approved. Please proceed with payment.`) } catch (_) {}
+      }
+      if (typeof user.phone === 'string' && user.phone.trim()) {
+        try { await sendSMS(user.phone, `Your adoption application for ${pet?.name || 'the pet'} has been approved. Please check your email for payment details.`) } catch (_) {}
       }
     }
 
@@ -275,11 +540,14 @@ const rejectApplication = async (req, res) => {
       await pet.save();
     }
 
-    // Send notification to user
+    // Send notification to user (safe guards)
     const user = await User.findById(application.userId);
     if (user) {
-      await sendMail(user.email, 'Adoption Application Update', 
-        `Your adoption application has been reviewed. Unfortunately, it was not approved at this time. Reason: ${reason}`);
+      const toEmail = typeof user.email === 'string' && user.email.includes('@') ? user.email : ''
+      const subject = 'Adoption Application Update'
+      if (toEmail && subject) {
+        try { await sendMail(toEmail, subject, `Your adoption application has been reviewed. Unfortunately, it was not approved at this time. Reason: ${reason || 'Not provided'}`) } catch (_) {}
+      }
     }
 
     res.json({
@@ -384,6 +652,21 @@ const verifyPayment = async (req, res) => {
       await pet.save();
     }
 
+    // Update centralized registry to reflect new owner (adopter)
+    try {
+      const PetRegistryService = require('../../../core/services/petRegistryService');
+      await PetRegistryService.updateState({
+        petCode: pet?.petCode,
+        currentOwnerId: application.userId,
+        currentLocation: 'at_owner',
+        currentStatus: 'owned',
+        actorUserId: application.userId,
+        lastTransferAt: new Date()
+      });
+    } catch (regErr) {
+      console.warn('PetRegistry state sync failed (adoption complete):', regErr?.message || regErr);
+    }
+
     res.json({
       success: true,
       message: 'Payment verified and adoption completed successfully'
@@ -395,7 +678,7 @@ const verifyPayment = async (req, res) => {
 
 const generateContract = async (req, res) => {
   try {
-    const application = await AdoptionRequest.findById(req.params.applicationId);
+    const application = await AdoptionRequest.findById(req.params.applicationId).populate('petId', 'name breed species').populate('userId', 'name email');
     if (!application) {
       return res.status(404).json({ success: false, error: 'Application not found' });
     }
@@ -407,14 +690,56 @@ const generateContract = async (req, res) => {
       });
     }
 
-    // Generate contract URL (in real implementation, generate actual PDF)
-    const contractURL = `https://your-domain.com/contracts/${application._id}.pdf`;
-    
-    await application.completeAdoption(contractURL);
+    // Try to load pdfkit dynamically
+    let PDFDocument
+    try { PDFDocument = require('pdfkit') } catch (e) {
+      return res.status(500).json({ success: false, error: 'PDF generator not available. Please install dependency: npm install pdfkit' })
+    }
+    const fs = require('fs')
+    const path = require('path')
+
+    // Prepare output directory
+    const dir = path.join(__dirname, '..', 'uploads', 'documents', 'contracts')
+    try { fs.mkdirSync(dir, { recursive: true }) } catch (_) {}
+    const filename = `${String(application._id)}.pdf`
+    const filePath = path.join(dir, filename)
+    const fileUrl = `/modules/adoption/uploads/documents/contracts/${filename}`
+
+    // Generate a simple PDF
+    await new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ size: 'A4', margin: 50 })
+        const stream = fs.createWriteStream(filePath)
+        doc.pipe(stream)
+
+        // Title
+        doc.fontSize(20).text('Adoption Agreement / Certificate', { align: 'center' })
+        doc.moveDown(1)
+        doc.fontSize(12)
+        // Body
+        doc.text(`Certificate ID: ${application._id}`)
+        doc.text(`Date: ${new Date().toLocaleDateString()}`)
+        doc.moveDown(1)
+        doc.text(`Adopter: ${application.userId?.name || 'Adopter'} (${application.userId?.email || ''})`)
+        doc.text(`Pet: ${application.petId?.name || 'Pet'} — ${application.petId?.breed || ''} (${application.petId?.species || ''})`)
+        doc.moveDown(1)
+        doc.text('This certifies that the above-named adopter has completed the adoption of the pet described herein. All responsibilities and care for the pet are transferred to the adopter as of the date stated.', { align: 'left' })
+        doc.moveDown(2)
+        doc.text('Manager Signature: ___________________________', { continued: false })
+        doc.moveDown(1)
+        doc.text('Adopter Signature: ___________________________', { continued: false })
+        doc.end()
+
+        stream.on('finish', resolve)
+        stream.on('error', reject)
+      } catch (err) { reject(err) }
+    })
+
+    await application.completeAdoption(fileUrl);
 
     res.json({
       success: true,
-      data: { contractURL },
+      data: { contractURL: fileUrl },
       message: 'Contract generated successfully'
     });
   } catch (error) {
@@ -487,18 +812,202 @@ module.exports = {
   getManagerPets,
   createPet,
   getPetById,
+  getPetMedia,
   updatePet,
   deletePet,
   getNewPetCode,
+  uploadPetMedia: async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+      const allowed = ['image/jpeg','image/png','image/webp','image/gif'];
+      if (!allowed.includes(req.file.mimetype)) {
+        return res.status(400).json({ success: false, error: 'Only image files are allowed' });
+      }
+      const path = require('path');
+      const fs = require('fs');
+      const crypto = require('crypto');
+      const extMap = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
+      const filename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${extMap[req.file.mimetype] || ''}`;
+      const uploadDir = path.join(__dirname, '..', 'uploads', 'images', 'pets', 'managers');
+      try { fs.mkdirSync(uploadDir, { recursive: true }); } catch (_) {}
+      const filePath = path.join(uploadDir, filename);
+      fs.writeFileSync(filePath, req.file.buffer);
+      const url = `/modules/adoption/uploads/images/pets/managers/${filename}`;
+      return res.status(201).json({ success: true, data: { url, name: filename, type: req.file.mimetype } });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  },
+  uploadPetDocument: async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+      const allowed = ['image/jpeg','image/png','image/webp','image/gif','application/pdf'];
+      if (!allowed.includes(req.file.mimetype)) {
+        return res.status(400).json({ success: false, error: 'Only images or PDF files are allowed' });
+      }
+      const path = require('path');
+      const fs = require('fs');
+      const crypto = require('crypto');
+      const extMap = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif', 'application/pdf': '.pdf' };
+      const filename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${extMap[req.file.mimetype] || ''}`;
+      const uploadDir = path.join(__dirname, '..', 'uploads', 'documents', 'pets', 'managers');
+      try { fs.mkdirSync(uploadDir, { recursive: true }); } catch (_) {}
+      const filePath = path.join(uploadDir, filename);
+      fs.writeFileSync(filePath, req.file.buffer);
+      const url = `/modules/adoption/uploads/documents/pets/managers/${filename}`;
+      return res.status(201).json({ success: true, data: { url, name: filename, type: req.file.mimetype } });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  },
   getManagerApplications,
   getApplicationById,
   approveApplication,
   rejectApplication,
+  patchApplicationStatus: async (req, res) => {
+    try {
+      const { status, notes, reason } = req.body || {};
+      if (!status) {
+        return res.status(400).json({ success: false, error: 'status is required' });
+      }
+      if (!['approved', 'rejected'].includes(String(status).toLowerCase())) {
+        return res.status(400).json({ success: false, error: 'Only approved/rejected supported via PATCH' });
+      }
+      if (String(status).toLowerCase() === 'approved') {
+        return await approveApplication(req, res);
+      } else {
+        req.body.reason = reason || req.body.reason || 'Not specified';
+        req.body.notes = notes || req.body.notes || '';
+        return await rejectApplication(req, res);
+      }
+    } catch (error) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  },
   createPaymentOrder,
   verifyPayment,
   generateContract,
   getContract,
   getManagerReports,
+  bulkDeletePets,
+ 
+
+
+  // Handover: schedule/update/complete
+  scheduleHandover: async (req, res) => {
+    try {
+      const { id } = req.params
+      const { method = 'pickup', scheduledAt, location = {}, notes = '' } = req.body || {}
+      const app = await AdoptionRequest.findById(id)
+      if (!app) return res.status(404).json({ success: false, error: 'Application not found' })
+      // Require certificate generated or at least contract present
+      if (!app.contractURL) {
+        return res.status(400).json({ success: false, error: 'Generate contract/certificate before scheduling handover' })
+      }
+      app.handover = app.handover || {}
+      app.handover.method = method
+      app.handover.scheduledAt = scheduledAt ? new Date(scheduledAt) : null
+      app.handover.location = {
+        address: location?.address || app.handover?.location?.address || '',
+        lat: location?.lat ?? app.handover?.location?.lat,
+        lng: location?.lng ?? app.handover?.location?.lng,
+      }
+      app.handover.notes = notes
+      await app.setHandoverStatus('scheduled', 'Handover scheduled')
+      await app.save()
+      // Notify user (best-effort)
+      try {
+        let toEmail = ''
+        if (app?.userId && typeof app.userId === 'object' && app.userId.email) {
+          toEmail = app.userId.email
+        } else if (app?.userId) {
+          const u = await User.findById(app.userId).select('email name')
+          toEmail = (u && typeof u.email === 'string') ? u.email : ''
+        }
+        let petName = ''
+        if (app?.petId && typeof app.petId === 'object' && app.petId.name) {
+          petName = app.petId.name
+        } else if (app?.petId) {
+          const p = await AdoptionPet.findById(app.petId).select('name')
+          petName = p?.name || ''
+        }
+        const subject = 'Adoption Handover Scheduled'
+        const scheduled = app.handover?.scheduledAt ? new Date(app.handover.scheduledAt).toLocaleString() : 'soon'
+        const address = app.handover?.location?.address || 'designated location'
+        const message = `Hello${app.userId?.name ? ' ' + app.userId.name : ''}, your handover for ${petName || 'your adopted pet'} is scheduled on ${scheduled} at ${address}.`
+        if (toEmail && subject) { try { await sendMail(toEmail, subject, message) } catch (_) {} }
+      } catch (_) {}
+      return res.json({ success: true, data: app.handover })
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message })
+    }
+  },
+  updateHandover: async (req, res) => {
+    try {
+      const { id } = req.params
+      const { method, scheduledAt, location, notes } = req.body || {}
+      const app = await AdoptionRequest.findById(id)
+      if (!app) return res.status(404).json({ success: false, error: 'Application not found' })
+      if (!app.handover || app.handover.status === 'none') {
+        return res.status(400).json({ success: false, error: 'Handover not scheduled' })
+      }
+      if (method) app.handover.method = method
+      if (scheduledAt) app.handover.scheduledAt = new Date(scheduledAt)
+      if (location) {
+        app.handover.location = {
+          address: location?.address || app.handover?.location?.address || '',
+          lat: location?.lat ?? app.handover?.location?.lat,
+          lng: location?.lng ?? app.handover?.location?.lng,
+        }
+      }
+      if (typeof notes === 'string') app.handover.notes = notes
+      await app.save()
+      return res.json({ success: true, data: app.handover })
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message })
+    }
+  },
+  completeHandover: async (req, res) => {
+    try {
+      const { id } = req.params
+      const { proofDocs } = req.body || {}
+      const app = await AdoptionRequest.findById(id)
+      if (!app) return res.status(404).json({ success: false, error: 'Application not found' })
+      if (!app.handover || app.handover.status !== 'scheduled') {
+        return res.status(400).json({ success: false, error: 'Handover is not scheduled' })
+      }
+      if (Array.isArray(proofDocs)) {
+        app.handover.proofDocs = proofDocs.filter(Boolean)
+      }
+      app.handoverCompletedAt = new Date()
+      await app.setHandoverStatus('completed', 'Handover completed')
+      await transferOwnershipInternal(app)
+      await app.save()
+      // Notify user (best-effort)
+      try {
+        let toEmail = ''
+        if (app?.userId && typeof app.userId === 'object' && app.userId.email) {
+          toEmail = app.userId.email
+        } else if (app?.userId) {
+          const u = await User.findById(app.userId).select('email name')
+          toEmail = (u && typeof u.email === 'string') ? u.email : ''
+        }
+        let petName = ''
+        if (app?.petId && typeof app.petId === 'object' && app.petId.name) {
+          petName = app.petId.name
+        } else if (app?.petId) {
+          const p = await AdoptionPet.findById(app.petId).select('name')
+          petName = p?.name || ''
+        }
+        const subject = 'Adoption Handover Completed'
+        const message = `Congratulations${app.userId?.name ? ' ' + app.userId.name : ''}! Handover for ${petName || 'your pet'} is completed. Your certificate is available in your dashboard.`
+        if (toEmail && subject) { try { await sendMail(toEmail, subject, message) } catch (_) {} }
+      } catch (_) {}
+      return res.json({ success: true, message: 'Handover completed and ownership transferred' })
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message })
+    }
+  },
   // CSV import endpoint: expects multipart/form-data with field name 'file'
   importPetsCSV: async (req, res) => {
     try {

@@ -39,6 +39,7 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
   
   const [anchorEl, setAnchorEl] = useState(null)
   const [notificationAnchor, setNotificationAnchor] = useState(null)
+  const [notifications, setNotifications] = useState([]) // real data to be wired; empty by default
   
   const handleProfileMenuOpen = (event) => {
     setAnchorEl(event.currentTarget)
@@ -61,30 +62,6 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
     navigate('/login')
     handleProfileMenuClose()
   }
-
-  const notifications = [
-    {
-      id: 1,
-      title: 'New Pet Available',
-      message: 'A Golden Retriever puppy is now available at PetShop Central',
-      time: '2 minutes ago',
-      unread: true
-    },
-    {
-      id: 2,
-      title: 'Reservation Approved',
-      message: 'Your reservation for Max has been approved',
-      time: '1 hour ago',
-      unread: true
-    },
-    {
-      id: 3,
-      title: 'Vet Appointment Reminder',
-      message: 'Your appointment is scheduled for tomorrow at 3 PM',
-      time: '3 hours ago',
-      unread: false
-    }
-  ]
 
   const unreadCount = notifications.filter(n => n.unread).length
 
@@ -163,7 +140,7 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
             {/* Messages */}
             <Tooltip title="Messages">
               <IconButton sx={{ color: 'text.primary' }}>
-                <Badge badgeContent={2} color="secondary">
+                <Badge badgeContent={0} color="secondary" showZero={false}>
                   <MailIcon />
                 </Badge>
               </IconButton>
@@ -175,7 +152,7 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
                 onClick={handleNotificationOpen}
                 sx={{ color: 'text.primary' }}
               >
-                <Badge badgeContent={unreadCount} color="error">
+                <Badge badgeContent={unreadCount} color="error" showZero={false}>
                   <NotificationsIcon />
                 </Badge>
               </IconButton>
@@ -296,30 +273,38 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
           )}
         </Box>
         
-        {notifications.map((notification) => (
-          <MenuItem 
-            key={notification.id}
-            onClick={handleNotificationClose}
-            sx={{ 
-              py: 1.5,
-              borderLeft: notification.unread ? 3 : 0,
-              borderColor: 'primary.main',
-              bgcolor: notification.unread ? alpha(theme.palette.primary.main, 0.05) : 'transparent'
-            }}
-          >
-            <Box sx={{ width: '100%' }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                {notification.title}
-              </Typography>
-              <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
-                {notification.message}
-              </Typography>
-              <Typography variant="caption" color="textSecondary">
-                {notification.time}
-              </Typography>
-            </Box>
-          </MenuItem>
-        ))}
+        {notifications.length === 0 ? (
+          <Box sx={{ px: 2, py: 2 }}>
+            <Typography variant="body2" color="textSecondary">
+              No notifications yet
+            </Typography>
+          </Box>
+        ) : (
+          notifications.map((notification) => (
+            <MenuItem 
+              key={notification.id}
+              onClick={handleNotificationClose}
+              sx={{ 
+                py: 1.5,
+                borderLeft: notification.unread ? 3 : 0,
+                borderColor: 'primary.main',
+                bgcolor: notification.unread ? alpha(theme.palette.primary.main, 0.05) : 'transparent'
+              }}
+            >
+              <Box sx={{ width: '100%' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                  {notification.title}
+                </Typography>
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
+                  {notification.message}
+                </Typography>
+                <Typography variant="caption" color="textSecondary">
+                  {notification.time}
+                </Typography>
+              </Box>
+            </MenuItem>
+          ))
+        )}
         
         <Divider />
         

@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import { Box, Drawer, AppBar, Toolbar, Typography, IconButton, Avatar, Badge, Menu, MenuItem, ListItemIcon, useMediaQuery, useTheme } from '@mui/material'
 import { Menu as MenuIcon, Logout as LogoutIcon, Notifications as NotificationIcon } from '@mui/icons-material'
-import RoleBasedSidebar from '../components/Layout/RoleBasedSidebar'
+import ManagerSidebar from '../components/Navigation/ManagerSidebar'
 import { useAuth } from '../contexts/AuthContext'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 
 const drawerWidth = 280
 
@@ -13,6 +13,7 @@ const ManagerLayout = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [anchorEl, setAnchorEl] = useState(null)
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
 
   // Only managers allowed here
   const isManager = user?.role?.endsWith('_manager')
@@ -25,8 +26,9 @@ const ManagerLayout = ({ children }) => {
   const handleProfileMenuClose = () => setAnchorEl(null)
   const handleLogout = () => { logout() }
 
+  const moduleType = (user?.role || '').replace('_manager','') || 'petshop'
   const drawer = (
-    <RoleBasedSidebar onClose={() => setMobileOpen(false)} />
+    <ManagerSidebar open={!isMobile || mobileOpen} onClose={() => setMobileOpen(false)} user={user} moduleType={moduleType} />
   )
 
   return (
@@ -71,40 +73,8 @@ const ManagerLayout = ({ children }) => {
       </AppBar>
 
       <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
-        <Drawer
-          variant="temporary"
-          open={mobileOpen}
-          onClose={handleDrawerToggle}
-          ModalProps={{ keepMounted: true }}
-          sx={{
-            display: { xs: 'block', md: 'none' },
-            '& .MuiDrawer-paper': {
-              boxSizing: 'border-box',
-              width: drawerWidth,
-              backgroundColor: 'background.paper',
-              borderRight: '1px solid',
-              borderColor: 'divider'
-            }
-          }}
-        >
-          {drawer}
-        </Drawer>
-        <Drawer
-          variant="permanent"
-          sx={{
-            display: { xs: 'none', md: 'block' },
-            '& .MuiDrawer-paper': {
-              boxSizing: 'border-box',
-              width: drawerWidth,
-              backgroundColor: 'background.paper',
-              borderRight: '1px solid',
-              borderColor: 'divider'
-            }
-          }}
-          open
-        >
-          {drawer}
-        </Drawer>
+        {/* ManagerSidebar handles its own Drawer responsiveness */}
+        {drawer}
       </Box>
 
       <Box component="main" sx={{ flexGrow: 1, width: { md: `calc(100% - ${drawerWidth}px)` }, minHeight: '100vh', backgroundColor: 'grey.50', display: 'flex', flexDirection: 'column' }}>
@@ -119,6 +89,15 @@ const ManagerLayout = ({ children }) => {
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
+        <MenuItem onClick={() => navigate('/manager/profile')}>
+          Profile
+        </MenuItem>
+        <MenuItem onClick={() => navigate('/force-password')}>
+          Change Password
+        </MenuItem>
+        <MenuItem onClick={() => navigate('/manager/store-name-change')}>
+          Request Store Name Change
+        </MenuItem>
         <MenuItem onClick={handleLogout}>
           <ListItemIcon>
             <LogoutIcon fontSize="small" />

@@ -37,6 +37,10 @@ const ModuleSchema = new mongoose.Schema(
       enum: ['active', 'blocked', 'maintenance', 'coming_soon'],
       default: 'coming_soon'
     },
+    hidden: {
+      type: Boolean,
+      default: false // Soft-delete visibility: true means hide from public
+    },
     hasManagerDashboard: { 
       type: Boolean, 
       default: false 
@@ -67,6 +71,7 @@ const ModuleSchema = new mongoose.Schema(
 // Note: unique index on key is already defined via the schema (unique: true)
 ModuleSchema.index({ status: 1 })
 ModuleSchema.index({ displayOrder: 1 })
+ModuleSchema.index({ hidden: 1 })
 
 module.exports = mongoose.model('Module', ModuleSchema)
 

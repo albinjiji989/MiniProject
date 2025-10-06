@@ -26,7 +26,7 @@ router.get('/', auth, authorize('admin'), async (req, res) => {
     }
 
     const breeds = await Breed.find(query)
-      .populate('species', 'name displayName')
+      .populate('species', 'name displayName category')
       .populate('createdBy', 'name email')
       .populate('lastUpdatedBy', 'name email')
       .sort({ name: 1 })
@@ -84,7 +84,7 @@ router.get('/active', auth, async (req, res) => {
 router.get('/species/:speciesId', auth, async (req, res) => {
   try {
     const breeds = await Breed.findBySpecies(req.params.speciesId)
-      .populate('species', 'name displayName');
+      .populate('species', 'name displayName category');
 
     res.json({
       success: true,
@@ -104,7 +104,7 @@ router.get('/species/:speciesId', auth, async (req, res) => {
 router.get('/:id', auth, authorize('admin'), async (req, res) => {
   try {
     const breed = await Breed.findById(req.params.id)
-      .populate('species', 'name displayName')
+      .populate('species', 'name displayName category')
       .populate('createdBy', 'name email')
       .populate('lastUpdatedBy', 'name email');
 
@@ -175,7 +175,7 @@ router.post('/', auth, authorize('admin'), async (req, res) => {
 
     await breed.save();
 
-    await breed.populate('species', 'name displayName');
+    await breed.populate('species', 'name displayName category');
     await breed.populate('createdBy', 'name email');
 
     res.status(201).json({
@@ -251,7 +251,7 @@ router.put('/:id', auth, authorize('admin'), async (req, res) => {
 
     await breed.save();
 
-    await breed.populate('species', 'name displayName');
+    await breed.populate('species', 'name displayName category');
     await breed.populate('createdBy', 'name email');
     await breed.populate('lastUpdatedBy', 'name email');
 

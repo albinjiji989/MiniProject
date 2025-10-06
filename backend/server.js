@@ -9,7 +9,12 @@ require('dotenv').config();
 const app = express();
 
 // Security middleware
-app.use(helmet());
+// Allow cross-origin resource loading for images served from this API (used by frontend on different origin)
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginOpenerPolicy: { policy: 'unsafe-none' },
+  crossOriginEmbedderPolicy: false
+}));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -38,6 +43,53 @@ if (!process.env.JWT_SECRET) {
 const connectDB = require('./core/config/db');
 connectDB();
 
+// Static assets for module uploads (e.g., Petshop images) - MOVED BEFORE API ROUTES
+// Ensure images can be embedded from other origins (frontend dev server)
+app.use('/modules/petshop/uploads', (req, res, next) => {
+  console.log('📸 Image request:', req.method, req.url);
+  
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    return res.status(200).end();
+  }
+  
+  // Set CORS headers for actual requests
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache images for 1 year
+  
+  next();
+}, express.static(path.join(__dirname, 'modules', 'petshop', 'uploads')));
+
+// Adoption module uploads (applicant documents: images/PDF)
+app.use('/modules/adoption/uploads', (req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    return res.status(200).end();
+  }
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cache-Control', 'public, max-age=31536000');
+  next();
+}, express.static(path.join(__dirname, 'modules', 'adoption', 'uploads')));
+
+// Debug endpoint for testing CORS
+app.get('/test-cors', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.json({ message: 'CORS test successful', timestamp: new Date().toISOString() });
+});
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/profile', require('./routes/profile'));
@@ -52,6 +104,7 @@ app.use('/api/admin/breeds', require('./routes/admin/breeds'));
 app.use('/api/admin/pet-categories', require('./routes/admin/pet-categories'));
 app.use('/api/admin/pet-details', require('./routes/admin/pet-details'));
 app.use('/api/admin/custom-breed-requests', require('./routes/admin/custom-breed-requests'));
+app.use('/api/admin/pet-system-requests', require('./routes/admin/petSystemRequests'));
 app.use('/api/admin/pets', require('./routes/admin/pets'));
 app.use('/api/admin/medical-records', require('./routes/admin/medical-records'));
 app.use('/api/admin/ownership-history', require('./routes/admin/ownership-history'));
@@ -71,8 +124,6 @@ app.use('/api/permissions', require('./routes/rbac/permissions'));
 app.use('/api/core', require('./routes/core/core'));
 app.use('/api/modules', require('./routes/modules'));
 
-// Static assets for module uploads (e.g., Petshop images)
-app.use('/modules/petshop/uploads', express.static(path.join(__dirname, 'modules', 'petshop', 'uploads')));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

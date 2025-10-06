@@ -47,10 +47,7 @@ const Sidebar = ({ open, onClose, user }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   
   const [expandedItems, setExpandedItems] = useState({
-    pets: false,
-    services: false,
-    healthcare: false,
-    shopping: false
+    pets: false
   })
 
   const handleExpand = (item) => {
@@ -61,115 +58,25 @@ const Sidebar = ({ open, onClose, user }) => {
   }
 
   const navigationItems = [
-    {
-      title: 'Dashboard',
-      icon: <DashboardIcon />,
-      path: '/User/dashboard',
-      active: location.pathname === '/User/dashboard'
-    },
+    { title: 'Dashboard', icon: <DashboardIcon />, path: '/User/dashboard', active: location.pathname === '/User/dashboard' },
+    { title: 'Adoption', icon: <FavoriteIcon />, path: '/User/adoption', active: location.pathname.startsWith('/User/adoption') },
+    { title: 'Pet Shop', icon: <StoreIcon />, path: '/User/petshop', active: location.pathname.startsWith('/User/petshop'), badge: 'Popular' },
+    { title: 'Rescue', icon: <LocalShippingIcon />, path: '/User/rescue', active: location.pathname.startsWith('/User/rescue') },
+    { title: 'Veterinary', icon: <LocalHospitalIcon />, path: '/User/veterinary', active: location.pathname.startsWith('/User/veterinary') },
+    { title: 'Pharmacy', icon: <LocalPharmacyIcon />, path: '/User/pharmacy', active: location.pathname.startsWith('/User/pharmacy') },
+    { title: 'Temporary Care', icon: <HomeIcon />, path: '/User/temporary-care', active: location.pathname.startsWith('/User/temporary-care') },
+    { title: 'Ecommerce', icon: <ShoppingCartIcon />, path: '/User/ecommerce', active: location.pathname.startsWith('/User/ecommerce') },
+    // Small My Pets group retained
     {
       title: 'My Pets',
       icon: <PetsIcon />,
       expandable: true,
       expanded: expandedItems.pets,
       children: [
-        {
-          title: 'All Pets',
-          icon: <PetsIcon />,
-          path: '/User/pets',
-          active: location.pathname === '/User/pets'
-        },
-        {
-          title: 'Add Pet',
-          icon: <HomeIcon />,
-          path: '/User/pets/add',
-          active: location.pathname === '/User/pets/add'
-        },
-        {
-          title: 'Request Breed',
-          icon: <BookOnlineIcon />,
-          path: '/User/pets/request-breed',
-          active: location.pathname.includes('/request-breed')
-        }
-      ]
-    },
-    {
-      title: 'Pet Services',
-      icon: <StoreIcon />,
-      expandable: true,
-      expanded: expandedItems.services,
-      children: [
-        {
-          title: 'Pet Shop',
-          icon: <StoreIcon />,
-          path: '/User/petshop',
-          badge: 'Popular',
-          active: location.pathname.includes('/petshop')
-        },
-        {
-          title: 'Adoption',
-          icon: <FavoriteIcon />,
-          path: '/User/adoption',
-          active: location.pathname.includes('/adoption')
-        },
-        {
-          title: 'Rescue',
-          icon: <LocalShippingIcon />,
-          path: '/User/rescue',
-          active: location.pathname.includes('/rescue')
-        },
-        {
-          title: 'Temporary Care',
-          icon: <HomeIcon />,
-          path: '/User/temporary-care',
-          active: location.pathname.includes('/temporary-care')
-        }
-      ]
-    },
-    {
-      title: 'Healthcare',
-      icon: <LocalHospitalIcon />,
-      expandable: true,
-      expanded: expandedItems.healthcare,
-      children: [
-        {
-          title: 'Veterinary',
-          icon: <LocalHospitalIcon />,
-          path: '/User/veterinary',
-          active: location.pathname.includes('/veterinary')
-        },
-        {
-          title: 'Pharmacy',
-          icon: <LocalPharmacyIcon />,
-          path: '/User/pharmacy',
-          active: location.pathname.includes('/pharmacy')
-        }
-      ]
-    },
-    {
-      title: 'Shopping',
-      icon: <ShoppingCartIcon />,
-      expandable: true,
-      expanded: expandedItems.shopping,
-      children: [
-        {
-          title: 'Ecommerce',
-          icon: <ShoppingCartIcon />,
-          path: '/User/ecommerce',
-          active: location.pathname.includes('/ecommerce')
-        },
-        {
-          title: 'My Cart',
-          icon: <ShoppingCartIcon />,
-          path: '/User/cart',
-          active: location.pathname === '/User/cart'
-        },
-        {
-          title: 'My Orders',
-          icon: <BookOnlineIcon />,
-          path: '/User/orders',
-          active: location.pathname === '/User/orders'
-        }
+        { title: 'All Pets', icon: <PetsIcon />, path: '/User/pets', active: location.pathname === '/User/pets' },
+        { title: 'Add Pet', icon: <HomeIcon />, path: '/User/pets/add', active: location.pathname === '/User/pets/add' },
+        { title: 'Request Breed', icon: <BookOnlineIcon />, path: '/User/pets/request-breed', active: location.pathname.includes('/request-breed') },
+        { title: 'Owned Pets', icon: <FavoriteIcon />, path: '/User/owned-pets', active: location.pathname === '/User/owned-pets' }
       ]
     }
   ]

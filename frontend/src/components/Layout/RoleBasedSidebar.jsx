@@ -73,15 +73,20 @@ const getMenuItems = (userRole, userDetails) => {
           : '/User/dashboard')
   )
 
+  const profilePath = (typeof userRole === 'string' && userRole.endsWith('_manager'))
+    ? '/manager/profile'
+    : '/User/profile'
+
   const baseItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: dashboardPath, roles: ['all'] },
-    { text: 'Profile', icon: <ProfileIcon />, path: '/profile', roles: ['all'] },
+    { text: 'Profile', icon: <ProfileIcon />, path: profilePath, roles: ['all'] },
   ]
 
   // Admin simplified navigation
   if (userRole === 'admin') {
+    const baseWithoutDashboard = baseItems.filter(i => i.text !== 'Dashboard')
     return [
-      ...baseItems,
+      ...baseWithoutDashboard,
       {
         text: 'Dashboard & Analytics',
         icon: <DashboardIcon />,
@@ -142,35 +147,25 @@ const getMenuItems = (userRole, userDetails) => {
         { text: 'Reports', icon: <AnalyticsIcon />, path: '/manager/adoption/reports', roles: ['adoption_manager'] }
       )
     } else if (userRole === 'petshop_manager') {
-      moduleItems.push(
-        { text: 'Pet Shop Dashboard', icon: <StoreIcon />, path: '/manager/petshop/dashboard', roles: ['petshop_manager'] }
-      )
+      // No extra Dashboard item; base Dashboard handles routing. Add other petshop-specific links here if needed.
     } else if (userRole === 'rescue_manager') {
-      moduleItems.push(
-        { text: 'Rescue Dashboard', icon: <RescueIcon />, path: '/manager/rescue/dashboard', roles: ['rescue_manager'] }
-      )
+      // No duplicate dashboard
     } else if (userRole === 'ecommerce_manager') {
-      moduleItems.push(
-        { text: 'E-Commerce Dashboard', icon: <EcommerceIcon />, path: '/manager/ecommerce/dashboard', roles: ['ecommerce_manager'] }
-      )
+      // No duplicate dashboard
     } else if (userRole === 'pharmacy_manager') {
-      moduleItems.push(
-        { text: 'Pharmacy Dashboard', icon: <PharmacyIcon />, path: '/manager/pharmacy/dashboard', roles: ['pharmacy_manager'] }
-      )
-    
+      // No duplicate dashboard
     } else if (userRole === 'temporary-care_manager') {
-      moduleItems.push(
-        { text: 'Temporary Care Dashboard', icon: <TemporaryCareIcon />, path: '/manager/temporary-care/dashboard', roles: ['temporary-care_manager'] }
-      )
+      // No duplicate dashboard
     } else if (userRole === 'veterinary_manager') {
-      moduleItems.push(
-        { text: 'Veterinary Dashboard', icon: <VeterinaryIcon />, path: '/manager/veterinary/dashboard', roles: ['veterinary_manager'] }
-      )
+      // No duplicate dashboard
     }
+
+    // Filter out any accidental dashboard items if present
+    const prunedModuleItems = moduleItems.filter(it => !String(it.text || '').toLowerCase().includes('dashboard'))
 
     return [
       ...baseItems,
-      ...moduleItems,
+      ...prunedModuleItems,
       {
         text: 'Analytics',
         icon: <StatsIcon />,
@@ -247,7 +242,10 @@ const RoleBasedSidebar = ({ onClose }) => {
   const renderMenuItem = (item, level = 0) => {
     const isExpanded = expandedItems[item.text]
     const hasChildren = item.children && item.children.length > 0
-    const isActive = location.pathname === item.path
+    // Consider a route active if it matches exactly or is a child path
+    const isActive = item.path && (
+      location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+    )
 
     if (hasChildren) {
       return (
@@ -292,21 +290,25 @@ const RoleBasedSidebar = ({ onClose }) => {
           selected={isActive}
           sx={{
             borderRadius: 2,
+            px: 1.25,
             '&.Mui-selected': {
-              backgroundColor: 'primary.50',
+              backgroundColor: 'rgba(59,130,246,0.10)', // soft blue
+              border: '1px solid',
+              borderColor: 'primary.main',
+              boxShadow: '0 0 0 1px rgba(59,130,246,0.20) inset',
               '&:hover': {
-                backgroundColor: 'primary.100',
+                backgroundColor: 'rgba(59,130,246,0.14)',
               },
               '& .MuiListItemIcon-root': {
                 color: 'primary.main',
               },
               '& .MuiListItemText-primary': {
                 color: 'primary.main',
-                fontWeight: 600,
+                fontWeight: 700,
               },
             },
             '&:hover': {
-              backgroundColor: 'grey.50',
+              backgroundColor: 'rgba(59,130,246,0.06)',
             },
           }}
         >
@@ -317,7 +319,7 @@ const RoleBasedSidebar = ({ onClose }) => {
             primary={item.text}
             primaryTypographyProps={{
               fontSize: '0.875rem',
-              fontWeight: isActive ? 600 : 400,
+              fontWeight: isActive ? 700 : 500,
             }}
           />
         </ListItemButton>
@@ -328,46 +330,46 @@ const RoleBasedSidebar = ({ onClose }) => {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Logo/Header */}
-      <Box sx={{ p: 3, borderBottom: '1px solid #e5e7eb' }}>
+      <Box sx={{
+        p: 3,
+        background: 'linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(147,51,234,0.12) 100%)',
+        borderBottom: '1px solid',
+        borderColor: 'divider'
+      }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar sx={{ bgcolor: 'primary.main', width: 40, height: 40 }}>
+          <Avatar sx={{ bgcolor: 'primary.main', width: 44, height: 44, boxShadow: 1 }}>
             <PetsIcon />
           </Avatar>
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-              Pet Welfare
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Management System
-            </Typography>
+            <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 0.25 }}>Pet Welfare</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: 0.2 }}>Manager Portal</Typography>
           </Box>
         </Box>
       </Box>
 
       {/* User Info */}
-      <Box sx={{ p: 3, borderBottom: '1px solid #e5e7eb' }}>
+      <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider', backgroundColor: 'background.paper' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar sx={{ bgcolor: 'secondary.main' }}>
+          <Avatar sx={{ bgcolor: 'secondary.main', width: 48, height: 48, fontWeight: 700 }}>
             {user?.name?.charAt(0)?.toUpperCase()}
           </Avatar>
           <Box sx={{ flex: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-              {user?.name}
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
+              {user?.name || 'Manager'}
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Chip 
-                label={user?.role?.replace('_', ' ')} 
-                size="small" 
-                color="primary" 
-                variant="outlined"
-              />
-              {user?.details?.assignedModule && (
-                <Chip 
-                  label={user.details.assignedModule} 
-                  size="small" 
-                  color="secondary" 
-                  variant="outlined"
-                />
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              {user?.email}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 1, flexWrap: 'wrap' }}>
+              <Chip label={(user?.role || '').replace('_', ' ')} size="small" color="primary" variant="outlined" />
+              {user?.assignedModule && (
+                <Chip label={user.assignedModule} size="small" color="secondary" variant="outlined" />
+              )}
+              {(user?.role || '').includes('_manager') && (
+                <>
+                  <Chip label={`ID: ${user?.storeId || '—'}`} size="small" variant="outlined" />
+                  <Chip label={`Name: ${user?.storeName || '—'}`} size="small" variant="outlined" />
+                </>
               )}
             </Box>
           </Box>
@@ -376,20 +378,20 @@ const RoleBasedSidebar = ({ onClose }) => {
 
       {/* Navigation */}
       <Box sx={{ flex: 1, overflow: 'auto' }}>
-        <List sx={{ px: 2, py: 1 }}>
+        <List sx={{ px: 2, py: 1.5 }}>
           {menuItems.map((item) => renderMenuItem(item))}
         </List>
       </Box>
 
       {/* Logout Button */}
-      <Box sx={{ p: 2, borderTop: '1px solid #e5e7eb' }}>
+      <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider', backgroundColor: 'background.paper' }}>
         <ListItemButton
           onClick={handleLogout}
           sx={{
             borderRadius: 2,
             color: 'error.main',
             '&:hover': {
-              backgroundColor: 'error.50',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
             },
           }}
         >
@@ -400,14 +402,14 @@ const RoleBasedSidebar = ({ onClose }) => {
             primary="Logout"
             primaryTypographyProps={{
               fontSize: '0.875rem',
-              fontWeight: 500,
+              fontWeight: 600,
             }}
           />
         </ListItemButton>
       </Box>
 
       {/* Footer */}
-      <Box sx={{ p: 2, borderTop: '1px solid #e5e7eb' }}>
+      <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           © 2024 Pet Welfare System
         </Typography>

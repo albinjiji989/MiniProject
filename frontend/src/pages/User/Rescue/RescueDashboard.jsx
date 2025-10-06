@@ -1,5 +1,6 @@
 import React from 'react'
 import { rescueAPI } from '../../../services/api'
+import ModuleDashboardLayout from '../../../components/Module/ModuleDashboardLayout'
 import {
   Box,
   Typography,
@@ -26,6 +27,7 @@ const RescueDashboard = () => {
   const [recentRescues, setRecentRescues] = React.useState([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState('')
+  const [tab, setTab] = React.useState('recent')
 
   React.useEffect(() => {
     const loadRescue = async () => {
@@ -80,167 +82,110 @@ const RescueDashboard = () => {
     }
   }
 
+  const actions = [
+    { label: 'Report Case', onClick: () => setTab('report'), color: 'bg-emerald-600' },
+    { label: 'My Cases', onClick: () => setTab('my'), color: 'bg-blue-600' },
+    { label: 'Emergency', onClick: () => setTab('recent'), color: 'bg-red-600' },
+  ]
+
+  const statCards = [
+    { label: 'Active Rescues', value: stats.activeRescues, icon: '🚑' },
+    { label: 'Completed', value: stats.completedRescues, icon: '✅' },
+    { label: 'Urgent Cases', value: stats.urgentCases, icon: '⚠️' },
+  ]
+
+  const tabs = [
+    { key: 'recent', label: 'Recent Cases' },
+    { key: 'my', label: 'My Cases' },
+    { key: 'report', label: 'Report' },
+  ]
+
+  const RecentCases = () => (
+    <Grid container spacing={3}>
+      <Grid item xs={12} md={8}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TrendingUpIcon />
+              Recent Rescue Cases
+            </Typography>
+            <List>
+              {recentRescues.map((rescue) => (
+                <ListItem key={rescue.id} divider>
+                  <ListItemIcon>
+                    {getStatusIcon(rescue.status)}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={`${rescue.location} - ${rescue.situation}`}
+                    secondary={rescue.time}
+                  />
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Chip label={rescue.urgency} color={getUrgencyColor(rescue.urgency)} size="small" variant="outlined" />
+                    <Chip label={rescue.status} color="info" size="small" variant="outlined" />
+                  </Box>
+                </ListItem>
+              ))}
+            </List>
+          </CardContent>
+        </Card>
+      </Grid>
+      <Grid item xs={12} md={4}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Quick Actions
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Button variant="contained" fullWidth onClick={() => setTab('report')}>Report New Rescue</Button>
+              <Button variant="outlined" fullWidth>Assign Rescue Team</Button>
+              <Button variant="outlined" fullWidth>View Emergency Cases</Button>
+              <Button variant="outlined" fullWidth>Generate Cost Report</Button>
+            </Box>
+          </CardContent>
+        </Card>
+      </Grid>
+    </Grid>
+  )
+
+  const MyCases = () => (
+    <Card>
+      <CardContent>
+        <Typography variant="h6" sx={{ mb: 2 }}>My Cases</Typography>
+        <List>
+          {recentRescues.filter(r => r.status !== 'completed').map(r => (
+            <ListItem key={r.id} divider>
+              <ListItemText primary={`${r.location} - ${r.situation}`} secondary={`${r.status} • ${r.time}`} />
+              <Chip label={r.urgency} size="small" />
+            </ListItem>
+          ))}
+        </List>
+      </CardContent>
+    </Card>
+  )
+
+  const Report = () => (
+    <Card>
+      <CardContent>
+        <Typography variant="h6">Report a Rescue Case</Typography>
+        <Typography variant="body2" color="text.secondary">Coming soon: simple form to submit a rescue request.</Typography>
+      </CardContent>
+    </Card>
+  )
+
   return (
-    <Box>
-      <Typography variant="h4" sx={{ fontWeight: 600, mb: 3 }}>
-        Rescue Management Dashboard
-      </Typography>
-
-      {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="h6">
-                    Active Rescues
-                  </Typography>
-                  <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                    {stats.activeRescues}
-                  </Typography>
-                </Box>
-                <RescueIcon sx={{ fontSize: 40, color: 'primary.main' }} />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="h6">
-                    Completed
-                  </Typography>
-                  <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                    {stats.completedRescues}
-                  </Typography>
-                </Box>
-                <CompletedIcon sx={{ fontSize: 40, color: 'success.main' }} />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="h6">
-                    Urgent Cases
-                  </Typography>
-                  <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                    {stats.urgentCases}
-                  </Typography>
-                </Box>
-                <UrgentIcon sx={{ fontSize: 40, color: 'error.main' }} />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="h6">
-                    Total Cost
-                  </Typography>
-                  <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                    ${stats.totalCost.toLocaleString()}
-                  </Typography>
-                </Box>
-                <TrendingUpIcon sx={{ fontSize: 40, color: 'info.main' }} />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="h6">
-                    Rescue Team
-                  </Typography>
-                  <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                    {stats.rescueTeam}
-                  </Typography>
-                </Box>
-                <Assignment sx={{ fontSize: 40, color: 'secondary.main' }} />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      <Grid container spacing={3}>
-        {/* Recent Rescues */}
-        <Grid item xs={12} md={8}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <TrendingUpIcon />
-                Recent Rescue Cases
-              </Typography>
-              <List>
-                {recentRescues.map((rescue) => (
-                  <ListItem key={rescue.id} divider>
-                    <ListItemIcon>
-                      {getStatusIcon(rescue.status)}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={`${rescue.location} - ${rescue.situation}`}
-                      secondary={rescue.time}
-                    />
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Chip
-                        label={rescue.urgency}
-                        color={getUrgencyColor(rescue.urgency)}
-                        size="small"
-                        variant="outlined"
-                      />
-                      <Chip
-                        label={rescue.status}
-                        color="info"
-                        size="small"
-                        variant="outlined"
-                      />
-                    </Box>
-                  </ListItem>
-                ))}
-              </List>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Quick Actions */}
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Quick Actions
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <Button variant="contained" fullWidth>
-                  Report New Rescue
-                </Button>
-                <Button variant="outlined" fullWidth>
-                  Assign Rescue Team
-                </Button>
-                <Button variant="outlined" fullWidth>
-                  View Emergency Cases
-                </Button>
-                <Button variant="outlined" fullWidth>
-                  Generate Cost Report
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-    </Box>
+    <ModuleDashboardLayout
+      title="Rescue"
+      description="Report cases and track rescue activity"
+      actions={actions}
+      stats={statCards}
+      tabs={tabs}
+      activeTab={tab}
+      onTabChange={setTab}
+    >
+      {tab === 'recent' && <RecentCases />}
+      {tab === 'my' && <MyCases />}
+      {tab === 'report' && <Report />}
+    </ModuleDashboardLayout>
   )
 }
 

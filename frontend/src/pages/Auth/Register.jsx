@@ -7,46 +7,45 @@ import BrandMark from '../../components/BrandMark'
 import { useForm } from 'react-hook-form'
 
 const Register = () => {
-	const navigate = useNavigate()
+    const navigate = useNavigate()
     const { register: registerUser, signUpWithGoogle, error } = useAuth()
 	const [showPassword, setShowPassword] = useState(false)
 	const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 	const [isLoading, setIsLoading] = useState(false)
 
-	const {
-		register,
-		handleSubmit,
-		formState: { errors },
-		watch,
-	} = useForm()
+    const { register, handleSubmit, formState: { errors }, watch } = useForm()
 
-	const password = watch('password')
+    const password = watch('password')
 
     const onSubmit = async (data) => {
 		setIsLoading(true)
-        const userData = {
-			name: `${data.firstName || ''} ${data.lastName || ''}`.trim(),
+		const payload = {
+			firstName: data.firstName,
+			lastName: data.lastName,
 			email: data.email,
 			password: data.password,
-            phone: data.phone
+			confirmPassword: data.confirmPassword,
+			phone: data.phone,
+			address: {
+				street: data.street,
+				city: data.city,
+				state: data.state,
+				postalCode: data.postalCode,
+			},
 		}
-        const result = await registerUser(userData)
+		const result = await registerUser(payload)
 		setIsLoading(false)
-        if (result.success) {
-            if (result.message) {
-                alert(result.message)
-            } else {
-                alert('Signup successful! Welcome email sent.')
-            }
-            navigate('/login')
-        }
+		if (result?.success) {
+			alert(result.message || 'Signup successful! Welcome email sent.')
+			navigate('/login')
+		}
 	}
 
 	const handleGoogleSignUp = async () => {
 		setIsLoading(true)
 		const result = await signUpWithGoogle('public_user')
 		setIsLoading(false)
-		if (result.success) navigate('/dashboard')
+		if (result?.success) navigate('/dashboard')
 	}
 
 	return (
@@ -93,10 +92,6 @@ const Register = () => {
 							<Typography variant="body2" color="text.secondary">Join our community of pet lovers today</Typography>
 						</Box>
 
-						{error && (
-							<Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
-						)}
-
 						<Button onClick={handleGoogleSignUp} startIcon={<GoogleIcon />} fullWidth variant="outlined" disabled={isLoading} sx={{ py: 1.25, borderRadius: 2, mb: 2, backdropFilter: 'blur(6px)', background: 'rgba(255,255,255,0.6)', borderColor: 'rgba(255,255,255,0.5)', '&:hover': { background: 'rgba(255,255,255,0.75)', borderColor: 'rgba(255,255,255,0.7)' } }}>
 							Sign up with Google
 						</Button>
@@ -114,7 +109,7 @@ const Register = () => {
 
 						<TextField fullWidth label="Email Address" type="email" margin="normal" autoComplete="email" InputProps={{ startAdornment: (<InputAdornment position="start"><Email color="action" /></InputAdornment>) }} {...register('email', { required: 'Email is required', pattern: { value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i, message: 'Invalid email address' } })} error={!!errors.email} helperText={errors.email?.message} />
 
-                        <TextField fullWidth label="Phone Number" type="tel" margin="normal" autoComplete="tel" InputProps={{ startAdornment: (<InputAdornment position="start"><Phone color="action" /></InputAdornment>) }} {...register('phone', { required: 'Phone number is required', pattern: { value: /^[\+]?[1-9][\d]{0,15}$/, message: 'Invalid phone number' } })} error={!!errors.phone} helperText={errors.phone?.message} />
+                        <TextField fullWidth label="Phone Number" type="tel" margin="normal" autoComplete="tel" InputProps={{ startAdornment: (<InputAdornment position="start"><Phone color="action" /></InputAdornment>) }} {...register('phone', { required: 'Phone number is required', pattern: { value: /^[\+]?[0-9][\d\-\s\(\)]{7,15}$/, message: 'Invalid phone number' } })} error={!!errors.phone} helperText={errors.phone?.message} />
 
 						<Grid container spacing={2}>
 								<Grid item xs={12} sm={6}>
@@ -126,10 +121,12 @@ const Register = () => {
 								<Grid item xs={12} sm={6}>
 								<TextField fullWidth label="State" margin="normal" autoComplete="address-level1" {...register('state', { required: 'State is required' })} error={!!errors.state} helperText={errors.state?.message} />
 								</Grid>
-								{/* ZIP Code removed per request */}
+								<Grid item xs={12} sm={6}>
+								<TextField fullWidth label="Postal Code" margin="normal" autoComplete="postal-code" {...register('postalCode', { required: 'Postal code is required', pattern: { value: /^[0-9\-]+$/, message: 'Invalid postal code' } })} error={!!errors.postalCode} helperText={errors.postalCode?.message} />
+								</Grid>
 							</Grid>
 
-						<TextField fullWidth label="Password" type={showPassword ? 'text' : 'password'} margin="normal" autoComplete="new-password" InputProps={{ startAdornment: (<InputAdornment position="start"><Lock color="action" /></InputAdornment>), endAdornment: (<InputAdornment position="end"><MuiIconButton aria-label="toggle password visibility" onClick={() => setShowPassword(!showPassword)} edge="end">{showPassword ? <VisibilityOff /> : <Visibility />}</MuiIconButton></InputAdornment>) }} {...register('password', { required: 'Password is required', minLength: { value: 6, message: 'Password must be at least 6 characters' }, pattern: { value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, message: 'Password must contain at least one uppercase letter, one lowercase letter, and one number' } })} error={!!errors.password} helperText={errors.password?.message} />
+						<TextField fullWidth label="Password" type={showPassword ? 'text' : 'password'} margin="normal" autoComplete="new-password" InputProps={{ startAdornment: (<InputAdornment position="start"><Lock color="action" /></InputAdornment>), endAdornment: (<InputAdornment position="end"><MuiIconButton aria-label="toggle password visibility" onClick={() => setShowPassword(!showPassword)} edge="end">{showPassword ? <VisibilityOff /> : <Visibility />}</MuiIconButton></InputAdornment>) }} {...register('password', { required: 'Password is required', minLength: { value: 8, message: 'Password must be at least 8 characters' }, pattern: { value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/, message: 'Must include uppercase, lowercase, number and special character' } })} error={!!errors.password} helperText={errors.password?.message} />
 
 						<TextField fullWidth label="Confirm Password" type={showConfirmPassword ? 'text' : 'password'} margin="normal" autoComplete="new-password" InputProps={{ startAdornment: (<InputAdornment position="start"><Lock color="action" /></InputAdornment>), endAdornment: (<InputAdornment position="end"><MuiIconButton aria-label="toggle confirm password visibility" onClick={() => setShowConfirmPassword(!showConfirmPassword)} edge="end">{showConfirmPassword ? <VisibilityOff /> : <Visibility />}</MuiIconButton></InputAdornment>) }} {...register('confirmPassword', { required: 'Please confirm your password', validate: (value) => value === password || 'Passwords do not match' })} error={!!errors.confirmPassword} helperText={errors.confirmPassword?.message} />
 

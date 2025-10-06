@@ -2,39 +2,114 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const User = require('../core/models/User');
 const UserDetails = require('../models/UserDetails');
-const { auth, authorize } = require('../middleware/auth');
 const PasswordReset = require('../core/models/PasswordReset');
 const { sendMail } = require('../core/utils/email');
+const { auth } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Login rate limiter - 5 attempts per 15 minutes
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // limit each IP to 5 login attempts per windowMs
+  message: 'Too many login attempts, please try again after 15 minutes',
+  skipSuccessfulRequests: true
+});
 
 // @route   POST /api/auth/register
 // @desc    Register a new user
 // @access  Public
 router.post('/register', [
-  body('name')
-    .notEmpty()
-    .withMessage('Name is required')
-    .isLength({ min: 2, max: 100 })
-    .withMessage('Name must be between 2 and 100 characters')
-    .trim(),
+  // Name validation
+  body('firstName')
+    .notEmpty().withMessage('First name is required')
+    .trim()
+    .matches(/^[A-Za-z\s'-]{2,50}$/)
+    .withMessage('First name must be 2-50 characters, letters, spaces, hyphens, or apostrophes only')
+    .custom(value => {
+      const words = value.trim().split(/\s+/);
+      if (words.length > 2) {
+        throw new Error('First name can have maximum 2 words');
+      }
+      return true;
+    }),
+  
+  body('lastName')
+    .notEmpty().withMessage('Last name is required')
+    .trim()
+    .matches(/^[A-Za-z\s'-]{1,50}$/)
+    .withMessage('Last name must be 1-50 characters, letters, spaces, hyphens, or apostrophes only')
+    .custom(value => {
+      const words = value.trim().split(/\s+/);
+      if (words.length > 2) {
+        throw new Error('Last name can have maximum 2 words');
+      }
+      return true;
+    }),
+  
+  // Email validation
   body('email')
-    .isEmail()
-    .withMessage('Please provide a valid email address')
+    .notEmpty().withMessage('Email is required')
+    .isEmail().withMessage('Please provide a valid email address')
     .normalizeEmail()
-    .toLowerCase(),
+    .custom(async (email) => {
+      // Check for disposable email domains
+      const disposableDomains = ['yopmail.com', 'mailinator.com', 'tempmail.com', 'guerrillamail.com', '10minutemail.com'];
+      const domain = email.split('@')[1];
+      if (disposableDomains.includes(domain)) {
+        throw new Error('Disposable email addresses are not allowed');
+      }
+      return true;
+    }),
+  
+  // Password validation
   body('password')
-    .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
+    .notEmpty().withMessage('Password is required')
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters long')
+    .matches(/[A-Z]/).withMessage('Password must contain at least one uppercase letter')
+    .matches(/[a-z]/).withMessage('Password must contain at least one lowercase letter')
+    .matches(/[0-9]/).withMessage('Password must contain at least one number')
+    .matches(/[^A-Za-z0-9]/).withMessage('Password must contain at least one special character'),
+  
+  // Confirm password
+  body('confirmPassword')
+    .notEmpty().withMessage('Please confirm your password')
+    .custom((value, { req }) => {
+      if (value !== req.body.password) {
+        throw new Error('Passwords do not match');
+      }
+      return true;
+    }),
+  
+  // Phone validation
   body('phone')
-    .notEmpty()
-    .withMessage('Phone number is required')
+    .notEmpty().withMessage('Phone number is required')
     .matches(/^[\+]?[0-9][\d\-\s\(\)]{7,15}$/)
-    .withMessage('Please provide a valid phone number')
+    .withMessage('Please provide a valid phone number'),
+    
+  // Address validation
+  body('address.street')
+    .notEmpty().withMessage('Street address is required')
+    .matches(/^[a-zA-Z0-9\s\-\.,#]+$/)
+    .withMessage('Please enter a valid street address'),
+    
+  body('address.city')
+    .notEmpty().withMessage('City is required')
+    .matches(/^[a-zA-Z\s\-']+$/)
+    .withMessage('City name can only contain letters, spaces, hyphens, and apostrophes'),
+    
+  body('address.state')
+    .notEmpty().withMessage('State is required')
+    .matches(/^[a-zA-Z\s\-']+$/)
+    .withMessage('State name can only contain letters, spaces, hyphens, and apostrophes'),
+    
+  body('address.postalCode')
+    .notEmpty().withMessage('Postal code is required')
+    .matches(/^[0-9\-]+$/)
+    .withMessage('Please enter a valid postal code')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -46,7 +121,7 @@ router.post('/register', [
       });
     }
 
-    const { name, email, password, phone } = req.body;
+    const { firstName, lastName, email, password, phone, address } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -60,7 +135,7 @@ router.post('/register', [
 
     // Create new user with basic info and default role
     const user = new User({
-      name,
+      name: `${firstName} ${lastName}`.trim(),
       email,
       password,
       phone,
@@ -70,9 +145,27 @@ router.post('/register', [
 
     await user.save();
 
-    // Create user details
+    // Create user details with address
     const userDetails = new UserDetails({
-      userId: user._id
+      userId: user._id,
+      address: {
+        street: address.street,
+        city: address.city,
+        state: address.state,
+        country: address.country || 'India',
+        postalCode: address.postalCode
+      },
+      dateOfBirth: null,
+      gender: 'prefer_not_to_say',
+      preferences: {
+        notifications: {
+          email: true,
+          sms: false,
+          push: true
+        },
+        language: 'en',
+        timezone: 'Asia/Kolkata'
+      }
     });
 
     await userDetails.save();
@@ -152,8 +245,14 @@ router.post('/register', [
 // @desc    Login user
 // @access  Public
 router.post('/login', [
-  body('email').isEmail().withMessage('Please provide a valid email'),
-  body('password').notEmpty().withMessage('Password is required')
+  loginLimiter,
+  body('email')
+    .notEmpty().withMessage('Email is required')
+    .isEmail().withMessage('Please provide a valid email address')
+    .normalizeEmail(),
+  body('password')
+    .notEmpty().withMessage('Password is required')
+    .isLength({ min: 1 }).withMessage('Password cannot be empty')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -210,11 +309,19 @@ router.post('/login', [
     // Get user role
     const userRole = user.role;
 
-    // Generate JWT token
+    // Get user details
+    const userDetails = await UserDetails.findOne({ userId: user.id });
+
+    // Generate JWT token (must include user id for auth middleware)
     const payload = {
       user: {
         id: user.id,
-        role: userRole
+        role: userRole,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        profileImage: user.profileImage || user.profilePicture,
+        address: userDetails?.address || {}
       }
     };
 
@@ -224,6 +331,9 @@ router.post('/login', [
       { expiresIn: '7d' },
       (err, token) => {
         if (err) throw err;
+        // Manager onboarding: indicate if store setup is required
+        const isModuleManager = typeof user.role === 'string' && user.role.endsWith('_manager');
+        const needsStoreSetup = !!(isModuleManager && (!user.storeId || !user.storeName));
         res.json({
           success: true,
           message: 'Login successful',
@@ -235,7 +345,11 @@ router.post('/login', [
               phone: user.phone,
               role: userRole,
               authProvider: user.authProvider,
-              mustChangePassword: user.mustChangePassword
+              mustChangePassword: user.mustChangePassword,
+              assignedModule: user.assignedModule || null,
+              storeId: user.storeId || null,
+              storeName: user.storeName || '',
+              needsStoreSetup
             },
             token
           }
@@ -745,7 +859,9 @@ router.get('/me', auth, async (req, res) => {
 
     // Get user role
     const userRole = user.role;
-
+    // Manager onboarding
+    const isModuleManager = typeof user.role === 'string' && user.role.endsWith('_manager');
+    const needsStoreSetup = !!(isModuleManager && (!user.storeId || !user.storeName));
     res.json({
       success: true,
       data: {
@@ -755,7 +871,11 @@ router.get('/me', auth, async (req, res) => {
           email: user.email,
           phone: user.phone,
           role: userRole,
-          authProvider: user.authProvider
+          authProvider: user.authProvider,
+          assignedModule: user.assignedModule || null,
+          storeId: user.storeId || null,
+          storeName: user.storeName || '',
+          needsStoreSetup
         }
       }
     });

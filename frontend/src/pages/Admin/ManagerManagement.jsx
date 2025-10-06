@@ -208,7 +208,7 @@ const ManagerManagement = () => {
       name: manager.name || '',
       email: manager.email || '',
       phone: manager.phone || '',
-      module: manager.assignedModule || '',
+      module: deriveManagerModule(manager) || '',
       address: manager.address || '',
       isActive: manager.isActive !== false
     })
@@ -317,6 +317,38 @@ const ManagerManagement = () => {
   const getModuleDisplayName = (module) => {
     if (!module) return 'N/A'
     return module.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  // Normalize various shapes to a module key string
+  const normalizeModuleValue = (m) => {
+    if (!m) return ''
+    if (typeof m === 'string') return m
+    if (typeof m.name === 'string') return m.name
+    if (typeof m.key === 'string') return m.key
+    return ''
+  }
+
+  // Derive a manager's assigned module from multiple possible fields
+  const deriveManagerModule = (manager) => {
+    // 1) explicit fields
+    const a = normalizeModuleValue(manager?.assignedModule)
+    if (a) return a
+    const b = normalizeModuleValue(manager?.module)
+    if (b) return b
+    // 2) array of modules (take first)
+    if (Array.isArray(manager?.modules) && manager.modules.length > 0) {
+      const first = manager.modules[0]
+      const fm = normalizeModuleValue(first)
+      if (fm) return fm
+    }
+    // 3) role like "adoption_manager"
+    if (typeof manager?.role === 'string' && manager.role.endsWith('_manager')) {
+      return manager.role.replace('_manager', '')
+    }
+    // 4) fallback custom key
+    const c = normalizeModuleValue(manager?.moduleKey)
+    if (c) return c
+    return ''
   }
 
   if (loading && managers.length === 0) {
@@ -491,12 +523,17 @@ const ManagerManagement = () => {
                           </Box>
                         </TableCell>
                         <TableCell>
-                          <Chip 
-                        icon={<ModuleIcon />}
-                        label={getModuleDisplayName(manager.assignedModule)}
-                        color={getModuleColor(manager.assignedModule)}
-                            size="small" 
-                          />
+                          {(() => {
+                            const mod = deriveManagerModule(manager)
+                            return (
+                              <Chip 
+                                icon={<ModuleIcon />}
+                                label={getModuleDisplayName(mod)}
+                                color={getModuleColor(mod)}
+                                size="small" 
+                              />
+                            )
+                          })()}
                         </TableCell>
                     <TableCell>
                       <Box>

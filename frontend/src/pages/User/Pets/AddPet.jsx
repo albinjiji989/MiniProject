@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { Box, Typography, Card, CardContent, Button, Grid, TextField, MenuItem, Alert, Avatar } from '@mui/material'
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import { userPetsAPI } from '../../../services/api'
+import { userPetsAPI, petsAPI } from '../../../services/api'
+import RequestModal from '../../../components/Common/RequestModal'
 
 const AddPet = () => {
   const navigate = useNavigate()
@@ -12,7 +13,6 @@ const AddPet = () => {
     name: '',
     speciesId: '',
     breedId: '',
-    color: '',
     gender: 'Unknown',
     age: '',
     ageUnit: 'months'
@@ -24,6 +24,7 @@ const AddPet = () => {
   const [breedList, setBreedList] = useState([])
   const [petDetailsOptions, setPetDetailsOptions] = useState([])
   const [requestMessage, setRequestMessage] = useState('')
+  const [showRequestModal, setShowRequestModal] = useState(false)
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -38,20 +39,17 @@ const AddPet = () => {
       if (!form.name?.trim()) throw new Error('Pet name is required')
       if (!form.gender) throw new Error('Gender is required')
       if (form.age === '' || form.age === null) throw new Error('Age is required')
-      if (!form.color?.trim()) throw new Error('Color is required')
-
-      const payload = {
+      // Step 1 does not submit; proceed to details step with collected basics
+      const step1 = {
         name: form.name,
         age: form.age ? Number(form.age) : undefined,
         ageUnit: form.ageUnit,
         gender: form.gender,
-        color: form.color || undefined,
         speciesId: form.speciesId || undefined,
         breedId: form.breedId || undefined,
-        tags: undefined
+        images: images.map((b64, idx) => ({ url: b64, isPrimary: idx === 0 }))
       }
-      await userPetsAPI.create(payload)
-      navigate('/User/pets')
+      navigate('/User/pets/add/details', { state: { step1 } })
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to create pet')
     } finally {
@@ -169,17 +167,26 @@ const AddPet = () => {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate('/User/pets')}
+            sx={{ mr: 2 }}
+          >
+            Back to Pets
+          </Button>
+          <Typography variant="h4" sx={{ fontWeight: 600 }}>
+            Add New Pet
+          </Typography>
+        </Box>
         <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/User/pets')}
-          sx={{ mr: 2 }}
+          variant="contained"
+          color="success"
+          onClick={() => setShowRequestModal(true)}
         >
-          Back to Pets
+          Request New Data
         </Button>
-        <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          Add New Pet
-        </Typography>
       </Box>
 
       <Card component="form" onSubmit={handleSubmit}>
@@ -240,9 +247,7 @@ const AddPet = () => {
                 </Alert>
               )}
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="Color" name="color" value={form.color} onChange={handleChange} />
-            </Grid>
+            {/* Color moved to details step */}
             <Grid item xs={12} sm={6}>
               <TextField select fullWidth label="Gender" name="gender" value={form.gender} onChange={handleChange}>
                 {['Male','Female','Unknown'].map((g) => (
@@ -262,11 +267,20 @@ const AddPet = () => {
             </Grid>
           </Grid>
           <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
-            <Button variant="outlined" onClick={() => navigate('/pets')}>Cancel</Button>
+            <Button variant="outlined" onClick={() => navigate('/User/pets')}>Cancel</Button>
             <Button type="submit" variant="contained" disabled={isSubmitting}>Save Pet</Button>
           </Box>
         </CardContent>
       </Card>
+
+      <RequestModal
+        isOpen={showRequestModal}
+        onClose={() => setShowRequestModal(false)}
+        onSuccess={() => {
+          console.log('Request submitted successfully')
+          // Optionally reload data here
+        }}
+      />
     </Box>
   )
 }

@@ -3,8 +3,9 @@ const mongoose = require('mongoose');
 const adoptionPetSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: true,
+    required: false,
     trim: true,
+    default: ''
   },
   breed: {
     type: String,
@@ -18,26 +19,30 @@ const adoptionPetSchema = new mongoose.Schema({
   },
   age: {
     type: Number,
-    required: true,
+    required: false,
     min: 0,
+    default: 0,
   },
   ageUnit: {
     type: String,
-    enum: ['months', 'years'],
+    enum: ['years', 'months', 'weeks', 'days'],
     default: 'months',
   },
   gender: {
     type: String,
     enum: ['male', 'female'],
-    required: true,
+    required: false,
+    default: 'male'
   },
   color: {
     type: String,
-    required: true,
+    required: false,
+    default: 'unknown'
   },
   weight: {
     type: Number,
-    required: true,
+    required: false,
+    default: 0,
   },
   healthStatus: {
     type: String,
@@ -49,6 +54,8 @@ const adoptionPetSchema = new mongoose.Schema({
     enum: ['up_to_date', 'partial', 'not_vaccinated'],
     default: 'not_vaccinated',
   },
+  // Optional: array form to align with spec; keep string for back-compat
+  vaccinationStatusList: [{ type: String }],
   temperament: {
     type: String,
     enum: ['calm', 'energetic', 'playful', 'shy', 'aggressive', 'friendly'],
@@ -56,11 +63,22 @@ const adoptionPetSchema = new mongoose.Schema({
   },
   description: {
     type: String,
-    required: true,
+    required: false,
+    default: ''
   },
+  // Spec alias field (keep alongside description)
+  healthHistory: { type: String },
   images: [{
-    url: String,
-    caption: String,
+    url: { type: String, required: true },
+    caption: { type: String, default: '' },
+    isPrimary: { type: Boolean, default: false }
+  }],
+  // Attached documents (e.g., medical records, vaccination cards)
+  documents: [{
+    url: { type: String, required: true },
+    name: { type: String, required: true },
+    type: { type: String, required: true },
+    uploadedAt: { type: Date, default: Date.now }
   }],
   status: {
     type: String,
@@ -69,8 +87,9 @@ const adoptionPetSchema = new mongoose.Schema({
   },
   adoptionFee: {
     type: Number,
-    required: true,
+    required: false,
     min: 0,
+    default: 0,
   },
   // Unique adoption pet code: 3 letters (A-Z) + 5 digits
   petCode: {
@@ -116,6 +135,10 @@ const adoptionPetSchema = new mongoose.Schema({
   timestamps: true,
 });
 
+// Include virtuals in JSON/Object outputs
+adoptionPetSchema.set('toJSON', { virtuals: true })
+adoptionPetSchema.set('toObject', { virtuals: true })
+
 // Indexes for better query performance
 adoptionPetSchema.index({ status: 1 });
 adoptionPetSchema.index({ breed: 1 });
@@ -126,20 +149,41 @@ adoptionPetSchema.index({ petCode: 1 }, { unique: true, sparse: true });
 
 // Virtual for age display
 adoptionPetSchema.virtual('ageDisplay').get(function() {
-  if (this.ageUnit === 'years') {
-    return `${this.age} year${this.age > 1 ? 's' : ''}`;
-  } else {
-    const years = Math.floor(this.age / 12);
-    const months = this.age % 12;
-    if (years > 0 && months > 0) {
-      return `${years} year${years > 1 ? 's' : ''} ${months} month${months > 1 ? 's' : ''}`;
-    } else if (years > 0) {
-      return `${years} year${years > 1 ? 's' : ''}`;
-    } else {
-      return `${months} month${months > 1 ? 's' : ''}`;
+  const n = this.age || 0
+  switch (this.ageUnit) {
+    case 'years':
+      return `${n} year${n !== 1 ? 's' : ''}`
+    case 'months': {
+      // Support mixed years+months if months >= 12
+      const years = Math.floor(n / 12)
+      const months = n % 12
+      if (years > 0 && months > 0) {
+        return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`
+      }
+      if (years > 0) return `${years} year${years !== 1 ? 's' : ''}`
+      return `${months} month${months !== 1 ? 's' : ''}`
     }
+    case 'weeks':
+      return `${n} week${n !== 1 ? 's' : ''}`
+    case 'days':
+      return `${n} day${n !== 1 ? 's' : ''}`
+    default:
+      return `${n}`
   }
 });
+
+// Spec-friendly virtuals
+adoptionPetSchema.virtual('photos').get(function() {
+  return (this.images || []).map(img => ({ url: img.url, caption: img.caption }))
+})
+
+adoptionPetSchema.virtual('availabilityStatus').get(function() {
+  return this.status
+})
+
+adoptionPetSchema.virtual('documentsUrls').get(function() {
+  return (this.documents || []).map(d => d.url).filter(Boolean)
+})
 
 // Method to check if pet is available for adoption
 adoptionPetSchema.methods.isAvailable = function() {

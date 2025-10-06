@@ -116,7 +116,7 @@ const AdminDashboard = () => {
     setLoading(true)
     try {
       const results = await Promise.allSettled([
-        usersAPI.getUsers({ limit: 1000 }),                 // 0
+        usersAPI.getPublicUsers({ limit: 1000 }),           // 0 - public users only
         modulesAPI.list(),                                  // 1
         managersAPI.list(),                                 // 2
         adminPetsAPI.getAll({ limit: 1000 }),               // 3
@@ -426,7 +426,7 @@ const AdminDashboard = () => {
         <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
             <StatCard
-              title="Total Users"
+              title="Public Users"
             value={stats.users.total}
             subtitle={`${stats.users.active} active, ${stats.users.new} new this week`}
             icon={<UsersIcon />}

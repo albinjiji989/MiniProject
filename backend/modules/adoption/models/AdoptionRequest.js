@@ -6,14 +6,23 @@ const adoptionRequestSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  // Manager notes
+  managerNotes: { type: String },
   petId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'AdoptionPet',
     required: true,
   },
+  // Uploaded documents by applicant (e.g., ID proof, address proof)
+  documents: [{
+    url: String,
+    name: String,
+    type: String,
+    uploadedAt: { type: Date, default: Date.now }
+  }],
   status: {
     type: String,
-    enum: ['pending', 'approved', 'rejected', 'payment_pending', 'payment_completed', 'completed', 'cancelled'],
+    enum: ['pending', 'approved', 'rejected', 'payment_pending', 'payment_completed', 'certificate_generated', 'handover_scheduled', 'handed_over', 'completed', 'cancelled'],
     default: 'pending',
   },
   applicationData: {
@@ -110,6 +119,27 @@ const adoptionRequestSchema = new mongoose.Schema({
     default: null,
   },
   contractGeneratedAt: {
+    type: Date,
+    default: null,
+  },
+  certificateGeneratedAt: {
+    type: Date,
+    default: null,
+  },
+  handover: {
+    method: { type: String, enum: ['pickup', 'delivery'], default: 'pickup' },
+    scheduledAt: { type: Date },
+    location: {
+      address: String,
+      lat: Number,
+      lng: Number,
+    },
+    notes: String,
+    status: { type: String, enum: ['none', 'scheduled', 'completed'], default: 'none' },
+    proofDocs: [String],
+    confirmedByUserAt: { type: Date },
+  },
+  handoverCompletedAt: {
     type: Date,
     default: null,
   },
@@ -216,6 +246,14 @@ adoptionRequestSchema.methods.completeAdoption = function(contractURL) {
   this.contractGeneratedAt = new Date();
   return this.updateStatus('completed', null, 'Adoption completed successfully');
 };
+
+// Method to update handover status quickly
+adoptionRequestSchema.methods.setHandoverStatus = function(newStatus, notes = '') {
+  if (!this.handover) this.handover = {}
+  if (newStatus === 'scheduled') this.handover.status = 'scheduled'
+  if (newStatus === 'completed') this.handover.status = 'completed'
+  return this.updateStatus(newStatus === 'scheduled' ? 'handover_scheduled' : (newStatus === 'completed' ? 'handed_over' : this.status), null, notes)
+}
 
 // Static method to get requests by status
 adoptionRequestSchema.statics.getByStatus = function(status) {

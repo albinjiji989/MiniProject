@@ -146,21 +146,22 @@ const UserManagement = () => {
   const loadUsers = async () => {
     setLoading(true)
     try {
+      // Map filters to public users endpoint
       const params = {
         page,
         limit: 10,
         search: searchTerm,
-        role: roleFilter || 'public_user', // Default to public users only
-        isActive: statusFilter === 'inactive' ? false : statusFilter === 'active' ? true : (showInactive ? undefined : true)
+        status: statusFilter || (showInactive ? '' : 'active') // '', 'active', or 'inactive'
       }
 
-      const response = await usersAPI.getUsers(params)
-      const data = response.data?.data || []
-      const pagination = response.data?.pagination || {}
+      const response = await usersAPI.getPublicUsers(params)
+      const payload = response.data?.data || {}
+      const data = Array.isArray(payload) ? payload : (payload.users || [])
+      const pagination = payload.pagination || {}
 
-      setUsers(Array.isArray(data) ? data : (data.users || []))
+      setUsers(data)
       setTotalPages(pagination.pages || 1)
-      setTotalUsers(pagination.total || 0)
+      setTotalUsers(pagination.total || data.length || 0)
     } catch (err) {
       setError('Failed to load users')
     } finally {

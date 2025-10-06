@@ -88,7 +88,7 @@ breedSchema.statics.findBySpecies = function(speciesId) {
 };
 
 breedSchema.statics.findActive = function() {
-  return this.find({ isActive: true }).populate('species', 'name displayName').sort({ name: 1 });
+  return this.find({ isActive: true }).populate('species', 'name displayName category').sort({ name: 1 });
 };
 
 breedSchema.statics.findByNameAndSpecies = function(name, speciesId) {

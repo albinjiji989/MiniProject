@@ -23,7 +23,7 @@ const PetSchema = new mongoose.Schema({
   petDetails: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'PetDetails',
-    required: [true, 'Pet details are required']
+    required: false
   },
   
   // Owner Information
@@ -69,7 +69,7 @@ const PetSchema = new mongoose.Schema({
   },
   color: {
     type: String,
-    required: [true, 'Pet color is required'],
+    required: false,
     trim: true,
     maxlength: [50, 'Color cannot exceed 50 characters']
   },
@@ -132,15 +132,6 @@ const PetSchema = new mongoose.Schema({
       type: String,
       trim: true,
       maxlength: [50, 'Country cannot exceed 50 characters']
-    },
-    coordinates: {
-      type: [Number], // [longitude, latitude]
-      validate: {
-        validator: function(v) {
-          return v.length === 2;
-        },
-        message: 'Coordinates must be [longitude, latitude]'
-      }
     }
   },
   
@@ -148,7 +139,7 @@ const PetSchema = new mongoose.Schema({
   petId: {
     type: String,
     unique: true,
-    required: [true, 'Pet ID is required'],
+    required: false,
     validate: {
       validator: function(v) {
         return /^\d{5}$/.test(v);
@@ -350,11 +341,11 @@ PetSchema.statics.generatePetCode = async function() {
 PetSchema.pre('save', async function(next) {
   // Generate unique pet ID if not provided
   if (!this.petId) {
-    this.petId = await Pet.generatePetId();
+    this.petId = await this.constructor.generatePetId();
   }
   // Generate universal petCode if not provided
   if (!this.petCode) {
-    this.petCode = await Pet.generatePetCode();
+    this.petCode = await this.constructor.generatePetCode();
   }
   
   // Calculate age from date of birth if not provided

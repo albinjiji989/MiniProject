@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { apiClient } from '../../../services/api'
+import { apiClient, resolveMediaUrl } from '../../../services/api'
 
 const initial = { name: '', breed: '', species: '', age: 0, ageUnit: 'months', gender: 'male', color: '', weight: 0, healthStatus: 'good', vaccinationStatus: 'not_vaccinated', temperament: 'friendly', description: '', adoptionFee: 0, category: '' }
 
@@ -24,6 +24,11 @@ const PetForm = () => {
     petCode: '',
     submit: ''
   })
+  // Media state for create flow
+  const [images, setImages] = useState([]) // [{url,isPrimary,caption}]
+  const [documents, setDocuments] = useState([]) // [{url}]
+  const imgInputRef = useRef(null)
+  const docInputRef = useRef(null)
 
   // Fetch species (active) and derive categories from species for manager dropdowns
   useEffect(() => {
@@ -48,6 +53,44 @@ const PetForm = () => {
             setDebugInfo(`Species fetch failed: ${e2.response?.status} ${e2.response?.data?.message || e2.message}`)
             spec = []
           }
+
+  // Media helpers
+  const onChooseImage = () => imgInputRef.current?.click()
+  const onChooseDocument = () => docInputRef.current?.click()
+
+  const onImageSelected = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const up = await apiClient.post('/adoption/manager/pets/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const url = up.data?.data?.url
+      if (url) setImages(prev => {
+        const next = [...prev]
+        next.push({ url: resolveMediaUrl(url), isPrimary: next.length === 0 })
+        return next
+      })
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Image upload failed')
+    }
+  }
+
+  const onDocumentSelected = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const up = await apiClient.post('/adoption/manager/pets/upload-document', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const url = up.data?.data?.url
+      if (url) setDocuments(prev => ([...prev, { url: resolveMediaUrl(url) }]))
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Document upload failed')
+    }
+  }
         }
         setSpecies(spec)
         // Derive categories from species (prefer displayName -> name -> categoryName)
@@ -78,28 +121,7 @@ const PetForm = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [species])
 
-  // On create, fetch a new unique pet code to display on form
-  useEffect(() => {
-    const getCode = async () => {
-      if (isEdit) return
-      try {
-        setApiErrors(prev => ({ ...prev, petCode: '' }))
-        setDebugInfo(prev => prev + ' | Fetching pet code...')
-        const res = await apiClient.get('/adoption/manager/pets/new-code')
-        const code = res.data?.data?.code
-        if (code) {
-          setForm(f => ({ ...f, petCode: code }))
-          setDebugInfo(prev => prev + ` | Pet code: ${code}`)
-        } else {
-          setApiErrors(prev => ({ ...prev, petCode: 'No pet code returned from server' }))
-        }
-      } catch (e) {
-        setApiErrors(prev => ({ ...prev, petCode: `Pet code fetch failed: ${e.response?.status} ${e.response?.data?.message || e.message}` }))
-        setDebugInfo(prev => prev + ` | Pet code error: ${e.response?.status}`)
-      }
-    }
-    getCode()
-  }, [isEdit])
+  // Do not prefetch code on create; it will be generated on backend and shown after creation (edit view)
 
   // Load existing pet when editing
   useEffect(() => {
@@ -246,8 +268,13 @@ const PetForm = () => {
         temperament: form.temperament || 'friendly',
         description: form.description || 'N/A',
         adoptionFee: Number(form.adoptionFee) || 0,
-        petCode: form.petCode,
+        // include uploaded media URLs
+        images: images.map(x => ({ url: x.url, isPrimary: !!x.isPrimary, caption: x.caption || '' })),
+        documents: documents.map(x => ({ url: x.url })),
       }
+
+      // Only allow editing petCode in edit mode (typically read-only anyway)
+      if (isEdit && form.petCode) payload.petCode = form.petCode
       
       setDebugInfo(prev => prev + ` | Submitting: ${JSON.stringify(payload, null, 2)}`)
       
@@ -294,15 +321,7 @@ const PetForm = () => {
     }
   }
 
-  // Regenerate pet code (create-only)
-  const regenerateCode = async () => {
-    if (isEdit) return
-    try {
-      const r = await apiClient.get('/adoption/manager/pets/new-code')
-      const c = r.data?.data?.code
-      if (c) setForm(f => ({ ...f, petCode: c }))
-    } catch (_) {}
-  }
+  // No code regeneration in create mode; code is generated by backend upon creation
 
   // When species changes, map to id and fetch breeds for that species (also handled in onChange, but keep to sync external setForm)
   useEffect(() => {
@@ -338,26 +357,37 @@ const PetForm = () => {
           <input name="name" placeholder="e.g., Bruno" className="px-3 py-2 border rounded w-full" value={form.name} onChange={onChange} required />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Pet Code</label>
+          <label className="text-sm text-gray-700 mb-1">Age</label>
           <div className="flex gap-2">
-            <input value={form.petCode || ''} readOnly className="px-3 py-2 border rounded w-full bg-gray-50 font-mono" placeholder="Fetching..." />
-            {!isEdit && (
-              <button type="button" className="px-3 py-2 border rounded bg-white" onClick={regenerateCode}>New</button>
-            )}
+            <input name="age" type="number" min="0" className="px-3 py-2 border rounded w-full" value={form.age} onChange={onChange} />
+            <select name="ageUnit" className="px-3 py-2 border rounded" value={form.ageUnit} onChange={onChange}>
+              <option value="years">years</option>
+              <option value="months">months</option>
+              <option value="weeks">weeks</option>
+              <option value="days">days</option>
+            </select>
           </div>
-          <p className="text-xs text-gray-500 mt-1">Auto-generated unique code. You can regenerate before saving.</p>
         </div>
+        {isEdit && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Pet Code</label>
+            <div className="flex gap-2">
+              <input value={form.petCode || ''} readOnly className="px-3 py-2 border rounded w-full bg-gray-50 font-mono" />
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Auto-generated unique code displayed after creation.</p>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
           <select name="category" className="px-3 py-2 border rounded w-full" value={form.category}
-                  onChange={onChange} disabled={fetchingMeta}>
+                  onChange={onChange} disabled={fetchingMeta} required>
             <option value="">Select category</option>
             {categories.map(cName => (
               <option key={cName} value={cName}>{cName}</option>
             ))}
           </select>
-          <p className="text-xs text-gray-500 mt-1">{categories.length ? 'Derived from species. Changes will filter available species.' : 'No categories available. Try selecting Species directly.'}</p>
+          <p className="text-xs text-gray-500 mt-1">{categories.length ? 'Select a category to filter species.' : 'No categories available. Ensure admin has configured species categories.'}</p>
         </div>
 
         <div>
@@ -383,19 +413,22 @@ const PetForm = () => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Breed</label>
-          {breeds.length > 0 ? (
-            <select name="breed" className="px-3 py-2 border rounded w-full" value={form.breed}
-                    onChange={onChange} required>
-              <option value="">Select breed</option>
-              {breeds.map(b => (
-                <option key={b._id || b.id} value={(b.name || b.title || '').toString()}>{b.name || b.title}</option>
-              ))}
-            </select>
-          ) : (
-            <input name="breed" placeholder="Type breed (no breeds found)" className="px-3 py-2 border rounded w-full" value={form.breed} onChange={onChange} required />
-          )}
+          <select
+            name="breed"
+            className="px-3 py-2 border rounded w-full"
+            value={form.breed}
+            onChange={onChange}
+            required
+            disabled={breeds.length === 0}
+          >
+            <option value="">{breeds.length ? 'Select breed' : 'No breeds available (ask Admin to add)'}
+            </option>
+            {breeds.map(b => (
+              <option key={b._id || b.id} value={(b.name || b.title || '').toString()}>{b.name || b.title}</option>
+            ))}
+          </select>
           {!fetchingMeta && selectedSpeciesId && breeds.length===0 && (
-            <p className="text-xs text-amber-700 mt-1">No breeds found for this species. You can type a breed manually or ask Admin to add breeds.</p>
+            <p className="text-xs text-amber-700 mt-1">No breeds configured for this species. Please contact Admin to add breeds.</p>
           )}
           {(form.species || form.category) && (
             <p className="text-xs text-gray-500 mt-1">Selected: {form.species ? `Species: ${form.species}` : ''}{form.species && form.category ? ' • ' : ''}{form.category ? `Category: ${form.category}` : ''}</p>
@@ -404,16 +437,6 @@ const PetForm = () => {
 
         {isEdit && (
           <>
-            <div>
-              <label className="text-sm text-gray-600">Age</label>
-              <div className="flex gap-2">
-                <input name="age" type="number" min="0" className="px-3 py-2 border rounded w-full" value={form.age} onChange={onChange} />
-                <select name="ageUnit" className="px-3 py-2 border rounded" value={form.ageUnit} onChange={onChange}>
-                  <option value="months">months</option>
-                  <option value="years">years</option>
-                </select>
-              </div>
-            </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
           <select name="gender" className="px-3 py-2 border rounded w-full" value={form.gender} onChange={onChange}>

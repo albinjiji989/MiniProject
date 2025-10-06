@@ -22,7 +22,6 @@ import {
   Store as PetShopIcon,
   Pets as PetsIcon,
   People as StaffIcon,
-  TrendingUp as TrendingUpIcon,
   Warning as WarningIcon,
   ShoppingCart as ProductIcon,
   Build as ServiceIcon,
@@ -30,7 +29,9 @@ import {
   Inventory as InventoryIcon,
   Assessment as ReportsIcon,
   BookOnline as ReservationsIcon,
-  LocalShipping as OrdersIcon
+  LocalShipping as OrdersIcon,
+  TrendingUp as TrendingUpIcon,
+  Settings as SettingsIcon
 } from '@mui/icons-material'
 import { Favorite as FavoriteIcon, AttachMoney as AttachMoneyIcon } from '@mui/icons-material'
 import { Refresh as RefreshIcon } from '@mui/icons-material'
@@ -44,7 +45,6 @@ import {
   DialogActions,
   TextField
 } from '@mui/material'
-import ManagerLayout from '../../../components/Layout/ManagerLayout'
 import { formatDistanceToNow } from 'date-fns'
 
 const PetShopManagerDashboard = () => {
@@ -231,14 +231,17 @@ const PetShopManagerDashboard = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
+      <>
+        {/* Loading indicator */}
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
+        </Box>
+      </>
     )
   }
   // Don't block render for activities loading, show partial data
   return (
-    <ManagerLayout user={user} moduleType="petshop">
+    <>
       {/* Welcome Section */}
       <Box sx={{ 
         mb: 4,
@@ -333,6 +336,65 @@ const PetShopManagerDashboard = () => {
             </CardContent>
           </Card>
         </Grid>
+
+      {/* Management Shortcuts */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12}>
+          <Typography variant="h6" sx={{ mb: 1 }}>Management Shortcuts</Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/add-stock')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Add Pet Stock</Typography>
+                  <Typography variant="body2" color="textSecondary">Create new inventory entries</Typography>
+                </Box>
+                <InventoryIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/manage-inventory')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Manage Inventory</Typography>
+                  <Typography variant="body2" color="textSecondary">Search, filter, bulk actions</Typography>
+                </Box>
+                <SettingsIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/pricing-rules')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Pricing Rules</Typography>
+                  <Typography variant="body2" color="textSecondary">Define automatic pricing</Typography>
+                </Box>
+                <TrendingUpIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/for-sale')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Available For Sale</Typography>
+                  <Typography variant="body2" color="textSecondary">Released items ({stats.availableForSale || 0})</Typography>
+                </Box>
+                <PetsIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
         
         <Grid item xs={12} sm={6} md={2.4}>
           <Card sx={{ 
@@ -598,7 +660,7 @@ const PetShopManagerDashboard = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </ManagerLayout>
+    </>
   )
 }
 

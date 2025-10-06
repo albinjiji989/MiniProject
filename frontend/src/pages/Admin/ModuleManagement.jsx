@@ -92,7 +92,6 @@ const ModuleManagement = () => {
       setLoading(false)
     }
   }
-
   const handleAddModule = () => {
     setEditingModule(null)
     setFormData({
@@ -143,15 +142,25 @@ const ModuleManagement = () => {
     }
   }
 
-  const handleDeleteModule = async (moduleId) => {
-    if (window.confirm('Are you sure you want to delete this module?')) {
+  const handleHideModule = async (moduleId) => {
+    if (window.confirm('Hide this module from user dashboard? This can be restored later.')) {
       try {
-        await modulesAPI.delete(moduleId)
-        setSuccess('Module deleted successfully!')
+        await modulesAPI.hide(moduleId)
+        setSuccess('Module hidden successfully!')
         loadModules()
       } catch (err) {
-        setError('Failed to delete module')
+        setError(err?.response?.data?.message || 'Failed to hide module')
       }
+    }
+  }
+
+  const handleRestoreModule = async (moduleId) => {
+    try {
+      await modulesAPI.restore(moduleId)
+      setSuccess('Module restored successfully!')
+      loadModules()
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to restore module')
     }
   }
 
@@ -279,30 +288,24 @@ const ModuleManagement = () => {
                               </Typography>
                 
                 <Box display="flex" justifyContent="space-between" alignItems="center">
-                          <Chip 
+                  <Chip 
                     icon={getStatusIcon(module.status)}
                     label={module.status.replace('_', ' ').toUpperCase()}
                     color={getStatusColor(module.status)}
-                            size="small" 
-                          />
+                    size="small" 
+                  />
                   <Typography variant="caption" color="text.secondary">
                     Order: {module.displayOrder}
                   </Typography>
-                        </Box>
-                        
-                          {module.hasManagerDashboard && (
-                  <Chip
-                    label="Has Dashboard"
-                            size="small" 
-                    color="primary"
-                    sx={{ mt: 1 }}
-                  />
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
+                </Box>
+                {module.hidden && (
+                  <Chip label="Hidden" size="small" color="default" variant="outlined" sx={{ mt: 1 }} />
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
 
       {/* Module Details Table */}
       <Card>
@@ -368,7 +371,19 @@ const ModuleManagement = () => {
                       >
                         <EditIcon />
                       </IconButton>
-                      {/* Delete disabled by requirement */}
+                      {/* Soft Hide / Restore */}
+                      {!module.hidden ? (
+                        <IconButton
+                          size="small"
+                          onClick={() => handleHideModule(module._id)}
+                          color="error"
+                          title="Hide from users"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      ) : (
+                        <Button size="small" onClick={() => handleRestoreModule(module._id)}>Restore</Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -548,12 +563,21 @@ const ModuleManagement = () => {
           </ListItemIcon>
           <ListItemText>Block Module</ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => { handleDeleteModule(selectedModule?._id); handleMenuClose(); }}>
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Delete Module</ListItemText>
-        </MenuItem>
+        {!selectedModule?.hidden ? (
+          <MenuItem onClick={() => { handleHideModule(selectedModule?._id); handleMenuClose(); }}>
+            <ListItemIcon>
+              <DeleteIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Hide (Soft Delete)</ListItemText>
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={() => { handleRestoreModule(selectedModule?._id); handleMenuClose(); }}>
+            <ListItemIcon>
+              <PlayIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Restore</ListItemText>
+          </MenuItem>
+        )}
       </Menu>
 
       {/* Error/Success Messages */}

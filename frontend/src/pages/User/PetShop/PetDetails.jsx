@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Box, Container, Typography, Grid, Card, CardContent, CardMedia, Chip, Button, CircularProgress, Alert, TextField, Rating, Divider } from '@mui/material'
-import { petShopAPI } from '../../../services/api'
+import { Box, Container, Typography, Grid, Card, CardContent, CardMedia, Chip, Button, CircularProgress, Alert, TextField, Rating, Divider, Stack } from '@mui/material'
+import { petShopAPI, apiClient } from '../../../services/api'
 import { Pets as PetsIcon, ArrowBack as BackIcon } from '@mui/icons-material'
 
 const PetDetails = () => {
@@ -18,12 +18,32 @@ const PetDetails = () => {
   const [reviews, setReviews] = useState([])
   const [myRating, setMyRating] = useState(0)
   const [myComment, setMyComment] = useState('')
+  const buildImageUrl = (url) => {
+    if (!url) return ''
+    // Support base64 data URLs
+    if (/^data:image\//i.test(url)) return url
+    // If absolute URL, return directly
+    if (/^https?:\/\//i.test(url)) return url
+    // If relative (like /modules/petshop/uploads/...), prefix backend origin
+    const apiBase = import.meta.env.VITE_API_URL || process.env.REACT_APP_API_URL || ''
+    // Strip trailing /api if present
+    const origin = apiBase.replace(/\/?api\/?$/, '')
+    return `${origin}${url.startsWith('/') ? '' : '/'}${url}`
+  }
 
   const load = async () => {
     try {
       setLoading(true)
-      const res = await petShopAPI.getPublicListing(id)
-      setItem(res.data.data.item)
+      // Try public listing first
+      let res
+      try {
+        res = await petShopAPI.getPublicListing(id)
+        setItem(res.data.data.item)
+      } catch (err) {
+        // If not publicly available (reserved/sold), fallback to user-access endpoint
+        const resp = await apiClient.get(`/petshop/user/listings/${id}`)
+        setItem(resp.data.data.item)
+      }
     } catch (e) {
       setError(e?.response?.data?.message || 'Failed to load pet')
     } finally { setLoading(false) }
@@ -155,15 +175,33 @@ const PetDetails = () => {
     <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
       <Button startIcon={<BackIcon />} onClick={() => navigate(-1)} sx={{ mb: 2 }}>Back</Button>
       <Card>
-        <CardMedia component="div" sx={{ height: 240, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <PetsIcon sx={{ fontSize: 80, color: 'white', opacity: 0.85 }} />
-        </CardMedia>
+        {/* Header image */}
+        {item?.images?.length > 0 ? (
+          <CardMedia
+            component="img"
+            height="300"
+            image={buildImageUrl((item.images.find(i=>i.isPrimary)?.url) || item.images[0]?.url)}
+            alt={item?.name || 'Pet'}
+            sx={{ objectFit: 'cover' }}
+          />
+        ) : (
+          <CardMedia component="div" sx={{ height: 240, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <PetsIcon sx={{ fontSize: 80, color: 'white', opacity: 0.85 }} />
+          </CardMedia>
+        )}
         <CardContent>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>{item.name || 'Pet'}</Typography>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-            <Chip label={`Price: ${item.price || 0}`} size="small" color="success" variant="outlined" />
-            <Chip label={item.status} size="small" color="primary" variant="outlined" />
-          </Box>
+          <Stack direction={{ xs:'column', sm:'row' }} justifyContent="space-between" alignItems={{ xs:'flex-start', sm:'center' }} spacing={2} sx={{ mb: 2 }}>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>{item.name || 'Pet'} {item.petCode ? `• ${item.petCode}` : ''}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {item?.speciesId?.displayName || item?.speciesId?.name || 'Species'} • {item?.breedId?.name || 'Breed'}
+              </Typography>
+            </Box>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip label={`₹${(item.price||0).toLocaleString()}`} size="small" color="success" />
+              <Chip label={item.status} size="small" color="primary" variant="outlined" />
+            </Stack>
+          </Stack>
           <Grid container spacing={2}>
             <Grid item xs={12}>
               <Typography variant="subtitle1" sx={{ mb: 1 }}>Reserve this pet</Typography>

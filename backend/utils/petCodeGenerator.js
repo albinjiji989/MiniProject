@@ -49,15 +49,17 @@ class PetCodeGenerator {
       const Pet = require('../core/models/Pet')
       const AdoptionPet = require('../modules/adoption/models/AdoptionPet')
       const PetInventoryItem = require('../modules/petshop/models/PetInventoryItem')
+      const PetRegistry = require('../core/models/PetRegistry')
 
       // Check all pet systems in parallel
-      const [coreExists, adoptionExists, petshopExists] = await Promise.all([
+      const [coreExists, adoptionExists, petshopExists, registryExists] = await Promise.all([
         Pet.exists({ petCode: code }).catch(() => false), // Handle if model doesn't exist
         AdoptionPet.exists({ petCode: code }).catch(() => false),
-        PetInventoryItem.exists({ petCode: code }).catch(() => false)
+        PetInventoryItem.exists({ petCode: code }).catch(() => false),
+        PetRegistry.exists({ petCode: code }).catch(() => false)
       ])
 
-      return coreExists || adoptionExists || petshopExists
+      return coreExists || adoptionExists || petshopExists || registryExists
     } catch (error) {
       console.error('Error checking pet code existence:', error)
       // If there's an error, assume code exists to be safe

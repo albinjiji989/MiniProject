@@ -1,7 +1,16 @@
 import React, { useEffect, useState } from 'react'
-import { Box, Container, Typography, Card, CardContent, Chip, Button, CircularProgress, Alert, Grid } from '@mui/material'
+import { Box, Container, Typography, Card, CardContent, Chip, Button, CircularProgress, Alert, Grid, CardMedia, Stack } from '@mui/material'
+import { Payment as PaymentIcon, Cancel as CancelIcon } from '@mui/icons-material'
 import { petShopAPI } from '../../../services/api'
 import { useNavigate } from 'react-router-dom'
+
+const buildImageUrl = (url) => {
+  if (!url) return '/placeholder-pet.svg'
+  if (/^https?:\/\//i.test(url)) return url
+  const apiBase = import.meta.env.VITE_API_URL || process.env.REACT_APP_API_URL || 'http://localhost:5000/api'
+  const origin = apiBase.replace(/\/?api\/?$/, '')
+  return `${origin}${url.startsWith('/') ? '' : '/'}${url}`
+}
 
 const MyReservations = () => {
   const [loading, setLoading] = useState(true)
@@ -42,20 +51,91 @@ const MyReservations = () => {
           <Grid key={r._id} item xs={12}>
             <Card>
               <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                  <Box>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Reservation #{r._id.slice(-6)}</Typography>
-                    <Typography variant="body2" color="text.secondary">Item: {r.itemId}</Typography>
-                    {r.notes && <Typography variant="body2">Notes: {r.notes}</Typography>}
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Chip label={r.status} color={r.status==='pending'?'warning':(r.status==='approved'?'success':(r.status==='rejected'?'error':'default'))} />
-                    <Button size="small" onClick={() => navigate(`/User/petshop/pet/${r.itemId}`)}>View Pet</Button>
-                    {r.status === 'pending' && (
-                      <Button size="small" color="error" onClick={() => cancel(r._id)}>Cancel</Button>
-                    )}
-                  </Box>
-                </Box>
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} sm={2}>
+                    <CardMedia
+                      component="img"
+                      height="90"
+                      image={buildImageUrl(r?.itemId?.images?.find?.(i => i.isPrimary)?.url || r?.itemId?.images?.[0]?.url)}
+                      alt={r?.itemId?.name || 'Pet'}
+                      sx={{ borderRadius: 1, objectFit: 'cover' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={10}>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2}>
+                      <Box>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                          {r?.itemId?.name || 'Pet Name Not Available'} {r?.itemId?.petCode ? `• ${r.itemId.petCode}` : ''}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Reservation #{r.reservationCode || r._id?.slice(-6) || 'N/A'} • {r.createdAt ? new Date(r.createdAt).toLocaleString() : 'Date not available'}
+                        </Typography>
+                        {r?.itemId?.price ? (
+                          <Typography variant="body2" sx={{ mt: 0.5, fontWeight: 600 }}>₹{Number(r.itemId.price).toLocaleString()}</Typography>
+                        ) : (
+                          <Typography variant="body2" sx={{ mt: 0.5, color: 'text.secondary' }}>Price not set</Typography>
+                        )}
+                        {r.notes && <Typography variant="body2" sx={{ mt: 0.5 }}>Notes: {r.notes}</Typography>}
+                      </Box>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        <Chip 
+                          label={r.status}
+                          color={
+                            r.status==='pending' ? 'warning' :
+                            r.status==='approved' ? 'success' :
+                            r.status==='rejected' ? 'error' :
+                            r.status==='payment_pending' ? 'info' :
+                            r.status==='paid' ? 'info' :
+                            (r.status==='delivered' || r.status==='at_owner') ? 'success' : 'default'
+                          }
+                          size="small"
+                        />
+                        <Button size="small" onClick={() => navigate(`/User/petshop/reservation/${r._id}`)}>View Details</Button>
+                        <Button size="small" onClick={() => navigate(`/User/petshop/pet/${r?.itemId?._id || r.itemId}`)}>View Pet</Button>
+                        {r.status === 'approved' && (
+                          <Button 
+                            size="small" 
+                            variant="contained" 
+                            color="success"
+                            onClick={() => navigate(`/User/petshop/purchase-decision/${r._id}`)}
+                          >
+                            Make Decision
+                          </Button>
+                        )}
+                        {(r.status === 'going_to_buy' || r.status === 'payment_pending') && (
+                          <Button 
+                            size="small" 
+                            variant="contained" 
+                            color="primary"
+                            startIcon={<PaymentIcon />}
+                            onClick={() => navigate(`/User/petshop/payment/${r._id}`)}
+                          >
+                            Pay Now
+                          </Button>
+                        )}
+                        {r.status === 'paid' && (
+                          <Chip label="Awaiting Delivery" color="info" size="small" />
+                        )}
+                        {r.status === 'delivered' && (
+                          <Chip label="Pet Delivered" color="success" size="small" />
+                        )}
+                        {r.status === 'at_owner' && (
+                          <Chip label="Pet with Owner" color="success" size="small" />
+                        )}
+                        {r.status === 'pending' && (
+                          <Button 
+                            size="small" 
+                            color="error" 
+                            startIcon={<CancelIcon />}
+                            onClick={() => cancel(r._id)}
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                      </Stack>
+                    </Stack>
+                  </Grid>
+                </Grid>
               </CardContent>
             </Card>
           </Grid>

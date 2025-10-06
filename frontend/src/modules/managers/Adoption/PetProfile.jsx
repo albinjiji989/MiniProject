@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { apiClient } from '../../../services/api'
+import { apiClient, resolveMediaUrl } from '../../../services/api'
 
 const PetProfile = () => {
   const { id } = useParams()
@@ -21,6 +21,10 @@ const PetProfile = () => {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [images, setImages] = useState([])
+  const [documents, setDocuments] = useState([])
+  const imgInputRef = useRef(null)
+  const docInputRef = useRef(null)
 
   useEffect(() => {
     const load = async () => {
@@ -43,6 +47,14 @@ const PetProfile = () => {
           description: p.description || '',
           adoptionFee: p.adoptionFee ?? 0,
         }))
+        // Load media (images/documents)
+        try {
+          const m = await apiClient.get(`/adoption/manager/pets/${id}/media`)
+          const imgs = (m.data?.data?.images || []).map(x => ({ url: resolveMediaUrl(x.url || x) }))
+          const docs = (m.data?.data?.documents || []).map(x => ({ url: resolveMediaUrl(x.url || x), type: x.type }))
+          setImages(imgs)
+          setDocuments(docs)
+        } catch (_) {}
       } catch (e) {
         setError(e?.response?.data?.error || 'Failed to load pet profile')
       } finally {
@@ -83,8 +95,57 @@ const PetProfile = () => {
     }
   }
 
+  const refreshMedia = async () => {
+    try {
+      const m = await apiClient.get(`/adoption/manager/pets/${id}/media`)
+      const imgs = (m.data?.data?.images || []).map(x => ({ url: resolveMediaUrl(x.url || x) }))
+      const docs = (m.data?.data?.documents || []).map(x => ({ url: resolveMediaUrl(x.url || x), type: x.type }))
+      setImages(imgs)
+      setDocuments(docs)
+    } catch (_) {}
+  }
+
+  const onChooseImage = () => imgInputRef.current?.click()
+  const onChooseDocument = () => docInputRef.current?.click()
+
+  const onImageSelected = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const up = await apiClient.post('/adoption/manager/pets/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const url = up.data?.data?.url
+      if (url) {
+        await apiClient.put(`/adoption/manager/pets/${id}`, { images: [{ url, isPrimary: images.length === 0 }] })
+        await refreshMedia()
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Image upload failed')
+    }
+  }
+
+  const onDocumentSelected = async (e) => {
+    const file = e.target.files && e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const up = await apiClient.post('/adoption/manager/pets/upload-document', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const url = up.data?.data?.url
+      if (url) {
+        await apiClient.put(`/adoption/manager/pets/${id}`, { documents: [{ url }] })
+        await refreshMedia()
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Document upload failed')
+    }
+  }
+
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-5xl">
       <h2 className="text-xl font-semibold mb-1">Complete Pet Profile</h2>
       <p className="text-sm text-gray-600 mb-4">Fill additional details for {form.name}{form.petCode ? ` (Code: ${form.petCode})` : ''}.</p>
       {error && <div className="mb-3 text-red-600">{error}</div>}
@@ -155,6 +216,42 @@ const PetProfile = () => {
           <button type="button" className="px-4 py-2 bg-gray-600 text-white rounded" onClick={()=>navigate(-1)} disabled={loading}>Back</button>
         </div>
       </form>
+
+      {/* Media sections */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+        <div className="border rounded p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold">Images</h3>
+            <button type="button" className="px-3 py-1 text-sm border rounded" onClick={onChooseImage}>Add Images</button>
+            <input type="file" accept="image/*" ref={imgInputRef} onChange={onImageSelected} style={{ display: 'none' }} />
+          </div>
+          {images.length === 0 ? (
+            <p className="text-sm text-gray-500">No images</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {images.map((img, idx) => (
+                <img key={idx} src={img.url} alt="pet" className="w-full h-28 object-cover rounded border" onError={(e)=>{ e.currentTarget.src='/placeholder-pet.svg' }} />
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="border rounded p-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold">Documents</h3>
+            <button type="button" className="px-3 py-1 text-sm border rounded" onClick={onChooseDocument}>Add Documents</button>
+            <input type="file" accept="image/*,application/pdf" ref={docInputRef} onChange={onDocumentSelected} style={{ display: 'none' }} />
+          </div>
+          {documents.length === 0 ? (
+            <p className="text-sm text-gray-500">No documents</p>
+          ) : (
+            <ul className="list-disc list-inside text-sm">
+              {documents.map((d, idx) => (
+                <li key={idx}><a className="text-blue-600" href={d.url} target="_blank" rel="noreferrer">Document {idx+1}</a></li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

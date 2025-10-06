@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   Box,
   Typography,
@@ -27,14 +27,18 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Checkbox
+  Checkbox,
+  Tabs,
+  Tab,
+  Badge
 } from '@mui/material'
 import {
   ArrowBack as ArrowBackIcon,
   Edit as EditIcon,
   Visibility as ViewIcon,
   Publish as PublishIcon,
-  Delete as DeleteIcon
+  Delete as DeleteIcon,
+  History as HistoryIcon
 } from '@mui/icons-material'
 import { apiClient } from '../../../services/api'
 // Component
@@ -43,7 +47,10 @@ const ManageInventory = () => {
   const location = useLocation()
   const [loading, setLoading] = useState(false)
   const [inventory, setInventory] = useState([])
+  const [readyForRelease, setReadyForRelease] = useState([])
   const [selectedIds, setSelectedIds] = useState([])
+  const [selectedReadyIds, setSelectedReadyIds] = useState([])
+  const [activeTab, setActiveTab] = useState(0) // 0: Pending Images, 1: Ready for Release
   const [editDialog, setEditDialog] = useState(false)
   const [editingPet, setEditingPet] = useState(null)
   const [editForm, setEditForm] = useState({
@@ -60,6 +67,10 @@ const ManageInventory = () => {
   const [breedFilter, setBreedFilter] = useState('')
   const [priceMin, setPriceMin] = useState('')
   const [priceMax, setPriceMax] = useState('')
+  const [searchText, setSearchText] = useState('')
+  const [genderFilter, setGenderFilter] = useState('')
+  const [ageMin, setAgeMin] = useState('')
+  const [ageMax, setAgeMax] = useState('')
   const [speciesOptions, setSpeciesOptions] = useState([])
   const [breedOptions, setBreedOptions] = useState([])
   // Bulk price update
@@ -70,6 +81,9 @@ const ManageInventory = () => {
   const [csvParsing, setCsvParsing] = useState(false)
   const [csvFileName, setCsvFileName] = useState('')
   const [csvPreview, setCsvPreview] = useState({ headers: [], rows: [], items: [] })
+  // Image upload state
+  const [imageDialog, setImageDialog] = useState({ open: false, item: null })
+  const [imageFile, setImageFile] = useState(null)
 
   // initial load and when filters change
   useEffect(() => {
@@ -79,7 +93,7 @@ const ManageInventory = () => {
       navigate('.', { replace: true, state: null })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, speciesFilter, breedFilter, priceMin, priceMax, limit])
+  }, [statusFilter, speciesFilter, breedFilter, priceMin, priceMax, genderFilter, ageMin, ageMax, searchText, limit])
 
   // Load species/breeds for filters
   useEffect(() => {
@@ -112,6 +126,10 @@ const ManageInventory = () => {
       if (breedFilter) qs.set('breedId', breedFilter)
       if (priceMin) qs.set('priceMin', priceMin)
       if (priceMax) qs.set('priceMax', priceMax)
+      if (genderFilter) qs.set('gender', genderFilter)
+      if (ageMin) qs.set('ageMin', ageMin)
+      if (ageMax) qs.set('ageMax', ageMax)
+      if (searchText) qs.set('q', searchText.trim())
       
       console.log('🔍 Fetching inventory with URL:', `/petshop/inventory?${qs.toString()}`)
       console.log('👤 Current user from localStorage:', JSON.parse(localStorage.getItem('user') || '{}'))
@@ -132,18 +150,35 @@ const ManageInventory = () => {
       console.log('🐾 Found items before filtering:', items.length, items)
       
       // Client-side filtering safety net
+      const needle = (searchText || '').toLowerCase().trim()
       items = items.filter(it => {
         const withinMin = priceMin === '' || Number(it.price || 0) >= Number(priceMin)
         const withinMax = priceMax === '' || Number(it.price || 0) <= Number(priceMax)
         const speciesOk = !speciesFilter || (it.speciesId && (it.speciesId._id === speciesFilter || it.speciesId === speciesFilter))
         const breedOk = !breedFilter || (it.breedId && (it.breedId._id === breedFilter || it.breedId === breedFilter))
-        return withinMin && withinMax && speciesOk && breedOk
+        const genderOk = !genderFilter || String(it.gender || '').toLowerCase() === String(genderFilter).toLowerCase()
+        const ageOk = (
+          (ageMin === '' || Number(it.age || 0) >= Number(ageMin)) &&
+          (ageMax === '' || Number(it.age || 0) <= Number(ageMax))
+        )
+        const textOk = !needle || (
+          String(it.petCode || '').toLowerCase().includes(needle) ||
+          String(it.name || '').toLowerCase().includes(needle) ||
+          String(it.breedId?.name || '').toLowerCase().includes(needle) ||
+          String(it.speciesId?.name || it.speciesId?.displayName || '').toLowerCase().includes(needle)
+        )
+        return withinMin && withinMax && speciesOk && breedOk && genderOk && ageOk && textOk
       })
       
       console.log('✅ Items after filtering:', items.length, items)
       
+      // Separate items based on whether they have images
+      const itemsWithoutImages = items.filter(item => !item.images || item.images.length === 0)
+      const itemsWithImages = items.filter(item => item.images && item.images.length > 0)
+      
       const paginationData = dataNode?.pagination || body.pagination || { current: page, pages: 1, total: items.length }
-      setInventory(items)
+      setInventory(itemsWithoutImages)
+      setReadyForRelease(itemsWithImages)
       setPagination({
         current: paginationData.current || paginationData.page || page,
         pages: paginationData.pages || paginationData.totalPages || 1,
@@ -298,8 +333,19 @@ const ManageInventory = () => {
 
   const handleReleaseToPublic = async (petIds) => {
     try {
-      await apiClient.post('/petshop/inventory/publish-bulk', { itemIds: petIds })
-      showSnackbar(`Released ${petIds.length} pets to public!`)
+      const resp = await apiClient.post('/petshop/inventory/publish-bulk', { itemIds: petIds })
+      const data = resp?.data?.data || {}
+      const published = Array.isArray(data.published) ? data.published.length : 0
+      const skipped = Array.isArray(data.skipped) ? data.skipped : []
+
+      if (published > 0) {
+        showSnackbar(`Released ${published} item(s) to public`)
+      }
+      if (skipped.length > 0) {
+        const reasonCounts = skipped.reduce((acc, s) => { acc[s.reason] = (acc[s.reason]||0)+1; return acc }, {})
+        const details = Object.entries(reasonCounts).map(([r,c]) => `${c} ${r.replaceAll('_',' ')}`).join(', ')
+        showSnackbar(`Skipped ${skipped.length}: ${details}. Set price > 0 and add at least 1 image.`, 'warning')
+      }
       setSelectedIds([])
       fetchInventory(pagination.current)
     } catch (err) {
@@ -318,6 +364,43 @@ const ManageInventory = () => {
     } catch (err) {
       console.error('Delete pet error:', err)
       showSnackbar(err.response?.data?.message || 'Failed to delete pet', 'error')
+    }
+  }
+
+  const handleOpenImageDialog = (item) => {
+    setImageDialog({ open: true, item })
+    setImageFile(null)
+  }
+
+  const handleUploadImage = async () => {
+    if (!imageFile || !imageDialog.item) {
+      showSnackbar('Please select an image file', 'warning')
+      return
+    }
+
+    try {
+      setLoading(true)
+      const formData = new FormData()
+      formData.append('file', imageFile) // Backend expects 'file', not 'image'
+      formData.append('caption', `Image for ${imageDialog.item.name || imageDialog.item.petCode}`)
+      formData.append('isPrimary', 'true') // Set as primary image
+      
+      // Use the correct endpoint with item ID in URL path
+      await apiClient.post(`/petshop/inventory/${imageDialog.item._id}/images`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+      
+      showSnackbar('Image uploaded successfully! Pet moved to Ready for Release.')
+      setImageDialog({ open: false, item: null })
+      setImageFile(null)
+      fetchInventory(pagination.current)
+    } catch (err) {
+      console.error('Upload image error:', err)
+      showSnackbar(err.response?.data?.message || 'Failed to upload image', 'error')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -341,6 +424,14 @@ const ManageInventory = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            <TextField
+              size="small"
+              label="Search (code/name/species/breed)"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              sx={{ minWidth: 260 }}
+            />
+
             <FormControl size="small" sx={{ minWidth: 180 }}>
               <InputLabel>Status Filter</InputLabel>
               <Select label="Status Filter" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -373,33 +464,51 @@ const ManageInventory = () => {
               </Select>
             </FormControl>
 
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel>Gender</InputLabel>
+              <Select label="Gender" value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)}>
+                <MenuItem value="">All</MenuItem>
+                <MenuItem value="Male">Male</MenuItem>
+                <MenuItem value="Female">Female</MenuItem>
+                <MenuItem value="Unknown">Unknown</MenuItem>
+              </Select>
+            </FormControl>
+
             <TextField size="small" type="number" label="Min Price" value={priceMin} onChange={(e) => setPriceMin(e.target.value)} sx={{ width: 120 }} />
             <TextField size="small" type="number" label="Max Price" value={priceMax} onChange={(e) => setPriceMax(e.target.value)} sx={{ width: 120 }} />
+            <TextField size="small" type="number" label="Min Age" value={ageMin} onChange={(e) => setAgeMin(e.target.value)} sx={{ width: 120 }} />
+            <TextField size="small" type="number" label="Max Age" value={ageMax} onChange={(e) => setAgeMax(e.target.value)} sx={{ width: 120 }} />
             
             <Button 
               variant="outlined" 
               color="info" 
               onClick={() => {
-                console.log('🔄 Manual refresh triggered')
+                console.log('🔄 Reset filters triggered')
                 setStatusFilter('')
                 setSpeciesFilter('')
                 setBreedFilter('')
                 setPriceMin('')
                 setPriceMax('')
+                setGenderFilter('')
+                setAgeMin('')
+                setAgeMax('')
+                setSearchText('')
                 fetchInventory(1)
               }}
             >
-              🔄 Debug Refresh
+              Reset Filters
             </Button>
 
-            <Button
-              variant="contained"
-              disabled={selectedIds.length === 0}
-              onClick={() => handleReleaseToPublic(selectedIds)}
-              startIcon={<PublishIcon />}
-            >
-              Release Selected to Public ({selectedIds.length})
-            </Button>
+            {activeTab === 1 && (
+              <Button
+                variant="contained"
+                disabled={selectedReadyIds.length === 0}
+                onClick={() => handleReleaseToPublic(selectedReadyIds)}
+                startIcon={<PublishIcon />}
+              >
+                Release Selected to Public ({selectedReadyIds.length})
+              </Button>
+            )}
             <Button
               variant="outlined"
               disabled={selectedIds.length === 0}
@@ -421,12 +530,53 @@ const ManageInventory = () => {
         </CardContent>
       </Card>
 
+      {/* Tabs for different sections */}
+      <Card sx={{ mb: 3 }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={(e, newValue) => setActiveTab(newValue)}
+          sx={{ borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Tab 
+            label={
+              <Badge badgeContent={inventory.length} color="warning" showZero>
+                Pending Images
+              </Badge>
+            } 
+          />
+          <Tab 
+            label={
+              <Badge badgeContent={readyForRelease.length} color="success" showZero>
+                Ready for Release
+              </Badge>
+            } 
+          />
+        </Tabs>
+      </Card>
+
       {/* Inventory Table */}
       <Card>
         <CardContent>
-          <Typography variant="h6" gutterBottom>
-            All Inventory ({inventory.length} pets)
-          </Typography>
+          {activeTab === 0 && (
+            <>
+              <Typography variant="h6" gutterBottom>
+                Pets Pending Images ({inventory.length} pets)
+              </Typography>
+              <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                These pets need images before they can be released to users. Upload images to move them to "Ready for Release".
+              </Typography>
+            </>
+          )}
+          {activeTab === 1 && (
+            <>
+              <Typography variant="h6" gutterBottom>
+                Ready for Release ({readyForRelease.length} pets)
+              </Typography>
+              <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                These pets have images and are ready to be released to users for viewing and booking.
+              </Typography>
+            </>
+          )}
 
           <TableContainer component={Paper}>
             <Table>
@@ -434,11 +584,24 @@ const ManageInventory = () => {
                 <TableRow>
                   <TableCell padding="checkbox">
                     <Checkbox
-                      indeterminate={selectedIds.length > 0 && selectedIds.length < inventory.length}
-                      checked={inventory.length > 0 && selectedIds.length === inventory.length}
+                      indeterminate={
+                        activeTab === 0 
+                          ? (selectedIds.length > 0 && selectedIds.length < inventory.length)
+                          : (selectedReadyIds.length > 0 && selectedReadyIds.length < readyForRelease.length)
+                      }
+                      checked={
+                        activeTab === 0 
+                          ? (inventory.length > 0 && selectedIds.length === inventory.length)
+                          : (readyForRelease.length > 0 && selectedReadyIds.length === readyForRelease.length)
+                      }
                       onChange={(e) => {
-                        if (e.target.checked) setSelectedIds(inventory.map(x => x._id))
-                        else setSelectedIds([])
+                        if (activeTab === 0) {
+                          if (e.target.checked) setSelectedIds(inventory.map(x => x._id))
+                          else setSelectedIds([])
+                        } else {
+                          if (e.target.checked) setSelectedReadyIds(readyForRelease.map(x => x._id))
+                          else setSelectedReadyIds([])
+                        }
                       }}
                     />
                   </TableCell>
@@ -452,17 +615,29 @@ const ManageInventory = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {inventory.map(item => (
+                {(activeTab === 0 ? inventory : readyForRelease).map(item => (
                   <TableRow key={item._id}>
                     <TableCell padding="checkbox">
                       <Checkbox
-                        checked={selectedIds.includes(item._id)}
+                        checked={
+                          activeTab === 0 
+                            ? selectedIds.includes(item._id)
+                            : selectedReadyIds.includes(item._id)
+                        }
                         onChange={(e) => {
-                          setSelectedIds(prev => 
-                            e.target.checked 
-                              ? [...new Set([...prev, item._id])] 
-                              : prev.filter(id => id !== item._id)
-                          )
+                          if (activeTab === 0) {
+                            setSelectedIds(prev => 
+                              e.target.checked 
+                                ? [...new Set([...prev, item._id])] 
+                                : prev.filter(id => id !== item._id)
+                            )
+                          } else {
+                            setSelectedReadyIds(prev => 
+                              e.target.checked 
+                                ? [...new Set([...prev, item._id])] 
+                                : prev.filter(id => id !== item._id)
+                            )
+                          }
                         }}
                       />
                     </TableCell>
@@ -522,6 +697,13 @@ const ManageInventory = () => {
                             <EditIcon />
                           </IconButton>
                         </Tooltip>
+                        {activeTab === 0 && (
+                          <Tooltip title="Add Image">
+                            <IconButton size="small" color="secondary" onClick={() => handleOpenImageDialog(item)}>
+                              <span className="material-icons">image</span>
+                            </IconButton>
+                          </Tooltip>
+                        )}
                         
                         <Tooltip title="View Details">
                           <IconButton size="small">
@@ -529,19 +711,17 @@ const ManageInventory = () => {
                           </IconButton>
                         </Tooltip>
 
-                        {item.status === 'available_for_sale' && (
-                          <Button 
+                        <Tooltip title="View Pet History">
+                          <IconButton 
                             size="small" 
-                            variant="text" 
-                            component={RouterLink} 
-                            to={`/User/petshop/pet/${item._id}`} 
-                            target="_blank"
+                            color="info"
+                            onClick={() => navigate(`/manager/petshop/pets/${item._id}/history`)}
                           >
-                            View Public
-                          </Button>
-                        )}
+                            <HistoryIcon />
+                          </IconButton>
+                        </Tooltip>
                         
-                        {item.status !== 'available_for_sale' && (
+                        {activeTab === 1 && item.status !== 'available_for_sale' && (
                           <Tooltip title="Release to Public">
                             <IconButton 
                               size="small" 
@@ -664,6 +844,25 @@ const ManageInventory = () => {
           <Button onClick={handleUpdatePet} variant="contained">
             Update Pet
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Image Upload Dialog */}
+      <Dialog open={imageDialog.open} onClose={() => setImageDialog({ open: false, item: null })} maxWidth="xs" fullWidth>
+        <DialogTitle>Upload Image</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1 }}>Pet: {imageDialog.item?.name || imageDialog.item?.petCode || ''}</Typography>
+          <Button variant="outlined" component="label">
+            Choose File
+            <input hidden type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
+          </Button>
+          {imageFile && (
+            <Typography variant="caption" sx={{ ml: 2 }}>{imageFile.name}</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImageDialog({ open: false, item: null })}>Cancel</Button>
+          <Button onClick={handleUploadImage} variant="contained" disabled={!imageFile}>Upload</Button>
         </DialogActions>
       </Dialog>
 

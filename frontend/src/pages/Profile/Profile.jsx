@@ -7,8 +7,10 @@ import {
   Tabs,
   Tab,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Button
 } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import ProfileDetails from '../../components/Profile/ProfileDetails';
@@ -38,6 +40,8 @@ function a11yProps(index) {
 
 const Profile = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+
   const [tabValue, setTabValue] = useState(0);
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -102,12 +106,6 @@ const Profile = () => {
         <Typography variant="subtitle1" color="text.secondary" gutterBottom>
           Manage your account settings and preferences
         </Typography>
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
 
         {success && (
           <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>

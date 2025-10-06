@@ -25,6 +25,7 @@ import {
   NavigateBefore as BackIcon
 } from '@mui/icons-material'
 import { apiClient } from '../../../services/api'
+import RequestModal from '../../../components/Common/RequestModal'
 
 const AddStock = () => {
   const navigate = useNavigate()
@@ -39,7 +40,6 @@ const AddStock = () => {
     breedId: '',
     unitCost: 0,
     basePrice: 0,
-    status: 'in_petshop',
     source: 'Other',
     arrivalDate: new Date().toISOString().split('T')[0],
     notes: ''
@@ -61,6 +61,7 @@ const AddStock = () => {
   const [categories, setCategories] = useState([])
   const [species, setSpecies] = useState([])
   const [breeds, setBreeds] = useState([])
+  const [showRequestModal, setShowRequestModal] = useState(false)
 
   const steps = ['Basic Information', 'Age Group Distribution', 'Gender Distribution']
 
@@ -213,17 +214,26 @@ const AddStock = () => {
   return (
     <Box sx={{ p: 3 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate('/manager/petshop/inventory')}
+            sx={{ mr: 2 }}
+          >
+            Back to Inventory
+          </Button>
+          <Typography variant="h4" component="h1">
+            Add New Stock
+          </Typography>
+        </Box>
         <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/manager/petshop/inventory')}
-          sx={{ mr: 2 }}
+          variant="contained"
+          color="success"
+          onClick={() => setShowRequestModal(true)}
         >
-          Back to Inventory
+          Request New Data
         </Button>
-        <Typography variant="h4" component="h1">
-          Add New Stock
-        </Typography>
       </Box>
 
       {/* Stepper */}
@@ -344,20 +354,6 @@ const AddStock = () => {
                       startAdornment: <Typography sx={{ mr: 1 }}>₹</Typography>
                     }}
                   />
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Status</InputLabel>
-                    <Select
-                      value={basicForm.status}
-                      onChange={(e) => setBasicForm(prev => ({ ...prev, status: e.target.value }))}
-                    >
-                      <MenuItem value="in_petshop">In PetShop</MenuItem>
-                      <MenuItem value="out_of_stock">Out of Stock</MenuItem>
-                      <MenuItem value="available_for_sale">Available for Sale</MenuItem>
-                    </Select>
-                  </FormControl>
                 </Grid>
 
                 <Grid item xs={12} sm={6}>
@@ -508,6 +504,15 @@ const AddStock = () => {
           {snackbar.message}
         </Alert>
       )}
+
+      <RequestModal
+        isOpen={showRequestModal}
+        onClose={() => setShowRequestModal(false)}
+        onSuccess={() => {
+          console.log('Request submitted successfully')
+          fetchDropdownData() // Reload dropdown data
+        }}
+      />
     </Box>
   )
 }

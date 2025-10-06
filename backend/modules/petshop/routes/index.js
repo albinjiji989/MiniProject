@@ -1,5 +1,5 @@
 const express = require('express');
-const { body } = require('express-validator');
+const { body, validationResult } = require('express-validator');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
@@ -8,18 +8,37 @@ const controller = require('../controllers/petShopController');
 
 const router = express.Router();
 
-// Local uploads folder for module assets
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch (_) {}
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.bin';
-    const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
-    cb(null, `${Date.now()}_${base}${ext}`);
+// Validation middleware
+const handleValidationErrors = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
   }
+  next();
+};
+
+// Multer configuration - memory storage (saves buffers we persist manually in controller)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 } // 5 MB
 });
-const upload = multer({ storage });
+
+// Lite manager guard: auth + any role containing "manager" (no module permission)
+const requireManagerLite = [auth, (req, res, next) => {
+  try {
+    const role = req.user?.role;
+    const hasManagerRole = Array.isArray(role)
+      ? role.some(r => typeof r === 'string' && r.toLowerCase().includes('manager'))
+      : (typeof role === 'string' && role.toLowerCase().includes('manager'));
+
+    if (!hasManagerRole) {
+      return res.status(403).json({ success: false, message: 'Manager access required' });
+    }
+    next();
+  } catch (e) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+}];
 
 router.get('/', auth, authorizeModule('petshop'), controller.listPetShops);
 router.get('/stats', auth, authorizeModule('petshop'), controller.getPetShopStats);
@@ -51,6 +70,10 @@ router.get('/animals', auth, authorizeModule('petshop'), controller.listAnimals)
 // User dashboard stats (auth required but no module permission)
 router.get('/user/stats', auth, controller.getUserPetShopStats);
 
+// Manager self-service: store identity (no module guard)
+router.get('/me/store', auth, controller.getMyStoreInfo);
+router.put('/me/store', auth, controller.updateMyStoreInfo);
+
 // Purchase Orders (manager)
 router.get('/orders', auth, authorizeModule('petshop'), controller.listPurchaseOrders);
 router.post('/orders', auth, authorizeModule('petshop'), [
@@ -62,11 +85,16 @@ router.post('/orders/:id/submit', auth, authorizeModule('petshop'), controller.s
 router.get('/orders/:id/invoice', auth, authorizeModule('petshop'), controller.generatePurchaseOrderInvoice);
 router.post('/orders/:id/receive', auth, authorizeModule('petshop'), controller.receivePurchaseOrder);
 
+// Manager: request store name change (auth only; no module guard; id stays same)
+router.post('/manager/store-name-change', auth, controller.createStoreNameChangeRequest);
+
 // Inventory (manager)
 router.get('/inventory', auth, authorizeModule('petshop'), controller.listInventory);
 router.post('/inventory', auth, authorizeModule('petshop'), controller.createInventoryItem);
 router.post('/inventory/bulk', auth, authorizeModule('petshop'), controller.bulkCreateInventoryItems);
 router.post('/inventory/publish-bulk', auth, authorizeModule('petshop'), controller.bulkPublishInventoryItems);
+// Manager utility: backfill missing storeId/storeName on historical inventory
+router.post('/inventory/backfill-store', auth, authorizeModule('petshop'), controller.managerBackfillInventoryStoreIds);
 router.get('/inventory/:id', auth, authorizeModule('petshop'), controller.getInventoryItemById);
 router.put('/inventory/:id', auth, authorizeModule('petshop'), controller.updateInventoryItem);
 router.delete('/inventory/:id', auth, authorizeModule('petshop'), controller.deleteInventoryItem);
@@ -82,38 +110,76 @@ router.post('/pricing/calculate', auth, authorizeModule('petshop'), controller.c
 // Public listings (no auth)
 router.get('/public/listings', controller.listPublicListings);
 router.get('/public/listings/:id', controller.getPublicListingById);
+// Authenticated listing access (user can view if they have reservation/bought it)
+router.get('/user/listings/:id', auth, controller.getUserAccessibleItemById);
 // Public pet shops (no auth)
 router.get('/public/shops', controller.listPublicPetShops);
 // Public wishlist (user auth)
 router.post('/public/wishlist', auth, controller.addToWishlist);
 router.get('/public/wishlist', auth, controller.listMyWishlist);
 router.delete('/public/wishlist/:itemId', auth, controller.removeFromWishlist);
-// Public reviews
+
 router.post('/public/reviews', auth, controller.createReview);
 router.get('/public/reviews/item/:id', controller.listItemReviews);
 router.get('/public/reviews/shop/:id', controller.listShopReviews);
 
 // Public reservations (user auth, no module guard)
 router.post('/public/reservations', auth, controller.createReservation);
-router.post('/public/reservations/enhanced', auth, controller.createEnhancedReservation);
 router.get('/public/reservations', auth, controller.listMyReservations);
 router.get('/public/reservations/enhanced', auth, controller.listEnhancedReservations);
+router.get('/public/reservations/:id', auth, controller.getReservationById);
 router.get('/public/reservations/track/:code', auth, controller.getReservationByCode);
 router.post('/public/reservations/:id/cancel', auth, controller.cancelReservation);
 
-// Payments - Razorpay
+// Payment routes
 router.post('/payments/razorpay/order', auth, controller.createRazorpayOrder);
 router.post('/payments/razorpay/verify', auth, controller.verifyRazorpaySignature);
+
+// User decision routes
+router.post('/reservations/:reservationId/confirm-purchase', auth, [
+  body('wantsToBuy').isBoolean().withMessage('wantsToBuy must be a boolean'),
+  body('notes').optional().isString().withMessage('Notes must be a string')
+], controller.confirmPurchaseDecision);
+
+// Manager delivery routes
+router.put('/manager/reservations/:reservationId/delivery', requireManagerLite, [
+  body('status').isIn(['ready_pickup', 'completed', 'cancelled']).withMessage('Invalid delivery status'),
+  body('deliveryNotes').optional().isString(),
+  body('actualDate').optional().isISO8601().withMessage('Invalid date format')
+], controller.updateDeliveryStatus);
+
+// Manager dashboard and analytics
+router.get('/manager/dashboard/stats', requireManagerLite, controller.getManagerDashboardStats);
+router.get('/manager/orders', requireManagerLite, controller.getManagerOrders);
+router.get('/manager/sales-report', requireManagerLite, controller.getSalesReport);
+router.get('/manager/reservations/:reservationId/invoice', requireManagerLite, controller.generateInvoice);
+router.put('/manager/reservations/:reservationId', requireManagerLite, [
+  body('status').isString().withMessage('Status is required'),
+  body('notes').optional().isString()
+], controller.updateReservationStatus);
+
+// Back-compat: some UIs call a distinct "/status" endpoint
+router.put('/manager/reservations/:reservationId/status', requireManagerLite, [
+  body('status')
+    .isIn(['pending', 'manager_review', 'approved', 'payment_pending', 'paid', 'ready_pickup', 'completed', 'cancelled'])
+    .withMessage('Invalid status'),
+  body('notes').optional().isString()
+], controller.updateReservationStatus);
+
+// Pet History (for users to view their owned pets' history)
+router.get('/pets/:petId/history', auth, controller.getPetHistory);
 
 // Centralized Pet Code Management (Admin/Manager only)
 router.get('/admin/pet-codes/stats', auth, authorize('admin'), controller.getPetCodeStats);
 router.post('/admin/pet-codes/generate-bulk', auth, authorize('admin'), controller.generateBulkPetCodes);
 router.post('/admin/pet-codes/validate', auth, authorize(['admin', 'manager']), controller.validatePetCode);
-
-// Admin analytics
 router.get('/admin/analytics/summary', auth, authorize('admin'), controller.getAdminAnalyticsSummary);
 router.get('/admin/analytics/species-breakdown', auth, authorize('admin'), controller.getAdminSpeciesBreakdown);
 router.get('/admin/analytics/sales-series', auth, authorize('admin'), controller.getAdminSalesSeries);
+
+// Admin: review store name change requests
+router.get('/admin/store-name-change-requests', auth, authorize('admin'), controller.adminListStoreNameChangeRequests);
+router.put('/admin/store-name-change-requests/:id/decision', auth, authorize('admin'), controller.adminDecideStoreNameChangeRequest);
 
 // Admin shops & listings oversight
 router.get('/admin/shops', auth, authorize('admin'), controller.adminListShops);
@@ -131,11 +197,16 @@ router.put('/admin/reservations/:id/status', auth, authorize('admin'), controlle
 
 // Manager routes - require manager role
 const requireManager = [auth, authorizeModule('petshop'), (req, res, next) => {
-  if (req.user.role !== 'manager') {
+  const role = req.user?.role
+  const hasRole = Array.isArray(role)
+    ? (role.includes('manager') || role.includes('petshop_manager'))
+    : (role === 'manager' || role === 'petshop_manager')
+  if (!hasRole) {
     return res.status(403).json({ success: false, message: 'Access denied. Manager role required.' });
   }
   next();
 }];
+
 
 // Manager Dashboard
 router.get('/manager/dashboard', requireManager, controller.managerDashboard);
@@ -172,19 +243,30 @@ router.put('/manager/promotions/:id', requireManager, [
 
 router.delete('/manager/promotions/:id', requireManager, controller.managerDeletePromotion);
 
-// Manager Reservations
-router.get('/manager/reservations', requireManager, controller.managerListReservations);
-router.get('/manager/reservations/enhanced', requireManager, controller.listEnhancedReservations);
-router.put('/manager/reservations/:id/status', requireManager, [
-  body('status').isIn(['confirmed', 'cancelled', 'checked_in', 'checked_out', 'no_show']).withMessage('Invalid status'),
+// Manager Reservations (use lite guard to avoid module permission 403)
+router.get('/manager/reservations', requireManagerLite, controller.managerListReservations);
+router.get('/manager/reservations/enhanced', requireManagerLite, controller.listEnhancedReservations);
+router.put('/manager/reservations/:id/status', requireManagerLite, [
+  body('status').isIn([
+    'pending',
+    'manager_review',
+    'approved',
+    'payment_pending',
+    'paid',
+    'ready_pickup',
+    'completed',
+    'cancelled'
+  ]).withMessage('Invalid status'),
   body('notes').optional().isString()
 ], controller.managerUpdateReservationStatus);
-router.post('/manager/reservations/:id/review', requireManager, [
+router.post('/manager/reservations/:id/review', requireManagerLite, [
   body('action').isIn(['approve', 'reject']).withMessage('Action must be approve or reject'),
   body('reviewNotes').optional().isString(),
   body('approvalReason').optional().isString()
 ], controller.managerReviewReservation);
 
+// Manager Pet History
+router.get('/manager/pets/:petId/history', requireManagerLite, controller.getPetHistory);
 // User routes
 router.get('/user/addresses', auth, controller.listUserAddresses);
 router.post('/user/payment-methods', auth, [

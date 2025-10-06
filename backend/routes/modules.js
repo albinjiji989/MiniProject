@@ -48,6 +48,7 @@ function getFilesystemModules() {
           maintenanceMessage: null,
           blockReason: null,
           displayOrder: idx,
+          hidden: false,
         }
       })
     return items
@@ -59,27 +60,28 @@ function getFilesystemModules() {
 async function ensureModulesSeeded() {
   const fsModules = getFilesystemModules()
   if (!fsModules || fsModules.length === 0) return
-  const ops = fsModules.map((m) => ({
-    updateOne: {
-      filter: { key: m.key },
-      update: {
-        $setOnInsert: {
-          key: m.key,
-          name: m.name,
-          description: m.description,
-          icon: m.icon,
-          color: m.color,
-          status: m.status,
-          hasManagerDashboard: m.hasManagerDashboard,
-          isCoreModule: true,
-          maintenanceMessage: null,
-          blockReason: null,
-          displayOrder: m.displayOrder,
+    const ops = fsModules.map((m) => ({
+      updateOne: {
+        filter: { key: m.key },
+        update: {
+          $setOnInsert: {
+            key: m.key,
+            name: m.name,
+            description: m.description,
+            icon: m.icon,
+            color: m.color,
+            status: m.status,
+            hasManagerDashboard: m.hasManagerDashboard,
+            isCoreModule: true,
+            maintenanceMessage: null,
+            blockReason: null,
+            displayOrder: m.displayOrder,
+            hidden: false,
+          },
         },
+        upsert: true,
       },
-      upsert: true,
-    },
-  }))
+    }))
   if (ops.length > 0) {
     try {
       await Module.bulkWrite(ops)
@@ -94,7 +96,7 @@ const { auth, authorize } = require('../middleware/auth')
 // Get all modules (public endpoint for user dashboard)
 router.get('/', async (req, res) => {
   try {
-    let modules = await Module.find()
+    let modules = await Module.find({ hidden: { $ne: true } })
       .select('key name description icon color status hasManagerDashboard maintenanceMessage blockReason displayOrder')
       .sort({ displayOrder: 1, name: 1 })
     if (!modules || modules.length === 0) {
@@ -208,6 +210,44 @@ router.patch('/:id/status', auth, authorize('admin'), async (req, res) => {
     res.json({ success: true, data: module })
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to update module status', error: error.message })
+  }
+})
+
+// Soft-hide module (acts as Delete)
+router.patch('/:id/hide', auth, authorize('admin'), async (req, res) => {
+  try {
+    const { Types } = require('mongoose')
+    if (!Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid module id' })
+    }
+    const mod = await Module.findByIdAndUpdate(
+      req.params.id,
+      { hidden: true },
+      { new: true }
+    )
+    if (!mod) return res.status(404).json({ success: false, message: 'Module not found' })
+    res.json({ success: true, data: mod })
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to hide module', error: error.message })
+  }
+})
+
+// Restore hidden module
+router.patch('/:id/restore', auth, authorize('admin'), async (req, res) => {
+  try {
+    const { Types } = require('mongoose')
+    if (!Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid module id' })
+    }
+    const mod = await Module.findByIdAndUpdate(
+      req.params.id,
+      { hidden: false },
+      { new: true }
+    )
+    if (!mod) return res.status(404).json({ success: false, message: 'Module not found' })
+    res.json({ success: true, data: mod })
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to restore module', error: error.message })
   }
 })
 

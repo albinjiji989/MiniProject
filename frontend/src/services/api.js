@@ -1,6 +1,32 @@
 import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+// Derive backend origin (scheme+host+port) from API_URL
+// e.g., http://localhost:5000/api -> http://localhost:5000
+export const API_ORIGIN = (() => {
+  try {
+    const u = new URL(API_URL)
+    // Remove trailing '/api' if present
+    const origin = `${u.protocol}//${u.host}`
+    return origin
+  } catch {
+    return 'http://localhost:5000'
+  }
+})()
+
+// Helper to resolve media URLs that backend returns as relative paths
+// Example: '/modules/petshop/uploads/file.jpg' -> 'http://localhost:5000/modules/petshop/uploads/file.jpg'
+export const resolveMediaUrl = (pathOrUrl) => {
+  if (!pathOrUrl) return ''
+  try {
+    // If it's already absolute, keep it
+    const u = new URL(pathOrUrl)
+    return u.href
+  } catch {
+    // Treat as relative to backend origin
+    return `${API_ORIGIN}${pathOrUrl.startsWith('/') ? '' : '/'}${pathOrUrl}`
+  }
+}
 
 // Create axios instance
 export const api = axios.create({
@@ -150,6 +176,37 @@ export const adoptionAPI = {
   getManagerAnalytics: () => api.get('/adoption/admin/manager-analytics'),
   getUserAnalytics: () => api.get('/adoption/admin/user-analytics'),
   getPetAnalytics: () => api.get('/adoption/admin/pet-analytics'),
+
+  // New REST alias endpoints (spec compliant)
+  // Pets (public/user)
+  listPets: (params) => api.get('/adoption/pets', { params }),
+  getPet: (id) => api.get(`/adoption/pets/${id}`),
+  searchPets: (params) => api.get('/adoption/pets', { params }), // same as list with filters
+  // Pets (manager)
+  managerCreatePet: (payload) => api.post('/adoption/pets', payload),
+
+  // Requests (applications)
+  submitRequest: (payload) => api.post('/adoption/requests', payload),
+  listMyRequests: () => api.get('/adoption/applications/my'),
+  getMyRequest: (id) => api.get(`/adoption/applications/${id}`),
+  cancelMyRequest: (id) => api.put(`/adoption/applications/${id}/cancel`),
+  managerListRequests: (params) => api.get('/adoption/requests', { params }),
+  managerPatchRequest: (id, { status, notes, reason }) => api.patch(`/adoption/requests/${id}`, { status, notes, reason }),
+
+  // Payments (user)
+  createPaymentOrder: (applicationId) => api.post('/adoption/payments/create-order', { applicationId }),
+  verifyPayment: (payload) => api.post('/adoption/payments/verify', payload),
+
+  // Documents (applicant uploads)
+  uploadApplicantDocument: (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/adoption/applications/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+
+  // Certificates
+  generateCertificate: (applicationId, agreementFile) => api.post('/adoption/certificates', { applicationId, agreementFile }),
+  getCertificate: (applicationId) => api.get(`/adoption/certificates/${applicationId}`),
 }
 
 // PetShop API
@@ -200,6 +257,11 @@ export const petShopAPI = {
   createReview: (payload) => api.post('/petshop/public/reviews', payload),
   getItemReviews: (itemId) => api.get(`/petshop/public/reviews/item/${itemId}`),
   getShopReviews: (shopId) => api.get(`/petshop/public/reviews/shop/${shopId}`),
+  // Manager Store Setup
+  getMyStore: () => api.get('/petshop/me/store'),
+  updateMyStore: (payload) => api.put('/petshop/me/store', payload),
+  // Manager: Store name change
+  requestStoreNameChange: (requestedStoreName, reason='') => api.post('/petshop/manager/store-name-change', { requestedStoreName, reason }),
 }
 
 // Rescue API
@@ -261,12 +323,23 @@ export const petShopAdminAPI = {
   // Orders auditing
   listOrders: (params) => api.get('/petshop/admin/orders', { params }),
   transferOwnership: (orderId) => api.post(`/petshop/admin/orders/${orderId}/transfer-ownership`),
+  // Store name change requests
+  listStoreNameChangeRequests: (params) => api.get('/petshop/admin/store-name-change-requests', { params }),
+  decideStoreNameChangeRequest: (id, decision, reason='') => api.put(`/petshop/admin/store-name-change-requests/${id}/decision`, { decision, reason }),
 }
 
 // PetShop Manager API (reservations)
 export const petShopManagerAPI = {
-  listReservations: (params) => api.get('/petshop/manager/reservations', { params }),
-  updateReservationStatus: (id, status) => api.put(`/petshop/manager/reservations/${id}/status`, { status }),
+  // Dashboard
+  getStats: () => api.get('/petshop/stats'),
+  getDashboardStats: () => api.get('/petshop/manager/dashboard/stats'),
+  getOrders: (params) => api.get('/petshop/manager/orders', { params }),
+  getSalesReport: (params) => api.get('/petshop/manager/sales-report', { params }),
+  // Reservations
+  listReservations: (params) => api.get('/petshop/reservations', { params }),
+  updateReservationStatus: (id, status, notes) => api.put(`/petshop/manager/reservations/${id}`, { status, notes }),
+  updateDeliveryStatus: (id, status, deliveryNotes) => api.put(`/petshop/manager/reservations/${id}/delivery`, { status, deliveryNotes, actualDate: new Date().toISOString() }),
+  generateInvoice: (id) => api.get(`/petshop/manager/reservations/${id}/invoice`),
 }
 
 // Pharmacy API
@@ -326,8 +399,12 @@ export const modulesAPI = {
   create: (payload) => api.post('/modules', payload),
   update: (id, payload) => api.patch(`/modules/${id}`, payload),
   updateStatus: (id, { status, message }) => api.patch(`/modules/${id}/status`, { status, message }),
-  remove: (id) => api.delete(`/modules/${id}`),
-  delete: (id) => api.delete(`/modules/${id}`), // Alias for compatibility
+  // Soft delete (hide from users)
+  hide: (id) => api.patch(`/modules/${id}/hide`),
+  restore: (id) => api.patch(`/modules/${id}/restore`),
+  // Deprecated hard delete endpoints (map to hide for safety)
+  remove: (id) => api.patch(`/modules/${id}/hide`),
+  delete: (id) => api.patch(`/modules/${id}/hide`), // Alias for compatibility
   reorder: (modules) => api.patch('/modules/reorder', { modules })
 }
 

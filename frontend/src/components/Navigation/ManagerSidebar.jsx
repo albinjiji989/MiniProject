@@ -14,7 +14,8 @@ import {
   IconButton,
   Collapse,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Button
 } from '@mui/material'
 import {
   Dashboard as DashboardIcon,
@@ -50,7 +51,8 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
   const [expandedItems, setExpandedItems] = useState({
     inventory: false,
     orders: false,
-    reports: false
+    reports: false,
+    adoption: false,
   })
 
   const handleExpand = (item) => {
@@ -86,116 +88,170 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
     return colors[type] || colors.petshop
   }
 
-  const navigationItems = [
-    {
-      title: 'Dashboard',
-      icon: <DashboardIcon />,
-      path: `/manager/${moduleType}/dashboard`,
-      active: location.pathname === `/manager/${moduleType}/dashboard`
-    },
-    {
-      title: 'Inventory Management',
-      icon: <InventoryIcon />,
-      expandable: true,
-      expanded: expandedItems.inventory,
-      children: [
+  const getNavigationItems = (type) => {
+    if (type === 'adoption') {
+      return [
         {
-          title: 'Pet Inventory',
+          title: 'Dashboard',
+          icon: <DashboardIcon />,
+          path: `/manager/${type}/dashboard`,
+          active: location.pathname === `/manager/${type}/dashboard`
+        },
+        {
+          title: 'All Pets',
           icon: <PetsIcon />,
-          path: `/manager/${moduleType}/inventory`,
-          active: location.pathname.includes('/inventory')
+          path: `/manager/${type}/pets`,
+          active: location.pathname === `/manager/${type}/pets` || (location.pathname.startsWith(`/manager/${type}/pets/`) && !location.pathname.includes('/edit'))
         },
         {
-          title: 'Add Stock',
+          title: 'Add Pet (Wizard)',
           icon: <InventoryIcon />,
-          path: `/manager/${moduleType}/add-stock`,
-          active: location.pathname.includes('/add-stock')
+          path: `/manager/${type}/wizard/start`,
+          active: location.pathname.includes('/wizard')
         },
         {
-          title: 'Manage Inventory',
-          icon: <SettingsIcon />,
-          path: `/manager/${moduleType}/manage-inventory`,
-          active: location.pathname.includes('/manage-inventory')
-        },
-        {
-          title: 'Pricing Rules',
-          icon: <SettingsIcon />,
-          path: `/manager/${moduleType}/pricing-rules`,
-          active: location.pathname.includes('/pricing-rules')
-        }
-      ]
-    },
-    {
-      title: 'Orders & Sales',
-      icon: <OrdersIcon />,
-      expandable: true,
-      expanded: expandedItems.orders,
-      children: [
-        {
-          title: 'All Orders',
-          icon: <OrdersIcon />,
-          path: `/manager/${moduleType}/orders`,
-          active: location.pathname.includes('/orders')
-        },
-        {
-          title: 'Reservations',
+          title: 'Applications',
           icon: <ReservationsIcon />,
-          path: `/manager/${moduleType}/reservations`,
-          active: location.pathname.includes('/reservations')
+          path: `/manager/${type}/applications`,
+          active: location.pathname.includes('/applications')
         },
         {
-          title: 'Invoices',
-          icon: <InvoiceIcon />,
-          path: `/manager/${moduleType}/invoices`,
-          active: location.pathname.includes('/invoices')
+          title: 'Import Pets (CSV)',
+          icon: <InventoryIcon />,
+          path: `/manager/${type}/import`,
+          active: location.pathname.includes('/import')
         },
         {
-          title: 'Delivery',
-          icon: <DeliveryIcon />,
-          path: `/manager/${moduleType}/delivery`,
-          active: location.pathname.includes('/delivery')
-        }
-      ]
-    },
-    {
-      title: 'Analytics & Reports',
-      icon: <ReportsIcon />,
-      expandable: true,
-      expanded: expandedItems.reports,
-      children: [
-        {
-          title: 'Sales Analytics',
-          icon: <AnalyticsIcon />,
-          path: `/manager/${moduleType}/analytics`,
-          active: location.pathname.includes('/analytics')
-        },
-        {
-          title: 'Performance Reports',
+          title: 'Reports',
           icon: <ReportsIcon />,
-          path: `/manager/${moduleType}/reports`,
+          path: `/manager/${type}/reports`,
           active: location.pathname.includes('/reports')
-        },
-        {
-          title: 'Customer Insights',
-          icon: <AnalyticsIcon />,
-          path: `/manager/${moduleType}/insights`,
-          active: location.pathname.includes('/insights')
         }
       ]
-    },
-    {
-      title: 'Staff Management',
-      icon: <StaffIcon />,
-      path: `/manager/${moduleType}/staff`,
-      active: location.pathname.includes('/staff')
-    },
-    {
-      title: 'Store Settings',
-      icon: <StoreIcon />,
-      path: `/manager/${moduleType}/settings`,
-      active: location.pathname.includes('/settings')
     }
-  ]
+    // Default to PetShop navigation
+    return [
+      {
+        title: 'Dashboard',
+        icon: <DashboardIcon />,
+        path: `/manager/${type}/dashboard`,
+        active: location.pathname === `/manager/${type}/dashboard`
+      },
+      {
+        title: 'Inventory Management',
+        icon: <InventoryIcon />,
+        key: 'inventory',
+        expandable: true,
+        expanded: expandedItems.inventory,
+        children: [
+          {
+            title: 'Pet Inventory',
+            icon: <PetsIcon />,
+            path: `/manager/${type}/inventory`,
+            active: location.pathname.includes('/inventory')
+          },
+          {
+            title: 'Add Stock',
+            icon: <InventoryIcon />,
+            path: `/manager/${type}/add-stock`,
+            active: location.pathname.includes('/add-stock')
+          },
+          {
+            title: 'Manage Inventory',
+            icon: <SettingsIcon />,
+            path: `/manager/${type}/manage-inventory`,
+            active: location.pathname.includes('/manage-inventory')
+          },
+          {
+            title: 'Available For Sale',
+            icon: <PetsIcon />,
+            path: `/manager/${type}/for-sale`,
+            active: location.pathname.includes('/for-sale')
+          },
+          {
+            title: 'Pricing Rules',
+            icon: <SettingsIcon />,
+            path: `/manager/${type}/pricing-rules`,
+            active: location.pathname.includes('/pricing-rules')
+          }
+        ]
+      },
+      {
+        title: 'Orders & Sales',
+        icon: <OrdersIcon />,
+        key: 'orders',
+        expandable: true,
+        expanded: expandedItems.orders,
+        children: [
+          {
+            title: 'All Orders',
+            icon: <OrdersIcon />,
+            path: `/manager/${type}/orders`,
+            active: location.pathname.includes('/orders')
+          },
+          {
+            title: 'Reservations',
+            icon: <ReservationsIcon />,
+            path: `/manager/${type}/reservations`,
+            active: location.pathname.includes('/reservations')
+          },
+          {
+            title: 'Invoices',
+            icon: <InvoiceIcon />,
+            path: `/manager/${type}/invoices`,
+            active: location.pathname.includes('/invoices')
+          },
+          {
+            title: 'Delivery',
+            icon: <DeliveryIcon />,
+            path: `/manager/${type}/delivery`,
+            active: location.pathname.includes('/delivery')
+          }
+        ]
+      },
+      {
+        title: 'Analytics & Reports',
+        icon: <ReportsIcon />,
+        key: 'reports',
+        expandable: true,
+        expanded: expandedItems.reports,
+        children: [
+          {
+            title: 'Sales Analytics',
+            icon: <AnalyticsIcon />,
+            path: `/manager/${type}/analytics`,
+            active: location.pathname.includes('/analytics')
+          },
+          {
+            title: 'Performance Reports',
+            icon: <ReportsIcon />,
+            path: `/manager/${type}/reports`,
+            active: location.pathname.includes('/reports')
+          },
+          {
+            title: 'Customer Insights',
+            icon: <AnalyticsIcon />,
+            path: `/manager/${type}/insights`,
+            active: location.pathname.includes('/insights')
+          }
+        ]
+      },
+      {
+        title: 'Staff Management',
+        icon: <StaffIcon />,
+        path: `/manager/${type}/staff`,
+        active: location.pathname.includes('/staff')
+      },
+      {
+        title: 'Store Settings',
+        icon: <StoreIcon />,
+        path: `/manager/${type}/settings`,
+        active: location.pathname.includes('/settings')
+      }
+    ]
+  }
+
+  const navigationItems = getNavigationItems(moduleType)
 
   const bottomItems = [
     {
@@ -207,7 +263,7 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
     {
       title: 'Profile',
       icon: <ProfileIcon />,
-      path: `/manager/${moduleType}/profile`
+      path: `/manager/profile`
     },
     {
       title: 'Help & Support',
@@ -261,6 +317,28 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
             </Typography>
           </Box>
         </Box>
+
+        {/* Primary Action Button */}
+        <Box sx={{ mt: 2 }}>
+          <Button
+            fullWidth
+            variant="contained"
+            sx={{
+              bgcolor: 'rgba(255,255,255,0.2)',
+              color: 'white',
+              fontWeight: 700,
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.28)' }
+            }}
+            onClick={() => {
+              let path = `/manager/${moduleType}/dashboard`
+              if (moduleType === 'petshop') path = `/manager/${moduleType}/add-stock`
+              if (moduleType === 'adoption') path = `/manager/${moduleType}/wizard/start`
+              handleNavigation(path)
+            }}
+          >
+            {moduleType === 'petshop' ? 'Add Stock' : moduleType === 'adoption' ? 'Start Add Pet Wizard' : 'Open Dashboard'}
+          </Button>
+        </Box>
       </Box>
 
       {/* Navigation Items */}
@@ -270,7 +348,7 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
             <React.Fragment key={index}>
               <ListItem disablePadding>
                 <ListItemButton
-                  onClick={() => item.expandable ? handleExpand(item.title.toLowerCase().replace(' ', '')) : handleNavigation(item.path)}
+                  onClick={() => item.expandable ? handleExpand(item.key) : handleNavigation(item.path)}
                   sx={{
                     mx: 1,
                     borderRadius: 2,
