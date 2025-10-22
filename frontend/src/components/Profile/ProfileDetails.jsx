@@ -19,16 +19,7 @@ const ProfileDetails = ({ profileData, onUpdateSuccess, onUpdateError }) => {
     city: profileData?.address?.city || '',
     state: profileData?.address?.state || '',
     zipCode: profileData?.address?.zipCode || '',
-    country: profileData?.address?.country || '',
-    preferences: {
-      notifications: {
-        email: profileData?.preferences?.notifications?.email || true,
-        sms: profileData?.preferences?.notifications?.sms || false,
-        push: profileData?.preferences?.notifications?.push || true
-      },
-      language: profileData?.preferences?.language || 'en',
-      timezone: profileData?.preferences?.timezone || 'UTC'
-    }
+    country: profileData?.address?.country || ''
   });
   const [loading, setLoading] = useState(false);
 
@@ -40,18 +31,7 @@ const ProfileDetails = ({ profileData, onUpdateSuccess, onUpdateError }) => {
     }));
   };
 
-  const handlePreferenceChange = (preference) => {
-    setFormData(prev => ({
-      ...prev,
-      preferences: {
-        ...prev.preferences,
-        notifications: {
-          ...prev.preferences.notifications,
-          [preference]: !prev.preferences.notifications[preference]
-        }
-      }
-    }));
-  };
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -71,8 +51,7 @@ const ProfileDetails = ({ profileData, onUpdateSuccess, onUpdateError }) => {
       const submitData = {
         name: formData.name,
         phone: formData.phone,
-        address: addressData,
-        preferences: formData.preferences
+        address: addressData
       };
 
       await api.put('/profile/details', submitData);
@@ -201,71 +180,6 @@ const ProfileDetails = ({ profileData, onUpdateSuccess, onUpdateError }) => {
             />
           </Grid>
         </Grid>
-
-        <Box sx={{ mt: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            Preferences
-          </Typography>
-          
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={4}>
-              <Box 
-                sx={{ 
-                  p: 2, 
-                  border: 1, 
-                  borderColor: 'divider', 
-                  borderRadius: 1,
-                  cursor: 'pointer',
-                  bgcolor: formData.preferences.notifications.push ? 'action.selected' : 'background.paper'
-                }}
-                onClick={() => handlePreferenceChange('push')}
-              >
-                <Typography variant="subtitle2">Push Notifications</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Receive notifications about updates
-                </Typography>
-              </Box>
-            </Grid>
-
-            <Grid item xs={12} sm={4}>
-              <Box 
-                sx={{ 
-                  p: 2, 
-                  border: 1, 
-                  borderColor: 'divider', 
-                  borderRadius: 1,
-                  cursor: 'pointer',
-                  bgcolor: formData.preferences.notifications.email ? 'action.selected' : 'background.paper'
-                }}
-                onClick={() => handlePreferenceChange('email')}
-              >
-                <Typography variant="subtitle2">Email Updates</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Receive updates via email
-                </Typography>
-              </Box>
-            </Grid>
-
-            <Grid item xs={12} sm={4}>
-              <Box 
-                sx={{ 
-                  p: 2, 
-                  border: 1, 
-                  borderColor: 'divider', 
-                  borderRadius: 1,
-                  cursor: 'pointer',
-                  bgcolor: formData.preferences.notifications.sms ? 'action.selected' : 'background.paper'
-                }}
-                onClick={() => handlePreferenceChange('sms')}
-              >
-                <Typography variant="subtitle2">SMS Updates</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Receive updates via SMS
-                </Typography>
-              </Box>
-            </Grid>
-          </Grid>
-        </Box>
 
         <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end' }}>
           <Button

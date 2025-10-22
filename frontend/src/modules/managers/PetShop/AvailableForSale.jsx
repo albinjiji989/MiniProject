@@ -91,7 +91,7 @@ const AvailableForSale = () => {
       if (ageMax) qs.set('ageMax', ageMax)
       if (searchText) qs.set('q', searchText.trim())
 
-      const resp = await apiClient.get(`/petshop/inventory?${qs.toString()}`)
+      const resp = await apiClient.get(`/petshop/manager/inventory?${qs.toString()}`)
       const body = resp?.data || {}
       const dataNode = body.data ?? body
       const list = Array.isArray(dataNode?.items) ? dataNode.items : []

@@ -26,11 +26,14 @@ import {
   CheckCircle as CompletedIcon,
   Schedule as PendingIcon,
   Home as HomeIcon,
-  Store as StoreIcon
+  Store as StoreIcon,
+  Assignment as AssignmentIcon
 } from '@mui/icons-material'
 import { petShopManagerAPI } from '../../services/api'
+import { useNavigate } from 'react-router-dom'
 
 const PetShopDeliveryManagement = () => {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [deliveries, setDeliveries] = useState([])
@@ -106,7 +109,7 @@ const PetShopDeliveryManagement = () => {
 
   const renderDeliveryCard = (delivery) => (
     <Grid item xs={12} key={delivery._id}>
-      <Card>
+      <Card key={delivery._id}>
         <CardContent>
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} sm={2}>

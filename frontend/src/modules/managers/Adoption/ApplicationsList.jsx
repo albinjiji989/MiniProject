@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, adoptionAPI, resolveMediaUrl } from '../../../services/api'
+import ApplicationDetailsImproved from './ApplicationDetailsImproved'
 import {
   Box,
   Card,
@@ -12,31 +13,72 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
   Chip,
-  Pagination
+  Pagination,
+  TextField,
+  InputAdornment,
+  Tabs,
+  Tab,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Grid,
+  Avatar,
+  IconButton,
+  Menu,
+  Divider
 } from '@mui/material'
+import {
+  Search as SearchIcon,
+  FilterList as FilterIcon,
+  MoreVert as MoreVertIcon,
+  Visibility as ViewIcon,
+  Download as DownloadIcon,
+  CalendarToday as CalendarIcon,
+  Person as PersonIcon,
+  Description as DescriptionIcon,
+  AttachMoney as MoneyIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Pending as PendingIcon,
+  Schedule as ScheduleIcon,
+  Assignment as AssignmentIcon,
+  Pets as PetsIcon
+} from '@mui/icons-material'
 
 const ApplicationsList = () => {
   const navigate = useNavigate()
   const [items, setItems] = useState([])
-  const [status, setStatus] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [total, setTotal] = useState(0)
   const [actionLoadingId, setActionLoadingId] = useState('')
+  const [selectedApplication, setSelectedApplication] = useState(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [menuAnchor, setMenuAnchor] = useState(null)
+  const [error, setError] = useState('')
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / limit)), [total, limit])
 
   const load = async (signal) => {
     setLoading(true)
+    setError('')
     try {
-      const res = await apiClient.get('/adoption/manager/applications', { params: { status, page, limit, fields: 'status,paymentStatus,contractURL,userId.name,userId.email,petId.name,petId.breed,createdAt', lean: true }, signal })
+      const res = await apiClient.get('/adoption/manager/applications', { 
+        params: { 
+          status: statusFilter === 'all' ? '' : statusFilter, 
+          page, 
+          limit, 
+          fields: 'status,paymentStatus,contractURL,userId.name,userId.email,petId.name,petId.breed,petId.species,petId.age,petId.ageUnit,petId.ageDisplay,petId.gender,petId.healthStatus,petId.adoptionFee,createdAt', 
+          lean: true 
+        }, 
+        signal 
+      })
       const raw = res.data?.data?.applications || []
       const minimal = raw.map(app => ({
         _id: app._id,
@@ -45,7 +87,17 @@ const ApplicationsList = () => {
         paymentStatus: app.paymentStatus,
         contractURL: app.contractURL,
         userId: app.userId ? { name: app.userId.name, email: app.userId.email } : null,
-        petId: app.petId ? { name: app.petId.name, breed: app.petId.breed } : null,
+        petId: app.petId ? { 
+          name: app.petId.name, 
+          breed: app.petId.breed, 
+          species: app.petId.species,
+          age: app.petId.age,
+          ageUnit: app.petId.ageUnit,
+          ageDisplay: app.petId.ageDisplay,
+          gender: app.petId.gender,
+          healthStatus: app.petId.healthStatus,
+          adoptionFee: app.petId.adoptionFee 
+        } : null,
       }))
       setItems(minimal)
       setTotal(res.data?.data?.pagination?.total || 0)
@@ -54,6 +106,7 @@ const ApplicationsList = () => {
         // silently ignore aborted requests
       } else {
         console.error('Load applications failed', e)
+        setError('Failed to load applications')
       }
     } finally {
       setLoading(false)
@@ -74,17 +127,28 @@ const ApplicationsList = () => {
       load(ac.signal)
     }, 300)
     return () => { clearTimeout(t); if (ac) ac.abort() }
-  }, [status])
+  }, [statusFilter, searchTerm])
 
   const StatusChip = ({ value }) => {
     const map = {
-      pending: { color: 'warning', label: 'PENDING' },
-      approved: { color: 'success', label: 'APPROVED' },
-      rejected: { color: 'error', label: 'REJECTED' },
-      payment_pending: { color: 'info', label: 'PAYMENT PENDING' },
-      completed: { color: 'success', label: 'COMPLETED' },
+      pending: { color: 'warning', label: 'Pending Review', icon: <PendingIcon /> },
+      approved: { color: 'info', label: 'Approved', icon: <CheckCircleIcon /> },
+      rejected: { color: 'error', label: 'Rejected', icon: <CancelIcon /> },
+      payment_pending: { color: 'secondary', label: 'Payment Pending', icon: <ScheduleIcon /> },
+      completed: { color: 'success', label: 'Completed', icon: <CheckCircleIcon /> },
     }
     const meta = map[value] || { color: 'default', label: (value || '').toUpperCase() }
+    return <Chip size="small" color={meta.color} label={meta.label} icon={meta.icon} variant="outlined" />
+  }
+
+  const getPaymentStatusChip = (status) => {
+    const map = {
+      pending: { color: 'default', label: 'Not Started' },
+      processing: { color: 'warning', label: 'Processing' },
+      completed: { color: 'success', label: 'Completed' },
+      failed: { color: 'error', label: 'Failed' },
+    }
+    const meta = map[status] || { color: 'default', label: 'Unknown' }
     return <Chip size="small" color={meta.color} label={meta.label} variant="outlined" />
   }
 
@@ -128,7 +192,7 @@ const ApplicationsList = () => {
     try {
       setActionLoadingId(applicationId)
       // Directly stream from backend to avoid CORS
-      const resp = await apiClient.get(`/adoption/certificates/${applicationId}/file`, { responseType: 'blob' })
+      const resp = await apiClient.get(`/adoption/manager/certificates/${applicationId}/file`, { responseType: 'blob' })
       const blob = new Blob([resp.data], { type: resp.headers['content-type'] || 'application/pdf' })
       const blobUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -153,74 +217,259 @@ const ApplicationsList = () => {
     }
   }
 
+  const handleMenuClick = (event, application) => {
+    setMenuAnchor(event.currentTarget)
+    setSelectedApplication(application)
+  }
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null)
+    setSelectedApplication(null)
+  }
+
+  const handleViewDetails = () => {
+    setDetailsOpen(true)
+    handleMenuClose()
+  }
+
+  const handleSearch = (event) => {
+    setSearchTerm(event.target.value)
+  }
+
+  const filteredItems = useMemo(() => {
+    if (!searchTerm) return items
+    
+    const term = searchTerm.toLowerCase()
+    return items.filter(app => 
+      (app.userId?.name && app.userId.name.toLowerCase().includes(term)) ||
+      (app.userId?.email && app.userId.email.toLowerCase().includes(term)) ||
+      (app.petId?.name && app.petId.name.toLowerCase().includes(term)) ||
+      (app.petId?.breed && app.petId.breed.toLowerCase().includes(term))
+    )
+  }, [items, searchTerm])
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="h6" fontWeight={700}>Applications</Typography>
-        <Stack direction="row" spacing={1}>
-          <FormControl size="small">
-            <InputLabel id="status-label">Status</InputLabel>
-            <Select labelId="status-label" label="Status" value={status} onChange={(e)=>setStatus(e.target.value)} sx={{ minWidth: 180 }}>
-              <MenuItem value="">All</MenuItem>
-              <MenuItem value="pending">Pending</MenuItem>
-              <MenuItem value="approved">Approved</MenuItem>
-              <MenuItem value="rejected">Rejected</MenuItem>
-              <MenuItem value="payment_pending">Payment Pending</MenuItem>
-              <MenuItem value="completed">Completed</MenuItem>
-            </Select>
-          </FormControl>
-          <Button variant="contained" onClick={()=>{ setPage(1) }}>Filter</Button>
-        </Stack>
+    <Box sx={{ p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 600 }}>
+          Adoption Applications
+        </Typography>
       </Box>
 
-      <Card>
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
+      )}
+
+      {/* Search and Filters */}
+      <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>User</TableCell>
-                  <TableCell>Pet</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Applied</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {loading ? (
-                  <TableRow><TableCell colSpan={5}>Loading...</TableCell></TableRow>
-                ) : items.length === 0 ? (
-                  <TableRow><TableCell colSpan={5}>No applications found</TableCell></TableRow>
-                ) : (
-                  items.map(app => (
-                    <TableRow key={app._id} hover>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight={600}>{app.userId?.name || '-'}</Typography>
-                        <Typography variant="caption" color="text.secondary">{app.userId?.email}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight={600}>{app.petId?.name || '-'}</Typography>
-                        <Typography variant="caption" color="text.secondary">{app.petId?.breed}</Typography>
-                      </TableCell>
-                      <TableCell><StatusChip value={app.status} /></TableCell>
-                      <TableCell>{new Date(app.createdAt).toLocaleDateString()}</TableCell>
-                      <TableCell align="right">
-                        <Button size="small" onClick={()=>navigate(`/manager/adoption/applications/${app._id}`)} sx={{ mr: 1 }}>View</Button>
-                        {app.paymentStatus === 'completed' && (
-                          <>
-                            <Button size="small" variant="contained" color="success" disabled={actionLoadingId===app._id} onClick={()=>generateCertificate(app._id)} sx={{ mr: 1 }}>Generate Certificate</Button>
-                            <Button size="small" variant="outlined" disabled={actionLoadingId===app._id} onClick={()=>viewCertificate(app._id, app.contractURL)}>View Certificate</Button>
-                          </>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+            <TextField
+              fullWidth
+              placeholder="Search by applicant name, email, pet name, or breed..."
+              value={searchTerm}
+              onChange={handleSearch}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Box>
+          
+          <Tabs 
+            value={statusFilter} 
+            onChange={(e, newValue) => setStatusFilter(newValue)}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="All Applications" value="all" />
+            <Tab label="Pending" value="pending" />
+            <Tab label="Approved" value="approved" />
+            <Tab label="Rejected" value="rejected" />
+            <Tab label="Payment Pending" value="payment_pending" />
+            <Tab label="Completed" value="completed" />
+          </Tabs>
         </CardContent>
       </Card>
 
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
+      {/* Applications List */}
+      {loading ? (
+        <Typography>Loading applications...</Typography>
+      ) : filteredItems.length === 0 ? (
+        <Card>
+          <CardContent sx={{ textAlign: 'center', py: 6 }}>
+            <AssignmentIcon sx={{ fontSize: 48, color: 'grey.400', mb: 2 }} />
+            <Typography variant="h6" sx={{ mb: 1 }}>No Applications Found</Typography>
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
+              {searchTerm || statusFilter !== 'all' 
+                ? 'No applications match your search criteria.' 
+                : 'No adoption applications have been submitted yet.'}
+            </Typography>
+          </CardContent>
+        </Card>
+      ) : (
+        <Grid container spacing={3}>
+          {filteredItems.map((app) => (
+            <Grid item xs={12} key={app._id}>
+              <Card sx={{ 
+                borderLeft: 4, 
+                borderLeftColor: app.status === 'pending' ? 'warning.main' : 
+                                app.status === 'approved' ? 'info.main' : 
+                                app.status === 'rejected' ? 'error.main' : 
+                                app.status === 'completed' ? 'success.main' : 'grey.400',
+                '&:hover': { boxShadow: 3 }
+              }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <Avatar sx={{ bgcolor: 'primary.light' }}>
+                        <PersonIcon />
+                      </Avatar>
+                      <Box>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          {app.userId?.name || 'Applicant'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {app.userId?.email || 'No email provided'}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <StatusChip value={app.status} />
+                      <IconButton size="small" onClick={(e) => handleMenuClick(e, app)}>
+                        <MoreVertIcon />
+                      </IconButton>
+                    </Box>
+                  </Box>
+                  
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar sx={{ width: 24, height: 24, bgcolor: 'secondary.light' }}>
+                          <PetsIcon />
+                        </Avatar>
+                        <Box>
+                          <Typography variant="body2" fontWeight={600}>
+                            {app.petId?.name || 'Pet'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {app.petId?.breed || 'Breed not specified'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CalendarIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                        <Typography variant="body2">
+                          <strong>Applied:</strong> {new Date(app.createdAt).toLocaleDateString()}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <MoneyIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                        <Typography variant="body2">
+                          <strong>Fee:</strong> ₹{app.petId?.adoptionFee || 0}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <DescriptionIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                        <Typography variant="body2">
+                          <strong>Payment:</strong> {getPaymentStatusChip(app.paymentStatus)}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  </Grid>
+                  
+                  {/* Additional Pet Information */}
+                  <Grid container spacing={2} sx={{ mt: 1 }}>
+                    <Grid item xs={12} sm={6} md={4}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <ScheduleIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                        <Typography variant="body2">
+                          <strong>Age:</strong> {app.petId?.ageDisplay || 'N/A'}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={4}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <PetsIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                        <Typography variant="body2">
+                          <strong>Gender:</strong> {app.petId?.gender ? app.petId.gender.charAt(0).toUpperCase() + app.petId.gender.slice(1) : 'N/A'}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={4}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CheckCircleIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                        <Typography variant="body2">
+                          <strong>Health:</strong> {app.petId?.healthStatus ? app.petId.healthStatus.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'N/A'}
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  </Grid>
+
+                  <Divider sx={{ my: 2 }} />
+                  
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end' }}>
+                    <Button 
+                      size="small" 
+                      variant="outlined"
+                      startIcon={<ViewIcon />}
+                      onClick={() => {
+                        setSelectedApplication(app)
+                        setDetailsOpen(true)
+                      }}
+                    >
+                      View Details
+                    </Button>
+                    {app.paymentStatus === 'completed' && (
+                      <>
+                        <Button 
+                          size="small" 
+                          variant="contained" 
+                          color="success" 
+                          disabled={actionLoadingId === app._id} 
+                          onClick={() => generateCertificate(app._id)} 
+                          startIcon={<DownloadIcon />}
+                        >
+                          {actionLoadingId === app._id ? 'Generating...' : 'Generate Certificate'}
+                        </Button>
+                        <Button 
+                          size="small" 
+                          variant="outlined" 
+                          disabled={actionLoadingId === app._id} 
+                          onClick={() => viewCertificate(app._id, app.contractURL)}
+                          startIcon={<ViewIcon />}
+                        >
+                          {actionLoadingId === app._id ? 'Opening...' : 'View Certificate'}
+                        </Button>
+                      </>
+                    )}
+                    <Button 
+                      size="small" 
+                      variant="contained"
+                      onClick={() => navigate(`/manager/adoption/applications/${app._id}`)}
+                    >
+                      Manage
+                    </Button>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
+
+      {/* Pagination */}
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 3 }}>
         <Typography variant="caption" color="text.secondary">Total: {total}</Typography>
         <Stack direction="row" spacing={2} alignItems="center">
           <FormControl size="small">
@@ -233,6 +482,146 @@ const ApplicationsList = () => {
           <Pagination count={totalPages} page={page} onChange={(_,p)=>setPage(p)} size="small" />
         </Stack>
       </Stack>
+
+      {/* Action Menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={handleViewDetails}>
+          <ViewIcon sx={{ mr: 1 }} />
+          View Details
+        </MenuItem>
+      </Menu>
+
+      {/* Application Details Dialog */}
+      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          Application Details
+          {selectedApplication && (
+            <Chip 
+              label={
+                selectedApplication.status === 'pending' ? 'Pending Review' :
+                selectedApplication.status === 'approved' ? 'Approved' :
+                selectedApplication.status === 'rejected' ? 'Rejected' :
+                selectedApplication.status === 'completed' ? 'Completed' :
+                selectedApplication.status
+              } 
+              color={
+                selectedApplication.status === 'pending' ? 'warning' :
+                selectedApplication.status === 'approved' ? 'info' :
+                selectedApplication.status === 'rejected' ? 'error' :
+                selectedApplication.status === 'completed' ? 'success' : 'default'
+              } 
+              size="small" 
+              sx={{ ml: 2 }}
+            />
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {selectedApplication && (
+            <Box sx={{ py: 2 }}>
+              <Grid container spacing={3}>
+                {/* Applicant Information */}
+                <Grid item xs={12} md={6}>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Applicant Information</Typography>
+                  <Box sx={{ display: 'grid', gap: 1.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <PersonIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                      <Typography variant="body2" color="text.secondary">Name:</Typography>
+                      <Typography variant="body2">{selectedApplication.userId?.name || '-'}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <DescriptionIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                      <Typography variant="body2" color="text.secondary">Email:</Typography>
+                      <Typography variant="body2">{selectedApplication.userId?.email || '-'}</Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+                
+                {/* Pet Information */}
+                <Grid item xs={12} md={6}>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Pet Information</Typography>
+                  <Box sx={{ display: 'grid', gap: 1.5 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">Name:</Typography>
+                      <Typography variant="body2">{selectedApplication.petId?.name || '-'}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">Breed:</Typography>
+                      <Typography variant="body2">{selectedApplication.petId?.breed || '-'}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">Species:</Typography>
+                      <Typography variant="body2">{selectedApplication.petId?.species || '-'}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">Age:</Typography>
+                      <Typography variant="body2">{selectedApplication.petId?.ageDisplay || 'N/A'}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">Gender:</Typography>
+                      <Typography variant="body2">
+                        {selectedApplication.petId?.gender ? 
+                          selectedApplication.petId.gender.charAt(0).toUpperCase() + selectedApplication.petId.gender.slice(1) : 
+                          'N/A'}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">Health Status:</Typography>
+                      <Typography variant="body2">
+                        {selectedApplication.petId?.healthStatus ? 
+                          selectedApplication.petId.healthStatus.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 
+                          'N/A'}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">Adoption Fee:</Typography>
+                      <Typography variant="body2">₹{selectedApplication.petId?.adoptionFee || 0}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">Application Date:</Typography>
+                      <Typography variant="body2">{new Date(selectedApplication.createdAt).toLocaleDateString()}</Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+                
+                {/* Status Information */}
+                <Grid item xs={12}>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Status Information</Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                        <Typography variant="body2" color="text.secondary">Application Status:</Typography>
+                        <StatusChip value={selectedApplication.status} />
+                      </Box>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                        <Typography variant="body2" color="text.secondary">Payment Status:</Typography>
+                        {getPaymentStatusChip(selectedApplication.paymentStatus)}
+                      </Box>
+                    </Grid>
+                  </Grid>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailsOpen(false)}>Close</Button>
+          <Button 
+            variant="contained" 
+            onClick={() => {
+              setDetailsOpen(false)
+              navigate(`/manager/adoption/applications/${selectedApplication._id}`)
+            }}
+          >
+            Manage Application
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

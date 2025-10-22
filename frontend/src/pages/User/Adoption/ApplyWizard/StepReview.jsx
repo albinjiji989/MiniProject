@@ -63,18 +63,46 @@ export default function StepReview() {
         throw new Error('Please complete Home and Experience steps (Work schedule, Time at home, Experience).')
       }
 
-      // Debug and validate petId
+      // Validate petId - more flexible validation
       const petId = applicant.petId;
       console.log('StepReview: submitting with petId =', petId)
-      console.log('StepReview: petId length =', petId?.length)
-      console.log('StepReview: full applicant data =', applicant)
       
-      if (!petId || typeof petId !== 'string' || petId.length !== 24) {
-        throw new Error(`Invalid pet ID: "${petId}". Please start the application from the pet details page.`);
+      if (!petId || typeof petId !== 'string' || petId.trim().length === 0) {
+        throw new Error('Invalid pet ID. Please start the application from the pet details page.')
+      }
+
+      // Additional validation: Check if pet exists before submitting
+      try {
+        const petResponse = await adoptionAPI.getPet(petId.trim());
+        if (!petResponse?.data?.data) {
+          throw new Error(`Pet with ID ${petId} not found. The pet may have been adopted or removed.`);
+        }
+        // Additional check to ensure pet is available
+        const petData = petResponse.data.data;
+        if (!petData.isActive) {
+          throw new Error(`Pet with ID ${petId} is not currently active in the system.`);
+        }
+        if (petData.status !== 'available') {
+          throw new Error(`Pet with ID ${petId} is not currently available for adoption. Current status: ${petData.status || 'unknown'}.`);
+        }
+      } catch (petError) {
+        console.error('Pet validation error:', petError);
+        // Provide more specific error message based on the error type
+        if (petError?.response?.status === 404) {
+          throw new Error(`Pet with ID ${petId} not found. The pet may have been adopted by another user, removed by the adoption manager, or the link you're using may be outdated. Please go back to the pet listings and select a currently available pet.`);
+        } else if (petError?.response?.status === 403) {
+          throw new Error(`Access denied to pet with ID ${petId}. This may happen if you don't have permission to view this pet.`);
+        } else if (petError.message.includes('not currently available')) {
+          throw petError; // Re-throw specific availability errors
+        } else if (petError.message.includes('not currently active')) {
+          throw petError; // Re-throw specific active status errors
+        } else {
+          throw new Error(`Unable to validate pet with ID ${petId}. ${petError?.response?.data?.error || petError.message || 'Please check your connection and try again.'}`);
+        }
       }
 
       const payload = {
-        petId: petId,
+        petId: petId.trim(),
         documents: (docs.documents || []).map(u => ({ url: u })),
         applicationData: {
           fullName: applicant.fullName,
@@ -98,7 +126,15 @@ export default function StepReview() {
       localStorage.removeItem(KEY)
       navigate('/User/adoption/applications')
     } catch (e) {
-      setError(e?.response?.data?.error || e.message || 'Failed to submit application')
+      // More detailed error handling
+      const errorMessage = e?.response?.data?.error || e.message || 'Failed to submit application'
+      setError(errorMessage)
+      console.error('Adoption application error:', e)
+      
+      // If it's a pet not found error, provide additional guidance
+      if (errorMessage.includes('not found') || errorMessage.includes('Pet ID') || errorMessage.includes('validate pet')) {
+        setError(`${errorMessage} This may happen if the pet was removed, adopted by another user, or if you're using an outdated link. Please go back to the pet listings and select a currently available pet.`)
+      }
     } finally {
       setSubmitting(false)
     }
@@ -111,7 +147,42 @@ export default function StepReview() {
 
   return (
     <div className="space-y-4">
-      {error && <div className="text-red-600 text-sm">{error}</div>}
+      {error && (
+        <div className="text-red-600 text-sm p-3 bg-red-50 rounded border border-red-200">
+          <div className="font-medium">Error:</div>
+          <div>{error}</div>
+          {(error.includes('not found') || error.includes('Pet ID') || error.includes('validate pet') || error.includes('available') || error.includes('active')) && (
+            <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-200">
+              <div className="font-medium text-blue-800 mb-2">Next Steps:</div>
+              <ul className="list-disc pl-5 space-y-1 text-blue-700">
+                <li>Go back to the pet listings and select a currently available pet</li>
+                <li>Use the Debug Pet Issues tool to check if a pet exists</li>
+                <li>Reload the page to ensure you have the latest data</li>
+              </ul>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button 
+                  onClick={() => navigate('/User/adoption')} 
+                  className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                >
+                  ← Back to Pet Listings
+                </button>
+                <button 
+                  onClick={() => navigate('/User/adoption/debug')} 
+                  className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                >
+                  Debug Pet Issues
+                </button>
+                <button 
+                  onClick={() => window.location.reload()} 
+                  className="px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
+                >
+                  Reload Page
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <h3 className="font-semibold mb-2">Applicant</h3>

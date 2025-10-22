@@ -12,7 +12,7 @@ import Landing from './pages/Landing/Landing'
 import About from './pages/Static/About'
 import Contact from './pages/Static/Contact'
 import Dashboard from './pages/Dashboard/Dashboard'
-import UserDashboard from './pages/User/Dashboard'
+import PublicUserDashboard from './pages/User/PublicUserDashboard'
 // Admin-named dashboards removed in favor of Manager dashboards
 import AdminLayout from './layouts/AdminLayout'
 import AdminDashboard from './pages/Admin/AdminDashboard'
@@ -38,6 +38,7 @@ import AdoptionPetForm from './modules/managers/Adoption/PetForm'
 import PetDetailsManager from './modules/managers/Adoption/PetDetails'
 import ApplicationsList from './modules/managers/Adoption/ApplicationsList'
 import ApplicationDetails from './modules/managers/Adoption/ApplicationDetails'
+import ApplicationDetailsImproved from './modules/managers/Adoption/ApplicationDetailsImproved'
 import ImportPets from './modules/managers/Adoption/ImportPets'
 import Reports from './modules/managers/Adoption/Reports'
 import ManagerDashboardRedirect from './pages/Manager/DashboardRedirect'
@@ -57,7 +58,21 @@ import EcommerceManagerDashboard from './modules/managers/Ecommerce/EcommerceMan
 import PharmacyManagerDashboard from './modules/managers/Pharmacy/PharmacyManagerDashboard'
 import RescueManagerDashboard from './modules/managers/Rescue/RescueManagerDashboard'
 import TemporaryCareManagerDashboard from './modules/managers/TemporaryCare/TemporaryCareManagerDashboard'
+import TemporaryCareManagerRequests from './modules/managers/TemporaryCare/Requests'
+import TemporaryCareManagerCaregivers from './modules/managers/TemporaryCare/Caregivers'
 import VeterinaryManagerDashboard from './modules/managers/Veterinary/VeterinaryManagerDashboard'
+import VeterinaryWorkerDashboard from './modules/managers/Veterinary/VeterinaryWorkerDashboard'
+import VeterinaryStaff from './modules/managers/Veterinary/Staff'
+import VeterinaryMedicalManage from './modules/managers/Veterinary/Manage'
+import VeterinaryAppointments from './modules/managers/Veterinary/Appointments'
+import VeterinaryRecords from './modules/managers/Veterinary/Records'
+import VeterinaryPatients from './modules/managers/Veterinary/Patients'
+import VeterinaryServices from './modules/managers/Veterinary/Services'
+import VeterinaryReports from './modules/managers/Veterinary/Reports'
+import VetWizardLayout from './modules/managers/Veterinary/Wizard/WizardLayout'
+import VetStepBasics from './modules/managers/Veterinary/Wizard/StepBasics'
+import VetStepTests from './modules/managers/Veterinary/Wizard/StepTestsInjections'
+import VetStepMedications from './modules/managers/Veterinary/Wizard/StepMedicationsReview'
 import AdoptionManage from './modules/managers/Adoption/Manage'
 import EcommerceManage from './modules/managers/Ecommerce/Manage'
 import PharmacyManage from './modules/managers/Pharmacy/Manage'
@@ -67,6 +82,9 @@ import TemporaryCareManage from './modules/managers/TemporaryCare/Manage'
 import VeterinaryManage from './modules/managers/Veterinary/Manage'
 import PetShopManageReservations from './modules/managers/PetShop/SimpleReservations'
 import PetShopPetHistory from './modules/managers/PetShop/PetHistory'
+import HandoverManagement from './modules/managers/PetShop/HandoverManagement'
+import HandoverDetails from './pages/User/PetShop/HandoverDetails'
+import ScheduleHandover from './modules/managers/PetShop/ScheduleHandover'
 // Adoption Manager Wizard
 import AdoptionWizardLayout from './modules/managers/Adoption/Wizard/WizardLayout'
 import AdoptionStepBasic from './modules/managers/Adoption/Wizard/StepBasicInfo'
@@ -78,6 +96,9 @@ import AddPet from './pages/User/Pets/AddPet'
 import AddPetDetails from './pages/User/Pets/AddPetDetails'
 import AddPetSuccess from './pages/User/Pets/AddPetSuccess'
 import UserPetDetails from './pages/User/Pets/Details'
+import EditPet from './pages/User/Pets/EditPet'
+import UserPetMedicalHistory from './pages/User/Pets/MedicalHistory'
+import UserPetHistory from './pages/User/Pets/History'
 import UserProfile from './pages/User/Profile'
 import RequestBreed from './pages/User/Pets/RequestBreed'
 import MyOwnedPets from './pages/User/MyOwnedPets'
@@ -87,6 +108,7 @@ import AdoptionDashboard from './pages/User/Adoption/AdoptionDashboard'
 import AdoptionApplications from './pages/User/Adoption/AdoptionApplications'
 import UserApplicationDetails from './pages/User/Adoption/ApplicationDetails'
 import MyAdoptedPets from './pages/User/Adoption/MyAdoptedPets'
+import UserAdoptedPetDetails from './pages/User/Adoption/UserAdoptedPetDetails'
 // User Adoption Apply Wizard
 import AdoptionApplyLayout from './pages/User/Adoption/ApplyWizard/ApplyLayout'
 import ApplyStepApplicant from './pages/User/Adoption/ApplyWizard/StepApplicant'
@@ -94,14 +116,19 @@ import ApplyStepHome from './pages/User/Adoption/ApplyWizard/StepHome'
 import ApplyStepExperience from './pages/User/Adoption/ApplyWizard/StepExperience'
 import ApplyStepDocuments from './pages/User/Adoption/ApplyWizard/StepDocuments'
 import ApplyStepReview from './pages/User/Adoption/ApplyWizard/StepReview'
+// Adoption Debug Tool
+import DebugPetCheck from './pages/User/Adoption/DebugPetCheck'
 import PetShop from './pages/User/PetShop/PetShop'
 import PetShopDashboard from './pages/User/PetShop/PetShopDashboard'
+import UserPetShopDashboard from './pages/User/PetShop/UserPetShopDashboard'
 import PetShopShop from './pages/User/PetShop/Shop'
 import PetShopPetDetails from './pages/User/PetShop/PetDetails'
 import PetShopMyReservations from './pages/User/PetShop/MyReservations'
 import PetShopReservationDetails from './pages/User/PetShop/ReservationDetails'
 import PaymentGateway from './pages/User/PetShop/PaymentGateway'
 import PurchaseDecision from './pages/User/PetShop/PurchaseDecision'
+import PurchaseConfirmation from './pages/User/PetShop/PurchaseConfirmation'
+import ReservationWizard from './pages/User/PetShop/ReservationWizard'
 import Rescue from './pages/User/Rescue/Rescue'
 import RescueDashboard from './pages/User/Rescue/RescueDashboard'
 import EcommerceDashboard from './pages/User/Ecommerce/EcommerceDashboard'
@@ -110,15 +137,21 @@ import Orders from './pages/User/Ecommerce/Orders'
 import ProductDetails from './pages/User/Ecommerce/ProductDetails'
 import PharmacyDashboard from './pages/User/Pharmacy/PharmacyDashboard'
 import TemporaryCareDashboard from './pages/User/TemporaryCare/TemporaryCareDashboard'
+import TemporaryCareRequestForm from './pages/User/TemporaryCare/RequestForm'
 import VeterinaryDashboard from './pages/User/Veterinary/VeterinaryDashboard'
+import PetMedicalHistory from './pages/User/Veterinary/PetMedicalHistory'
 import RBACManagement from './pages/RBAC/RBACManagement'
 import CoreManagement from './pages/Core/CoreManagement'
 import Profile from './pages/Profile/Profile'
 import AdminManagement from './pages/Admin/AdminManagement'
 import StoreSetup from './pages/Manager/StoreSetup'
+import StoreNameSetup from './pages/Manager/StoreNameSetup'
 import RequestStoreNameChange from './pages/Manager/RequestStoreNameChange'
 import AdminStoreNameChangeRequests from './pages/Admin/StoreNameChangeRequests'
-// Pet Management Components
+import PetManagerDashboard from './modules/managers/Pet/pages/PetManagerDashboard'
+import PetDetails from './modules/managers/Pet/pages/PetDetails'
+import CentralizedRegistry from './modules/managers/Pet/pages/CentralizedRegistry'
+import PetRoutes from './modules/managers/Pet/routes'
 import PetManagementDashboard from './pages/Admin/PetManagement/PetManagementDashboard'
 import PetManagementOverview from './pages/Admin/PetManagement/PetManagementOverview'
 import PetManagement from './pages/Admin/PetManagement/PetManagement'
@@ -133,9 +166,69 @@ import CustomBreedRequests from './pages/Admin/CustomBreedRequests'
 import ProtectedRoute from './core/components/ProtectedRoute'
 import PetCategories from './pages/Admin/PetManagement/PetCategories'
 import OwnershipByUser from './pages/Admin/PetManagement/OwnershipByUser'
+import CentralizedPetDashboard from './pages/Admin/Dashboard/CentralizedPetDashboard'
+import CentralizedPetDetails from './components/Pet/CentralizedPetDetails'
+// PetShop Components - Adding missing imports
+import BrowsePets from './pages/User/PetShop/BrowsePets'
+import EnhancedBrowsePets from './pages/User/PetShop/EnhancedBrowsePets'
+import NewPetDetails from './pages/User/PetShop/NewPetDetails'
+import EnhancedPetDetails from './pages/User/PetShop/EnhancedPetDetails'
+import Reservations from './pages/User/PetShop/Reservations'
+import ReservationDetails from './pages/User/PetShop/ReservationDetails'
+import Wishlist from './pages/User/PetShop/Wishlist'
+import Payment from './pages/User/PetShop/Payment'
+import Handover from './pages/User/PetShop/Handover'
 
 function App() {
   const { user, loading } = useAuth()
+
+  // Helper function to determine the redirect path
+  const getRedirectPath = (user) => {
+    if (!user) return null;
+    
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      return '/admin/dashboard';
+    }
+    
+    if (typeof user.role === 'string' && user.role.endsWith('_manager')) {
+      if (user.needsStoreSetup) {
+        return '/manager/store-setup';
+      }
+      if (user.needsStoreNameSetup) {
+        return '/manager/store-name-setup';
+      }
+      
+      switch (user.role) {
+        case 'adoption_manager':
+          return '/manager/adoption/dashboard';
+        case 'petshop_manager':
+          return '/manager/petshop/dashboard';
+        case 'ecommerce_manager':
+          return '/manager/ecommerce/dashboard';
+        case 'pharmacy_manager':
+          return '/manager/pharmacy/dashboard';
+        case 'rescue_manager':
+          return '/manager/rescue/dashboard';
+        case 'veterinary_manager':
+          return '/manager/veterinary/dashboard';
+        case 'temporary_care_manager':
+          return '/manager/temporary-care/dashboard';
+        default:
+          return '/manager/dashboard';
+      }
+    }
+    // Workers (staff) redirects
+    if (typeof user.role === 'string' && user.role.endsWith('_worker')) {
+      switch (user.role) {
+        case 'veterinary_worker':
+          return '/manager/veterinary/staff-dashboard';
+        default:
+          return '/User/dashboard';
+      }
+    }
+    
+    return '/User/dashboard';
+  };
 
   return (
     <Routes>
@@ -145,28 +238,8 @@ function App() {
           loading
             ? null
             : (user
-            ? (user.role === 'admin' || user.role === 'super_admin'
-                ? <Navigate to="/admin/dashboard" replace />
-                : ((typeof user.role === 'string' && user.role.endsWith('_manager') && user.needsStoreSetup)
-                    ? <Navigate to="/manager/store-setup" replace />
-                    : ((typeof user.role === 'string' && user.role.trim() === 'adoption_manager')
-                    ? <Navigate to="/manager/adoption/dashboard" replace />
-                    : ((typeof user.role === 'string' && user.role.trim() === 'petshop_manager')
-                        ? <Navigate to="/manager/petshop/dashboard" replace />
-                        : ((typeof user.role === 'string' && user.role.trim() === 'ecommerce_manager')
-                            ? <Navigate to="/manager/ecommerce/dashboard" replace />
-                            : ((typeof user.role === 'string' && user.role.trim() === 'pharmacy_manager')
-                                ? <Navigate to="/manager/pharmacy/dashboard" replace />
-                                : ((typeof user.role === 'string' && user.role.trim() === 'rescue_manager')
-                                    ? <Navigate to="/manager/rescue/dashboard" replace />
-                                    : ((typeof user.role === 'string' && user.role.trim() === 'veterinary_manager')
-                                        ? <Navigate to="/manager/veterinary/dashboard" replace />
-                                        : ((typeof user.role === 'string' && user.role.trim() === 'temporary_care_manager')
-                                            ? <Navigate to="/manager/temporary-care/dashboard" replace />
-                                            : (typeof user.role === 'string' && user.role.endsWith('_manager')
-                                                ? <Navigate to="/manager/dashboard" replace />
-                                                : <Navigate to="/User/dashboard" replace />))))))))))
-            : <Landing />)
+                ? <Navigate to={getRedirectPath(user)} replace />
+                : <Landing />)
         } 
       />
 
@@ -194,6 +267,18 @@ function App() {
         }
       />
 
+      {/* Manager Store Name Setup */}
+      <Route
+        path="/manager/store-name-setup"
+        element={
+          <ProtectedRoute>
+            <ManagerLayout>
+              <StoreNameSetup />
+            </ManagerLayout>
+          </ProtectedRoute>
+        }
+      />
+
       {/* Unified manager dashboard redirect */}
       <Route path="/manager/dashboard" element={<ManagerDashboardRedirect />} />
       <Route path="/about" element={<About />} />
@@ -202,27 +287,7 @@ function App() {
         path="/login" 
         element={
           user
-            ? (user.role === 'admin' || user.role === 'super_admin'
-                ? <Navigate to="/admin/dashboard" replace />
-                : ((typeof user.role === 'string' && user.role.endsWith('_manager') && user.needsStoreSetup)
-                    ? <Navigate to="/manager/store-setup" replace />
-                    : ((typeof user.role === 'string' && user.role.trim() === 'adoption_manager')
-                    ? <Navigate to="/manager/adoption/dashboard" replace />
-                    : ((typeof user.role === 'string' && user.role.trim() === 'petshop_manager')
-                        ? <Navigate to="/manager/petshop/dashboard" replace />
-                        : ((typeof user.role === 'string' && user.role.trim() === 'ecommerce_manager')
-                            ? <Navigate to="/manager/ecommerce/dashboard" replace />
-                            : ((typeof user.role === 'string' && user.role.trim() === 'pharmacy_manager')
-                                ? <Navigate to="/manager/pharmacy/dashboard" replace />
-                                : ((typeof user.role === 'string' && user.role.trim() === 'rescue_manager')
-                                    ? <Navigate to="/manager/rescue/dashboard" replace />
-                                    : ((typeof user.role === 'string' && user.role.trim() === 'veterinary_manager')
-                                        ? <Navigate to="/manager/veterinary/dashboard" replace />
-                                        : ((typeof user.role === 'string' && user.role.trim() === 'temporary_care_manager')
-                                            ? <Navigate to="/manager/temporary-care/dashboard" replace />
-                                            : (typeof user.role === 'string' && user.role.endsWith('_manager')
-                                                ? <Navigate to="/manager/dashboard" replace />
-                                                : <Navigate to="/User/dashboard" replace />))))))))))
+            ? <Navigate to={getRedirectPath(user)} replace />
             : <Login />
         } 
       />
@@ -232,28 +297,8 @@ function App() {
           loading
             ? null
             : (user
-            ? (user.role === 'admin' || user.role === 'super_admin'
-                ? <Navigate to="/admin/dashboard" replace />
-                : ((typeof user.role === 'string' && user.role.endsWith('_manager') && user.needsStoreSetup)
-                    ? <Navigate to="/manager/store-setup" replace />
-                    : ((typeof user.role === 'string' && user.role.trim() === 'adoption_manager')
-                    ? <Navigate to="/manager/adoption/dashboard" replace />
-                    : ((typeof user.role === 'string' && user.role.trim() === 'petshop_manager')
-                        ? <Navigate to="/manager/petshop/dashboard" replace />
-                        : ((typeof user.role === 'string' && user.role.trim() === 'ecommerce_manager')
-                            ? <Navigate to="/manager/ecommerce/dashboard" replace />
-                            : ((typeof user.role === 'string' && user.role.trim() === 'pharmacy_manager')
-                                ? <Navigate to="/manager/pharmacy/dashboard" replace />
-                                : ((typeof user.role === 'string' && user.role.trim() === 'rescue_manager')
-                                    ? <Navigate to="/manager/rescue/dashboard" replace />
-                                    : ((typeof user.role === 'string' && user.role.trim() === 'veterinary_manager')
-                                        ? <Navigate to="/manager/veterinary/dashboard" replace />
-                                        : ((typeof user.role === 'string' && user.role.trim() === 'temporary_care_manager')
-                                            ? <Navigate to="/manager/temporary-care/dashboard" replace />
-                                            : (typeof user.role === 'string' && user.role.endsWith('_manager')
-                                                ? <Navigate to="/manager/dashboard" replace />
-                                                : <Navigate to="/User/dashboard" replace />))))))))))
-            : <Register />)
+                ? <Navigate to={getRedirectPath(user)} replace />
+                : <Register />)
         } 
       />
       <Route 
@@ -274,7 +319,7 @@ function App() {
         path="/User/dashboard"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <PublicUserDashboard />
           </ProtectedRoute>
         }
       />
@@ -289,6 +334,7 @@ function App() {
             <AdminLayout>
               <Routes>
                 <Route path="/dashboard" element={<AdminDashboard />} />
+                <Route path="/profile" element={<Profile />} />
                 <Route path="/managers" element={<ManagerManagement />} />
                 <Route path="/users" element={<UserManagement />} />
                 <Route path="/roles" element={<RoleManagement />} />
@@ -312,6 +358,8 @@ function App() {
                 <Route path="/pets/:petId/medical-records" element={<MedicalRecords />} />
                 <Route path="/pets/:petId/ownership-history" element={<OwnershipHistory />} />
                 <Route path="/pets/import" element={<PetImport />} />
+                <Route path="/pets/centralized" element={<CentralizedPetDashboard />} />
+                <Route path="/pets/centralized/:petCode" element={<CentralizedPetDetails />} />
                 <Route path="/species" element={<SpeciesManagement />} />
                 <Route path="/breeds" element={<BreedsManagement />} />
                 <Route path="/pet-categories" element={<PetCategories />} />
@@ -344,13 +392,18 @@ function App() {
                 <Route path="/pets/add/details" element={<AddPetDetails />} />
                 <Route path="/pets/add/success" element={<AddPetSuccess />} />
                 <Route path="/pets/:id" element={<UserPetDetails />} />
+                <Route path="/pets/:id/edit" element={<EditPet />} />
+                <Route path="/pets/:id/medical-history" element={<UserPetMedicalHistory />} />
+                <Route path="/pets/:id/history" element={<UserPetHistory />} />
                 <Route path="/pets/request-breed" element={<RequestBreed />} />
                 <Route path="/owned-pets" element={<MyOwnedPets />} />
                 <Route path="/adoption" element={<AdoptionDashboard />} />
                 <Route path="/adoption/applications" element={<AdoptionApplications />} />
                 <Route path="/adoption/applications/:id" element={<UserApplicationDetails />} />
                 <Route path="/adoption/adopted" element={<MyAdoptedPets />} />
+                <Route path="/adoption/my-adopted-pets/:id" element={<UserAdoptedPetDetails />} />
                 <Route path="/adoption/:id" element={<AdoptionDetails />} />
+                <Route path="/adoption/debug" element={<DebugPetCheck />} />
                 {/* Adoption Apply wizard */}
                 <Route path="/adoption/apply/*" element={<AdoptionApplyLayout />}>
                   <Route index element={<Navigate to="/User/adoption/apply/applicant" replace />} />
@@ -362,12 +415,15 @@ function App() {
                   <Route path="review" element={<ApplyStepReview />} />
                 </Route>
                 <Route path="/petshop" element={<PetShopDashboard />} />
-                <Route path="/petshop/shop" element={<PetShopShop />} />
-                <Route path="/petshop/pet/:id" element={<PetShopPetDetails />} />
-                <Route path="/petshop/reservations" element={<PetShopMyReservations />} />
-                <Route path="/petshop/reservation/:reservationId" element={<PetShopReservationDetails />} />
+                <Route path="/petshop/shop" element={<BrowsePets />} />
+                <Route path="/petshop/pet/:id" element={<NewPetDetails />} />
+                <Route path="/petshop/reserve/:petId" element={<ReservationWizard />} />
+                <Route path="/petshop/reservations" element={<Reservations />} />
+                <Route path="/petshop/reservation/:reservationId" element={<ReservationDetails />} />
+                <Route path="/petshop/wishlist" element={<Wishlist />} />
+                <Route path="/petshop/payment/:reservationId" element={<Payment />} />
                 <Route path="/petshop/purchase-decision/:reservationId" element={<PurchaseDecision />} />
-                <Route path="/petshop/payment/:reservationId" element={<PaymentGateway />} />
+                <Route path="/petshop/handover/:reservationId" element={<Handover />} />
                 <Route path="/rescue" element={<RescueDashboard />} />
                 <Route path="/ecommerce" element={<EcommerceDashboard />} />
                 <Route path="/ecommerce/product/:id" element={<ProductDetails />} />
@@ -376,7 +432,9 @@ function App() {
                 <Route path="/pharmacy" element={<PharmacyDashboard />} />
                 {false && <Route path="/boarding" element={<Boarding />} />}
                 <Route path="/temporary-care" element={<TemporaryCareDashboard />} />
+                <Route path="/temporary-care/request" element={<TemporaryCareRequestForm />} />
                 <Route path="/veterinary" element={<VeterinaryDashboard />} />
+                <Route path="/veterinary/pets/:petId/medical-records" element={<PetMedicalHistory />} />
                 {false && <Route path="/donation" element={<DonationDashboard />} />}
                 <Route path="/rbac" element={<RBACManagement />} />
                 <Route path="/core" element={<CoreManagement />} />
@@ -385,7 +443,7 @@ function App() {
                 <Route path="/admin-management" element={<AdminManagement />} />
                 
                 {/* Module Dashboards (Admin and Manager aliases) */}
-                <Route path="/dashboard/public" element={<UserDashboard />} />
+                <Route path="/dashboard/public" element={<PublicUserDashboard />} />
                 <Route path="/dashboard/petshop-admin" element={<PetShopManagerDashboard />} />
                 <Route path="/dashboard/petshop-manager" element={<PetShopManagerDashboard />} />
                 <Route path="/dashboard/temporary-care-admin" element={<TemporaryCareManagerDashboard />} />
@@ -402,6 +460,7 @@ function App() {
                 <Route path="/dashboard/pharmacy-admin" element={<PharmacyManagerDashboard />} />
                 <Route path="/dashboard/pharmacy-manager" element={<PharmacyManagerDashboard />} />
                 <Route path="/dashboard/pharmacy-manager/manage" element={<PharmacyManage />} />
+                <Route path="/manager/pet/*" element={<PetRoutes />} />
                 {false && <Route path="/dashboard/boarding-admin" element={<div />} />}
                 <Route path="/dashboard/veterinary-admin" element={<VeterinaryManagerDashboard />} />
                 <Route path="/dashboard/veterinary-manager" element={<VeterinaryManagerDashboard />} />
@@ -436,7 +495,7 @@ function App() {
                   <Route path="review" element={<AdoptionStepReview />} />
                 </Route>
                 <Route path="/applications" element={<ApplicationsList />} />
-                <Route path="/applications/:id" element={<ApplicationDetails />} />
+                <Route path="/applications/:id" element={<ApplicationDetailsImproved />} />
                 <Route path="/import" element={<ImportPets />} />
                 <Route path="/reports" element={<Reports />} />
                 <Route path="/" element={<Navigate to="/manager/adoption/dashboard" replace />} />
@@ -513,16 +572,19 @@ function App() {
             <ManagerLayout>
               <Routes>
                 <Route path="/dashboard" element={<PetShopManagerDashboard />} />
+                <Route path="/add-pet" element={<AddPet />} />
+                <Route path="/add-stock" element={<PetShopAddStock />} />
                 <Route path="/orders" element={<PetShopOrders />} />
                 <Route path="/orders/:id/invoice" element={<PetShopInvoice />} />
                 <Route path="/inventory" element={<PetShopInventory />} />
-                <Route path="/add-stock" element={<PetShopAddStock />} />
                 <Route path="/manage-inventory" element={<PetShopManageInventory />} />
                 <Route path="/for-sale" element={<AvailableForSale />} />
                 <Route path="/pricing-rules" element={<PetShopPricingRules />} />
                 <Route path="/reports" element={<PetShopReports />} />
                 <Route path="/reservations" element={<PetShopManageReservations />} />
+                <Route path="/schedule-handover/:reservationId" element={<ScheduleHandover />} />
                 <Route path="/pets/:petId/history" element={<PetShopPetHistory />} />
+                <Route path="/handover/:reservationId" element={<HandoverManagement />} />
                 <Route path="/" element={<Navigate to="/manager/petshop/dashboard" replace />} />
               </Routes>
             </ManagerLayout>
@@ -538,6 +600,8 @@ function App() {
             <ManagerLayout>
               <Routes>
                 <Route path="/dashboard" element={<TemporaryCareManagerDashboard />} />
+                <Route path="/requests" element={<TemporaryCareManagerRequests />} />
+                <Route path="/caregivers" element={<TemporaryCareManagerCaregivers />} />
                 <Route path="/" element={<Navigate to="/manager/temporary-care/dashboard" replace />} />
               </Routes>
             </ManagerLayout>
@@ -553,9 +617,48 @@ function App() {
             <ManagerLayout>
               <Routes>
                 <Route path="/dashboard" element={<VeterinaryManagerDashboard />} />
+                <Route path="/appointments" element={<VeterinaryAppointments />} />
+                <Route path="/records" element={<VeterinaryRecords />} />
+                <Route path="/patients" element={<VeterinaryPatients />} />
+                <Route path="/services" element={<VeterinaryServices />} />
+                <Route path="/reports" element={<VeterinaryReports />} />
+                <Route path="/staff" element={<VeterinaryStaff />} />
+                <Route path="/staff-dashboard" element={<VeterinaryWorkerDashboard />} />
+                <Route path="/wizard/*" element={<VetWizardLayout />}>
+                  <Route path="basic" element={<VetStepBasics />} />
+                  <Route path="tests" element={<VetStepTests />} />
+                  <Route path="medications" element={<VetStepMedications />} />
+                  <Route index element={<Navigate to="/manager/veterinary/wizard/basic" replace />} />
+                </Route>
+                <Route path="/manage" element={<VeterinaryMedicalManage />} />
                 <Route path="/" element={<Navigate to="/manager/veterinary/dashboard" replace />} />
               </Routes>
             </ManagerLayout>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* User PetShop Routes */}
+      <Route
+        path="/User/petshop/*"
+        element={
+          <ProtectedRoute>
+            <UserLayout>
+              <Routes>
+                <Route path="/dashboard" element={<UserPetShopDashboard />} />
+                <Route path="/shop" element={<EnhancedBrowsePets />} />
+                <Route path="/pet/:id" element={<EnhancedPetDetails />} />
+                <Route path="/reserve/:petId" element={<ReservationWizard />} />
+                <Route path="/reservations" element={<Reservations />} />
+                <Route path="/reservation/:reservationId" element={<ReservationDetails />} />
+                <Route path="/wishlist" element={<Wishlist />} />
+                <Route path="/payment/:reservationId" element={<Payment />} />
+                <Route path="/purchase-decision/:reservationId" element={<PurchaseDecision />} />
+                <Route path="/purchase-confirmation/:reservationId" element={<PurchaseConfirmation />} />
+                <Route path="/handover/:reservationId" element={<Handover />} />
+                <Route path="/" element={<Navigate to="/User/petshop/dashboard" replace />} />
+              </Routes>
+            </UserLayout>
           </ProtectedRoute>
         }
       />

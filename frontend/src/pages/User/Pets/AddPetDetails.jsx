@@ -1,35 +1,45 @@
 import React, { useMemo, useState } from 'react'
-import { Box, Typography, Card, CardContent, Button, Grid, TextField, Alert, IconButton, Chip } from '@mui/material'
-import { ArrowBack as ArrowBackIcon, Delete as DeleteIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon } from '@mui/icons-material'
+import { Box, Typography, Card, CardContent, Button, Grid, Alert, IconButton, CircularProgress } from '@mui/material'
+import { 
+  ArrowBack as ArrowBackIcon, 
+  Delete as DeleteIcon, 
+  ArrowLeft as ArrowLeftIcon, 
+  ArrowRight as ArrowRightIcon,
+  AddAPhoto as AddPhotoIcon,
+  Pets as PetsIcon
+} from '@mui/icons-material'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { petsAPI } from '../../../services/api'
+import { userPetsAPI } from '../../../services/api'
 
 const AddPetDetails = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const step1 = useMemo(() => location.state?.step1 || {}, [location.state])
 
-  const [color, setColor] = useState('')
   const [images, setImages] = useState(step1?.images || [])
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const onFilesSelected = async (event) => {
+  const handleFileSelect = (event) => {
     const files = Array.from(event.target.files || [])
-    const toBase64 = (file) => new Promise((resolve, reject) => {
+    if (files.length + images.length > 5) {
+      setError('You can upload maximum 5 images')
+      return
+    }
+    
+    files.forEach(file => {
+      if (!file.type.match('image.*')) {
+        setError('Please select only image files')
+        return
+      }
+      
       const reader = new FileReader()
-      reader.onload = () => resolve(reader.result)
-      reader.onerror = reject
+      reader.onload = (e) => {
+        setImages(prev => [...prev, e.target.result])
+      }
       reader.readAsDataURL(file)
     })
-    const results = []
-    for (const file of files) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        const b64 = await toBase64(file)
-        results.push(b64)
-      } catch (_) {}
-    }
+  }
 
   const moveImage = (index, dir) => {
     setImages((prev) => {
@@ -46,8 +56,6 @@ const AddPetDetails = () => {
   const removeImage = (index) => {
     setImages((prev) => prev.filter((_, i) => i !== index))
   }
-    setImages((prev) => [...prev, ...results])
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -58,13 +66,21 @@ const AddPetDetails = () => {
 
       const payload = {
         ...step1,
-        ...(color?.trim() ? { color: color.trim() } : {}),
-        images: images.map((b64, idx) => ({ url: b64, isPrimary: idx === 0 }))
+        images: images.map((img, idx) => ({ url: img, isPrimary: idx === 0 }))
       }
-      const res = await petsAPI.createPet(payload)
+      
+      const res = await userPetsAPI.create(payload)
       const pet = res?.data?.data?.pet || res?.data?.pet
+      
       // After successful creation: go to success page with pet info
-      navigate('/User/pets/add/success', { replace: true, state: { petId: pet?._id, petCode: pet?.petCode, name: pet?.name } })
+      navigate('/User/pets/add/success', { 
+        replace: true, 
+        state: { 
+          petId: pet?._id, 
+          petCode: pet?.petCode, 
+          name: pet?.name 
+        } 
+      })
     } catch (err) {
       setError(err?.response?.data?.message || err.message || 'Failed to create pet')
     } finally {
@@ -75,10 +91,14 @@ const AddPetDetails = () => {
   const restartFlow = () => navigate('/User/pets/add', { replace: true })
 
   return (
-    <Box>
+    <Box sx={{ maxWidth: 800, mx: 'auto', py: 4 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)} sx={{ mr: 2 }}>Back</Button>
-        <Typography variant="h4" sx={{ fontWeight: 600 }}>Add Pet — Details</Typography>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)} sx={{ mr: 2 }}>
+          Back
+        </Button>
+        <Typography variant="h4" sx={{ fontWeight: 600 }}>
+          Add Pet — Details
+        </Typography>
       </Box>
 
       {!step1?.name ? (
@@ -87,56 +107,200 @@ const AddPetDetails = () => {
         </Alert>
       ) : null}
 
-      <Card component="form" onSubmit={handleSubmit}>
+      <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="subtitle1" sx={{ mb: 2 }}>
-            Basic: {step1?.name || '—'} • {step1?.gender || '—'} • {step1?.age ?? '—'} {step1?.ageUnit || ''}
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Review Basic Information
+          </Typography>
+          <Box sx={{ 
+            p: 2, 
+            bgcolor: 'grey.50', 
+            borderRadius: 1, 
+            mb: 3,
+            border: '1px solid',
+            borderColor: 'divider'
+          }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="text.secondary">Name</Typography>
+                <Typography variant="body1">{step1?.name || '—'}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="text.secondary">Gender</Typography>
+                <Typography variant="body1">{step1?.gender || '—'}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="text.secondary">Age</Typography>
+                <Typography variant="body1">
+                  {step1?.age ?? '—'} {step1?.ageUnit || ''}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="text.secondary">Species</Typography>
+                <Typography variant="body1">
+                  {step1?.speciesId ? 'Selected' : '—'}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="text.secondary">Breed</Typography>
+                <Typography variant="body1">
+                  {step1?.breedId ? 'Selected' : '—'}
+                </Typography>
+              </Grid>
+            </Grid>
+          </Box>
+
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Add Photos
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Upload photos of your pet. You can upload up to 5 images. The first image will be used as the primary photo.
           </Typography>
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="Color (optional)" value={color} onChange={(e) => setColor(e.target.value)} />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" sx={{ mb: 1 }}>Preview</Typography>
-              <Box sx={{ width: 48, height: 48, borderRadius: 1, border: '1px solid', borderColor: 'divider', bgcolor: color || 'transparent' }} />
-              {color && (
-                <Chip size="small" label={color} sx={{ ml: 1, mt: 1 }} />
-              )}
-            </Grid>
             <Grid item xs={12}>
-              <Button variant="outlined" component="label">
-                Upload Images
-                <input type="file" hidden multiple accept="image/*" onChange={onFilesSelected} />
-              </Button>
+              <input
+                accept="image/*"
+                style={{ display: 'none' }}
+                id="image-upload"
+                type="file"
+                onChange={handleFileSelect}
+                multiple
+              />
+              <label htmlFor="image-upload">
+                <Button 
+                  variant="outlined" 
+                  component="span"
+                  startIcon={<AddPhotoIcon />}
+                >
+                  Upload Images
+                </Button>
+              </label>
               <Typography variant="caption" sx={{ ml: 1 }}>
-                Add 1 or more photos (first will be primary)
+                Add up to 5 photos (first will be primary)
               </Typography>
             </Grid>
-            {images?.length ? (
+            
+            {images?.length > 0 ? (
               <Grid item xs={12}>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Uploaded Images ({images.length}/5)
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                   {images.map((src, idx) => (
-                    <Box key={idx} sx={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', p: 0.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                      <Box component="img" src={src} alt={`pet-${idx}`} sx={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 0.5 }} />
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <IconButton size="small" onClick={() => moveImage(idx, -1)} disabled={idx === 0}><ArrowLeftIcon fontSize="inherit" /></IconButton>
-                        <IconButton size="small" onClick={() => moveImage(idx, 1)} disabled={idx === images.length - 1}><ArrowRightIcon fontSize="inherit" /></IconButton>
-                        <IconButton size="small" color="error" onClick={() => removeImage(idx)}><DeleteIcon fontSize="inherit" /></IconButton>
+                    <Box 
+                      key={idx} 
+                      sx={{ 
+                        display: 'inline-flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        p: 1, 
+                        border: '1px solid', 
+                        borderColor: 'divider', 
+                        borderRadius: 1,
+                        position: 'relative'
+                      }}
+                    >
+                      <Box 
+                        component="img" 
+                        src={src} 
+                        alt={`pet-${idx}`} 
+                        sx={{ 
+                          width: 100, 
+                          height: 100, 
+                          objectFit: 'cover', 
+                          borderRadius: 0.5,
+                          mb: 1
+                        }} 
+                      />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => moveImage(idx, -1)} 
+                          disabled={idx === 0}
+                        >
+                          <ArrowLeftIcon fontSize="inherit" />
+                        </IconButton>
+                        <IconButton 
+                          size="small" 
+                          onClick={() => moveImage(idx, 1)} 
+                          disabled={idx === images.length - 1}
+                        >
+                          <ArrowRightIcon fontSize="inherit" />
+                        </IconButton>
+                        <IconButton 
+                          size="small" 
+                          color="error" 
+                          onClick={() => removeImage(idx)}
+                        >
+                          <DeleteIcon fontSize="inherit" />
+                        </IconButton>
                       </Box>
-                      {idx === 0 && <Typography variant="caption" color="text.secondary">Primary</Typography>}
+                      {idx === 0 && (
+                        <Typography 
+                          variant="caption" 
+                          color="primary" 
+                          sx={{ 
+                            position: 'absolute', 
+                            top: 4, 
+                            right: 4, 
+                            bgcolor: 'white', 
+                            px: 0.5, 
+                            borderRadius: 1,
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          Primary
+                        </Typography>
+                      )}
                     </Box>
                   ))}
                 </Box>
               </Grid>
-            ) : null}
+            ) : (
+              <Grid item xs={12}>
+                <Box sx={{ 
+                  textAlign: 'center', 
+                  py: 4, 
+                  border: '2px dashed', 
+                  borderColor: 'divider', 
+                  borderRadius: 1 
+                }}>
+                  <PetsIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    No images uploaded yet
+                  </Typography>
+                </Box>
+              </Grid>
+            )}
           </Grid>
 
-          <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
-            <Button variant="outlined" onClick={restartFlow}>Start Over</Button>
-            <Button type="submit" variant="contained" disabled={isSubmitting}>Create Pet</Button>
+          <Box sx={{ 
+            mt: 3, 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            pt: 2,
+            borderTop: 1,
+            borderColor: 'divider'
+          }}>
+            <Button 
+              variant="outlined" 
+              onClick={restartFlow}
+            >
+              Start Over
+            </Button>
+            <Button 
+              type="submit" 
+              variant="contained" 
+              disabled={isSubmitting}
+              onClick={handleSubmit}
+              endIcon={isSubmitting ? <CircularProgress size={20} /> : null}
+            >
+              {isSubmitting ? 'Creating Pet...' : 'Create Pet'}
+            </Button>
           </Box>
         </CardContent>
       </Card>

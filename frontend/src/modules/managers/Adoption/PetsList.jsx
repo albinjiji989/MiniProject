@@ -10,6 +10,7 @@ const PetsList = () => {
   const navigate = useNavigate()
   const [pets, setPets] = useState([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(9)
   const [total, setTotal] = useState(0)
@@ -44,10 +45,13 @@ const PetsList = () => {
       const form = new FormData()
       form.append('file', file)
       const up = await apiClient.post('/adoption/manager/pets/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      const imageId = up.data?.data?._id
       const url = up.data?.data?.url
-      if (url) {
-        await apiClient.put(`/adoption/manager/pets/${petId}`, { images: [{ url, isPrimary: true }] })
-        setThumbById(prev => ({ ...prev, [petId]: resolveMediaUrl(url) }))
+      if (imageId) {
+        await apiClient.put(`/adoption/manager/pets/${petId}`, { imageIds: [imageId] })
+        if (url) {
+          setThumbById(prev => ({ ...prev, [petId]: resolveMediaUrl(url) }))
+        }
       }
     } catch (err) {
       alert(err?.response?.data?.error || 'Upload failed')
@@ -55,17 +59,32 @@ const PetsList = () => {
   }
 
   const getFirstImageUrl = (pet) => {
-    const images = pet?.images || []
-    if (!images || images.length === 0) return ''
-    // find first non-blob url
-    const firstValid = images.find(it => {
-      const raw = extractUrl(it)
-      return raw && !String(raw).startsWith('blob:')
-    })
-    if (!firstValid) return ''
-    const url = extractUrl(firstValid)
-    if (String(url).startsWith('data:')) return url // render data URL directly
-    return resolveMediaUrl(url)
+    const images = pet?.images || [];
+    if (!images || images.length === 0) return '';
+    
+    // Handle different image object structures
+    const firstImage = images[0];
+    let url = '';
+    
+    if (typeof firstImage === 'string') {
+      url = firstImage;
+    } else if (firstImage && typeof firstImage === 'object') {
+      // Handle populated image object from backend
+      if (firstImage.url) {
+        url = firstImage.url;
+      } else if (firstImage._id && firstImage.entityType) {
+        // This is a full Image model object
+        url = firstImage.url || '';
+      }
+    }
+    
+    if (!url) return '';
+    
+    // Handle different URL types
+    if (String(url).startsWith('data:')) return url; // render data URL directly
+    if (String(url).startsWith('blob:')) return ''; // skip blob URLs
+    
+    return resolveMediaUrl(url);
   }
 
   // Fallback: if a pet has no image in list payload, fetch its media endpoint to get first image URL
@@ -123,32 +142,68 @@ const PetsList = () => {
 
   const load = async () => {
     setLoading(true)
+    setError(null)
     try {
-      const res = await apiClient.get('/adoption/manager/pets', { params: { search: q, status, page, limit, fields: '_id,name,breed,species,status,ageDisplay,age,ageUnit,petCode,images', lean: true } })
+      console.log('Loading pets with params:', { search: q, status, page, limit });
+      const res = await apiClient.get('/adoption/manager/pets', { 
+        params: { 
+          search: q, 
+          status, 
+          page, 
+          limit,
+          fields: '_id,name,breed,species,status,ageDisplay,age,ageUnit,petCode,images,documents',
+          lean: false  // Changed from true to false to ensure virtuals are populated
+        } 
+      })
+      console.log('Pets API response:', res.data);
       const raw = res.data?.data?.pets || []
       // Minimize each item to reduce memory/CPU: keep only fields we render and a single thumbnail url
       const minimal = raw.map((p) => {
-        const firstUrl = extractUrl((p.images||[]).find(it => {
-          const u = extractUrl(it)
-          return u && !String(u).startsWith('blob:')
-        }))
-        const minimal = {
-          _id: p._id,
-          name: p.name,
-          breed: p.breed,
-          species: p.species,
-          age: p.age,
-          ageUnit: p.ageUnit,
-          ageDisplay: p.ageDisplay,
-          status: p.status,
-          petCode: p.petCode,
-          images: firstUrl ? [firstUrl] : [],
+        try {
+          // Extract the first image URL properly
+          let firstUrl = '';
+          if (Array.isArray(p.images) && p.images.length > 0) {
+            const firstImage = p.images[0];
+            if (typeof firstImage === 'string') {
+              firstUrl = firstImage;
+            } else if (firstImage && typeof firstImage === 'object' && firstImage.url) {
+              firstUrl = firstImage.url;
+            }
+          }
+          
+          const minimal = {
+            _id: p._id,
+            name: p.name,
+            breed: p.breed,
+            species: p.species,
+            age: p.age,
+            ageUnit: p.ageUnit,
+            ageDisplay: p.ageDisplay,
+            status: p.status,
+            petCode: p.petCode,
+            images: p.images || [], // Keep full images array for proper processing
+          }
+          // Backfill ageDisplay if missing
+          if (!minimal.ageDisplay && (minimal.age !== undefined || minimal.ageUnit !== undefined)) {
+            minimal.ageDisplay = computeAgeDisplay(minimal.age, minimal.ageUnit)
+          }
+          return minimal
+        } catch (err) {
+          console.error('Error processing pet:', p, err);
+          // Return a safe fallback
+          return {
+            _id: p._id || Math.random().toString(),
+            name: p.name || 'Unknown',
+            breed: p.breed || 'Unknown',
+            species: p.species || 'Unknown',
+            age: p.age,
+            ageUnit: p.ageUnit,
+            ageDisplay: p.ageDisplay || '',
+            status: p.status || 'available',
+            petCode: p.petCode || '',
+            images: p.images || []
+          }
         }
-        // Backfill ageDisplay if missing
-        if (!minimal.ageDisplay && (minimal.age !== undefined || minimal.ageUnit !== undefined)) {
-          minimal.ageDisplay = computeAgeDisplay(minimal.age, minimal.ageUnit)
-        }
-        return minimal
       })
       setPets(minimal)
       // Always try to load/refresh thumbs from media endpoint to ensure a valid served URL
@@ -157,6 +212,10 @@ const PetsList = () => {
       setSelected(new Set())
     } catch (e) {
       console.error('Load pets failed', e)
+      const errorMsg = e?.response?.data?.error || e?.message || 'Unknown error'
+      setError(errorMsg)
+      // Show error to user
+      alert('Failed to load pets: ' + errorMsg)
     } finally {
       setLoading(false)
     }
@@ -213,7 +272,7 @@ const PetsList = () => {
 
   const closeQuickView = () => setQuickView({ open: false, pet: null, loading: false })
 
-  useEffect(() => { load() }, [page, limit])
+  useEffect(() => { load() }, [page, limit, q, status])
   // Debounce search/status changes to avoid spamming API and heavy re-renders
   useEffect(() => {
     const t = setTimeout(() => {
@@ -247,6 +306,12 @@ const PetsList = () => {
         </Stack>
       </Box>
       <Divider />
+      
+      {error && (
+        <Box sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText', borderRadius: 1 }}>
+          <Typography variant="body1">Error: {error}</Typography>
+        </Box>
+      )}
 
       <Grid container spacing={2}>
         {loading && (
@@ -256,22 +321,22 @@ const PetsList = () => {
           .filter(pet => (draftOnly ? isDraft(pet) : true))
           .map(pet => (
           <Grid item xs={12} sm={6} md={4} key={pet._id}>
-            <Card>
-              <Box sx={{ position:'relative', width: '100%', height: 160, overflow: 'hidden', bgcolor: 'grey.100', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                <Checkbox checked={selected.has(pet._id)} onChange={()=>toggleSelect(pet._id)} sx={{ position:'absolute', top: 2, left: 2, bgcolor:'rgba(255,255,255,0.7)', borderRadius: 1 }} />
-                <IconButton size="small" onClick={()=>openQuickView(pet._id)} sx={{ position:'absolute', top: 2, right: 2, bgcolor:'rgba(255,255,255,0.7)' }} title="Quick View">
-                  <VisibilityIcon fontSize="inherit" />
-                </IconButton>
-                {thumbById[pet._id] || getFirstImageUrl(pet)
-                  ? <img loading="lazy" src={thumbById[pet._id] || getFirstImageUrl(pet)} alt={pet.name || 'Pet image'} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={(e)=>{ e.currentTarget.src='/placeholder-pet.svg' }} />
-                  : (
-                    <Box sx={{ textAlign:'center' }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ display:'block', mb: 1 }}>No image</Typography>
-                      <input type="file" accept="image/*" style={{ display:'none' }} ref={el => (fileInputsRef.current[pet._id] = el)} onChange={(e)=>handleFileSelected(pet._id, e)} />
-                      <Button size="small" variant="outlined" onClick={()=>triggerUpload(pet._id)}>Upload Image</Button>
-                    </Box>
-                  )
-                }
+            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <Box sx={{ position: 'relative', width: '100%', height: 160, bgcolor: 'grey.100', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {getFirstImageUrl(pet) ? (
+                  <img 
+                    loading="lazy" 
+                    src={getFirstImageUrl(pet)} 
+                    alt={pet.name || 'Pet'} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    onError={(e) => { 
+                      console.log('Image load error for:', getFirstImageUrl(pet));
+                      e.currentTarget.src = '/placeholder-pet.svg' 
+                    }} 
+                  />
+                ) : (
+                  <Typography variant="caption" color="text.secondary">No image</Typography>
+                )}
               </Box>
               <CardContent>
                 <Box sx={{ display:'flex', alignItems:'start', justifyContent:'space-between', mb: 1 }}>
@@ -301,7 +366,7 @@ const PetsList = () => {
             </Card>
           </Grid>
         ))}
-        {!loading && pets.length === 0 && (
+        {!loading && pets.length === 0 && !error && (
           <Grid item xs={12}><Typography>No pets found.</Typography></Grid>
         )}
       </Grid>

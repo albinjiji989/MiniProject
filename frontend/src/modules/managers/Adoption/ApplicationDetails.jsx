@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { apiClient, adoptionAPI, resolveMediaUrl } from '../../../services/api'
+import OTPInputModal from './OTPInputModal'
 
 const ApplicationDetails = () => {
   const { id } = useParams()
@@ -9,15 +10,14 @@ const ApplicationDetails = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [contractUrl, setContractUrl] = useState('')
-
-  const defaultHandover = {
+  const [activeTab, setActiveTab] = useState('overview')
+  const [handover, setHandover] = useState({
     scheduledAt: '',
     notes: '',
     status: 'none'
-  }
-
-  const [handover, setHandover] = useState(defaultHandover)
+  })
   const [saving, setSaving] = useState(false)
+  const [showOTPModal, setShowOTPModal] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -27,9 +27,12 @@ const ApplicationDetails = () => {
       const data = res.data?.data
       setApp(data)
       setContractUrl(data?.contractURL || '')
+      // Fix: Properly initialize handover data from the application
+      const handoverData = data?.handover || {}
       setHandover({
-        ...defaultHandover,
-        ...(data?.handover || {})
+        scheduledAt: handoverData.scheduledAt || '',
+        notes: handoverData.notes || '',
+        status: handoverData.status || 'none'
       })
     } catch (e) {
       setError(e?.response?.data?.error || 'Failed to load application')
@@ -77,8 +80,8 @@ const ApplicationDetails = () => {
   const viewCertificate = async () => {
     try {
       setSaving(true)
-      // Directly stream from backend to avoid CORS
-      const resp = await apiClient.get(`/adoption/certificates/${id}/file`, { responseType: 'blob' })
+      // Fix: Use the correct API endpoint - just /manager/... since baseURL includes /api/adoption
+      const resp = await apiClient.get(`/adoption/manager/certificates/${id}/file`, { responseType: 'blob' })
       const blob = new Blob([resp.data], { type: resp.headers['content-type'] || 'application/pdf' })
       const blobUrl = URL.createObjectURL(blob)
       window.open(blobUrl, '_blank')
@@ -109,48 +112,44 @@ const ApplicationDetails = () => {
     
     setSaving(true)
     try {
-      await apiClient.post(`/adoption/manager/applications/${id}/handover/schedule`, {
+      const response = await apiClient.post(`/adoption/manager/applications/${id}/handover/schedule`, {
         scheduledAt: handover.scheduledAt,
         notes: handover.notes || ''
       })
       await load()
-      alert('Handover scheduled. OTP has been sent to the adopter\'s email.')
+      const message = response?.data?.message || 'Handover scheduled successfully'
+      alert(message)
+      
+      // If email failed to send, show additional warning
+      if (response?.data?.emailError) {
+        alert(`Warning: ${response.data.emailError}\n\nPlease inform the adopter about their handover details manually.`)
+      }
     } catch (e) {
-      alert(e?.response?.data?.error || 'Failed to schedule handover')
+      const errorMessage = e?.response?.data?.error || 'Failed to schedule handover'
+      alert(errorMessage)
     } finally {
       setSaving(false)
     }
   }
 
-  const updateHandover = async () => {
-    setSaving(true)
-    try {
-      await apiClient.patch(`/adoption/manager/applications/${id}/handover`, {
-        scheduledAt: handover.scheduledAt,
-        notes: handover.notes
-      })
-      await load()
-      alert('Handover updated')
-    } catch (e) {
-      alert(e?.response?.data?.error || 'Failed to update handover')
-    } finally {
-      setSaving(false)
+  const regenerateOTP = async () => {
+    if (!window.confirm('Are you sure you want to regenerate the OTP? The adopter will receive a new OTP via email.')) {
+      return
     }
-  }
-
-  const completeHandover = async () => {
-    const otp = prompt('Enter the OTP provided by the adopter:')
-    if (!otp) return
     
     setSaving(true)
     try {
-      await apiClient.post(`/adoption/manager/applications/${id}/handover/complete`, {
-        otp: otp
-      })
-      await load()
-      alert('Handover completed and ownership transferred')
+      const response = await apiClient.post(`/adoption/manager/applications/${id}/handover/regenerate-otp`)
+      const message = response?.data?.message || 'New OTP generated successfully'
+      alert(message)
+      
+      // If email failed to send, show additional warning
+      if (response?.data?.emailError) {
+        alert(`Warning: ${response.data.emailError}\n\nPlease inform the adopter about their new OTP manually.`)
+      }
     } catch (e) {
-      alert(e?.response?.data?.error || 'Failed to complete handover')
+      const errorMessage = e?.response?.data?.error || 'Failed to regenerate OTP'
+      alert(errorMessage)
     } finally {
       setSaving(false)
     }
@@ -162,78 +161,19 @@ const ApplicationDetails = () => {
   if (error) return <div className="p-4 text-red-600">Error: {error}</div>
   if (!app) return <div className="p-4">Application not found</div>
 
-  // Get application status badge
-  const getStatusBadge = (status) => {
-    const statusMap = {
-      pending: { text: 'Pending Review', bg: 'bg-yellow-100', textClass: 'text-yellow-800' },
-      approved: { text: 'Approved', bg: 'bg-green-100', textClass: 'text-green-800' },
-      rejected: { text: 'Rejected', bg: 'bg-red-100', textClass: 'text-red-800' }
-    }
-    const statusInfo = statusMap[status] || { text: status, bg: 'bg-gray-100', textClass: 'text-gray-800' }
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bg} ${statusInfo.textClass}`}>
-        {statusInfo.text}
-      </span>
-    )
-  }
-
-  // Get payment status badge
-  const getPaymentBadge = (status) => {
-    const statusMap = {
-      processing: { text: 'Processing', bg: 'bg-yellow-100', textClass: 'text-yellow-800' },
-      completed: { text: 'Completed', bg: 'bg-green-100', textClass: 'text-green-800' },
-      failed: { text: 'Failed', bg: 'bg-red-100', textClass: 'text-red-800' }
-    }
-    const statusInfo = statusMap[status] || { text: 'Not Started', bg: 'bg-gray-100', textClass: 'text-gray-800' }
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bg} ${statusInfo.textClass}`}>
-        {statusInfo.text}
-      </span>
-    )
-  }
-
-  // Get handover status badge
-  const getHandoverBadge = (status) => {
-    const statusMap = {
-      none: { text: 'Not Scheduled', bg: 'bg-gray-100', textClass: 'text-gray-800' },
-      scheduled: { text: 'Scheduled', bg: 'bg-blue-100', textClass: 'text-blue-800' },
-      completed: { text: 'Completed', bg: 'bg-green-100', textClass: 'text-green-800' }
-    }
-    const statusInfo = statusMap[status] || { text: status, bg: 'bg-gray-100', textClass: 'text-gray-800' }
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bg} ${statusInfo.textClass}`}>
-        {statusInfo.text}
-      </span>
-    )
-  }
-
-  // Get applicant documents
-  const getApplicantDocuments = () => {
-    const d1 = Array.isArray(app?.documents) ? app.documents : []
-    const d2 = Array.isArray(app?.applicationData?.documents) ? app.applicationData.documents : []
-    return [...d1, ...d2]
-  }
-
-  // Check if handover can be scheduled
-  const canScheduleHandover = () => {
-    return (
-      app.status === 'approved' &&
-      app.paymentStatus === 'completed' &&
-      app.contractURL
-    )
-  }
-
-  // Get handover prerequisites status
-  const getHandoverPrerequisites = () => {
-    return {
-      isApproved: app.status === 'approved',
-      isPaymentCompleted: app.paymentStatus === 'completed',
-      isContractGenerated: !!app.contractURL
-    }
-  }
-
   return (
     <div className="max-w-6xl mx-auto p-4">
+      {/* OTP Modal */}
+      <OTPInputModal 
+        isOpen={showOTPModal}
+        onClose={() => setShowOTPModal(false)}
+        onSubmit={handleOTPSubmit}
+        onRegenerate={handleOTPRegenerate}
+        applicationId={id}
+        isRegenerating={saving}
+      />
+      
+      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Adoption Application</h1>
@@ -279,17 +219,40 @@ const ApplicationDetails = () => {
               </div>
               <div className="text-center p-3 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-500">Pet Age</p>
-                <p className="text-lg font-semibold text-gray-900">{app.petId?.ageDisplay || 'N/A'}</p>
+                <p className="text-lg font-semibold text-gray-900" title={`${app.petId?.age || 0} ${app.petId?.ageUnit || 'months'}`}>
+                  {app.petId?.ageDisplay || 'N/A'}
+                </p>
               </div>
               <div className="text-center p-3 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-500">Gender</p>
-                <p className="text-lg font-semibold text-gray-900">{app.petId?.gender || 'N/A'}</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {app.petId?.gender ? app.petId.gender.charAt(0).toUpperCase() + app.petId.gender.slice(1) : 'N/A'}
+                </p>
               </div>
               <div className="text-center p-3 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-500">Status</p>
                 <p className="text-lg font-semibold text-gray-900 capitalize">{app.status}</p>
               </div>
             </div>
+            
+            {/* Additional Pet Details */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-500">Species</p>
+                <p className="text-lg font-semibold text-gray-900">{app.petId?.species || 'N/A'}</p>
+              </div>
+              <div className="text-center p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-500">Breed</p>
+                <p className="text-lg font-semibold text-gray-900">{app.petId?.breed || 'N/A'}</p>
+              </div>
+              <div className="text-center p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-500">Health Status</p>
+                <p className="text-lg font-semibold text-gray-900 capitalize">
+                  {app.petId?.healthStatus?.replace(/_/g, ' ') || 'N/A'}
+                </p>
+              </div>
+            </div>
+
           </div>
 
           {/* Applicant Information */}
@@ -317,9 +280,15 @@ const ApplicationDetails = () => {
                 <p className="text-gray-900">{app.applicationData?.hasGarden ? 'Yes' : 'No'}</p>
               </div>
               <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-1">Has Children</h4>
-                <p className="text-gray-900">{app.applicationData?.hasChildren ? 'Yes' : 'No'}</p>
+                <h4 className="text-sm font-medium text-gray-500 mb-1">Has Other Pets</h4>
+                <p className="text-gray-900">{app.applicationData?.hasOtherPets ? 'Yes' : 'No'}</p>
               </div>
+              {app.applicationData?.hasOtherPets && app.applicationData?.otherPetsDetails && (
+                <div className="md:col-span-2">
+                  <h4 className="text-sm font-medium text-gray-500 mb-1">Other Pets Details</h4>
+                  <p className="text-gray-900">{app.applicationData.otherPetsDetails}</p>
+                </div>
+              )}
               <div className="md:col-span-2">
                 <h4 className="text-sm font-medium text-gray-500 mb-1">Address</h4>
                 <p className="text-gray-900">
@@ -329,8 +298,30 @@ const ApplicationDetails = () => {
                 </p>
               </div>
               <div className="md:col-span-2">
-                <h4 className="text-sm font-medium text-gray-500 mb-1">Adoption Reason</h4>
+                <h4 className="text-sm font-medium text-gray-500 mb-1">Work Schedule</h4>
+                <p className="text-gray-900">{app.applicationData?.workSchedule || 'N/A'}</p>
+              </div>
+              <div className="md:col-span-2">
+                <h4 className="text-sm font-medium text-gray-500 mb-1">Time at Home</h4>
+                <p className="text-gray-900">{app.applicationData?.timeAtHome || 'N/A'}</p>
+              </div>
+              <div className="md:col-span-2">
+                <h4 className="text-sm font-medium text-gray-500 mb-1">Pet Experience</h4>
+                <p className="text-gray-900">{app.applicationData?.petExperience || 'N/A'}</p>
+              </div>
+              {app.applicationData?.previousPets && (
+                <div className="md:col-span-2">
+                  <h4 className="text-sm font-medium text-gray-500 mb-1">Previous Pets</h4>
+                  <p className="text-gray-900">{app.applicationData.previousPets}</p>
+                </div>
+              )}
+              <div className="md:col-span-2">
+                <h4 className="text-sm font-medium text-gray-500 mb-1">Reason for Adoption</h4>
                 <p className="text-gray-900">{app.applicationData?.adoptionReason || 'N/A'}</p>
+              </div>
+              <div className="md:col-span-2">
+                <h4 className="text-sm font-medium text-gray-500 mb-1">Expectations</h4>
+                <p className="text-gray-900">{app.applicationData?.expectations || 'N/A'}</p>
               </div>
             </div>
           </div>
@@ -348,24 +339,41 @@ const ApplicationDetails = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {getApplicantDocuments().map((doc, index) => {
-                  const url = typeof doc === 'string' ? doc : (doc?.url || '')
-                  const name = doc?.name || url.split('/').pop() || `Document ${index + 1}`
+                  // Handle different document formats
+                  const docObj = typeof doc === 'string' ? { url: doc } : doc;
+                  const url = docObj?.url || '';
+                  const name = docObj?.name || url.split('/').pop() || `Document ${index + 1}`;
+                  const type = docObj?.type || (url.endsWith('.pdf') ? 'application/pdf' : 'image');
+                  
                   return (
                     <div key={index} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                       <div className="flex items-center">
                         <svg className="h-5 w-5 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          {type === 'application/pdf' ? (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          ) : (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          )}
                         </svg>
                         <span className="text-sm font-medium text-gray-900 truncate max-w-xs">{name}</span>
                       </div>
-                      <a 
-                        href={resolveMediaUrl(url)} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                      >
-                        View
-                      </a>
+                      <div className="flex space-x-2">
+                        <a 
+                          href={resolveMediaUrl(url)} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        >
+                          View
+                        </a>
+                        <a 
+                          href={resolveMediaUrl(url)} 
+                          download={name}
+                          className="text-green-600 hover:text-green-800 text-sm font-medium"
+                        >
+                          Download
+                        </a>
+                      </div>
                     </div>
                   )
                 })}
@@ -392,14 +400,21 @@ const ApplicationDetails = () => {
                     if (notes !== null) {
                       try {
                         setSaving(true)
-                        await apiClient.patch(`/adoption/requests/${id}`, {
+                        await apiClient.patch(`/adoption/manager/applications/${id}`, {
                           status: 'approved',
                           notes: notes || ''
                         })
                         await load()
-                        alert('Application approved successfully')
+                        // Instead of showing an alert, show a more user-friendly message
+                        // and avoid any immediate redirects or reloads that might cause token issues
+                        setTimeout(() => {
+                          alert('Application approved successfully')
+                        }, 100)
                       } catch (e) {
-                        alert(e?.response?.data?.error || 'Failed to approve application')
+                        // Handle error without causing redirects
+                        setTimeout(() => {
+                          alert(e?.response?.data?.error || 'Failed to approve application')
+                        }, 100)
                       } finally {
                         setSaving(false)
                       }
@@ -416,7 +431,7 @@ const ApplicationDetails = () => {
                     if (reason) {
                       try {
                         setSaving(true)
-                        await apiClient.patch(`/adoption/requests/${id}`, {
+                        await apiClient.patch(`/adoption/manager/applications/${id}`, {
                           status: 'rejected',
                           reason: reason
                         })
@@ -516,7 +531,7 @@ const ApplicationDetails = () => {
                         <input 
                           type="datetime-local" 
                           className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                          value={handover.scheduledAt} 
+                          value={handover.scheduledAt ? new Date(handover.scheduledAt).toISOString().slice(0, 16) : ''} 
                           onChange={e=>setHandover(h=>({ ...h, scheduledAt: e.target.value }))}
                         />
                       </div>
@@ -572,6 +587,9 @@ const ApplicationDetails = () => {
                         {app.status === 'rejected' && (
                           <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Rejected</span>
                         )}
+                        {getHandoverPrerequisites().isApproved && (
+                          <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Completed</span>
+                        )}
                       </div>
                       <div className={`flex items-center ${getHandoverPrerequisites().isPaymentCompleted ? 'text-green-600' : 'text-gray-600'}`}>
                         {getHandoverPrerequisites().isPaymentCompleted ? (
@@ -589,6 +607,9 @@ const ApplicationDetails = () => {
                             {app.paymentStatus === 'processing' ? 'Processing' : 'Not Completed'}
                           </span>
                         )}
+                        {getHandoverPrerequisites().isPaymentCompleted && (
+                          <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Completed</span>
+                        )}
                       </div>
                       <div className={`flex items-center ${getHandoverPrerequisites().isContractGenerated ? 'text-green-600' : 'text-gray-600'}`}>
                         {getHandoverPrerequisites().isContractGenerated ? (
@@ -601,19 +622,26 @@ const ApplicationDetails = () => {
                           </svg>
                         )}
                         <span>Contract/Certificate must be generated</span>
+                        {getHandoverPrerequisites().isContractGenerated && (
+                          <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Completed</span>
+                        )}
                       </div>
                     </div>
-                    {!getHandoverPrerequisites().isApproved && app.status === 'pending' && (
+                    {!getHandoverPrerequisites().isApproved && (
                       <div className="text-xs text-gray-500 mt-2">
-                        Please review and approve this application first.
+                        {app.status === 'pending' 
+                          ? 'Please review and approve this application first.' 
+                          : app.status === 'rejected' 
+                            ? 'This application has been rejected and cannot be scheduled for handover.' 
+                            : 'Application approval is required before proceeding.'}
                       </div>
                     )}
-                    {!getHandoverPrerequisites().isPaymentCompleted && getHandoverPrerequisites().isApproved && (
+                    {getHandoverPrerequisites().isApproved && !getHandoverPrerequisites().isPaymentCompleted && (
                       <div className="text-xs text-gray-500 mt-2">
                         The adopter must complete the adoption payment before handover can be scheduled.
                       </div>
                     )}
-                    {!getHandoverPrerequisites().isContractGenerated && getHandoverPrerequisites().isPaymentCompleted && (
+                    {getHandoverPrerequisites().isApproved && getHandoverPrerequisites().isPaymentCompleted && !getHandoverPrerequisites().isContractGenerated && (
                       <div className="text-xs text-gray-500 mt-2">
                         Generate the contract/certificate after payment is completed.
                       </div>
@@ -641,7 +669,7 @@ const ApplicationDetails = () => {
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-500">Scheduled Date</span>
                     <span className="text-sm font-medium">
-                      {handover.scheduledAt ? new Date(handover.scheduledAt).toLocaleString() : 'N/A'}
+                      {app.handover.scheduledAt ? new Date(app.handover.scheduledAt).toLocaleString() : 'N/A'}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -652,10 +680,10 @@ const ApplicationDetails = () => {
                     <span className="text-sm text-gray-500">Contact</span>
                     <span className="text-sm font-medium">+91-9876543210</span>
                   </div>
-                  {handover.notes && (
+                  {app.handover.notes && (
                     <div>
                       <span className="text-sm text-gray-500">Notes</span>
-                      <p className="text-sm font-medium mt-1">{handover.notes}</p>
+                      <p className="text-sm font-medium mt-1">{app.handover.notes}</p>
                     </div>
                   )}
                 </div>
@@ -666,7 +694,7 @@ const ApplicationDetails = () => {
                     <input 
                       type="datetime-local" 
                       className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                      value={handover.scheduledAt} 
+                      value={handover.scheduledAt ? new Date(handover.scheduledAt).toISOString().slice(0, 16) : ''} 
                       onChange={e=>setHandover(h=>({ ...h, scheduledAt: e.target.value }))}
                     />
                   </div>
@@ -693,6 +721,18 @@ const ApplicationDetails = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     {saving ? 'Completing...' : 'Complete Handover (Requires OTP)'}
+                  </button>
+                  <button 
+                    className={`px-4 py-2 rounded-lg font-medium flex items-center justify-center ${
+                      saving ? 'bg-gray-400' : 'bg-amber-600 text-white hover:bg-amber-700'
+                    }`} 
+                    disabled={saving} 
+                    onClick={regenerateOTP}
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    {saving ? 'Regenerating...' : 'Regenerate OTP'}
                   </button>
                   <button 
                     className={`px-4 py-2 rounded-lg font-medium flex items-center justify-center ${

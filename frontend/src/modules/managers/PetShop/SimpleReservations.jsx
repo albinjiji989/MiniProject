@@ -16,11 +16,27 @@ import {
   Paper,
   Chip,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  IconButton,
+  Tooltip
 } from '@mui/material'
 import {
   ArrowBack as ArrowBackIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  QrCode as QrCodeIcon,
+  Visibility as VisibilityIcon,
+  Chat as ChatIcon,
+  Notifications as NotificationsIcon,
+  Info as InfoIcon
 } from '@mui/icons-material'
 import { apiClient } from '../../../services/api'
 
@@ -35,6 +51,11 @@ const SimpleReservations = () => {
     approved: 0,
     paid: 0
   })
+  const [openDialog, setOpenDialog] = useState(false)
+  const [selectedReservation, setSelectedReservation] = useState(null)
+  const [dialogAction, setDialogAction] = useState('')
+  const [notes, setNotes] = useState('')
+  const [communicationMethod, setCommunicationMethod] = useState('email')
 
   useEffect(() => {
     fetchReservations()
@@ -58,18 +79,54 @@ const SimpleReservations = () => {
     }
   }
 
-  const updateReservationStatus = async (reservationId, newStatus) => {
+  const handleOpenDialog = (reservation, action) => {
+    setSelectedReservation(reservation)
+    setDialogAction(action)
+    setNotes('')
+    setOpenDialog(true)
+  }
+
+  const handleCloseDialog = () => {
+    setOpenDialog(false)
+    setSelectedReservation(null)
+    setDialogAction('')
+    setNotes('')
+  }
+
+  const handleConfirmAction = async () => {
     try {
-      await apiClient.put(`/petshop/manager/reservations/${reservationId}/status`, {
-        status: newStatus,
-        notes: `Status updated to ${newStatus}`
-      })
+      let finalNotes = notes;
+      if (!finalNotes) {
+        switch (dialogAction) {
+          case 'approved':
+            finalNotes = 'Reservation approved';
+            break;
+          case 'rejected':
+            finalNotes = 'Reservation rejected';
+            break;
+          case 'ready_pickup':
+            finalNotes = 'Ready for pickup/delivery';
+            break;
+          default:
+            finalNotes = `Status updated to ${dialogAction}`;
+        }
+      }
+
+      await apiClient.put(`/petshop/manager/reservations/${selectedReservation._id}/status`, {
+        status: dialogAction,
+        notes: finalNotes
+      });
       
       // Refresh data
-      fetchReservations()
+      fetchReservations();
+      
+      // Show success message
+      alert(`Reservation status updated to "${dialogAction}" successfully!`);
+      
+      handleCloseDialog();
     } catch (err) {
-      console.error('Update status error:', err)
-      setError(err.response?.data?.message || 'Failed to update status')
+      console.error('Update status error:', err);
+      setError(err.response?.data?.message || 'Failed to update status');
     }
   }
 
@@ -97,6 +154,17 @@ const SimpleReservations = () => {
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  const sendNotification = async (reservationId, message) => {
+    try {
+      // In a real implementation, this would send a notification to the user
+      // For now, we'll just show an alert
+      alert(`Notification sent to user: ${message}`)
+    } catch (err) {
+      console.error('Send notification error:', err)
+      setError(err.response?.data?.message || 'Failed to send notification')
+    }
   }
 
   if (loading) {
@@ -221,6 +289,9 @@ const SimpleReservations = () => {
                         <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
                           {reservation._id.slice(-8)}
                         </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {reservation.reservationCode}
+                        </Typography>
                       </TableCell>
                       <TableCell>
                         <Box>
@@ -240,6 +311,24 @@ const SimpleReservations = () => {
                           <Typography variant="caption" color="text.secondary">
                             {reservation.userId?.email}
                           </Typography>
+                          <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+                            <Tooltip title="Send notification">
+                              <IconButton 
+                                size="small" 
+                                onClick={() => sendNotification(reservation._id, `Regarding your reservation for ${reservation.itemId?.name}`)}
+                              >
+                                <NotificationsIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="View details">
+                              <IconButton 
+                                size="small" 
+                                onClick={() => navigate(`/manager/petshop/reservation/${reservation._id}`)}
+                              >
+                                <VisibilityIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
                         </Box>
                       </TableCell>
                       <TableCell>
@@ -249,7 +338,7 @@ const SimpleReservations = () => {
                       </TableCell>
                       <TableCell>
                         <Chip 
-                          label={reservation.status} 
+                          label={reservation.status.replace('_', ' ')} 
                           color={getStatusColor(reservation.status)}
                           size="small"
                         />
@@ -262,7 +351,7 @@ const SimpleReservations = () => {
                                 size="small"
                                 variant="contained"
                                 color="success"
-                                onClick={() => updateReservationStatus(reservation._id, 'approved')}
+                                onClick={() => handleOpenDialog(reservation, 'approved')}
                               >
                                 Approve
                               </Button>
@@ -270,51 +359,84 @@ const SimpleReservations = () => {
                                 size="small"
                                 variant="outlined"
                                 color="error"
-                                onClick={() => updateReservationStatus(reservation._id, 'rejected')}
+                                onClick={() => handleOpenDialog(reservation, 'rejected')}
                               >
                                 Reject
                               </Button>
                             </>
                           )}
-                          {reservation.status === 'paid' && (
+                          {reservation.status === 'approved' && (
                             <Button
                               size="small"
                               variant="contained"
-                              color="info"
-                              onClick={() => updateReservationStatus(reservation._id, 'ready_pickup')}
+                              color="primary"
+                              onClick={() => handleOpenDialog(reservation, 'payment_pending')}
                             >
-                              Ready for Pickup
+                              Request Payment
                             </Button>
                           )}
+                          {reservation.status === 'paid' && (
+                            <>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="primary"
+                                onClick={() => navigate(`/manager/petshop/schedule-handover/${reservation._id}`)}
+                                sx={{ mr: 1 }}
+                              >
+                                Schedule Handover
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="info"
+                                onClick={() => handleOpenDialog(reservation, 'ready_pickup')}
+                              >
+                                Ready for Pickup
+                              </Button>
+                            </>
+                          )}
                           {reservation.status === 'ready_pickup' && (
-                            <Button
-                              size="small"
-                              variant="contained"
-                              color="success"
-                              onClick={() => updateReservationStatus(reservation._id, 'delivered')}
-                            >
-                              Mark Delivered
-                            </Button>
+                            <>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                onClick={() => handleOpenDialog(reservation, 'delivered')}
+                              >
+                                Mark Delivered
+                              </Button>
+                            </>
                           )}
                           {reservation.status === 'delivered' && (
                             <Button
                               size="small"
                               variant="contained"
                               color="primary"
-                              onClick={() => updateReservationStatus(reservation._id, 'at_owner')}
+                              onClick={() => handleOpenDialog(reservation, 'at_owner')}
                             >
-                              Confirm with Owner
+                              Complete Handover
                             </Button>
                           )}
-                          {['approved', 'going_to_buy', 'payment_pending'].includes(reservation.status) && (
+                          {reservation.status === 'at_owner' && (
+                            <Chip 
+                              label="Handover Completed" 
+                              color="success" 
+                              size="small" 
+                            />
+                          )}
+
+                          {['going_to_buy', 'payment_pending'].includes(reservation.status) && (
                             <Chip 
                               label="Waiting for User" 
                               color="warning" 
                               size="small" 
                             />
                           )}
+
                         </Box>
                       </TableCell>
+
                     </TableRow>
                   ))}
                 </TableBody>
@@ -323,6 +445,68 @@ const SimpleReservations = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Action Dialog */}
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {dialogAction === 'approved' && 'Approve Reservation'}
+          {dialogAction === 'rejected' && 'Reject Reservation'}
+          {dialogAction === 'payment_pending' && 'Request Payment'}
+          {dialogAction === 'ready_pickup' && 'Mark Ready for Pickup'}
+          {dialogAction === 'delivered' && 'Mark as Delivered'}
+          {dialogAction === 'at_owner' && 'Complete Handover'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ py: 2 }}>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              {selectedReservation && (
+                <>
+                  <strong>Pet:</strong> {selectedReservation.itemId?.name} ({selectedReservation.itemId?.petCode})
+                  <br />
+                  <strong>Customer:</strong> {selectedReservation.userId?.name}
+                </>
+              )}
+            </Typography>
+            
+            <TextField
+              fullWidth
+              label="Notes"
+              multiline
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              helperText="Add notes about this status change"
+              sx={{ mb: 2 }}
+            />
+            
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <InfoIcon color="info" />
+              <Typography variant="body2" color="text.secondary">
+                {dialogAction === 'approved' && 'Customer will be notified about the approval and next steps.'}
+                {dialogAction === 'rejected' && 'Customer will be notified about the rejection and reason.'}
+                {dialogAction === 'payment_pending' && 'Customer will be notified to complete payment.'}
+                {dialogAction === 'ready_pickup' && 'Customer will be notified that the pet is ready for pickup.'}
+                {dialogAction === 'delivered' && 'Customer will be notified that the pet has been delivered.'}
+                {dialogAction === 'at_owner' && 'Reservation will be marked as completed.'}
+              </Typography>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button 
+            onClick={handleConfirmAction} 
+            variant="contained"
+            color={
+              dialogAction === 'approved' ? 'success' :
+              dialogAction === 'rejected' ? 'error' :
+              'primary'
+            }
+          >
+            Confirm
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

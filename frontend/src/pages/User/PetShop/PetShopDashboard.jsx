@@ -90,8 +90,6 @@ const PetShopDashboard = () => {
   const [wishlistItems, setWishlistItems] = useState([])
   const [reservations, setReservations] = useState([])
   
-  // Removed mock user; using authenticated user from context
-  
   // Reservation dialog state
   const [reservationDialog, setReservationDialog] = useState(false)
   const [selectedPet, setSelectedPet] = useState(null)
@@ -129,10 +127,10 @@ const PetShopDashboard = () => {
       // Fetch all data in parallel
       const [statsRes, petsRes, shopsRes, wishlistRes, reservationsRes] = await Promise.all([
         apiClient.get('/petshop/user/stats'),
-        apiClient.get('/petshop/public/listings?limit=12'),
-        apiClient.get('/petshop/public/shops?limit=8'),
-        apiClient.get('/petshop/public/wishlist'),
-        apiClient.get('/petshop/public/reservations')
+        apiClient.get('/petshop/user/public/listings?limit=12'),
+        apiClient.get('/petshop/user/public/shops?limit=8'),
+        apiClient.get('/petshop/user/public/wishlist'),
+        apiClient.get('/petshop/user/public/reservations')
       ])
       
       setStats(statsRes.data.data)
@@ -155,9 +153,9 @@ const PetShopDashboard = () => {
 
   // Unified layout config
   const quickActions = [
-    { label: 'Browse', onClick: () => setTabValue(1), color: 'bg-emerald-600' },
-    { label: 'Wishlist', onClick: () => setTabValue(3), color: 'bg-blue-600' },
-    { label: 'Reservations', onClick: () => navigate('/User/petshop/reservations'), color: 'bg-indigo-600' },
+    { label: 'Browse Pets', onClick: () => navigate('/User/petshop/shop'), color: 'bg-emerald-600' },
+    { label: 'My Wishlist', onClick: () => navigate('/User/petshop/wishlist'), color: 'bg-blue-600' },
+    { label: 'My Reservations', onClick: () => navigate('/User/petshop/reservations'), color: 'bg-indigo-600' },
   ]
   const statCards = [
     { label: 'Pet Shops', value: stats.totalPetShops || 0, icon: '🏪' },
@@ -197,7 +195,7 @@ const PetShopDashboard = () => {
         ...reservationData
       }
       
-      const response = await apiClient.post('/petshop/public/reservations', payload)
+      const response = await apiClient.post('/petshop/user/public/reservations', payload)
       
       setSnackbar({
         open: true,
@@ -220,7 +218,7 @@ const PetShopDashboard = () => {
 
   const handleAddToWishlist = async (petId) => {
     try {
-      await apiClient.post('/petshop/public/wishlist', { itemId: petId })
+      await apiClient.post('/petshop/user/public/wishlist', { itemId: petId })
       setSnackbar({
         open: true,
         message: 'Pet added to wishlist!',
@@ -318,7 +316,7 @@ const PetShopDashboard = () => {
                     <CardMedia
                       component="img"
                       height="200"
-                      image={resolveMediaUrl(pet.images?.[0]?.url) || `${window.location.origin}/api/placeholder/300/200`}
+                      image={resolveMediaUrl(pet.images?.[0]?.url) || '/placeholder-pet.svg'}
                       alt={pet.name || 'Pet'}
                       sx={{ objectFit: 'cover' }}
                     />
@@ -359,9 +357,9 @@ const PetShopDashboard = () => {
                         size="small" 
                         variant="contained" 
                         startIcon={<ReserveIcon />}
-                        onClick={() => handleReservePet(pet)}
+                        onClick={() => navigate(`/User/petshop/pet/${pet._id}`)}
                       >
-                        Reserve
+                        View Details
                       </Button>
                     </CardActions>
                   </Card>
@@ -374,9 +372,18 @@ const PetShopDashboard = () => {
 
       {tabValue === 1 && (
         <Box>
-          <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
-            Browse All Pets
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              Browse All Pets
+            </Typography>
+            <Button 
+              variant="outlined" 
+              startIcon={<SearchIcon />}
+              onClick={() => navigate('/User/petshop/shop')}
+            >
+              Advanced Search
+            </Button>
+          </Box>
           <Grid container spacing={3}>
             {featuredPets.map((pet) => (
               <Grid item xs={12} sm={6} md={3} key={pet._id}>
@@ -387,7 +394,7 @@ const PetShopDashboard = () => {
                   <CardMedia
                     component="img"
                     height="150"
-                    image={resolveMediaUrl(pet.images?.[0]?.url) || `${window.location.origin}/api/placeholder/300/200`}
+                    image={resolveMediaUrl(pet.images?.[0]?.url) || '/placeholder-pet.svg'}
                     alt={pet.name || 'Pet'}
                   />
                   <CardContent>
@@ -401,10 +408,10 @@ const PetShopDashboard = () => {
                   <CardActions>
                     <Button 
                       size="small" 
-                      onClick={() => handleReservePet(pet)}
-                      startIcon={<ReserveIcon />}
+                      onClick={() => navigate(`/User/petshop/pet/${pet._id}`)}
+                      startIcon={<ViewIcon />}
                     >
-                      Reserve
+                      View Details
                     </Button>
                   </CardActions>
                 </Card>
@@ -434,7 +441,11 @@ const PetShopDashboard = () => {
                     <Typography variant="body2">
                       Capacity: {shop.capacity?.current || 0}/{shop.capacity?.total || 0}
                     </Typography>
-                    <Button variant="outlined" sx={{ mt: 2 }}>
+                    <Button 
+                      variant="outlined" 
+                      sx={{ mt: 2 }}
+                      onClick={() => navigate(`/User/petshop/shop/${shop._id}`)}
+                    >
                       Visit Shop
                     </Button>
                   </CardContent>
@@ -480,7 +491,11 @@ const PetShopDashboard = () => {
                       )}
                     </Box>
                   )}
-                  <Button variant="outlined" sx={{ mt: 2 }}>
+                  <Button 
+                    variant="outlined" 
+                    sx={{ mt: 2 }}
+                    onClick={() => navigate('/User/petshop/wishlist')}
+                  >
                     View Full Wishlist
                   </Button>
                 </CardContent>
@@ -514,9 +529,12 @@ const PetShopDashboard = () => {
                             Code: {reservation.reservationCode}
                           </Typography>
                           <Box sx={{ mt: 1 }}>
-                            <Tooltip title="Track Reservation">
-                              <IconButton size="small">
-                                <QrCodeIcon />
+                            <Tooltip title="View Reservation Details">
+                              <IconButton 
+                                size="small"
+                                onClick={() => navigate(`/User/petshop/reservation/${reservation._id}`)}
+                              >
+                                <ViewIcon />
                               </IconButton>
                             </Tooltip>
                           </Box>

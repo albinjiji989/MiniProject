@@ -2,118 +2,115 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Box,
+  Container,
   Typography,
   Card,
   CardContent,
   CardMedia,
   Button,
-  Alert,
-  CircularProgress,
-  Grid,
-  Avatar,
   Chip,
-  TextField,
+  CircularProgress,
+  Alert,
+  Grid,
+  Stepper,
+  Step,
+  StepLabel,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  FormControl,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Paper
+  TextField
 } from '@mui/material'
 import {
-  CheckCircle as ApprovedIcon,
-  Pets as PetIcon,
-  Payment as PaymentIcon,
+  ArrowBack as BackIcon,
+  Pets as PetsIcon,
+  CheckCircle as CheckIcon,
   Cancel as CancelIcon,
-  ArrowBack as BackIcon
+  Info as InfoIcon,
+  Schedule as ScheduleIcon
 } from '@mui/icons-material'
-import { apiClient } from '../../../services/api'
+import { petShopAPI, resolveMediaUrl } from '../../../services/api'
 
 const PurchaseDecision = () => {
   const { reservationId } = useParams()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
-  const [reservation, setReservation] = useState(null)
+  const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
-  const [confirmDialog, setConfirmDialog] = useState({ open: false, decision: null })
+  const [reservation, setReservation] = useState(null)
+  const [decision, setDecision] = useState('proceed')
   const [notes, setNotes] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  
-  const buildImageUrl = (url) => {
-    if (!url) return ''
-    if (/^data:image\//i.test(url)) return url
-    if (/^https?:\/\//i.test(url)) return url
-    const apiBase = import.meta.env.VITE_API_URL || process.env.REACT_APP_API_URL || ''
-    const origin = apiBase.replace(/\/?api\/?$/, '')
-    return `${origin}${url.startsWith('/') ? '' : '/'}${url}`
-  }
+  const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false)
 
-  useEffect(() => {
-    fetchReservation()
-  }, [reservationId])
-
-  const fetchReservation = async () => {
+  const loadReservation = async () => {
     try {
       setLoading(true)
-      const response = await apiClient.get(`/petshop/public/reservations/track/${reservationId}`)
-      const reservationData = response.data.data.reservation
-      
-      if (reservationData.status !== 'approved') {
-        setError('This reservation is not available for purchase decision.')
-        return
-      }
-      
-      setReservation(reservationData)
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load reservation details')
+      const res = await petShopAPI.getReservationById(reservationId)
+      setReservation(res?.data?.data?.reservation || null)
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to load reservation details')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleDecision = (wantsToBuy) => {
-    setConfirmDialog({ open: true, decision: wantsToBuy })
+  useEffect(() => {
+    loadReservation()
+  }, [reservationId])
+
+  const formatAge = (age, ageUnit) => {
+    if (!age) return 'Age not specified'
+    if (ageUnit === 'months' && age >= 12) {
+      const years = Math.floor(age / 12)
+      const months = age % 12
+      return `${years} yr${years > 1 ? 's' : ''}${months > 0 ? ` ${months} mo` : ''}`
+    }
+    return `${age} ${ageUnit || 'yr'}${age > 1 && ageUnit ? (ageUnit.endsWith('s') ? '' : 's') : ''}`
   }
 
-  const confirmDecision = async () => {
+  const handleConfirmDecision = () => {
+    setConfirmationDialogOpen(true)
+  }
+
+  const submitDecision = async () => {
     try {
-      setSubmitting(true)
-      const response = await apiClient.post(`/petshop/reservations/${reservationId}/confirm-purchase`, {
-        wantsToBuy: confirmDialog.decision,
+      setProcessing(true)
+      setConfirmationDialogOpen(false)
+      
+      const payload = {
+        wantsToBuy: decision === 'proceed',
         notes: notes
-      })
-      
-      setConfirmDialog({ open: false, decision: null })
-      
-      if (confirmDialog.decision) {
-        // User wants to buy - redirect to payment
-        navigate(`/User/petshop/payment/${reservationId}`)
-      } else {
-        // User declined - show success message and redirect
-        navigate('/User/petshop/reservations', { 
-          state: { message: 'Reservation cancelled successfully.' }
-        })
       }
       
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to submit decision')
+      await petShopAPI.confirmPurchaseDecision(reservationId, payload)
+      
+      // Refresh reservation data
+      await loadReservation()
+      
+      // Show success message
+      alert(`Your decision has been recorded successfully!`)
+      
+      // If user wants to proceed, redirect to reservation details
+      if (decision === 'proceed') {
+        navigate(`/User/petshop/reservation/${reservationId}`)
+      } else {
+        // If user wants to cancel, redirect to reservations list
+        navigate('/User/petshop/reservations')
+      }
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to submit decision')
     } finally {
-      setSubmitting(false)
+      setProcessing(false)
     }
-  }
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
   }
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
         <CircularProgress />
       </Box>
     )
@@ -121,240 +118,279 @@ const PurchaseDecision = () => {
 
   if (error) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-        <Button startIcon={<BackIcon />} onClick={() => navigate('/User/petshop/reservations')}>
-          Back to Reservations
-        </Button>
-      </Box>
+      <Container maxWidth="lg" sx={{ mt: 4 }}>
+        <Alert severity="error">{error}</Alert>
+      </Container>
     )
   }
 
+  if (!reservation) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4 }}>
+        <Alert severity="info">Reservation not found</Alert>
+      </Container>
+    )
+  }
+
+  const pet = reservation.itemId
+
   return (
-    <Box sx={{ p: 3, maxWidth: 800, mx: 'auto' }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Button
-          startIcon={<BackIcon />}
-          onClick={() => navigate('/User/petshop/reservations')}
-          sx={{ mr: 2 }}
-        >
-          Back
-        </Button>
-        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Button 
+        startIcon={<BackIcon />} 
+        onClick={() => navigate(-1)} 
+        sx={{ mb: 2 }}
+      >
+        Back
+      </Button>
+      
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
           Purchase Decision
+        </Typography>
+        <Typography variant="subtitle1" color="text.secondary">
+          Reservation {reservation.reservationCode} - Payment Successful
         </Typography>
       </Box>
 
-      {/* Approval Notice */}
-      <Alert severity="success" sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ApprovedIcon />
-          <Typography variant="h6">
-            Great News! Your reservation has been approved!
-          </Typography>
-        </Box>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-          The pet shop manager has reviewed and approved your reservation. 
-          Please confirm if you'd like to proceed with the purchase.
-        </Typography>
-      </Alert>
-
-      {/* Pet Details Card */}
-      <Card sx={{ mb: 4 }}>
-        <CardContent>
-          <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} md={3}>
-              {reservation.itemId?.images?.length > 0 ? (
-                <CardMedia
-                  component="img"
-                  height={200}
-                  image={buildImageUrl((reservation.itemId.images.find(i=>i.isPrimary)?.url) || reservation.itemId.images[0]?.url)}
-                  alt={reservation.itemId.name}
-                  sx={{ borderRadius: 2, objectFit: 'cover' }}
-                />
-              ) : (
-                <Box
-                  sx={{
-                    width: '100%',
-                    height: 200,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    bgcolor: 'grey.100',
-                    borderRadius: 2
-                  }}
-                >
-                  <PetIcon sx={{ fontSize: 60, color: 'grey.400' }} />
-                </Box>
-              )}
-            </Grid>
-            
-            <Grid item xs={12} md={9}>
-              <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>
-                {reservation.itemId?.name || 'Pet'}
-              </Typography>
+      <Grid container spacing={3}>
+        {/* Left Column - Pet Details */}
+        <Grid item xs={12} md={8}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>Reserved Pet</Typography>
               
               <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Pet Code</Typography>
-                  <Typography variant="body1">{reservation.itemId?.petCode}</Typography>
+                <Grid item xs={12} sm={4}>
+                  <CardMedia
+                    component="img"
+                    height="150"
+                    image={resolveMediaUrl(pet?.images?.[0]?.url) || '/placeholder-pet.svg'}
+                    alt={pet?.name || 'Pet'}
+                    sx={{ objectFit: 'cover', borderRadius: 1 }}
+                  />
                 </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Price</Typography>
-                  <Typography variant="h6" color="primary">
-                    ₹{reservation.itemId?.price?.toLocaleString()}
+                
+                <Grid item xs={12} sm={8}>
+                  <Typography variant="h6" component="div" sx={{ mb: 1 }}>
+                    {pet?.name || 'Pet'}
                   </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Species</Typography>
-                  <Typography variant="body1">
-                    {reservation.itemId?.speciesId?.displayName || 'Unknown'}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Breed</Typography>
-                  <Typography variant="body1">
-                    {reservation.itemId?.breedId?.name || 'Unknown'}
-                  </Typography>
+                  
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Typography variant="body2">
+                      <strong>Species:</strong> {pet?.speciesId?.displayName || pet?.speciesId?.name || 'Not specified'}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>Breed:</strong> {pet?.breedId?.name || 'Not specified'}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>Age:</strong> {formatAge(pet?.age, pet?.ageUnit)}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>Gender:</strong> {pet?.gender || 'Not specified'}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>Price:</strong> ₹{pet?.price?.toLocaleString() || 'N/A'}
+                    </Typography>
+                  </Box>
                 </Grid>
               </Grid>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
-
-      {/* Reservation Details */}
-      <Card sx={{ mb: 4 }}>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Reservation Details</Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Reservation ID</Typography>
-              <Typography variant="body1" sx={{ fontFamily: 'monospace' }}>
-                {reservation.reservationCode || reservation._id.slice(-8)}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Status</Typography>
-              <Chip label="Approved" color="success" />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Requested Date</Typography>
-              <Typography variant="body1">{formatDate(reservation.createdAt)}</Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Approved Date</Typography>
-              <Typography variant="body1">
-                {reservation.managerReview?.reviewedAt ? 
-                  formatDate(reservation.managerReview.reviewedAt) : 
-                  'Recently'
-                }
-              </Typography>
-            </Grid>
-            {reservation.notes && (
-              <Grid item xs={12}>
-                <Typography variant="body2" color="text.secondary">Your Notes</Typography>
-                <Typography variant="body1">{reservation.notes}</Typography>
-              </Grid>
-            )}
-            {reservation.managerReview?.reviewNotes && (
-              <Grid item xs={12}>
-                <Typography variant="body2" color="text.secondary">Manager Notes</Typography>
-                <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
-                  <Typography variant="body1">{reservation.managerReview.reviewNotes}</Typography>
-                </Paper>
-              </Grid>
-            )}
-          </Grid>
-        </CardContent>
-      </Card>
-
-      {/* Decision Buttons */}
-      <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 3 }}>
-            Would you like to proceed with purchasing this pet?
-          </Typography>
+            </CardContent>
+          </Card>
           
-          <Grid container spacing={3}>
-            <Grid item xs={12} sm={6}>
-              <Button
-                variant="contained"
-                color="primary"
-                size="large"
-                fullWidth
-                startIcon={<PaymentIcon />}
-                onClick={() => handleDecision(true)}
-                sx={{ py: 2 }}
-              >
-                Yes, I want to buy this pet
-              </Button>
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                You'll be redirected to the payment page
+          {/* Decision Options */}
+          <Card sx={{ mt: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>What would you like to do?</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Your payment has been processed successfully. Please confirm your decision to proceed with the purchase or cancel.
               </Typography>
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <Button
-                variant="outlined"
-                color="error"
-                size="large"
+              
+              <FormControl component="fieldset" fullWidth>
+                <RadioGroup
+                  value={decision}
+                  onChange={(e) => setDecision(e.target.value)}
+                >
+                  <Card 
+                    variant="outlined" 
+                    sx={{ 
+                      mb: 2, 
+                      borderColor: decision === 'proceed' ? 'primary.main' : 'divider',
+                      borderWidth: decision === 'proceed' ? 2 : 1
+                    }}
+                  >
+                    <CardContent>
+                      <FormControlLabel 
+                        value="proceed" 
+                        control={<Radio />} 
+                        label={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <CheckIcon color="success" />
+                            <Typography>Proceed with Purchase</Typography>
+                          </Box>
+                        }
+                      />
+                      <Typography variant="body2" color="text.secondary" sx={{ ml: 4 }}>
+                        Confirm your purchase and proceed with the adoption process. You will receive further instructions for pickup.
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card 
+                    variant="outlined" 
+                    sx={{ 
+                      borderColor: decision === 'cancel' ? 'primary.main' : 'divider',
+                      borderWidth: decision === 'cancel' ? 2 : 1
+                    }}
+                  >
+                    <CardContent>
+                      <FormControlLabel 
+                        value="cancel" 
+                        control={<Radio />} 
+                        label={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <CancelIcon color="error" />
+                            <Typography>Cancel Purchase</Typography>
+                          </Box>
+                        }
+                      />
+                      <Typography variant="body2" color="text.secondary" sx={{ ml: 4 }}>
+                        Cancel your purchase. The amount will be refunded to your original payment method within 5-7 business days.
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </RadioGroup>
+              </FormControl>
+              
+              <TextField
                 fullWidth
-                startIcon={<CancelIcon />}
-                onClick={() => handleDecision(false)}
-                sx={{ py: 2 }}
-              >
-                No, cancel reservation
-              </Button>
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                The pet will be available for others
+                multiline
+                rows={3}
+                label="Additional Notes (Optional)"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                sx={{ mt: 3 }}
+              />
+              
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+                <Button 
+                  variant="contained" 
+                  size="large"
+                  onClick={handleConfirmDecision}
+                  disabled={processing}
+                >
+                  {processing ? <CircularProgress size={24} /> : 'Confirm Decision'}
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        {/* Right Column - Information */}
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <InfoIcon color="primary" />
+                <Typography variant="h6">Next Steps</Typography>
+              </Box>
+              
+              {decision === 'proceed' ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <CheckIcon color="success" />
+                    <Typography variant="body2">
+                      Your purchase will be confirmed and the pet will be prepared for pickup
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <ScheduleIcon color="primary" />
+                    <Typography variant="body2">
+                      You will receive a pickup schedule within 24 hours
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <InfoIcon color="primary" />
+                    <Typography variant="body2">
+                      Bring valid ID and proof of address for verification
+                    </Typography>
+                  </Box>
+                </Box>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <InfoIcon color="primary" />
+                    <Typography variant="body2">
+                      Your purchase will be cancelled and refund initiated
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <ScheduleIcon color="primary" />
+                    <Typography variant="body2">
+                      Refund will be processed to your original payment method
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <InfoIcon color="primary" />
+                    <Typography variant="body2">
+                      Refund typically takes 5-7 business days to reflect
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+          
+          <Card sx={{ mt: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>Need Help?</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Have questions about your purchase decision?
               </Typography>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
-
+              <Button 
+                variant="outlined" 
+                fullWidth
+              >
+                Contact Support
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+      
       {/* Confirmation Dialog */}
-      <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog({ open: false, decision: null })}>
-        <DialogTitle>
-          {confirmDialog.decision ? 'Confirm Purchase' : 'Cancel Reservation'}
-        </DialogTitle>
+      <Dialog 
+        open={confirmationDialogOpen} 
+        onClose={() => setConfirmationDialogOpen(false)}
+      >
+        <DialogTitle>Confirm Your Decision</DialogTitle>
         <DialogContent>
           <Typography variant="body1" sx={{ mb: 2 }}>
-            {confirmDialog.decision ? 
-              'Are you sure you want to proceed with purchasing this pet? You will be redirected to the payment page.' :
-              'Are you sure you want to cancel this reservation? The pet will become available for other customers.'
-            }
+            {decision === 'proceed' 
+              ? `Are you sure you want to proceed with the purchase of ${pet?.name || 'this pet'}?` 
+              : `Are you sure you want to cancel your purchase of ${pet?.name || 'this pet'}?`}
           </Typography>
-          
-          <TextField
-            fullWidth
-            multiline
-            rows={3}
-            label="Additional Notes (Optional)"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Any additional comments or questions..."
-          />
+          {notes && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2">Your Notes:</Typography>
+              <Typography variant="body2">{notes}</Typography>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmDialog({ open: false, decision: null })}>
-            Cancel
+          <Button onClick={() => setConfirmationDialogOpen(false)}>
+            No, Go Back
           </Button>
-          <Button
-            onClick={confirmDecision}
+          <Button 
+            onClick={submitDecision} 
             variant="contained"
-            color={confirmDialog.decision ? 'primary' : 'error'}
-            disabled={submitting}
+            color={decision === 'proceed' ? 'primary' : 'error'}
           >
-            {submitting ? <CircularProgress size={20} /> : 'Confirm'}
+            Yes, Confirm
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </Container>
   )
 }
 

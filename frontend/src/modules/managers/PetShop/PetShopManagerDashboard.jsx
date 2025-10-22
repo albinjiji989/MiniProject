@@ -31,12 +31,14 @@ import {
   BookOnline as ReservationsIcon,
   LocalShipping as OrdersIcon,
   TrendingUp as TrendingUpIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Add as AddIcon,
+  Favorite as FavoriteIcon,
+  AttachMoney as AttachMoneyIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material'
-import { Favorite as FavoriteIcon, AttachMoney as AttachMoneyIcon } from '@mui/icons-material'
-import { Refresh as RefreshIcon } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import { apiClient } from '../../../services/api'
+import { apiClient, authAPI } from '../../../services/api'
 import { useAuth } from '../../../contexts/AuthContext'
 import {
   Dialog,
@@ -46,6 +48,7 @@ import {
   TextField
 } from '@mui/material'
 import { formatDistanceToNow } from 'date-fns'
+import { useContext } from 'react' // Import useContext hook
 
 const PetShopManagerDashboard = () => {
   const theme = useTheme()
@@ -70,10 +73,24 @@ const PetShopManagerDashboard = () => {
   // Store identity prompt
   const [storeDialogOpen, setStoreDialogOpen] = useState(false)
   const [storeNameInput, setStoreNameInput] = useState('')
+  const [pincodeInput, setPincodeInput] = useState('')
 
   const loadDashboardData = async () => {
     try {
       setLoading(true)
+      // Refresh user data to ensure store information is up to date
+      try {
+        const res = await authAPI.getMe()
+        if (res?.data?.data?.user) {
+          dispatch({
+            type: 'UPDATE_USER',
+            payload: res.data.data.user
+          })
+        }
+      } catch (err) {
+        console.warn('Failed to refresh user data:', err)
+      }
+      
       await Promise.all([
         loadStats(),
         loadRecentActivities()
@@ -87,25 +104,30 @@ const PetShopManagerDashboard = () => {
   }
 
   useEffect(() => {
-    loadDashboardData()
-    // If manager has storeId but no storeName, prompt to set it
-    if (user?.role?.includes('manager') && user?.storeId && !user?.storeName) {
-      setStoreNameInput('')
-      setStoreDialogOpen(true)
+    const initializeDashboard = async () => {
+      loadDashboardData()
+      // If manager has storeId but no storeName, prompt to set it
+      if (user?.role?.includes('manager') && user?.storeId && !user?.storeName) {
+        setStoreNameInput('')
+        setStoreDialogOpen(true)
+      }
     }
+    
+    initializeDashboard()
+    
     const intervalId = setInterval(() => {
       loadDashboardData()
     }, 60000) // auto-refresh every 60s
     return () => clearInterval(intervalId)
-  }, [])
+  }, [user])
 
   const loadStats = async () => {
     try {
       // Combine: use /petshop/stats for staff/products/services, and inventory counts for animals
       const [statsRes, invAllRes, invSaleRes] = await Promise.all([
-        apiClient.get('/petshop/stats'),
-        apiClient.get('/petshop/inventory?limit=1'),
-        apiClient.get('/petshop/inventory?status=available_for_sale&limit=1')
+        apiClient.get('/petshop/manager/stats'),
+        apiClient.get('/petshop/manager/inventory?limit=1'),
+        apiClient.get('/petshop/manager/inventory?status=available_for_sale&limit=1')
       ])
       
       const statsData = statsRes.data?.data || {}
@@ -116,7 +138,7 @@ const PetShopManagerDashboard = () => {
       // Get pending purchase orders count
       let pendingOrders = 0
       try {
-        const ordersRes = await apiClient.get('/petshop/orders?status=pending')
+        const ordersRes = await apiClient.get('/petshop/manager/orders?status=pending')
         pendingOrders = ordersRes.data.meta?.total || 0
       } catch (err) {
         console.warn('Could not fetch pending orders:', err.message)
@@ -143,8 +165,8 @@ const PetShopManagerDashboard = () => {
       
       // Get recent internal inventory updates (manager view) and wishlist items
       const [inventoryRes, wishlistRes] = await Promise.allSettled([
-        apiClient.get('/petshop/inventory?limit=5'),
-        apiClient.get('/petshop/public/wishlist?limit=3')
+        apiClient.get('/petshop/manager/inventory?limit=5'),
+        apiClient.get('/petshop/user/public/wishlist?limit=3')
       ])
       const activities = []
       const now = new Date()
@@ -264,7 +286,22 @@ const PetShopManagerDashboard = () => {
           </Box>
         )}
         <Box sx={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 1, alignItems: 'center' }}>
-          <Button size="small" variant="outlined" startIcon={<RefreshIcon />} onClick={loadDashboardData}>
+          <Button size="small" variant="outlined" startIcon={<RefreshIcon />} onClick={async () => {
+            // Refresh user data first
+            try {
+              const res = await authAPI.getMe()
+              if (res?.data?.data?.user) {
+                dispatch({
+                  type: 'UPDATE_USER',
+                  payload: res.data.data.user
+                })
+              }
+            } catch (err) {
+              console.warn('Failed to refresh user data:', err)
+            }
+            // Then refresh dashboard data
+            loadDashboardData()
+          }}>
             Refresh
           </Button>
           {lastUpdated && (
@@ -341,6 +378,19 @@ const PetShopManagerDashboard = () => {
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12}>
           <Typography variant="h6" sx={{ mb: 1 }}>Management Shortcuts</Typography>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/add-pet')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Add New Pet</Typography>
+                  <Typography variant="body2" color="textSecondary">Add individual pets to inventory</Typography>
+                </Box>
+                <AddIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/add-stock')}>
@@ -640,6 +690,15 @@ const PetShopManagerDashboard = () => {
             placeholder="e.g., Happy Paws Pet Shop"
             value={storeNameInput}
             onChange={(e) => setStoreNameInput(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            label="Pincode (Optional)"
+            placeholder="e.g., 123456"
+            value={pincodeInput}
+            onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            inputProps={{ maxLength: 6 }}
           />
         </DialogContent>
         <DialogActions>
@@ -649,10 +708,27 @@ const PetShopManagerDashboard = () => {
             onClick={async () => {
               const name = storeNameInput.trim()
               if (!name) return
-              const res = await updateProfile({ storeName: name })
-              if (res?.success) {
+              // Prepare data for update
+              const updateData = { storeName: name }
+              if (pincodeInput && pincodeInput.length === 6) {
+                updateData.pincode = pincodeInput
+              }
+              // Use the authAPI to update user profile directly
+              try {
+                await authAPI.updateProfile(updateData)
+                // Refresh the user data from the backend to get updated store info
+                const res = await authAPI.getMe()
+                if (res?.data?.data?.user) {
+                  // Update the AuthContext with fresh user data
+                  dispatch({
+                    type: 'UPDATE_USER',
+                    payload: res.data.data.user
+                  })
+                }
                 setStoreDialogOpen(false)
                 setLastUpdated(new Date())
+              } catch (error) {
+                setError(error?.response?.data?.message || 'Failed to update store info')
               }
             }}
           >

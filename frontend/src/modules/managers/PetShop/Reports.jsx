@@ -41,10 +41,10 @@ const Reports = () => {
 
       // Fetch core data using existing working endpoints
       const [statsRes, inventoryRes, availableRes, ordersRes] = await Promise.allSettled([
-        apiClient.get('/petshop/stats'),
-        apiClient.get('/petshop/inventory?limit=1'),
-        apiClient.get('/petshop/inventory?status=available_for_sale&limit=1'),
-        apiClient.get('/petshop/orders?limit=10')
+        apiClient.get('/petshop/manager/stats'),
+        apiClient.get('/petshop/manager/inventory?limit=1'),
+        apiClient.get('/petshop/manager/inventory?status=available_for_sale&limit=1'),
+        apiClient.get('/petshop/manager/orders?limit=10')
       ])
 
       // Process manager stats

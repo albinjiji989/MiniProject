@@ -19,7 +19,7 @@ const PetDetails = () => {
   const [myRating, setMyRating] = useState(0)
   const [myComment, setMyComment] = useState('')
   const buildImageUrl = (url) => {
-    if (!url) return ''
+    if (!url) return '/placeholder-pet.svg'
     // Support base64 data URLs
     if (/^data:image\//i.test(url)) return url
     // If absolute URL, return directly
@@ -157,14 +157,20 @@ const PetDetails = () => {
     if (item.metaKeywords && Array.isArray(item.metaKeywords)) ensureMeta('keywords').setAttribute('content', item.metaKeywords.join(', '))
   }, [item])
 
-  const reserve = async () => {
-    try {
-      setReserving(true)
-      await petShopAPI.createReservation({ itemId: id, notes })
-      alert('Reservation submitted. You can view it in your reservations list soon.')
-    } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to reserve')
-    } finally { setReserving(false) }
+  // OLD RESERVATION METHOD - REPLACED WITH WIZARD
+  // const reserve = async () => {
+  //   try {
+  //     setReserving(true)
+  //     await petShopAPI.createReservation({ itemId: id, notes })
+  //     alert('Reservation submitted. You can view it in your reservations list soon.')
+  //   } catch (e) {
+  //     setError(e?.response?.data?.message || 'Failed to reserve')
+  //   } finally { setReserving(false) }
+  // }
+
+  const handleReserve = () => {
+    // Navigate to the new reservation wizard
+    navigate(`/User/petshop/reserve/${id}`)
   }
 
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight={300}><CircularProgress /></Box>
@@ -207,7 +213,7 @@ const PetDetails = () => {
               <Typography variant="subtitle1" sx={{ mb: 1 }}>Reserve this pet</Typography>
               <TextField fullWidth label="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} multiline minRows={2} sx={{ mb: 2 }} />
               <Box sx={{ display: 'flex', gap: 2 }}>
-                <Button variant="contained" disabled={reserving} onClick={reserve}>Reserve</Button>
+                <Button variant="contained" disabled={reserving} onClick={handleReserve}>Reserve</Button>
                 <Button variant="outlined" color="success" disabled={paying} onClick={buyNow}>Buy Now</Button>
                 <Button variant="text" disabled={wishloading} onClick={toggleWishlist}>{isWishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}</Button>
               </Box>

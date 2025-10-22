@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiClient, resolveMediaUrl } from '../../../../services/api'
+import { apiClient, resolveMediaUrl, API_ORIGIN } from '../../../../services/api'
 
 const KEY = 'adopt_wizard'
 
@@ -17,15 +17,36 @@ const VACCINE_OPTIONS = [
 export default function StepHealthMedia() {
   const navigate = useNavigate()
   const [form, setForm] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(KEY))?.health || { vaccinationStatus: [], photos: [], documents: [] } } catch { return { vaccinationStatus: [], photos: [], documents: [] } }
+    try { 
+      const saved = JSON.parse(localStorage.getItem(KEY))?.health || {}
+      return {
+        healthHistory: saved.healthHistory || '',
+        vaccinationStatus: saved.vaccinationStatus || [],
+        weight: saved.weight || '',
+        photos: saved.photos || [],
+        documents: saved.documents || []
+      }
+    } catch { 
+      return {
+        healthHistory: '',
+        vaccinationStatus: [],
+        weight: '',
+        photos: [],
+        documents: []
+      }
+    }
   })
   const [uploading, setUploading] = useState(false)
+  const [imageLoadErrors, setImageLoadErrors] = useState({})
 
   const saveLocal = (nextPart) => {
     const prev = JSON.parse(localStorage.getItem(KEY) || '{}')
     const next = { ...prev, health: { ...(prev.health||{}), ...nextPart } }
     localStorage.setItem(KEY, JSON.stringify(next))
-    setForm(next.health)
+    setForm(prevForm => ({
+      ...prevForm,
+      ...nextPart
+    }))
   }
 
   const toggleVaccine = (v) => {
@@ -49,14 +70,53 @@ export default function StepHealthMedia() {
         }
         const formData = new FormData()
         formData.append('file', file)
-        const up = await apiClient.post('/adoption/manager/pets/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-        const url = resolveMediaUrl(up.data?.data?.url)
-        if (url) uploaded.push({ url, name: file.name, type: file.type, size: file.size })
+        try {
+          const up = await apiClient.post('/adoption/manager/pets/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+          const backendUrl = up.data?.data?.url
+          console.log('✅ Photo uploaded, backend URL:', backendUrl)
+          
+          if (backendUrl) {
+            // Use the resolveMediaUrl function to properly construct the full URL
+            const fullUrl = resolveMediaUrl(backendUrl);
+            
+            // Validate URL before storing
+            if (fullUrl && typeof fullUrl === 'string' && fullUrl.length > 10) {
+              uploaded.push({ 
+                url: backendUrl, // Store the relative URL for backend processing
+                backendPath: backendUrl,
+                name: file.name, 
+                type: file.type, 
+                size: file.size,
+                uploadedAt: new Date().toISOString(),
+                isPrimary: false
+              })
+              console.log('✅ Photo stored with URL:', fullUrl)
+            } else {
+              console.warn('Invalid URL received from backend, skipping:', backendUrl)
+            }
+          }
+        } catch (uploadErr) {
+          console.error(`❌ Failed to upload ${file.name}:`, uploadErr)
+          alert(`Failed to upload ${file.name}: ${uploadErr?.response?.data?.error || uploadErr.message}`)
+        }
       }
-      if (uploaded.length) saveLocal({ photos: [...(form.photos||[]), ...uploaded] })
+      if (uploaded.length) {
+        // Set first uploaded image as primary if no primary exists
+        if (form.photos && form.photos.length > 0) {
+          const hasPrimary = form.photos.some(photo => photo.isPrimary)
+          if (!hasPrimary && uploaded.length > 0) {
+            uploaded[0].isPrimary = true
+          }
+        } else if (uploaded.length > 0) {
+          uploaded[0].isPrimary = true
+        }
+        
+        saveLocal({ photos: [...(form.photos||[]), ...uploaded] })
+        console.log('✅ Saved photos to localStorage:', uploaded.length)
+      }
     } catch (error) {
-      console.error('Photo upload failed:', error)
-      alert(error?.response?.data?.error || 'Failed to upload photos')
+      console.error('Photo upload process failed:', error)
+      alert('Failed to process photos')
     } finally {
       setUploading(false)
     }
@@ -71,22 +131,49 @@ export default function StepHealthMedia() {
     try {
       const uploaded = []
       for (const file of files) {
-        const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
+        // Accept both images and PDFs
+        const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'image/webp']
         if (!validTypes.includes(file.type)) {
-          alert(`${file.name} is not a valid type (PDF, JPG, PNG allowed)`) ; continue
+          alert(`${file.name} is not a valid type (PDF, JPG, PNG, WebP allowed)`)
+          continue
         }
         const formData = new FormData()
         formData.append('file', file)
-        const up = await apiClient.post('/adoption/manager/pets/upload-document', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-        const url = resolveMediaUrl(up.data?.data?.url)
-        if (url) uploaded.push({ url, name: file.name, type: file.type, size: file.size })
+        try {
+          const up = await apiClient.post('/adoption/manager/pets/upload-document', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+          const backendUrl = up.data?.data?.url
+          console.log('✅ Document uploaded, backend URL:', backendUrl)
+          
+          if (backendUrl) {
+            // Use the resolveMediaUrl function to properly construct the full URL
+            const fullUrl = resolveMediaUrl(backendUrl);
+            
+            // Validate URL before storing
+            if (fullUrl && typeof fullUrl === 'string' && fullUrl.length > 10) {
+              uploaded.push({ 
+                url: backendUrl, // Store the relative URL for backend processing
+                backendPath: backendUrl,
+                name: file.name, 
+                type: file.type, 
+                size: file.size,
+                uploadedAt: new Date().toISOString()
+              })
+              console.log('✅ Document stored with URL:', fullUrl)
+            } else {
+              console.warn('Invalid URL received from backend, skipping:', backendUrl)
+            }
+          }
+        } catch (uploadErr) {
+          console.error(`❌ Failed to upload ${file.name}:`, uploadErr)
+          alert(`Failed to upload ${file.name}: ${uploadErr?.response?.data?.error || uploadErr.message}`)
+        }
       }
-      if (uploaded.length) saveLocal({ documents: [...(form.documents||[]), ...uploaded] })
-    } catch (error) {
-      console.error('Document upload failed:', error)
-      alert(error?.response?.data?.error || 'Failed to upload documents')
+      if (uploaded.length) {
+        saveLocal({ documents: [...(form.documents||[]), ...uploaded] })
+      }
     } finally {
       setUploading(false)
+      e.target.value = '' // reset file input
     }
   }
 
@@ -106,7 +193,10 @@ export default function StepHealthMedia() {
     saveLocal({ documents: form.documents.filter((_, idx) => idx !== i) })
   }
 
-  const onChange = (e) => saveLocal({ [e.target.name]: e.target.value })
+  const onChange = (e) => {
+    const { name, value } = e.target
+    saveLocal({ [name]: value || '' })
+  }
 
   const next = () => navigate('/manager/adoption/wizard/availability')
   const back = () => navigate('/manager/adoption/wizard/basic')
@@ -123,7 +213,7 @@ export default function StepHealthMedia() {
             name="healthHistory" 
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
             rows={4} 
-            value={form.healthHistory||''} 
+            value={form.healthHistory || ''} 
             onChange={onChange} 
             placeholder="Medical notes, special needs, treatments, etc." 
           />
@@ -138,7 +228,7 @@ export default function StepHealthMedia() {
                 <label key={v} className="flex items-center gap-2 text-sm p-2 border rounded hover:bg-gray-50">
                   <input 
                     type="checkbox" 
-                    checked={form.vaccinationStatus?.includes(v)} 
+                    checked={form.vaccinationStatus?.includes(v) || false} 
                     onChange={() => toggleVaccine(v)}
                     className="rounded"
                   /> 
@@ -157,7 +247,7 @@ export default function StepHealthMedia() {
               min="0" 
               step="0.1" 
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              value={form.weight||''} 
+              value={form.weight || ''} 
               onChange={onChange}
               placeholder="Enter weight in kg"
             />
@@ -191,30 +281,62 @@ export default function StepHealthMedia() {
             {/* Photo Preview */}
             {form.photos?.length > 0 && (
               <div className="mt-4 space-y-2">
-                <h4 className="text-sm font-medium">Uploaded Photos:</h4>
-                <div className="grid grid-cols-2 gap-2">
-                  {form.photos.map((photo, i) => (
-                    <div key={i} className="relative border rounded-lg overflow-hidden">
-                      <img 
-                        src={typeof photo === 'string' ? photo : photo.url} 
-                        alt={`Pet photo ${i + 1}`}
-                        className="w-full h-24 object-cover"
-                        onError={(e)=>{ e.currentTarget.src='/placeholder-pet.svg' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removePhoto(i)}
-                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-700"
-                      >
-                        ×
-                      </button>
-                      {photo.name && (
-                        <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate">
-                          {photo.name}
+                <h4 className="text-sm font-medium">Uploaded Photos: ({form.photos.length})</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {form.photos.map((photo, i) => {
+                    const photoUrl = typeof photo === 'string' ? photo : photo.url
+                    const hasError = imageLoadErrors[`photo-${i}`]
+                    
+                    // Validate URL to prevent loading invalid URLs
+                    const isValidUrl = photoUrl && 
+                      typeof photoUrl === 'string' && 
+                      photoUrl.length > 10 && 
+                      (photoUrl.startsWith('http') || photoUrl.startsWith('/')) &&
+                      !photoUrl.endsWith('/')
+                    
+                    return (
+                      <div key={i} className="relative border rounded-lg overflow-hidden bg-gray-100 group">
+                        <div className="w-full h-32 flex items-center justify-center bg-gray-100">
+                          {hasError || !isValidUrl ? (
+                            <div className="text-center p-2">
+                              <div className="text-2xl mb-1">📸</div>
+                              <p className="text-xs text-gray-500">Image unavailable</p>
+                            </div>
+                          ) : (
+                            <img 
+                              src={resolveMediaUrl(photoUrl)} 
+                              alt={`Pet photo ${i + 1}`}
+                              className="w-full h-full object-cover"
+                              onError={() => {
+                                console.warn(`Image failed to load: ${photoUrl}`)
+                                setImageLoadErrors(prev => ({ ...prev, [`photo-${i}`]: true }))
+                              }}
+                              onLoad={() => {
+                                console.log(`Image loaded successfully: ${photoUrl}`)
+                                setImageLoadErrors(prev => {
+                                  const updated = { ...prev }
+                                  delete updated[`photo-${i}`]
+                                  return updated
+                                })
+                              }}
+                            />
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(i)}
+                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          ×
+                        </button>
+                        {photo.name && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white text-xs p-1.5 truncate">
+                            {photo.name}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -245,34 +367,38 @@ export default function StepHealthMedia() {
             {/* Document List */}
             {form.documents?.length > 0 && (
               <div className="mt-4 space-y-2">
-                <h4 className="text-sm font-medium">Uploaded Documents:</h4>
+                <h4 className="text-sm font-medium">Uploaded Documents: ({form.documents.length})</h4>
                 <div className="space-y-2">
-                  {form.documents.map((doc, i) => (
-                    <div key={i} className="flex items-center justify-between p-2 border rounded-lg bg-gray-50">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-xs">
-                          {doc.type?.includes('pdf') ? '📄' : doc.type?.startsWith('image/') ? '🖼️' : '📝'}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium truncate max-w-32">
-                            {doc.name || (typeof doc === 'string' ? doc.split('/').pop() : 'Document')}
-                          </p>
-                          {doc.size && (
-                            <p className="text-xs text-gray-500">
-                              {(doc.size / 1024 / 1024).toFixed(2)} MB
+                  {form.documents.map((doc, i) => {
+                    const docName = doc.name || (typeof doc === 'string' ? doc.split('/').pop() : `Document ${i + 1}`)
+                    const docSize = doc.size ? `${(doc.size / 1024 / 1024).toFixed(2)} MB` : 'Unknown size'
+                    const docType = doc.type || 'Unknown type'
+                    
+                    return (
+                      <div key={i} className="flex items-center justify-between p-3 border rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors group">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center text-lg flex-shrink-0">
+                            {docType.includes('pdf') ? '📄' : docType.startsWith('image/') ? '🖼️' : '📋'}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate text-gray-700 max-w-xs">
+                              {docName}
                             </p>
-                          )}
+                            <p className="text-xs text-gray-500">
+                              {docSize} • {docType}
+                            </p>
+                          </div>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => removeDoc(i)}
+                          className="ml-2 px-3 py-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded text-xs font-medium transition-colors"
+                        >
+                          Remove
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => removeDoc(i)}
-                        className="text-red-600 hover:text-red-800 text-sm"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}

@@ -1,102 +1,101 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
-const connectDB = require('../core/config/db');
+const connectDB = require('../core/db');
 
 const Species = require('../core/models/Species');
 const Breed = require('../core/models/Breed');
 const PetDetails = require('../core/models/PetDetails');
 const Pet = require('../core/models/Pet');
 const User = require('../core/models/User');
+const Module = require('../core/models/Module');
+
+async function seedModules() {
+  // All modules start as 'coming_soon' - admin activates them later
+  const modules = [
+    {
+      key: 'adoption',
+      name: 'Adoption',
+      description: 'Pet adoption services and management',
+      icon: 'Pets',
+      color: '#10b981',
+      status: 'coming_soon',
+      hasManagerDashboard: true,
+      isCoreModule: true,
+      displayOrder: 0
+    },
+    {
+      key: 'petshop',
+      name: 'Pet Shop',
+      description: 'Pet products and accessories marketplace',
+      icon: 'ShoppingCart',
+      color: '#3b82f6',
+      status: 'coming_soon',
+      hasManagerDashboard: true,
+      isCoreModule: true,
+      displayOrder: 1
+    },
+    {
+      key: 'veterinary',
+      name: 'Veterinary',
+      description: 'Veterinary services and appointments',
+      icon: 'LocalHospital',
+      color: '#64748b',
+      status: 'coming_soon',
+      hasManagerDashboard: true,
+      isCoreModule: true,
+      displayOrder: 2
+    },
+    {
+      key: 'temporary-care',
+      name: 'Temporary Care',
+      description: 'Short-term pet boarding and care',
+      icon: 'Home',
+      color: '#06b6d4',
+      status: 'coming_soon',
+      hasManagerDashboard: true,
+      isCoreModule: true,
+      displayOrder: 3
+    }
+  ];
+
+  // Delete non-module entries (admin, auth, pet, rbac, user, etc.)
+  const validModuleKeys = modules.map(m => m.key);
+  await Module.deleteMany({ key: { $nin: validModuleKeys } });
+
+  for (const module of modules) {
+    // Only create if doesn't exist - preserve admin's changes
+    await Module.findOneAndUpdate(
+      { key: module.key },
+      { $setOnInsert: module },
+      { upsert: true, new: true }
+    );
+  }
+  console.log('✅ Modules seeded successfully');
+}
 
 async function run() {
   try {
     await connectDB();
 
+    // Seed modules first
+    await seedModules();
+
     const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@example.com';
     const existingAdmin = await User.findOne({ email: adminEmail });
-    let admin = existingAdmin;
-    if (!admin) {
-      admin = await User.create({
-        name: 'Seed Admin',
+    if (!existingAdmin) {
+      await User.create({
+        name: 'System Admin',
         email: adminEmail,
         role: 'admin',
         isActive: true,
       });
+      console.log('✅ Admin user created');
+    } else {
+      console.log('✅ Admin already exists');
     }
 
-    // Species
-    const speciesDocs = await Species.insertMany([
-      { name: 'dog', displayName: 'Dog', description: 'Canis lupus familiaris', createdBy: admin._id },
-      { name: 'cat', displayName: 'Cat', description: 'Felis catus', createdBy: admin._id },
-    ], { ordered: false }).catch(() => []);
-    const dog = await Species.findOne({ name: 'dog' });
-    const cat = await Species.findOne({ name: 'cat' });
-
-    // Breeds
-    await Breed.insertMany([
-      { name: 'Labrador Retriever', speciesId: dog._id, description: 'Friendly and outgoing', createdBy: admin._id },
-      { name: 'Persian', speciesId: cat._id, description: 'Long-haired, calm', createdBy: admin._id },
-    ], { ordered: false }).catch(() => []);
-    const labrador = await Breed.findOne({ name: 'Labrador Retriever' });
-    const persian = await Breed.findOne({ name: 'Persian' });
-
-    // PetDetails
-    await PetDetails.insertMany([
-      { name: 'Dog Standard', speciesId: dog._id, breedId: labrador._id },
-      { name: 'Cat Standard', speciesId: cat._id, breedId: persian._id },
-    ], { ordered: false }).catch(() => []);
-    const dogStd = await PetDetails.findOne({ speciesId: dog._id, breedId: labrador._id });
-    const catStd = await PetDetails.findOne({ speciesId: cat._id, breedId: persian._id });
-
-    // Public user
-    const publicEmail = process.env.SEED_PUBLIC_EMAIL || 'user@example.com';
-    let publicUser = await User.findOne({ email: publicEmail });
-    if (!publicUser) {
-      publicUser = await User.create({
-        name: 'Public User',
-        email: publicEmail,
-        role: 'public_user',
-        isActive: true,
-      });
-    }
-
-    // Pets
-    await Pet.insertMany([
-      {
-        name: 'Buddy',
-        species: dog._id,
-        breed: labrador._id,
-        petDetails: dogStd._id,
-        owner: publicUser._id,
-        gender: 'Male',
-        age: 24,
-        ageUnit: 'months',
-        color: 'Yellow',
-        weight: 25,
-        size: 'large',
-        currentStatus: 'Available',
-        healthStatus: 'Good',
-        createdBy: admin._id,
-      },
-      {
-        name: 'Luna',
-        species: cat._id,
-        breed: persian._id,
-        petDetails: catStd._id,
-        owner: publicUser._id,
-        gender: 'Female',
-        age: 18,
-        ageUnit: 'months',
-        color: 'White',
-        weight: 4,
-        size: 'small',
-        currentStatus: 'Available',
-        healthStatus: 'Excellent',
-        createdBy: admin._id,
-      }
-    ], { ordered: false }).catch(() => []);
-
-    console.log('Seed completed.');
+    console.log('✅ Seed completed - NO dummy data created');
+    console.log('ℹ️  Admin must manually add all species, breeds, and pets');
     process.exit(0);
   } catch (err) {
     console.error('Seed failed:', err);

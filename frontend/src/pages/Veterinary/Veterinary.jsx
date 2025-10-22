@@ -105,7 +105,7 @@ const Veterinary = () => {
           rating: c.rating || 0,
           reviews: c.reviews || 0,
           specialties: c.specialties || [],
-          image: c.image || 'https://via.placeholder.com/120?text=Clinic',
+          image: c.image || '/placeholder-pet.svg',
         }))
         setClinics(normalizedClinics)
 

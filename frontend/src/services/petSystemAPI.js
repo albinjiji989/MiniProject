@@ -118,8 +118,10 @@ const ownershipHistoryAPI = {
 // User Pets API
 const userPetsAPI = {
   list: (params = {}) => api.get('/user/pets', { params }),
+  get: (id) => api.get(`/user/pets/${id}`),
   getById: (id) => api.get(`/user/pets/${id}`),
   getSpeciesAndBreeds: () => api.get('/user/pets/species-breeds'),
+  getSpeciesBreedsActive: () => api.get('/user/pets/species-breeds'),
   getCategories: () => api.get('/user/pets/categories'),
   getSpeciesActive: (categoryName) => api.get('/user/pets/species', { params: { category: categoryName } }),
   getBreedsBySpecies: (speciesId) => api.get(`/user/pets/breeds/${speciesId}`),

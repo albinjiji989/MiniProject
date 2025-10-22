@@ -1,9 +1,15 @@
 const express = require('express');
+
+const router = express.Router();
+
+router.use('/admin', require('./admin/veterinaryAdminRoutes'));
+router.use('/manager', require('./manager/veterinaryManagerRoutes'));
+router.use('/user', require('./user/veterinaryUserRoutes'));
+
+// Clinic routes
 const { body } = require('express-validator');
 const { auth, authorizeModule } = require('../../../core/middleware/auth');
 const controller = require('../controllers/veterinaryController');
-
-const router = express.Router();
 
 router.get('/clinics', auth, authorizeModule('veterinary'), controller.listClinics);
 router.post(

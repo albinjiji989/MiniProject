@@ -14,6 +14,12 @@ const userSchema = new mongoose.Schema({
   profileImage: { type: String, default: null },
   // Backwards compatibility with existing code using profilePicture
   profilePicture: { type: String, default: null },
+  // Google profile picture (stored separately, never overwritten)
+  googleProfilePicture: { type: String, default: null },
+  // Array of uploaded profile pictures
+  uploadedProfilePictures: { type: [String], default: [] },
+  // Flag to use custom picture instead of Google
+  useCustomProfilePicture: { type: Boolean, default: false },
   role: { type: String, default: 'public_user' },
   assignedModule: { type: String, default: null },
   // Store identity for module managers (e.g., PSP1xxxxx)
@@ -50,5 +56,3 @@ userSchema.methods.matchPassword = async function(enteredPassword) {
 };
 
 module.exports = mongoose.model('User', userSchema);
-
-

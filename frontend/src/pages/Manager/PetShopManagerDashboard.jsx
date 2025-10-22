@@ -28,7 +28,8 @@ import {
   CircularProgress,
   Paper,
   IconButton,
-  Tooltip
+  Tooltip,
+  Avatar
 } from '@mui/material'
 import {
   Dashboard as DashboardIcon,
@@ -40,7 +41,8 @@ import {
   Visibility as ViewIcon,
   Edit as EditIcon,
   Print as PrintIcon,
-  Download as DownloadIcon
+  Download as DownloadIcon,
+  Assignment as AssignmentIcon
 } from '@mui/icons-material'
 import { petShopManagerAPI, apiClient } from '../../services/api'
 import InvoiceTemplate from '../../components/PetShop/InvoiceTemplate'
@@ -414,6 +416,112 @@ const PetShopManagerDashboard = () => {
       </Table>
     </Paper>
   )
+
+  const renderRecentDeliveries = () => {
+    const recentDeliveries = deliveries.filter(d => d.status === 'completed').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    return (
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="h6" gutterBottom>
+          Recent Deliveries
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Pet</TableCell>
+              <TableCell>Customer</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {recentDeliveries.slice(0, 5).map((delivery) => (
+              <TableRow key={delivery._id}>
+                <TableCell>
+                  <Box display="flex" alignItems="center">
+                    <Avatar 
+                      src={buildImageUrl(delivery.itemId?.images?.[0]?.url)} 
+                      sx={{ width: 40, height: 40, mr: 1 }}
+                    />
+                    <Box>
+                      <Typography variant="body2" fontWeight="medium">
+                        {delivery.itemId?.name || 'Pet'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {delivery.itemId?.petCode}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2">{delivery.userId?.name || 'Customer'}</Typography>
+                </TableCell>
+                <TableCell>
+                  <Chip 
+                    label={delivery.status} 
+                    color={getStatusColor(delivery.status)}
+                    size="small"
+                  />
+                  {delivery.handover?.status && (
+                    <Chip 
+                      label={delivery.handover.status}
+                      color={getStatusColor(delivery.handover.status)}
+                      size="small"
+                      variant="outlined"
+                      sx={{ ml: 1 }}
+                    />
+                  )}
+                </TableCell>
+                <TableCell>
+                  {delivery.status === 'paid' && (
+                    <Button 
+                      size="small" 
+                      variant="contained"
+                      onClick={() => handleDeliveryUpdate(delivery._id, 'ready_pickup')}
+                    >
+                      Mark Ready
+                    </Button>
+                  )}
+                  {delivery.status === 'ready_pickup' && (
+                    <>
+                      <Button 
+                        size="small" 
+                        variant="contained"
+                        color="info"
+                        onClick={() => navigate(`/manager/petshop/handover/${delivery._id}`)}
+                        startIcon={<AssignmentIcon />}
+                        sx={{ mr: 1 }}
+                      >
+                        Manage Handover
+                      </Button>
+                      <Button 
+                        size="small" 
+                        variant="contained" 
+                        color="success"
+                        onClick={() => handleDeliveryUpdate(delivery._id, 'completed')}
+                      >
+                        Mark Completed
+                      </Button>
+                    </>
+                  )}
+                  {delivery.status === 'completed' && (
+                    <Button 
+                      size="small" 
+                      variant="contained"
+                      color="primary"
+                      onClick={() => navigate(`/manager/petshop/handover/${delivery._id}`)}
+                      startIcon={<AssignmentIcon />}
+                    >
+                      View Handover
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Paper>
+    )
+  }
 
   if (loading) {
     return (

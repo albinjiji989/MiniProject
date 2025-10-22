@@ -7,14 +7,19 @@ const KEY = 'adopt_apply_wizard'
 export default function StepDocuments() {
   const navigate = useNavigate()
   const [form, setForm] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(KEY))?.documents || { documents: [] } } catch { return { documents: [] } }
+    try { 
+      const savedData = JSON.parse(localStorage.getItem(KEY))?.documents || {}
+      return { documents: Array.isArray(savedData.documents) ? savedData.documents : [] }
+    } catch { 
+      return { documents: [] } 
+    }
   })
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
 
   const save = (patch) => {
     const prev = JSON.parse(localStorage.getItem(KEY) || '{}')
-    const next = { ...prev, documents: { ...(prev.documents||{}), ...patch } }
+    const next = { ...prev, documents: { ...(prev.documents || {}), ...patch } }
     localStorage.setItem(KEY, JSON.stringify(next))
     setForm(next.documents)
   }
@@ -38,11 +43,11 @@ export default function StepDocuments() {
         setError(err?.response?.data?.error || 'Upload failed for one or more files')
       }
     }
-    if (urls.length) save({ documents: [...(form.documents||[]), ...urls] })
+    if (urls.length) save({ documents: [...(form.documents || []), ...urls] })
     setUploading(false)
     e.target.value = ''
   }
-  const removeDoc = (i) => save({ documents: (form.documents||[]).filter((_, idx)=> idx!==i) })
+  const removeDoc = (i) => save({ documents: (form.documents || []).filter((_, idx)=> idx !== i) })
 
   const next = () => navigate('/User/adoption/apply/review')
   const back = () => navigate('/User/adoption/apply/experience')
@@ -55,7 +60,7 @@ export default function StepDocuments() {
         {uploading && <div className="text-sm text-gray-600 mt-1">Uploading...</div>}
         {error && <div className="text-sm text-red-600 mt-1">{error}</div>}
         <ul className="list-disc pl-5 text-sm mt-2 space-y-1">
-          {(form.documents||[]).map((u, i) => (
+          {(form.documents || []).map((u, i) => (
             <li key={i} className="flex items-center justify-between gap-2">
               <a href={resolveMediaUrl(u)} target="_blank" rel="noreferrer" className="text-blue-600 underline truncate">{u}</a>
               <button type="button" className="text-red-600" onClick={()=>removeDoc(i)}>Remove</button>

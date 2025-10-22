@@ -1,8 +1,50 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import LoadingSpinner from '../../../components/UI/LoadingSpinner';
-import { apiClient } from '../../../services/api';
-import ModuleDashboardLayout from '../../../components/Module/ModuleDashboardLayout';
+import React, { useState, useEffect } from 'react'
+import {
+  Box,
+  Grid,
+  Card,
+  CardContent,
+  Typography,
+  Button,
+  Chip,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Alert,
+  CircularProgress,
+  useTheme,
+  alpha,
+  CardActions,
+  Tooltip
+} from '@mui/material'
+import {
+  Dashboard as DashboardIcon,
+  Pets as PetIcon,
+  Home as HomeIcon,
+  ShoppingCart as ShopIcon,
+  LocalShipping as RescueIcon,
+  Medication as PharmacyIcon,
+  Healing as VeterinaryIcon,
+  Assignment as AdoptionIcon,
+  Build as CareIcon,
+  TrendingUp as TrendingIcon,
+  Search as SearchIcon,
+  Add as AddIcon,
+  FavoriteOutlined as FavoriteIcon,
+  Notifications as NotificationIcon,
+  Star as StarIcon,
+  ArrowForward as ArrowIcon,
+  Block as BlockIcon,
+  Construction as ConstructionIcon,
+  Schedule as ScheduleIcon
+} from '@mui/icons-material'
+import { useAuth } from '../../../contexts/AuthContext'
+import { apiClient, adoptionAPI, resolveMediaUrl } from '../../../services/api'
+import { useNavigate, useLocation } from 'react-router-dom'
+import UserLayout from '../../../components/Layout/UserLayout'
+import LoadingSpinner from '../../../components/UI/LoadingSpinner'
+import ModuleDashboardLayout from '../../../components/Module/ModuleDashboardLayout'
 
 const AdoptionDashboard = () => {
   const navigate = useNavigate();
@@ -32,9 +74,9 @@ const AdoptionDashboard = () => {
     try {
       setLoading(true);
       const [petsRes, applicationsRes, adoptedRes] = await Promise.all([
-        apiClient.get('/adoption/pets'),
-        apiClient.get('/adoption/applications/my'),
-        apiClient.get('/adoption/my-adopted-pets')
+        adoptionAPI.listPets(),
+        adoptionAPI.listMyRequests(),
+        adoptionAPI.getMyAdoptedPets()
       ]);
 
       setPets(petsRes.data.data.pets || []);
@@ -80,7 +122,7 @@ const AdoptionDashboard = () => {
       {pets.map((pet) => (
         <div key={pet._id} className="bg-white border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
           {pet.images && pet.images.length > 0 && (
-            <img src={pet.images[0].url} alt={pet.name} className="w-full h-48 object-cover" />
+            <img src={resolveMediaUrl(pet.images[0]?.url || pet.images[0])} alt={pet.name} className="w-full h-48 object-cover" onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }} />
           )}
           <div className="p-4">
             <div className="flex justify-between items-start mb-3">
@@ -156,7 +198,7 @@ const AdoptionDashboard = () => {
       {adopted.map(pet => (
         <div key={pet._id} className="bg-white border rounded-lg overflow-hidden">
           {pet.images && pet.images.length > 0 && (
-            <img src={pet.images[0].url} alt={pet.name} className="w-full h-40 object-cover" />
+            <img src={resolveMediaUrl(pet.images[0]?.url || pet.images[0])} alt={pet.name} className="w-full h-40 object-cover" onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }} />
           )}
           <div className="p-4">
             <div className="font-semibold">{pet.name}</div>

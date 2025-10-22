@@ -70,7 +70,7 @@ const Adoption = () => {
           breed: p.breed || p.petBreed || p.species || 'Unknown',
           age: p.ageYears || p.age || 0,
           gender: p.gender || 'Unknown',
-          image: p.image || p.photoUrl || 'https://via.placeholder.com/400x300?text=Pet',
+          image: p.image || p.photoUrl || '/placeholder-pet.svg',
           status: p.currentStatus || p.status || 'Available',
           description: p.description || 'No description provided.'
         }))

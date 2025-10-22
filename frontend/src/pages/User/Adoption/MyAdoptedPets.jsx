@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiClient, resolveMediaUrl } from '../../../services/api'
-import { Box, Typography, Grid, Card, CardMedia, CardContent, Chip, Button } from '@mui/material'
+import { adoptionAPI, resolveMediaUrl } from '../../../services/api'
+import { Box, Typography, Grid, Card, CardMedia, CardContent, Chip, Button, CircularProgress } from '@mui/material'
 
 export default function MyAdoptedPets() {
   const navigate = useNavigate()
@@ -14,7 +14,7 @@ export default function MyAdoptedPets() {
       setLoading(true)
       setError('')
       try {
-        const res = await apiClient.get('/adoption/my-adopted-pets')
+        const res = await adoptionAPI.getMyAdoptedPets()
         const raw = res?.data?.data || []
         const normalized = raw.map(p => ({
           id: p._id || p.id,
@@ -29,6 +29,7 @@ export default function MyAdoptedPets() {
         setPets(normalized)
       } catch (e) {
         setError('Failed to load adopted pets')
+        console.error('Error loading adopted pets:', e)
       } finally {
         setLoading(false)
       }
@@ -37,29 +38,67 @@ export default function MyAdoptedPets() {
   }, [])
 
   return (
-    <Box>
+    <Box sx={{ p: 3 }}>
       <Typography variant="h4" sx={{ fontWeight: 600, mb: 3 }}>My Adopted Pets</Typography>
       {error && <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>}
-      {loading && <Typography>Loading...</Typography>}
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
+      )}
       {!loading && pets.length === 0 && (
-        <Typography color="text.secondary">You haven't adopted any pets yet.</Typography>
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+          <Typography color="text.secondary" sx={{ mb: 2 }}>You haven't adopted any pets yet.</Typography>
+          <Button variant="contained" onClick={() => navigate('/User/adoption')}>Adopt a Pet</Button>
+        </Box>
       )}
       <Grid container spacing={3}>
         {pets.map((pet) => (
           <Grid item xs={12} sm={6} md={4} lg={3} key={pet.id}>
-            <Card>
-              {pet.image && (
-                <CardMedia component="img" height="180" image={pet.image} alt={pet.name} sx={{ objectFit:'cover' }} />
+            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              {pet.image ? (
+                <CardMedia 
+                  component="img" 
+                  height="180" 
+                  image={pet.image} 
+                  alt={pet.name} 
+                  sx={{ objectFit: 'cover' }}
+                  onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }}
+                />
+              ) : (
+                <Box sx={{ 
+                  height: 180, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  bgcolor: 'grey.100'
+                }}>
+                  <Typography variant="h3" color="text.secondary">🐾</Typography>
+                </Box>
               )}
-              <CardContent>
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>{pet.name}</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{pet.breed} • {pet.species}</Typography>
-                <Chip size="small" label={`Adopted on ${pet.adoptionDate}`} />
+              <CardContent sx={{ flexGrow: 1 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>{pet.name}</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  {pet.breed} • {pet.species}
+                </Typography>
+                <Chip 
+                  size="small" 
+                  label={`Adopted on ${pet.adoptionDate}`} 
+                  sx={{ mb: 1 }}
+                />
                 {pet.description && (
-                  <Typography variant="body2" sx={{ mt: 1 }}>{pet.description}</Typography>
+                  <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
+                    {pet.description}
+                  </Typography>
                 )}
-                <Box sx={{ mt: 1 }}>
-                  <Button size="small" onClick={()=>navigate(`/User/pets`)}>View My Pets</Button>
+                <Box sx={{ mt: 2 }}>
+                  <Button 
+                    size="small" 
+                    variant="outlined"
+                    onClick={() => navigate(`/User/adoption/my-adopted-pets/${pet.id}`)}
+                  >
+                    View Details
+                  </Button>
                 </Box>
               </CardContent>
             </Card>

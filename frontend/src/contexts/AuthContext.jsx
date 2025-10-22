@@ -68,6 +68,15 @@ export const AuthProvider = ({ children }) => {
     } catch (_) {}
   }
 
+  // Check if user is a module manager with empty store name
+  const needsStoreNameSetup = (user) => {
+    if (!user) return false;
+    const isModuleManager = typeof user.role === 'string' && user.role.endsWith('_manager');
+    // For adoption and petshop managers, check if storeName is empty
+    const isAdoptionOrPetshopManager = user.role === 'adoption_manager' || user.role === 'petshop_manager';
+    return isModuleManager && isAdoptionOrPetshopManager && (!user.storeName || user.storeName.trim() === '');
+  }
+
   // Simple initialization - verify token with backend; if cookies enabled, try session-based auth
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -76,10 +85,13 @@ export const AuthProvider = ({ children }) => {
       // Verify token with backend
       authAPI.getMe()
         .then(response => {
+          const user = response.data.data.user
+          // Check if user needs store name setup
+          const shouldRedirectToStoreSetup = needsStoreNameSetup(user)
           dispatch({
             type: 'AUTH_SUCCESS',
             payload: {
-              user: response.data.data.user,
+              user: {...user, needsStoreNameSetup: shouldRedirectToStoreSetup},
               token
             }
           })
@@ -95,7 +107,15 @@ export const AuthProvider = ({ children }) => {
         .then(response => {
           const user = response.data?.data?.user
           if (user) {
-            dispatch({ type: 'AUTH_SUCCESS', payload: { user, token: null } })
+            // Check if user needs store name setup
+            const shouldRedirectToStoreSetup = needsStoreNameSetup(user)
+            dispatch({ 
+              type: 'AUTH_SUCCESS', 
+              payload: { 
+                user: {...user, needsStoreNameSetup: shouldRedirectToStoreSetup}, 
+                token: null 
+              } 
+            })
           } else {
             dispatch({ type: 'AUTH_FAILURE', payload: null })
           }
@@ -139,9 +159,11 @@ export const AuthProvider = ({ children }) => {
           const { user, token } = response.data.data
           
           localStorage.setItem('token', token)
+          // Check if user needs store name setup
+          const shouldRedirectToStoreSetup = needsStoreNameSetup(user)
           dispatch({
             type: 'AUTH_SUCCESS',
-            payload: { user, token }
+            payload: { user: {...user, needsStoreNameSetup: shouldRedirectToStoreSetup}, token }
           })
           // Clear google flow flag after successful session creation
           sessionStorage.removeItem('auth_google_flow')
@@ -179,14 +201,30 @@ export const AuthProvider = ({ children }) => {
       
       // If token present (JWT flow)
       if (data.token) {
+        // Check if user needs store name setup
+        const shouldRedirectToStoreSetup = needsStoreNameSetup(data.user)
         localStorage.setItem('token', data.token)
-        dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user, token: data.token } })
+        dispatch({ 
+          type: 'AUTH_SUCCESS', 
+          payload: { 
+            user: {...data.user, needsStoreNameSetup: shouldRedirectToStoreSetup}, 
+            token: data.token 
+          } 
+        })
       } else if (cookiesEnabled) {
         // Cookie session flow: fetch user via /auth/me
         const me = await authAPI.getMe()
         const user = me.data?.data?.user
         if (user) {
-          dispatch({ type: 'AUTH_SUCCESS', payload: { user, token: null } })
+          // Check if user needs store name setup
+          const shouldRedirectToStoreSetup = needsStoreNameSetup(user)
+          dispatch({ 
+            type: 'AUTH_SUCCESS', 
+            payload: { 
+              user: {...user, needsStoreNameSetup: shouldRedirectToStoreSetup}, 
+              token: null 
+            } 
+          })
         } else {
           throw new Error('Session established but user not returned')
         }
@@ -211,10 +249,12 @@ export const AuthProvider = ({ children }) => {
       const response = await authAPI.register(userData)
       const { user, token } = response.data.data
       
+      // Check if user needs store name setup
+      const shouldRedirectToStoreSetup = needsStoreNameSetup(user)
       localStorage.setItem('token', token)
       dispatch({
         type: 'AUTH_SUCCESS',
-        payload: { user, token }
+        payload: { user: {...user, needsStoreNameSetup: shouldRedirectToStoreSetup}, token }
       })
       
       return { success: true }
@@ -269,17 +309,37 @@ export const AuthProvider = ({ children }) => {
 
   const updateProfile = async (profileData) => {
     try {
-      const response = await authAPI.updateProfile(profileData)
+      // If profileData is provided, update it first
+      if (profileData && Object.keys(profileData).length > 0) {
+        await authAPI.updateProfile(profileData);
+      }
+      
+      // Always fetch fresh user data to ensure consistency
+      const freshUserData = await authAPI.getMe();
       dispatch({
         type: 'UPDATE_USER',
-        payload: response.data.data.user
-      })
-      return { success: true }
+        payload: freshUserData.data.data.user
+      });
+      return { success: true };
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Profile update failed'
-      return { success: false, error: errorMessage }
+      const errorMessage = error.response?.data?.message || 'Profile update failed';
+      return { success: false, error: errorMessage };
     }
-  }
+  };
+
+  const refreshUser = async () => {
+    try {
+      const freshUserData = await authAPI.getMe();
+      dispatch({
+        type: 'UPDATE_USER',
+        payload: freshUserData.data.data.user
+      });
+      return { success: true };
+    } catch (error) {
+      console.error('Refresh user error:', error);
+      return { success: false, error: error.message };
+    }
+  };
 
   const changePassword = async (passwordData) => {
     try {
@@ -430,6 +490,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     clearAuthState,
     updateProfile,
+    refreshUser,
     changePassword,
     // Google authentication
     loginWithGoogle,

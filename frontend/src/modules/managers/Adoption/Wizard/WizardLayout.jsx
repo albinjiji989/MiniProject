@@ -4,8 +4,8 @@ import { useNavigate, Outlet, useLocation } from 'react-router-dom'
 const STEPS = [
   { key: 'basic', label: 'Basic Info', path: '/manager/adoption/wizard/basic' },
   { key: 'health', label: 'Health & Media', path: '/manager/adoption/wizard/health' },
-  { key: 'availability', label: 'Availability', path: '/manager/adoption/wizard/availability' },
-  { key: 'review', label: 'Review', path: '/manager/adoption/wizard/review' },
+  { key: 'availability', label: 'Adoption Fee', path: '/manager/adoption/wizard/availability' },
+  { key: 'review', label: 'Review & Submit', path: '/manager/adoption/wizard/review' },
 ]
 
 export default function WizardLayout() {

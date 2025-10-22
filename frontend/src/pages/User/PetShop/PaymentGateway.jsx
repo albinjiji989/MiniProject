@@ -75,7 +75,7 @@ const PaymentGateway = () => {
   const fetchReservationDetails = async () => {
     try {
       setLoading(true)
-      const response = await apiClient.get(`/petshop/public/reservations/track/${reservationId}`)
+      const response = await apiClient.get(`/petshop/user/public/reservations/track/${reservationId}`)
       const reservationData = response.data.data.reservation
       
       if (!['going_to_buy', 'payment_pending'].includes(reservationData.status)) {
@@ -146,6 +146,38 @@ const PaymentGateway = () => {
 
   const isMobile = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 
+  const handlePaymentSuccess = async (response) => {
+    try {
+      setProcessing(true)
+      
+      // Verify payment with backend
+      const verificationResponse = await apiClient.post('/petshop/payments/razorpay/verify', {
+        razorpay_order_id: response.razorpay_order_id,
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_signature: response.razorpay_signature,
+        reservationId: reservationId
+      })
+
+      if (verificationResponse.data.success) {
+        setSuccess(true)
+        setPaymentDetails({
+          orderId: response.razorpay_order_id,
+          paymentId: response.razorpay_payment_id,
+          signature: response.razorpay_signature
+        })
+        
+        // Redirect to purchase confirmation page
+        navigate(`/User/petshop/purchase-confirmation/${reservationId}`)
+      } else {
+        setError('Payment verification failed')
+      }
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Payment verification failed')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   const handlePayment = async () => {
     try {
       setProcessing(true)
@@ -206,29 +238,7 @@ const PaymentGateway = () => {
           upi: true,
           paylater: true
         },
-        handler: async (response) => {
-          try {
-            // Verify payment with Razorpay
-            const verifyResponse = await apiClient.post('/petshop/payments/razorpay/verify', {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              reservationId,
-              deliveryMethod,
-              deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : null
-            })
-
-            if (verifyResponse.data.success) {
-              setPaymentDetails(verifyResponse.data.data)
-              setSuccess(true)
-              setActiveStep(2)
-            } else {
-              setError('Payment verification failed')
-            }
-          } catch (err) {
-            setError('Payment verification failed')
-          }
-        },
+        handler: handlePaymentSuccess,
         prefill: {
           name: user?.name || '',
           email: user?.email || '',

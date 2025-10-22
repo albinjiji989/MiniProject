@@ -186,43 +186,14 @@ const PetSchema = new mongoose.Schema({
     maxlength: [200, 'Adoption requirement cannot exceed 200 characters']
   }],
   
-  // Media and Documentation
-  images: [{
-    url: {
-      type: String,
-      required: true
-    },
-    caption: {
-      type: String,
-      trim: true
-    },
-    isPrimary: {
-      type: Boolean,
-      default: false
-    },
-    uploadedAt: {
-      type: Date,
-      default: Date.now
-    }
+  // Media and Documentation (references to separate collections)
+  imageIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Image'
   }],
-  documents: [{
-    name: {
-      type: String,
-      required: true
-    },
-    type: {
-      type: String,
-      required: true,
-      enum: ['Medical Record', 'Certificate', 'License', 'Other']
-    },
-    url: {
-      type: String,
-      required: true
-    },
-    uploadedAt: {
-      type: Date,
-      default: Date.now
-    }
+  documentIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Document'
   }],
   
   // Ownership History (references to separate OwnershipHistory model)
@@ -304,12 +275,25 @@ PetSchema.virtual('ageInMonths').get(function() {
 
 // Virtual for full address
 PetSchema.virtual('fullAddress').get(function() {
-  const parts = [];
-  if (this.location.address) parts.push(this.location.address);
-  if (this.location.city) parts.push(this.location.city);
-  if (this.location.state) parts.push(this.location.state);
-  if (this.location.country) parts.push(this.location.country);
-  return parts.join(', ');
+  if (!this.location) return '';
+  const parts = [this.location.address, this.location.city, this.location.state, this.location.country];
+  return parts.filter(Boolean).join(', ');
+});
+
+// Virtual populate images
+PetSchema.virtual('images', {
+  ref: 'Image',
+  localField: 'imageIds',
+  foreignField: '_id',
+  justOne: false
+});
+
+// Virtual populate documents
+PetSchema.virtual('documents', {
+  ref: 'Document',
+  localField: 'documentIds',
+  foreignField: '_id',
+  justOne: false
 });
 
 // Generate unique 5-digit pet ID
@@ -333,7 +317,7 @@ PetSchema.statics.generatePetId = async function() {
 
 // Generate unique petCode using centralized generator
 PetSchema.statics.generatePetCode = async function() {
-  const PetCodeGenerator = require('../../utils/petCodeGenerator')
+  const PetCodeGenerator = require('../utils/petCodeGenerator')
   return await PetCodeGenerator.generateUniquePetCode()
 }
 
@@ -367,15 +351,7 @@ PetSchema.pre('save', async function(next) {
     }
   }
   
-  // Ensure only one primary image
-  if (this.images && this.images.length > 0) {
-    const primaryImages = this.images.filter(img => img.isPrimary);
-    if (primaryImages.length > 1) {
-      this.images.forEach((img, index) => {
-        img.isPrimary = index === 0;
-      });
-    }
-  }
+  // Image handling is now done via separate Image collection
   
   next();
 });
@@ -421,13 +397,17 @@ PetSchema.statics.findAdopted = function() {
 
 // Instance methods
 
-PetSchema.methods.addImage = function(image) {
-  this.images.push(image);
+PetSchema.methods.addImageId = function(imageId) {
+  if (!this.imageIds.includes(imageId)) {
+    this.imageIds.push(imageId);
+  }
   return this.save();
 };
 
-PetSchema.methods.addDocument = function(document) {
-  this.documents.push(document);
+PetSchema.methods.addDocumentId = function(documentId) {
+  if (!this.documentIds.includes(documentId)) {
+    this.documentIds.push(documentId);
+  }
   return this.save();
 };
 

@@ -1,6 +1,44 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { adoptionAPI, resolveMediaUrl } from '../../../services/api'
+import { apiClient } from '../../../services/api'
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Button,
+  Chip,
+  Avatar,
+  Grid,
+  Stepper,
+  Step,
+  StepLabel,
+  StepContent,
+  Paper,
+  Divider,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  IconButton,
+} from '@mui/material'
+import {
+  Pets as PetIcon,
+  Person as PersonIcon,
+  Home as HomeIcon,
+  Work as WorkIcon,
+  Description as DocumentIcon,
+  Payment as PaymentIcon,
+  CalendarToday as CalendarIcon,
+  LocationOn as LocationIcon,
+  Phone as PhoneIcon,
+  Email as EmailIcon,
+  CheckCircle as CheckIcon,
+  Pending as PendingIcon,
+  Cancel as CancelIcon,
+  Download as DownloadIcon,
+  AttachMoney as AttachMoneyIcon,
+} from '@mui/icons-material'
 
 export default function UserAdoptionApplicationDetails() {
   const { id } = useParams()
@@ -72,10 +110,41 @@ export default function UserAdoptionApplicationDetails() {
 
   const downloadCertificate = async () => {
     try {
-      const res = await adoptionAPI.getCertificate(app._id || id)
-      const url = res?.data?.data?.agreementFile || res?.data?.data?.certificate?.agreementFile || res?.data?.data?.contractURL
-      if (url) window.open(resolveMediaUrl(url), '_blank')
-    } catch (_) {}
+      // Stream via backend to avoid redirects/CORS and force download
+      // Use the correct user certificate endpoint
+      const resp = await adoptionAPI.getUserCertificate(app._id || id)
+      const blob = new Blob([resp.data], { type: resp.headers['content-type'] || 'application/pdf' })
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const dispo = resp.headers['content-disposition'] || ''
+      const match = dispo.match(/filename="?([^";]+)"?/i)
+      const fname = (match && match[1]) ? match[1] : `certificate_${app._id || id}.pdf`
+      a.href = blobUrl
+      a.download = fname
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(blobUrl)
+    } catch (e) {
+      // Fallback to the existing method if the new endpoint fails
+      try {
+        const res = await adoptionAPI.getCertificate(app._id || id)
+        const url = res?.data?.data?.agreementFile || res?.data?.data?.certificate?.agreementFile || res?.data?.data?.contractURL
+        if (url) {
+          const resolvedUrl = resolveMediaUrl(url)
+          const a = document.createElement('a')
+          a.href = resolvedUrl
+          a.download = `certificate_${app._id || id}.pdf`
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+        } else {
+          alert('Certificate not available')
+        }
+      } catch (fallbackError) {
+        alert(e?.response?.data?.error || 'Failed to download certificate')
+      }
+    }
   }
 
   const docs = () => {
@@ -86,267 +155,452 @@ export default function UserAdoptionApplicationDetails() {
 
   // Get current step in the adoption process
   const getCurrentStep = () => {
-    if (app?.status === 'pending') return 1
-    if (app?.status === 'approved' && app?.paymentStatus !== 'completed') return 2
-    if (app?.status === 'approved' && app?.paymentStatus === 'completed' && (!app?.handover || app?.handover?.status === 'none')) return 3
-    if (app?.handover?.status === 'scheduled') return 4
-    if (app?.handover?.status === 'completed') return 5
-    return 1
+    if (app?.status === 'pending') return 0
+    if (app?.status === 'approved' && app?.paymentStatus !== 'completed') return 1
+    if (app?.status === 'approved' && app?.paymentStatus === 'completed') return 2
+    if (app?.handover?.status === 'scheduled') return 3
+    if (app?.handover?.status === 'completed') return 4
+    return 0
   }
 
   // Get step status for progress indicator
-  const getStepStatus = (step) => {
+  const getStepStatus = (stepIndex) => {
     const current = getCurrentStep()
-    if (step < current) return 'completed'
-    if (step === current) return 'current'
+    if (stepIndex < current) return 'completed'
+    if (stepIndex === current) return 'active'
     return 'pending'
   }
 
-  if (loading) return <div>Loading...</div>
-  if (error) return <div className="text-red-600">{error}</div>
-  if (!app) return <div>Not found</div>
+  // Get step icon
+  const getStepIcon = (stepIndex) => {
+    const status = getStepStatus(stepIndex)
+    if (status === 'completed') return <CheckIcon sx={{ color: 'success.main' }} />
+    if (status === 'active') return <PendingIcon sx={{ color: 'primary.main' }} />
+    return <PendingIcon sx={{ color: 'grey.400' }} />
+  }
+
+  if (loading) return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <Typography>Loading application details...</Typography>
+    </Box>
+  )
+  
+  if (error) return (
+    <Box sx={{ p: 3 }}>
+      <Card>
+        <CardContent>
+          <Typography color="error.main">{error}</Typography>
+          <Button onClick={() => navigate('/User/adoption/applications')} sx={{ mt: 2 }}>
+            Back to Applications
+          </Button>
+        </CardContent>
+      </Card>
+    </Box>
+  )
+  
+  if (!app) return (
+    <Box sx={{ p: 3 }}>
+      <Card>
+        <CardContent>
+          <Typography>Application not found</Typography>
+          <Button onClick={() => navigate('/User/adoption/applications')} sx={{ mt: 2 }}>
+            Back to Applications
+          </Button>
+        </CardContent>
+      </Card>
+    </Box>
+  )
+
+  const steps = [
+    {
+      label: 'Application Submitted',
+      description: 'Your adoption application has been submitted and is awaiting review.',
+      icon: <PendingIcon />
+    },
+    {
+      label: 'Payment Processing',
+      description: 'Application approved. Please complete the adoption fee payment.',
+      icon: <PaymentIcon />
+    },
+    {
+      label: 'Certificate Generation',
+      description: 'Payment completed. Adoption certificate is being generated.',
+      icon: <DocumentIcon />
+    },
+    {
+      label: 'Handover Scheduled',
+      description: 'Certificate ready. Visit the adoption center to pick up your pet.',
+      icon: <CalendarIcon />
+    },
+    {
+      label: 'Adoption Completed',
+      description: 'Pet ownership transferred. Congratulations on your new companion!',
+      icon: <CheckIcon />
+    }
+  ]
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Adoption Application</h2>
-        <button className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700" onClick={()=>navigate(-1)}>Back</button>
-      </div>
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 600 }}>
+          Adoption Application Details
+        </Typography>
+        <Button 
+          variant="outlined" 
+          onClick={() => navigate('/User/adoption/applications')}
+        >
+          Back to Applications
+        </Button>
+      </Box>
 
-      {/* Progress Indicator */}
-      <div className="bg-white border rounded-lg p-4">
-        <h3 className="font-semibold mb-3">Adoption Process Status</h3>
-        <div className="flex items-center justify-between relative">
-          {/* Progress line */}
-          <div className="absolute top-4 left-0 right-0 h-1 bg-gray-200 z-0"></div>
-          <div 
-            className="absolute top-4 left-0 h-1 bg-green-500 z-10 transition-all duration-500" 
-            style={{ width: `${Math.max(0, (getCurrentStep() - 1) * 25)}%` }}
-          ></div>
-          
-          {/* Steps */}
-          {[
-            { num: 1, label: 'Application Submitted', desc: 'Waiting for review' },
-            { num: 2, label: 'Payment', desc: 'Complete adoption fee' },
-            { num: 3, label: 'Certificate', desc: 'Awaiting generation' },
-            { num: 4, label: 'Handover Scheduled', desc: 'Visit adoption center' },
-            { num: 5, label: 'Completed', desc: 'Pet ownership transferred' }
-          ].map((step, index) => {
-            const status = getStepStatus(step.num)
-            return (
-              <div key={step.num} className="flex flex-col items-center z-20 relative">
-                <div className={`
-                  w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mb-2
-                  ${status === 'completed' ? 'bg-green-500 text-white' : ''}
-                  ${status === 'current' ? 'bg-blue-500 text-white' : ''}
-                  ${status === 'pending' ? 'bg-gray-300 text-gray-600' : ''}
-                `}>
-                  {status === 'completed' ? '✓' : step.num}
-                </div>
-                <div className="text-center">
-                  <div className={`text-xs font-medium ${status === 'current' ? 'text-blue-600' : 'text-gray-600'}`}>
-                    {step.label}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">{step.desc}</div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Application Status */}
-        <div className="bg-white border rounded-lg p-4">
-          <h3 className="font-semibold mb-3 text-lg">Application Status</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Status:</span>
-              <span className={`font-medium ${
-                app.status === 'approved' ? 'text-green-600' : 
-                app.status === 'rejected' ? 'text-red-600' : 
-                app.status === 'pending' ? 'text-yellow-600' : 'text-gray-600'
-              }`}>
-                {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
-              </span>
-            </div>
-            
-            <div className="flex justify-between">
-              <span className="text-gray-600">Payment:</span>
-              <span className={`font-medium ${
-                app.paymentStatus === 'completed' ? 'text-green-600' : 
-                app.paymentStatus === 'failed' ? 'text-red-600' : 
-                app.paymentStatus === 'processing' ? 'text-yellow-600' : 'text-gray-600'
-              }`}>
-                {app.paymentStatus ? app.paymentStatus.charAt(0).toUpperCase() + app.paymentStatus.slice(1) : 'Not started'}
-              </span>
-            </div>
-            
-            {app.status === 'rejected' && (
-              <div className="pt-2">
-                <div className="text-sm text-red-600 font-medium">Rejection Reason:</div>
-                <div className="text-sm text-gray-700 mt-1">{app.rejectionReason || 'Not provided'}</div>
-              </div>
-            )}
-            
-            {app.status === 'approved' && app.paymentStatus !== 'completed' && (
-              <div className="pt-3">
-                <button 
-                  className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                  onClick={payNow}
-                >
-                  Pay Adoption Fee (₹{app.petId?.adoptionFee || 0})
-                </button>
-                <div className="text-xs text-gray-500 mt-2 text-center">
-                  After payment, the adoption manager will generate your certificate
-                </div>
-              </div>
-            )}
-            
-            {app.paymentStatus === 'completed' && (
-              <div className="pt-3">
-                <button 
-                  className="w-full px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors"
-                  onClick={downloadCertificate}
-                >
-                  Download Certificate
-                </button>
-                <div className="text-xs text-gray-500 mt-2 text-center">
-                  Your certificate is ready for the handover process
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-        
-        {/* Pet Information */}
-        <div className="bg-white border rounded-lg p-4">
-          <h3 className="font-semibold mb-3 text-lg">Pet Information</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Name:</span>
-              <span className="font-medium">{app.petId?.name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Breed:</span>
-              <span className="font-medium">{app.petId?.breed}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Species:</span>
-              <span className="font-medium">{app.petId?.species}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Adoption Fee:</span>
-              <span className="font-medium">₹{app.petId?.adoptionFee || 0}</span>
-            </div>
-            {app.paymentStatus === 'completed' && app.handover?.status === 'scheduled' && (
-              <div className="pt-3 border-t border-gray-200 mt-3">
-                <div className="text-sm font-medium text-blue-600">Handover Scheduled</div>
-                <div className="text-sm mt-1">
-                  Date: {app.handover.scheduledAt ? new Date(app.handover.scheduledAt).toLocaleString() : 'Not set'}
-                </div>
-                <div className="text-xs text-gray-500 mt-2">
-                  Please bring the OTP sent to your email to the adoption center
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-        
-        {/* Applicant Information */}
-        <div className="bg-white border rounded-lg p-4">
-          <h3 className="font-semibold mb-3 text-lg">Your Information</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Name:</span>
-              <span className="font-medium">{app.userId?.name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Email:</span>
-              <span className="font-medium">{app.userId?.email}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Phone:</span>
-              <span className="font-medium">{app.applicationData?.phone || app.userId?.phone}</span>
-            </div>
-          </div>
-        </div>
-        
-        {/* Documents */}
-        <div className="bg-white border rounded-lg p-4">
-          <h3 className="font-semibold mb-3 text-lg">Documents</h3>
-          {docs().length === 0 ? (
-            <div className="text-sm text-gray-500">No documents uploaded.</div>
-          ) : (
-            <ul className="space-y-2">
-              {docs().map((d, i) => {
-                const url = typeof d === 'string' ? d : (d && d.url ? d.url : '')
-                if (!url) return null
-                const name = (typeof d === 'object' && d.name) ? d.name : url.split('/').pop()
-                return (
-                  <li key={i} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-sm truncate flex-1 mr-2">{name}</span>
-                    <a 
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium" 
-                      href={resolveMediaUrl(url)} 
-                      target="_blank" 
-                      rel="noreferrer"
+      <Grid container spacing={3}>
+        {/* Progress Tracker */}
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                Adoption Process Status
+              </Typography>
+              <Stepper activeStep={getCurrentStep()} orientation="vertical">
+                {steps.map((step, index) => (
+                  <Step key={step.label} active={getStepStatus(index) === 'active'}>
+                    <StepLabel 
+                      StepIconComponent={() => getStepIcon(index)}
+                      sx={{ 
+                        '& .MuiStepLabel-label': { 
+                          fontWeight: getStepStatus(index) === 'active' ? 600 : 400,
+                          color: getStepStatus(index) === 'completed' ? 'success.main' : 
+                                 getStepStatus(index) === 'active' ? 'primary.main' : 'text.secondary'
+                        }
+                      }}
                     >
-                      View
-                    </a>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
-      </div>
+                      {step.label}
+                    </StepLabel>
+                    <StepContent>
+                      <Typography variant="body2" color="text.secondary">
+                        {step.description}
+                      </Typography>
+                    </StepContent>
+                  </Step>
+                ))}
+              </Stepper>
+            </CardContent>
+          </Card>
+        </Grid>
 
-      {/* Handover Information */}
-      {app.handover?.status === 'scheduled' && (
-        <div className="bg-white border rounded-lg p-4">
-          <h3 className="font-semibold mb-3 text-lg">Handover Appointment</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <div className="text-sm text-gray-600">Date & Time</div>
-              <div className="font-medium">{app.handover.scheduledAt ? new Date(app.handover.scheduledAt).toLocaleString() : 'Not set'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600">Location</div>
-              <div className="font-medium">{app.handover.location?.address || 'Adoption Center - Main Branch, 123 Pet Welfare Road, Animal City'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600">Contact</div>
-              <div className="font-medium">{app.handover.location?.phone || '+91-9876543210'}</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-600">Special Notes</div>
-              <div className="font-medium">{app.handover.notes || 'None'}</div>
-            </div>
-          </div>
-          <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded">
-            <div className="font-medium text-amber-800">Important Information</div>
-            <div className="text-sm text-amber-700 mt-1">
-              Please bring the OTP sent to your email to the adoption center. 
-              Arrive 15 minutes before your scheduled time. 
-              No pets will be released without the correct OTP.
-            </div>
-          </div>
-        </div>
-      )}
+        {/* Application Status Card */}
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                Application Status
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                <Chip
+                  label={app.status === 'approved' ? 'Approved' : 
+                         app.status === 'rejected' ? 'Rejected' : 
+                         app.status === 'pending' ? 'Pending Review' : 
+                         app.status === 'completed' ? 'Completed' : 
+                         app.status.charAt(0).toUpperCase() + app.status.slice(1)}
+                  color={app.status === 'approved' ? 'success' : 
+                         app.status === 'rejected' ? 'error' : 
+                         app.status === 'pending' ? 'warning' : 
+                         app.status === 'completed' ? 'info' : 'default'}
+                  size="medium"
+                  sx={{ fontWeight: 600 }}
+                />
+              </Box>
+              
+              {app.status === 'rejected' && (
+                <Box sx={{ mt: 2, p: 2, bgcolor: 'error.light', borderRadius: 1 }}>
+                  <Typography variant="subtitle2" color="error.main" sx={{ mb: 1 }}>
+                    Rejection Reason
+                  </Typography>
+                  <Typography variant="body2">
+                    {app.rejectionReason || 'No reason provided'}
+                  </Typography>
+                </Box>
+              )}
+              
+              {app.status === 'approved' && app.paymentStatus !== 'completed' && (
+                <Box sx={{ mt: 2 }}>
+                  <Button 
+                    variant="contained" 
+                    color="success"
+                    fullWidth
+                    startIcon={<PaymentIcon />}
+                    onClick={payNow}
+                    sx={{ mb: 1 }}
+                  >
+                    Pay Adoption Fee (₹{app.petId?.adoptionFee || 0})
+                  </Button>
+                  <Typography variant="caption" color="text.secondary" align="center">
+                    After payment, the adoption manager will generate your certificate
+                  </Typography>
+                </Box>
+              )}
+              
+              {(app.paymentStatus === 'completed' || ['certificate_generated', 'handover_scheduled', 'handed_over', 'completed'].includes(app.status)) && (
+                <Box sx={{ mt: 2 }}>
+                  <Button 
+                    variant="contained" 
+                    color="primary"
+                    fullWidth
+                    startIcon={<DownloadIcon />}
+                    onClick={downloadCertificate}
+                    sx={{ mb: 1 }}
+                  >
+                    Download Certificate
+                  </Button>
+                  <Typography variant="caption" color="text.secondary" align="center">
+                    Your certificate is ready for the handover process
+                  </Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
 
-      {/* Completion Message */}
-      {app.handover?.status === 'completed' && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <h3 className="font-semibold text-lg text-green-800">Adoption Completed!</h3>
-          <div className="text-green-700 mt-2">
-            Congratulations! Your adoption is now complete. The pet is officially yours and will appear in your dashboard under "My Pets".
-          </div>
-          <div className="text-sm text-green-600 mt-3">
-            Handover completed on {app.handoverCompletedAt ? new Date(app.handoverCompletedAt).toLocaleString() : 'recently'}
-          </div>
-        </div>
-      )}
-    </div>
+        {/* Pet Information Card */}
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                Pet Information
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <Avatar sx={{ width: 56, height: 56, bgcolor: 'primary.light' }}>
+                  <PetIcon />
+                </Avatar>
+                <Box>
+                  <Typography variant="h6">{app.petId?.name}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {app.petId?.breed} • {app.petId?.species}
+                  </Typography>
+                </Box>
+              </Box>
+              
+              <Divider sx={{ my: 2 }} />
+              
+              <List dense>
+                <ListItem>
+                  <ListItemIcon>
+                    <AttachMoneyIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Adoption Fee" 
+                    secondary={`₹${app.petId?.adoptionFee || 0}`} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <CalendarIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Application Date" 
+                    secondary={app.createdAt ? new Date(app.createdAt).toLocaleDateString() : '-'} 
+                  />
+                </ListItem>
+              </List>
+              
+              {app.paymentStatus === 'completed' && app.handover?.status === 'scheduled' && (
+                <Box sx={{ mt: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+                  <Typography variant="subtitle2" color="info.main" sx={{ mb: 1 }}>
+                    Handover Scheduled
+                  </Typography>
+                  <Typography variant="body2">
+                    Date: {app.handover.scheduledAt ? new Date(app.handover.scheduledAt).toLocaleString() : 'Not set'}
+                  </Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Applicant Information Card */}
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                Your Information
+              </Typography>
+              
+              <List dense>
+                <ListItem>
+                  <ListItemIcon>
+                    <PersonIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Name" 
+                    secondary={app.applicationData?.fullName || app.userId?.name || '-'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <EmailIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Email" 
+                    secondary={app.applicationData?.email || app.userId?.email || '-'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <PhoneIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Phone" 
+                    secondary={app.applicationData?.phone || '-'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <HomeIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Home Type" 
+                    secondary={app.applicationData?.homeType || '-'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <WorkIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Work Schedule" 
+                    secondary={app.applicationData?.workSchedule || '-'} 
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Documents Card */}
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                Documents
+              </Typography>
+              
+              {docs().length === 0 ? (
+                <Typography color="text.secondary">No documents uploaded.</Typography>
+              ) : (
+                <Grid container spacing={2}>
+                  {docs().map((d, i) => {
+                    const url = typeof d === 'string' ? d : (d && d.url ? d.url : '')
+                    if (!url) return null
+                    const name = (typeof d === 'object' && d.name) ? d.name : url.split('/').pop()
+                    return (
+                      <Grid item xs={12} sm={6} md={4} key={i}>
+                        <Paper 
+                          variant="outlined" 
+                          sx={{ 
+                            p: 2, 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between',
+                            '&:hover': { bgcolor: 'grey.50' }
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <DocumentIcon color="primary" />
+                            <Typography variant="body2" noWrap>
+                              {name}
+                            </Typography>
+                          </Box>
+                          <IconButton 
+                            size="small" 
+                            href={resolveMediaUrl(url)} 
+                            target="_blank" 
+                            rel="noreferrer"
+                          >
+                            <DownloadIcon fontSize="small" />
+                          </IconButton>
+                        </Paper>
+                      </Grid>
+                    )
+                  })}
+                </Grid>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Handover Information */}
+        {app.handover?.status === 'scheduled' && (
+          <Grid item xs={12}>
+            <Card sx={{ border: '1px solid', borderColor: 'info.main' }}>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: 'info.main' }}>
+                  Handover Appointment
+                </Typography>
+                
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Typography variant="subtitle2" color="text.secondary">Date & Time</Typography>
+                    <Typography>
+                      {app.handover.scheduledAt ? new Date(app.handover.scheduledAt).toLocaleString() : 'Not set'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Typography variant="subtitle2" color="text.secondary">Location</Typography>
+                    <Typography>
+                      {app.handover.location?.address || 'Adoption Center - Main Branch, 123 Pet Welfare Road, Animal City'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Typography variant="subtitle2" color="text.secondary">Contact</Typography>
+                    <Typography>
+                      {app.handover.location?.phone || '+91-9876543210'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Typography variant="subtitle2" color="text.secondary">Special Notes</Typography>
+                    <Typography>
+                      {app.handover.notes || 'None'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+                
+                <Box sx={{ mt: 3, p: 2, bgcolor: 'warning.light', borderRadius: 1 }}>
+                  <Typography variant="subtitle2" color="warning.main" sx={{ mb: 1 }}>
+                    Important Information
+                  </Typography>
+                  <Typography variant="body2">
+                    Please bring the OTP sent to your email to the adoption center. 
+                    Arrive 15 minutes before your scheduled time. 
+                    No pets will be released without the correct OTP.
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+
+        {/* Completion Message */}
+        {app.handover?.status === 'completed' && (
+          <Grid item xs={12}>
+            <Card sx={{ bgcolor: 'success.light', border: '1px solid', borderColor: 'success.main' }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <CheckIcon sx={{ color: 'success.main' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600, color: 'success.main' }}>
+                    Adoption Completed!
+                  </Typography>
+                </Box>
+                <Typography sx={{ color: 'success.dark', mb: 2 }}>
+                  Congratulations! Your adoption is now complete. The pet is officially yours and will appear in your dashboard under "My Pets".
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'success.main' }}>
+                  Handover completed on {app.handoverCompletedAt ? new Date(app.handoverCompletedAt).toLocaleString() : 'recently'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+      </Grid>
+    </Box>
   )
 }

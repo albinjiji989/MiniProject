@@ -8,13 +8,25 @@ export default function StepApplicant() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const [form, setForm] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(KEY))?.applicant || { fullName:'', email:'', phone:'', petId:'' } } catch { return { fullName:'', email:'', phone:'', petId:'' } }
+    try { 
+      const savedData = JSON.parse(localStorage.getItem(KEY))?.applicant || {}
+      return { 
+        fullName: savedData.fullName || '', 
+        email: savedData.email || '', 
+        phone: savedData.phone || '', 
+        petId: savedData.petId || '' 
+      }
+    } catch { 
+      return { fullName: '', email: '', phone: '', petId: '' } 
+    }
   })
 
   useEffect(() => {
     const petId = params.get('petId')
     console.log('StepApplicant: URL petId =', petId)
-    if (petId && !form.petId) update({ petId })
+    if (petId && !form.petId) {
+      update({ petId })
+    }
   }, [])
 
   // Prefill from logged-in user profile (editable)
@@ -41,12 +53,12 @@ export default function StepApplicant() {
 
   const update = (patch) => {
     const prev = JSON.parse(localStorage.getItem(KEY) || '{}')
-    const next = { ...prev, applicant: { ...(prev.applicant||{}), ...patch } }
+    const next = { ...prev, applicant: { ...(prev.applicant || {}), ...patch } }
     localStorage.setItem(KEY, JSON.stringify(next))
     setForm(next.applicant)
   }
 
-  const onChange = (e) => update({ [e.target.name]: e.target.value })
+  const onChange = (e) => update({ [e.target.name]: e.target.value || '' })
   const next = () => navigate('/User/adoption/apply/home')
 
   return (
@@ -54,17 +66,43 @@ export default function StepApplicant() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm mb-1">Full Name</label>
-          <input name="fullName" className="px-3 py-2 border rounded w-full" value={form.fullName} onChange={onChange} required />
+          <input 
+            name="fullName" 
+            className="px-3 py-2 border rounded w-full" 
+            value={form.fullName || ''} 
+            onChange={onChange} 
+            required 
+          />
         </div>
         <div>
           <label className="block text-sm mb-1">Email</label>
-          <input name="email" type="email" className="px-3 py-2 border rounded w-full" value={form.email} onChange={onChange} required />
+          <input 
+            name="email" 
+            type="email" 
+            className="px-3 py-2 border rounded w-full" 
+            value={form.email || ''} 
+            onChange={onChange} 
+            required 
+          />
         </div>
         <div>
           <label className="block text-sm mb-1">Phone</label>
-          <input name="phone" className="px-3 py-2 border rounded w-full" value={form.phone} onChange={onChange} required />
+          <input 
+            name="phone" 
+            className="px-3 py-2 border rounded w-full" 
+            value={form.phone || ''} 
+            onChange={onChange} 
+            required 
+          />
         </div>
         {/* Pet ID is auto-captured from route; no manual input */}
+        <div className="hidden">
+          <input 
+            name="petId" 
+            value={form.petId || ''} 
+            readOnly 
+          />
+        </div>
       </div>
       <div className="flex justify-end">
         <button className="px-4 py-2 bg-emerald-600 text-white rounded" onClick={next}>Next</button>

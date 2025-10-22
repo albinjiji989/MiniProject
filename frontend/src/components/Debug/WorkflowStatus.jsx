@@ -46,7 +46,7 @@ const WorkflowStatus = () => {
       const healthData = await healthResponse.json()
 
       // Get reservations data
-      const reservationsResponse = await apiClient.get('/petshop/public/reservations')
+      const reservationsResponse = await apiClient.get('/petshop/user/public/reservations')
       const reservationsData = reservationsResponse.data.data || []
 
       // Get user stats

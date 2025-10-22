@@ -39,9 +39,9 @@ const Inventory = () => {
     try {
       setLoading(true)
       const results = await Promise.allSettled([
-        apiClient.get('/petshop/inventory?limit=1'),
-        apiClient.get('/petshop/inventory?status=in_petshop&limit=1'),
-        apiClient.get('/petshop/inventory?status=available_for_sale&limit=50')
+        apiClient.get('/petshop/manager/inventory?limit=1'),
+        apiClient.get('/petshop/manager/inventory?status=in_petshop&limit=1'),
+        apiClient.get('/petshop/manager/inventory?status=available_for_sale&limit=50')
       ])
       const allRes = results[0]
       const inShopRes = results[1]

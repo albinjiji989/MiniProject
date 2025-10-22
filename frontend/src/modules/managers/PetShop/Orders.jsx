@@ -20,7 +20,7 @@ const Orders = () => {
   const load = async () => {
     try {
       setLoading(true)
-      const res = await apiClient.get('/petshop/orders')
+      const res = await apiClient.get('/petshop/manager/orders')
       setOrders(res.data?.data?.orders || [])
     } catch (e) {
       setError(e?.response?.data?.message || 'Failed to load orders')

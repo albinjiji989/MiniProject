@@ -110,7 +110,7 @@ const PricingRules = () => {
     try {
       setLoading(true)
       const [rulesRes, catsRes, specsRes, brdsRes] = await Promise.allSettled([
-        apiClient.get('/petshop/pricing'),
+        apiClient.get('/petshop/manager/pricing'),
         apiClient.get('/admin/pet-categories/active'),
         apiClient.get('/admin/species/active'),
         apiClient.get('/admin/breeds/active')

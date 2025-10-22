@@ -14,9 +14,7 @@ import {
   Alert,
   CircularProgress,
   useTheme,
-  alpha,
-  CardActions,
-  Tooltip
+  alpha
 } from '@mui/material'
 import {
   Dashboard as DashboardIcon,
@@ -34,13 +32,10 @@ import {
   FavoriteOutlined as FavoriteIcon,
   Notifications as NotificationIcon,
   Star as StarIcon,
-  ArrowForward as ArrowIcon,
-  Block as BlockIcon,
-  Construction as ConstructionIcon,
-  Schedule as ScheduleIcon
+  ArrowForward as ArrowIcon
 } from '@mui/icons-material'
 import { useAuth } from '../../contexts/AuthContext'
-import { modulesAPI, userPetsAPI, apiClient } from '../../services/api'
+import { modulesAPI, userPetsAPI, apiClient, adoptionAPI, resolveMediaUrl } from '../../services/api'
 import { useNavigate } from 'react-router-dom'
 import UserLayout from '../../components/Layout/UserLayout'
 
@@ -52,18 +47,11 @@ const PublicUserDashboard = () => {
   const [modulesLoading, setModulesLoading] = useState(false)
   const [modulesError, setModulesError] = useState('')
   const [modules, setModules] = useState([])
-  const [softBlockedMsg, setSoftBlockedMsg] = useState('')
   const [myPets, setMyPets] = useState([])
-  const [myPetsLoading, setMyPetsLoading] = useState(false)
-  const [myPetsError, setMyPetsError] = useState('')
   const [ownedPets, setOwnedPets] = useState([])
-  const [petshopPurchases, setPetshopPurchases] = useState([])
   const [recentActivity, setRecentActivity] = useState([])
-  const [availableServices, setAvailableServices] = useState([])
-  // Recent activity panel state
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityError, setActivityError] = useState('')
-
 
   const loadDashboardData = async () => {
     try {
@@ -71,56 +59,60 @@ const PublicUserDashboard = () => {
       setActivityLoading(true)
       setActivityError('')
       
-      // Load user's pets
-      const petsRes = await userPetsAPI.list()
-      setMyPets(petsRes.data?.data?.pets || [])
+      // Load all data in parallel to reduce loading time
+      const [petsRes, ownedRes, activityRes, adoptedRes] = await Promise.allSettled([
+        userPetsAPI.list(),
+        apiClient.get('/pets/my-pets'),
+        apiClient.get('/user-dashboard/activities'),
+        adoptionAPI.getMyAdoptedPets()
+      ])
       
-      // Load core owned pets (from core Pet model)
-      let coreOwned = []
-      try {
-        const ownedRes = await apiClient.get('/pets/my-pets')
-        coreOwned = ownedRes.data?.data?.pets || []
-      } catch (e) {
-        console.log('No owned pets or error loading:', e.message)
+      // Process pets from PetNew model
+      let allPets = []
+      if (petsRes.status === 'fulfilled') {
+        const petNewPets = petsRes.value.data?.data || []
+        allPets = [...allPets, ...petNewPets]
+      }
+      
+      // Process core owned pets
+      if (ownedRes.status === 'fulfilled') {
+        const corePets = ownedRes.value.data?.data?.pets || []
+        allPets = [...allPets, ...corePets]
       }
 
-      // Load petshop reservations to include purchases
-      let purchases = []
-      try {
-        const resvRes = await apiClient.get('/petshop/public/reservations')
-        const all = resvRes.data?.data?.reservations || []
-        purchases = all.filter(r => ['paid','ready_pickup','completed','at_owner'].includes(r.status))
-        setPetshopPurchases(purchases)
-      } catch (e) {
-        setPetshopPurchases([])
+      // Process adopted pets
+      let adoptedPets = []
+      if (adoptedRes.status === 'fulfilled') {
+        adoptedPets = adoptedRes.value.data?.data || []
       }
 
-      // Merge for display: core owned + purchased items (map inventory item as pet-like)
-      const mappedPurchases = purchases.map(r => ({
-        _id: r.itemId?._id || r._id,
-        name: r.itemId?.name || 'Pet',
-        images: r.itemId?.images || [],
-        petCode: r.itemId?.petCode,
-        breedId: r.itemId?.breedId,
-        breed: r.itemId?.breedId?.name,
-        gender: r.itemId?.gender || 'Unknown',
-        status: r.status,
-        currentStatus: r.status,
-        tags: ['petshop'],
+      // Map adopted pets to pet-like objects
+      const mappedAdoptedPets = adoptedPets.map(pet => ({
+        _id: pet._id,
+        name: pet.name || 'Pet',
+        images: pet.images || [],
+        petCode: pet.petCode,
+        breed: pet.breed,
+        species: pet.species,
+        gender: pet.gender || 'Unknown',
+        status: 'adopted',
+        currentStatus: 'adopted',
+        tags: ['adoption'],
+        adoptionDate: pet.adoptionDate
       }))
 
-      // De-duplicate by petCode or _id
-      const byKey = new Map()
-      ;[...coreOwned, ...mappedPurchases].forEach(p => {
-        const key = p.petCode || p._id
-        if (key && !byKey.has(key)) byKey.set(key, p)
-      })
-      setOwnedPets(Array.from(byKey.values()))
+      // Combine all pets and remove duplicates
+      const combinedPets = [...allPets, ...mappedAdoptedPets]
+      const uniquePets = combinedPets.filter((pet, index, self) => 
+        index === self.findIndex(p => (p.petCode || p._id) === (pet.petCode || pet._id))
+      )
       
-      // Load recent activity (best-effort)
-      try {
-        const res = await apiClient.get('/user-dashboard/activities')
-        const items = res.data?.data?.activities || []
+      setMyPets(uniquePets)
+      setOwnedPets(uniquePets)
+      
+      // Process recent activity
+      if (activityRes.status === 'fulfilled') {
+        const items = activityRes.value.data?.data?.activities || []
         const withIcons = items.map((a, idx) => ({
           id: a.id || `${a.type}-${idx}`,
           title: a.title,
@@ -135,54 +127,33 @@ const PublicUserDashboard = () => {
           )
         }))
         setRecentActivity(withIcons)
-      } catch (e) {
+      } else {
         setRecentActivity([])
-        setActivityError(e?.response?.data?.message || 'Failed to load recent activity')
+        setActivityError(activityRes.reason?.response?.data?.message || 'Failed to load recent activity')
       }
       
     } catch (error) {
       console.error('Error loading dashboard data:', error)
+      setMyPetsError(error?.response?.data?.message || 'Failed to load pets')
     } finally {
       setLoading(false)
       setActivityLoading(false)
     }
   }
 
-  // Build absolute image URL for pet images
-  // Supports:
-  // - data URLs saved from Add Pet flow
-  // - absolute URLs
-  // - relative URLs from API
-  const buildImageUrl = (url) => {
-    if (!url) return '/placeholder-pet.svg'
-    if (/^data:image\//i.test(url)) return url
-    if (/^https?:\/\//i.test(url)) return url
-    const apiBase = import.meta.env.VITE_API_URL || process.env.REACT_APP_API_URL || 'http://localhost:5000/api'
-    const origin = apiBase.replace(/\/?api\/?$/, '')
-    return `${origin}${url.startsWith('/') ? '' : '/'}${url}`
-  }
-
   useEffect(() => {
     loadDashboardData()
   }, [])
 
-  // Listen for soft-block events (403)
-  useEffect(() => {
-    const onSoftBlock = (e) => {
-      setSoftBlockedMsg(e?.detail?.message || 'Your account access is restricted by admin. Some features are disabled.')
-    }
-    window.addEventListener('auth:soft-block', onSoftBlock)
-    return () => window.removeEventListener('auth:soft-block', onSoftBlock)
-  }, [])
-
-  // Load modules data
+  // Load modules data - only active modules
   useEffect(() => {
     (async () => {
       setModulesLoading(true)
       setModulesError('')
       try {
         const res = await modulesAPI.list()
-        const list = (res.data?.data || [])
+        // Filter to only show active modules
+        const list = (res.data?.data || []).filter(module => module.status === 'active')
         setModules(list)
       } catch (e) {
         setModules([])
@@ -221,66 +192,32 @@ const PublicUserDashboard = () => {
     return iconMap[iconName] || <CareIcon sx={{ fontSize: 40 }} />
   }
 
-  const getModuleColor = (color) => {
-    const colorMap = {
-      '#4CAF50': 'success',
-      '#2196F3': 'info', 
-      '#FF9800': 'warning',
-      '#9C27B0': 'secondary',
-      '#F44336': 'error',
-      '#607D8B': 'primary',
-      '#795548': 'info'
-    }
-    return colorMap[color] || 'primary'
-  }
-
   const getModulePath = (key) => {
     const pathMap = {
-      'adoption': '/adoption',
-      'veterinary': '/veterinary',
-      'rescue': '/rescue',
-      'petshop': '/petshop',
-      'pharmacy': '/pharmacy',
-      'ecommerce': '/ecommerce',
-      'temporary-care': '/temporary-care'
+      'adoption': '/User/adoption',
+      'veterinary': '/User/veterinary',
+      'rescue': '/User/rescue',
+      'petshop': '/User/petshop',
+      'pharmacy': '/User/pharmacy',
+      'ecommerce': '/User/ecommerce',
+      'temporary-care': '/User/temporary-care'
     }
-    return pathMap[key] || '/'
+    return pathMap[key] || '/User/dashboard'
   }
 
+  // Only show real, working features
   const staticCards = [
     {
       key: 'pet-management',
       title: 'Pet Management',
-      description: 'Manage your pets, view medical records, and track their history',
-      icon: <PetIcon sx={{ fontSize: 40 }} />, // inherit white
-      color: 'primary',
+      description: 'Manage your pets and view their information',
+      icon: <PetIcon sx={{ fontSize: 40 }} />,
       path: '/User/pets',
-      isActive: true,
-      statusMessage: '',
-      features: ['Add/Edit Pets', 'Medical Records', 'Vaccination History', 'Ownership History']
+      isActive: true
     },
   ]
 
-  const quickActions = [
-    { title: 'Add New Pet', icon: <AddIcon />, path: '/User/pets/add' },
-    { title: 'Find Adoption', icon: <SearchIcon />, path: '/adoption' },
-    { title: 'Shop Products', icon: <ShopIcon />, path: '/ecommerce' },
-    
-  ]
-
-  const sidebarItems = [
-    { label: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-    { label: 'My Pets', icon: <PetIcon />, path: '/pets' },
-    { label: 'Adoption', icon: <AdoptionIcon />, path: '/adoption' },
-    { label: 'Pet Shop', icon: <HomeIcon />, path: '/petshop' },
-    { label: 'Rescue', icon: <RescueIcon />, path: '/rescue' },
-    { label: 'Temporary Care', icon: <CareIcon />, path: '/temporary-care' },
-    { label: 'Pharmacy', icon: <PharmacyIcon />, path: '/pharmacy' },
-    { label: 'Veterinary', icon: <VeterinaryIcon />, path: '/veterinary' },
-    { label: 'Shop', icon: <ShopIcon />, path: '/ecommerce' }
-  ]
-
-  // Gradient presets for action cards (cycles across items)
+  // Gradient presets for action cards
   const gradientPresets = [
     'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', // purple
     'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', // pink
@@ -288,20 +225,27 @@ const PublicUserDashboard = () => {
     'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', // green
   ]
 
-  // Deterministic gradient per module to avoid similar colors
-  const gradientMap = {
-    'pet-management': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', // purple
-    'adoption': 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', // pink
-    'petshop': 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', // blue
-    'veterinary': 'linear-gradient(135deg, #36d1dc 0%, #5b86e5 100%)', // teal-blue
-    'pharmacy': 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', // green-teal
-    'rescue': 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)', // orange
-    'temporary-care': 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)', // light blue
-    'ecommerce': 'linear-gradient(135deg, #ff9966 0%, #ff5e62 100%)', // orange-red
-    'owned-pets': 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)', // violet-pink
-  }
+  const getGradientFor = (index) => gradientPresets[index % gradientPresets.length]
 
-  const getGradientFor = (key, index) => gradientMap[key] || gradientPresets[index % gradientPresets.length]
+  // Function to get the primary image for a pet
+  const getPetImageUrl = (pet) => {
+    // For user-created pets from PetNew model
+    if (pet.images && pet.images.length > 0) {
+      // Find primary image or use first image
+      const primaryImage = pet.images.find(img => img.isPrimary) || pet.images[0];
+      if (primaryImage && primaryImage.url) {
+        return resolveMediaUrl(primaryImage.url);
+      }
+    }
+    
+    // Fallback to imageUrl if available
+    if (pet.imageUrl) {
+      return resolveMediaUrl(pet.imageUrl);
+    }
+    
+    // Default placeholder
+    return '/placeholder-pet.svg';
+  };
 
   return (
     <UserLayout user={user}>
@@ -324,109 +268,115 @@ const PublicUserDashboard = () => {
         }}>
           Welcome back, {user?.name?.split(' ')[0] || 'Friend'}! 🐾
         </Typography>
-        {/* Removed subtitle per request */}
-        {/* Removed Quick Stats row as requested */}
       </Box>
 
-      {/* My Pets (all sources combined) - directly below welcome */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h5" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <PetIcon color="primary" />
-          My Pets ({allMyPets.length})
-        </Typography>
-        {allMyPets.length > 0 && (
-          <Button size="small" variant="outlined" onClick={() => navigate('/User/pets')}>
-            View All
-          </Button>
-        )}
-      </Box>
-      <Card sx={{ mb: 4 }}>
-        <CardContent>
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : allMyPets.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-              <PetIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>No pets yet</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Add your pet, or adopt/buy to see them here.
-              </Typography>
-              <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/User/pets/add')}>
-                Add Pet
-              </Button>
-            </Box>
-          ) : (
-            <Box sx={{ overflowX: 'auto', pb: 1 }}>
-              <Box sx={{ display: 'flex', gap: 2, minWidth: '100%' }}>
-                {allMyPets.map((pet) => (
-                  <Card key={pet._id || pet.petCode} sx={{ minWidth: 240, flex: '0 0 auto', cursor: 'pointer', '&:hover': { boxShadow: 4 } }} onClick={() => navigate('/User/pets')}>
-                    <CardContent>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        {(() => {
-                          const src = buildImageUrl(
-                            (pet.images?.find?.(img => img?.isPrimary)?.url) ||
-                            (pet.images?.[0]?.url) ||
-                            pet.imageUrl ||
-                            ''
-                          )
-                          return (
-                            <Box
-                              component="img"
-                              src={src}
-                              alt={pet.name || 'Pet'}
-                              onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }}
-                              sx={{
-                                width: 56,
-                                height: 56,
-                                objectFit: 'cover',
-                                borderRadius: '8px',
-                                border: '1px solid',
-                                borderColor: 'divider'
-                              }}
-                            />
-                          )
-                        })()}
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, overflow: 'hidden' }}>
-                            <Typography variant="h6" noWrap sx={{ fontWeight: 'bold' }}>
-                              {pet.name || 'Unnamed Pet'}
-                            </Typography>
-                            {(pet.petCode || pet.code) && (
-                              <Chip 
-                                label={pet.petCode || pet.code} 
-                                size="small" 
-                                variant="outlined"
-                                sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}
-                              />
-                            )}
-                          </Box>
-                          <Typography variant="body2" color="text.secondary" noWrap>
-                            {(pet.breedId?.name || pet.breed?.name || pet.breed || 'Breed not specified')} • {(pet.gender || 'Gender not set')}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {(pet.status || pet.currentStatus || 'Owned')}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Box>
-            </Box>
+      {/* My Pets Section */}
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h5" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PetIcon color="primary" />
+            My Pets ({allMyPets.length})
+          </Typography>
+          {allMyPets.length > 0 && (
+            <Button size="small" variant="outlined" onClick={() => navigate('/User/pets')}>
+              View All
+            </Button>
           )}
-        </CardContent>
-      </Card>
+        </Box>
+        <Card>
+          <CardContent>
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : allMyPets.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <PetIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>No pets yet</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Add your pet to get started
+                </Typography>
+                <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/User/pets/add')}>
+                  Add Pet
+                </Button>
+              </Box>
+            ) : (
+              <Box sx={{ overflowX: 'auto', pb: 1 }}>
+                <Box sx={{ display: 'flex', gap: 2, minWidth: '100%' }}>
+                  {allMyPets.slice(0, 4).map((pet) => (
+                    <Card 
+                      key={pet._id || pet.petCode} 
+                      sx={{ minWidth: 240, flex: '0 0 auto', cursor: 'pointer', '&:hover': { boxShadow: 4 } }} 
+                      onClick={() => {
+                        // Check if this is an adopted pet by looking for the 'adoption' tag
+                        if (pet?.tags?.includes('adoption')) {
+                          // For adopted pets, navigate to the adoption details page
+                          navigate(`/User/adoption/my-adopted-pets/${pet._id}`)
+                        } else {
+                          // For regular user pets, use the existing navigation
+                          navigate(`/User/pets/${pet._id}`)
+                        }
+                      }}
+                    >
+                      <CardContent>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Box
+                            component="img"
+                            src={getPetImageUrl(pet)}
+                            alt={pet.name || 'Pet'}
+                            onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }}
+                            sx={{
+                              width: 56,
+                              height: 56,
+                              objectFit: 'cover',
+                              borderRadius: '8px',
+                              border: '1px solid',
+                              borderColor: 'divider'
+                            }}
+                          />
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, overflow: 'hidden' }}>
+                              <Typography variant="h6" noWrap sx={{ fontWeight: 'bold' }}>
+                                {pet.name || 'Unnamed Pet'}
+                              </Typography>
+                              {(pet.petCode || pet.code) && (
+                                <Chip 
+                                  label={pet.petCode || pet.code} 
+                                  size="small" 
+                                  variant="outlined"
+                                  sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}
+                                />
+                              )}
+                            </Box>
+                            <Typography variant="body2" color="text.secondary" noWrap>
+                              {(pet.breedId?.name || pet.breed?.name || pet.breed || 'Breed not specified')} • {(pet.gender || 'Gender not set')}
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                              <Chip 
+                                label={pet.status || pet.currentStatus || 'Owned'} 
+                                size="small" 
+                                color="primary" 
+                                variant="outlined"
+                              />
+                              {pet.tags?.includes('adoption') && (
+                                <Chip label="Adopted" size="small" color="success" variant="outlined" />
+                              )}
+                            </Box>
+                          </Box>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
 
-      {softBlockedMsg && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          {softBlockedMsg}
-        </Alert>
-      )}
-      {/* Quick Actions */}
+      {/* Quick Actions - Only real features */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={6}>
           <Card sx={{ 
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
             color: 'white',
@@ -446,61 +396,21 @@ const PublicUserDashboard = () => {
           </Card>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ 
-            background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', 
-            color: 'white',
-            cursor: 'pointer',
-            transition: 'transform 0.2s',
-            '&:hover': { transform: 'translateY(-4px)' }
-          }} onClick={() => navigate('/User/adoption')}>
-            <CardContent sx={{ textAlign: 'center', py: 3 }}>
-              <FavoriteIcon sx={{ fontSize: 48, mb: 2 }} />
-              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
-                Find Adoption
-              </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                Adopt a loving companion
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={6}>
           <Card sx={{ 
             background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', 
             color: 'white',
             cursor: 'pointer',
             transition: 'transform 0.2s',
             '&:hover': { transform: 'translateY(-4px)' }
-          }} onClick={() => navigate('/User/petshop')}>
-            <CardContent sx={{ textAlign: 'center', py: 3 }}>
-              <ShopIcon sx={{ fontSize: 48, mb: 2 }} />
-              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
-                Pet Shop
-              </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                Buy pets & supplies
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ 
-            background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', 
-            color: 'white',
-            cursor: 'pointer',
-            transition: 'transform 0.2s',
-            '&:hover': { transform: 'translateY(-4px)' }
-          }} onClick={() => navigate('/User/owned-pets')}>
+          }} onClick={() => navigate('/User/pets')}>
             <CardContent sx={{ textAlign: 'center', py: 3 }}>
               <PetIcon sx={{ fontSize: 48, mb: 2 }} />
               <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
-                My Owned Pets
+                My Pets
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                View purchased pets ({ownedPets.length})
+                View all your pets
               </Typography>
             </CardContent>
           </Card>
@@ -509,10 +419,10 @@ const PublicUserDashboard = () => {
 
       {/* Recent Activity */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={4}>
-          <Card sx={{ height: '100%' }}>
+        <Grid item xs={12}>
+          <Card>
             <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                 <TrendingIcon color="primary" />
                 Recent Activity
               </Typography>
@@ -532,7 +442,7 @@ const PublicUserDashboard = () => {
                 </Box>
               ) : (
                 <List sx={{ p: 0 }}>
-                  {recentActivity.map((activity) => (
+                  {recentActivity.slice(0, 5).map((activity) => (
                     <ListItem key={activity.id} sx={{ px: 0, py: 1 }}>
                       <ListItemIcon sx={{ minWidth: 40 }}>
                         <Box sx={{ 
@@ -559,7 +469,7 @@ const PublicUserDashboard = () => {
                 variant="outlined" 
                 fullWidth 
                 sx={{ mt: 2 }}
-                onClick={() => navigate('/User/activity')}
+                onClick={() => navigate('/User/pets')}
               >
                 View All Activity
               </Button>
@@ -568,134 +478,81 @@ const PublicUserDashboard = () => {
         </Grid>
       </Grid>
 
-      {/* Available Services */}
-      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <StarIcon color="primary" />
-        Available Services
-      </Typography>
-      
-      {modulesError && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {modulesError}
-        </Alert>
-      )}
-      
-      <Grid container spacing={3}>
-        {staticCards.concat(
-          modules.map(m => {
-            const path = getModulePath(m.key)
-            // For public/user dashboard, treat 'active' as usable regardless of manager dashboard availability
-            const isActive = m.status === 'active'
-            const isBlocked = m.status === 'blocked'
-            const isMaintenance = m.status === 'maintenance'
-            const isComingSoon = m.status === 'coming_soon'
-
-            let statusMessage = ''
-            if (isBlocked) statusMessage = m.blockReason || 'Service Blocked'
-            else if (isMaintenance) statusMessage = m.maintenanceMessage || 'Under Maintenance'
-            else if (isComingSoon) statusMessage = 'Coming Soon'
-
-            return {
-              key: m.key,
-              title: m.name,
-              description: m.description || statusMessage,
-              icon: getModuleIcon(m.icon),
-              path: isActive ? path : '#',
-              isActive,
-              isBlocked,
-              isMaintenance,
-              isComingSoon,
-              statusMessage,
-            }
-          })
-        ).map((module, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
-            <Card
-              onClick={() => module.isActive ? navigate(module.path) : null}
-              sx={{
-                background: getGradientFor(module.key, index),
-                color: 'white',
-                cursor: module.isActive ? 'pointer' : 'default',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                boxShadow: 3,
-                '&:hover': module.isActive ? { transform: 'translateY(-4px)', boxShadow: 6 } : {},
-                position: 'relative',
-                overflow: 'hidden',
-                opacity: module.isActive ? 1 : 0.95,
-              }}
-            >
-              {!module.isActive && (() => {
-                const isBlocked = module.isBlocked
-                const isMaintenance = module.isMaintenance
-                const label = module.statusMessage || (isBlocked ? 'Service Blocked' : isMaintenance ? 'Under Maintenance' : 'Coming Soon')
-                const icon = isBlocked ? <BlockIcon sx={{ fontSize: 16, mr: 0.5 }} /> : isMaintenance ? <ConstructionIcon sx={{ fontSize: 16, mr: 0.5 }} /> : <ScheduleIcon sx={{ fontSize: 16, mr: 0.5 }} />
-                const badgeBg = isBlocked ? 'rgba(244,67,54,0.9)' : isMaintenance ? 'rgba(255,167,38,0.9)' : 'rgba(33,150,243,0.9)'
-                const bannerBg = isBlocked ? 'rgba(244,67,54,0.2)' : isMaintenance ? 'rgba(255,167,38,0.2)' : 'rgba(33,150,243,0.2)'
-                return (
-                  <>
-                    {/* Prominent top-right badge */}
-                    <Tooltip title={label}>
-                      <Box sx={{
-                        position: 'absolute',
-                        top: 12,
-                        right: 12,
-                        bgcolor: badgeBg,
-                        color: 'white',
-                        px: 1.2,
-                        py: 0.6,
-                        borderRadius: 999,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        display: 'flex',
-                        alignItems: 'center',
-                        boxShadow: 3,
-                        border: '1px solid rgba(255,255,255,0.35)'
-                      }}>
-                        {icon}
-                        {label}
-                      </Box>
-                    </Tooltip>
-                    {/* Bottom status banner */}
-                    <Box sx={{
-                      position: 'absolute',
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      bgcolor: bannerBg,
-                      color: 'white',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 1,
-                      py: 0.75,
-                      px: 2,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      backdropFilter: 'blur(2px)'
-                    }}>
-                      {icon}
-                      <span>{label}</span>
+      {/* Available Services - Only real, active modules */}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h5" sx={{ fontWeight: 600, mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <StarIcon color="primary" />
+          Available Services
+        </Typography>
+        
+        {modulesError && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {modulesError}
+          </Alert>
+        )}
+        
+        {modulesLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : modules.length === 0 ? (
+          <Card>
+            <CardContent sx={{ textAlign: 'center', py: 4 }}>
+              <HomeIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                No services available
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Check back later for new services
+              </Typography>
+            </CardContent>
+          </Card>
+        ) : (
+          <Grid container spacing={3}>
+            {staticCards.concat(
+              modules.map(m => {
+                const path = getModulePath(m.key)
+                return {
+                  key: m.key,
+                  title: m.name,
+                  description: m.description,
+                  icon: getModuleIcon(m.icon),
+                  path: path,
+                  isActive: true
+                }
+              })
+            ).map((module, index) => (
+              <Grid item xs={12} sm={6} md={3} key={index}>
+                <Card
+                  onClick={() => navigate(module.path)}
+                  sx={{
+                    background: getGradientFor(index),
+                    color: 'white',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s, box-shadow 0.2s',
+                    boxShadow: 3,
+                    '&:hover': { transform: 'translateY(-4px)', boxShadow: 6 },
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <CardContent sx={{ textAlign: 'center', py: 4 }}>
+                    <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: 2, mb: 1, color: 'white' }}>
+                      {module.icon}
                     </Box>
-                    {/* Subtle dim overlay for inactive */}
-                    <Box sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.06)' }} />
-                  </>
-                )
-              })()}
-              <CardContent sx={{ textAlign: 'center', py: 4 }}>
-                <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: 2, mb: 1, color: 'white' }}>
-                  {module.icon}
-                </Box>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                  {module.title}
-                </Typography>
-                <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                  {module.description}
-                </Typography>
-              </CardContent>
-            </Card>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                      {module.title}
+                    </Typography>
+                    <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                      {module.description}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
           </Grid>
-        ))}
-      </Grid>
+        )}
+      </Box>
     </UserLayout>
   )
 }

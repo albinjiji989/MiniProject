@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { petShopAPI, authAPI } from '../../services/api'
+import { adoptionAPI, petShopAPI, authAPI, temporaryCareAPI, veterinaryAPI } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 const StoreSetup = () => {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -11,25 +13,49 @@ const StoreSetup = () => {
   const [storeId, setStoreId] = useState('')
   const [moduleKey, setModuleKey] = useState('')
 
+  // Get the correct API based on user role
+  const getModuleAPI = () => {
+    const role = user?.role || ''
+    if (role.includes('adoption')) return adoptionAPI
+    if (role.includes('petshop')) return petShopAPI
+    if (role.includes('temporary-care') || role.includes('temporary_care')) return temporaryCareAPI
+    if (role.includes('veterinary')) return veterinaryAPI
+    return petShopAPI // fallback
+  }
+
+  // Get the correct method names based on API
+  const getAPIMethod = (methodType) => {
+    const moduleAPI = getModuleAPI()
+    // Veterinary API uses different naming convention
+    if (moduleAPI === veterinaryAPI) {
+      return methodType === 'get' ? 'managerGetMyStore' : 'managerUpdateMyStore'
+    }
+    return methodType === 'get' ? 'getMyStore' : 'updateMyStore'
+  }
+
   useEffect(() => {
     let mounted = true
     const load = async () => {
       try {
-        const res = await petShopAPI.getMyStore()
+        const moduleAPI = getModuleAPI()
+        const getMethod = getAPIMethod('get')
+        const res = await moduleAPI[getMethod]()
         if (!mounted) return
         const data = res?.data?.data || {}
-        setModuleKey(data.assignedModule || '')
-        setStoreId(data.storeId || '')
-        setStoreName(data.storeName || '')
+        setModuleKey(data.assignedModule || user?.assignedModule || '')
+        setStoreId(data.storeId || user?.storeId || '')
+        setStoreName(data.storeName || user?.storeName || '')
       } catch (err) {
-        setError(err?.response?.data?.message || 'Failed to load store info')
+        if (mounted) {
+          setError(err?.response?.data?.message || 'Failed to load store info')
+        }
       } finally {
         if (mounted) setLoading(false)
       }
     }
     load()
     return () => { mounted = false }
-  }, [])
+  }, [user])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -40,7 +66,9 @@ const StoreSetup = () => {
     try {
       setSaving(true)
       setError('')
-      await petShopAPI.updateMyStore({ storeName: storeName.trim() })
+      const moduleAPI = getModuleAPI()
+      const updateMethod = getAPIMethod('update')
+      await moduleAPI[updateMethod]({ storeName: storeName.trim() })
       // Refresh auth state and force a reload so AuthProvider picks up updated user via /auth/me
       try { await authAPI.getMe() } catch (_) {}
       // Hard reload ensures AuthProvider useEffect runs and sets updated user (with storeId/storeName)

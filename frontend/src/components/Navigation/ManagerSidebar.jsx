@@ -82,13 +82,14 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
       ecommerce: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
       pharmacy: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
       rescue: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-      veterinary: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-      'temporary-care': 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)'
+      veterinary: 'linear-gradient(135deg, #00b4db 0%, #0083b0 100%)', // Professional medical blue
+      'temporary-care': 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)' // Warm caring pink-red
     }
     return colors[type] || colors.petshop
   }
 
   const getNavigationItems = (type) => {
+    // ADOPTION MANAGER
     if (type === 'adoption') {
       return [
         {
@@ -129,7 +130,98 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
         }
       ]
     }
-    // Default to PetShop navigation
+    
+    // VETERINARY MANAGER
+    if (type === 'veterinary') {
+      return [
+        {
+          title: 'Dashboard',
+          icon: <DashboardIcon />,
+          path: '/manager/dashboard',
+          active: location.pathname === '/manager/dashboard'
+        },
+        {
+          title: 'Appointments',
+          icon: <ReservationsIcon />,
+          path: '/manager/veterinary/appointments',
+          active: location.pathname.includes('/appointments')
+        },
+        {
+          title: 'Medical Records',
+          icon: <ReportsIcon />,
+          path: '/manager/veterinary/records',
+          active: location.pathname.includes('/records')
+        },
+        {
+          title: 'Patients',
+          icon: <PetsIcon />,
+          path: '/manager/veterinary/patients',
+          active: location.pathname.includes('/patients')
+        },
+        {
+          title: 'Staff Management',
+          icon: <StaffIcon />,
+          path: '/manager/veterinary/staff',
+          active: location.pathname.includes('/staff')
+        },
+        {
+          title: 'Services',
+          icon: <SettingsIcon />,
+          path: '/manager/veterinary/services',
+          active: location.pathname.includes('/services')
+        },
+        {
+          title: 'Reports',
+          icon: <AnalyticsIcon />,
+          path: '/manager/veterinary/reports',
+          active: location.pathname.includes('/reports')
+        }
+      ]
+    }
+    
+    // TEMPORARY CARE MANAGER
+    if (type === 'temporary-care') {
+      return [
+        {
+          title: 'Dashboard',
+          icon: <DashboardIcon />,
+          path: '/manager/dashboard',
+          active: location.pathname === '/manager/dashboard'
+        },
+        {
+          title: 'Bookings',
+          icon: <ReservationsIcon />,
+          path: '/manager/temporary-care/bookings',
+          active: location.pathname.includes('/bookings')
+        },
+        {
+          title: 'Facilities',
+          icon: <StoreIcon />,
+          path: '/manager/temporary-care/facilities',
+          active: location.pathname.includes('/facilities')
+        },
+        {
+          title: 'Caregivers',
+          icon: <StaffIcon />,
+          path: '/manager/temporary-care/caregivers',
+          active: location.pathname.includes('/caregivers')
+        },
+        {
+          title: 'Pets in Care',
+          icon: <PetsIcon />,
+          path: '/manager/temporary-care/pets',
+          active: location.pathname.includes('/pets')
+        },
+        {
+          title: 'Reports',
+          icon: <AnalyticsIcon />,
+          path: '/manager/temporary-care/reports',
+          active: location.pathname.includes('/reports')
+        }
+      ]
+    }
+    
+    // PETSHOP MANAGER (Default)
     return [
       {
         title: 'Dashboard',
@@ -333,10 +425,16 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
               let path = `/manager/${moduleType}/dashboard`
               if (moduleType === 'petshop') path = `/manager/${moduleType}/add-stock`
               if (moduleType === 'adoption') path = `/manager/${moduleType}/wizard/start`
+              if (moduleType === 'veterinary') path = `/manager/veterinary/appointments`
+              if (moduleType === 'temporary-care') path = `/manager/temporary-care/bookings`
               handleNavigation(path)
             }}
           >
-            {moduleType === 'petshop' ? 'Add Stock' : moduleType === 'adoption' ? 'Start Add Pet Wizard' : 'Open Dashboard'}
+            {moduleType === 'petshop' && 'Add Stock'}
+            {moduleType === 'adoption' && 'Start Add Pet Wizard'}
+            {moduleType === 'veterinary' && 'New Appointment'}
+            {moduleType === 'temporary-care' && 'New Booking'}
+            {!['petshop', 'adoption', 'veterinary', 'temporary-care'].includes(moduleType) && 'Open Dashboard'}
           </Button>
         </Box>
       </Box>

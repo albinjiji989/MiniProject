@@ -69,5 +69,3 @@ const VeterinaryManage = () => {
 }
 
 export default VeterinaryManage
-
-

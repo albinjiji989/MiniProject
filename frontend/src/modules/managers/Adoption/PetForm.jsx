@@ -53,44 +53,6 @@ const PetForm = () => {
             setDebugInfo(`Species fetch failed: ${e2.response?.status} ${e2.response?.data?.message || e2.message}`)
             spec = []
           }
-
-  // Media helpers
-  const onChooseImage = () => imgInputRef.current?.click()
-  const onChooseDocument = () => docInputRef.current?.click()
-
-  const onImageSelected = async (e) => {
-    const file = e.target.files && e.target.files[0]
-    e.target.value = ''
-    if (!file) return
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const up = await apiClient.post('/adoption/manager/pets/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-      const url = up.data?.data?.url
-      if (url) setImages(prev => {
-        const next = [...prev]
-        next.push({ url: resolveMediaUrl(url), isPrimary: next.length === 0 })
-        return next
-      })
-    } catch (err) {
-      setError(err?.response?.data?.error || 'Image upload failed')
-    }
-  }
-
-  const onDocumentSelected = async (e) => {
-    const file = e.target.files && e.target.files[0]
-    e.target.value = ''
-    if (!file) return
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const up = await apiClient.post('/adoption/manager/pets/upload-document', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-      const url = up.data?.data?.url
-      if (url) setDocuments(prev => ([...prev, { url: resolveMediaUrl(url) }]))
-    } catch (err) {
-      setError(err?.response?.data?.error || 'Document upload failed')
-    }
-  }
         }
         setSpecies(spec)
         // Derive categories from species (prefer displayName -> name -> categoryName)
@@ -246,6 +208,108 @@ const PetForm = () => {
     }
     setForm((f) => ({ ...f, [name]: name === 'age' || name === 'weight' || name === 'adoptionFee' ? Number(value) : value }))
   }
+
+  // Media helpers
+  const onChooseImage = () => imgInputRef.current?.click()
+  const onChooseDocument = () => docInputRef.current?.click()
+
+  // Convert file to base64
+  const toBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = error => reject(error)
+  })
+
+  const onImageSelected = async (e) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    e.target.value = ''
+    
+    try {
+      // Process all selected images
+      const uploadedImages = []
+      for (const file of files) {
+        // Upload image to backend and get URL
+        const formData = new FormData()
+        formData.append('file', file)
+        const res = await apiClient.post('/adoption/manager/pets/upload', formData, { 
+          headers: { 'Content-Type': 'multipart/form-data' } 
+        })
+        const url = resolveMediaUrl(res.data?.data?.url)
+        if (url) {
+          uploadedImages.push({ 
+            url, 
+            name: file.name, 
+            type: file.type, 
+            size: file.size,
+            isPrimary: false
+          })
+        }
+      }
+      
+      // Add uploaded images to state
+      setImages(prev => {
+        const next = [...prev, ...uploadedImages]
+        // Set first image as primary if no primary exists
+        if (next.length > 0 && !next.some(img => img.isPrimary)) {
+          next[0].isPrimary = true
+        }
+        return next
+      })
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Image upload failed')
+    }
+  }
+
+  const onDocumentSelected = async (e) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    e.target.value = ''
+    
+    try {
+      // Process all selected documents
+      const uploadedDocs = []
+      for (const file of files) {
+        // Upload document to backend and get URL
+        const formData = new FormData()
+        formData.append('file', file)
+        const res = await apiClient.post('/adoption/manager/pets/upload-document', formData, { 
+          headers: { 'Content-Type': 'multipart/form-data' } 
+        })
+        const url = resolveMediaUrl(res.data?.data?.url)
+        if (url) {
+          uploadedDocs.push({ 
+            url, 
+            name: file.name, 
+            type: file.type, 
+            size: file.size 
+          })
+        }
+      }
+      
+      // Add uploaded documents to state
+      setDocuments(prev => [...prev, ...uploadedDocs])
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Document upload failed')
+    }
+  }
+
+  const removeImage = (index) => {
+    setImages(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const removeDocument = (index) => {
+    setDocuments(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const setPrimaryImage = (index) => {
+    setImages(prev => prev.map((img, i) => ({
+      ...img,
+      isPrimary: i === index
+    })))
+  }
+
   const onSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -351,6 +415,46 @@ const PetForm = () => {
       <h2 className="text-xl font-semibold mb-2">{isEdit ? 'Edit Pet' : 'Add New Pet'}</h2>
       <p className="text-sm text-gray-600 mb-4">You can do a quick intake now and complete details later. Species is required; other fields can be added later.</p>
       {error && <div className="mb-3 text-red-600">{error}</div>}
+      
+      {/* Image Preview Section */}
+      {images.length > 0 && (
+        <div className="mb-4">
+          <h3 className="text-md font-medium mb-2">Pet Images</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            {images.map((img, index) => (
+              <div key={index} className="relative group">
+                <img 
+                  src={img.url} 
+                  alt={`Preview ${index + 1}`} 
+                  className="w-full h-24 object-cover rounded border"
+                />
+                {img.isPrimary && (
+                  <span className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">Primary</span>
+                )}
+                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center gap-1">
+                  {!img.isPrimary && (
+                    <button
+                      type="button"
+                      onClick={() => setPrimaryImage(index)}
+                      className="opacity-0 group-hover:opacity-100 bg-blue-500 text-white p-1 rounded text-xs transition-opacity"
+                    >
+                      Set Primary
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    className="opacity-0 group-hover:opacity-100 bg-red-500 text-white p-1 rounded text-xs transition-opacity"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
       <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
@@ -483,6 +587,130 @@ const PetForm = () => {
             </div>
           </>
         )}
+        
+        {/* Image Upload Section */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Pet Images</label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onChooseImage}
+              className="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+            >
+              Upload Image
+            </button>
+            <input
+              type="file"
+              ref={imgInputRef}
+              onChange={onImageSelected}
+              accept="image/*"
+              className="hidden"
+            />
+            <p className="text-xs text-gray-500 self-center">
+              Upload clear photos of the pet (optional but recommended)
+            </p>
+          </div>
+          
+          {/* Image Preview */}
+          {images.length > 0 && (
+            <div className="mt-3">
+              <h4 className="text-sm font-medium mb-2">Uploaded Images:</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                {images.map((img, index) => (
+                  <div key={index} className="relative group">
+                    <img 
+                      src={img.url} 
+                      alt={`Preview ${index + 1}`} 
+                      className="w-full h-24 object-cover rounded border"
+                      onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }}
+                    />
+                    {img.isPrimary && (
+                      <span className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">Primary</span>
+                    )}
+                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center gap-1">
+                      {!img.isPrimary && (
+                        <button
+                          type="button"
+                          onClick={() => setPrimaryImage(index)}
+                          className="opacity-0 group-hover:opacity-100 bg-blue-500 text-white p-1 rounded text-xs transition-opacity"
+                        >
+                          Set Primary
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        className="opacity-0 group-hover:opacity-100 bg-red-500 text-white p-1 rounded text-xs transition-opacity"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Document Upload Section */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Documents</label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onChooseDocument}
+              className="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+            >
+              Upload Document
+            </button>
+            <input
+              type="file"
+              ref={docInputRef}
+              onChange={onDocumentSelected}
+              accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+              className="hidden"
+            />
+            <p className="text-xs text-gray-500 self-center">
+              Upload medical records, certificates, or other documents (PDF, DOC, DOCX, TXT, JPG, PNG)
+            </p>
+          </div>
+          
+          {/* Document Preview */}
+          {documents.length > 0 && (
+            <div className="mt-3">
+              <h4 className="text-sm font-medium mb-2">Uploaded Documents:</h4>
+              <div className="space-y-2">
+                {documents.map((doc, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 border rounded-lg bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-xs">
+                        {doc.type?.includes('pdf') ? '📄' : doc.type?.startsWith('image/') ? '🖼️' : '📝'}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium truncate max-w-32">
+                          {doc.name || (typeof doc === 'string' ? doc.split('/').pop() : 'Document')}
+                        </p>
+                        {doc.size && (
+                          <p className="text-xs text-gray-500">
+                            {(doc.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeDocument(index)}
+                      className="text-red-600 hover:text-red-800 text-sm"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        
         <div className="md:col-span-2 flex flex-wrap gap-2">
           <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded" disabled={loading}>{isEdit ? 'Update' : 'Add Pet'}</button>
           <button type="button" className="px-4 py-2 bg-gray-600 text-white rounded" onClick={()=>navigate('..')} disabled={loading}>Cancel</button>

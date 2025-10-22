@@ -118,7 +118,7 @@ const PetProfile = () => {
       const up = await apiClient.post('/adoption/manager/pets/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } })
       const url = up.data?.data?.url
       if (url) {
-        await apiClient.put(`/adoption/manager/pets/${id}`, { images: [{ url, isPrimary: images.length === 0 }] })
+        await apiClient.put(`/adoption/manager/pets/${id}`, { imageIds: [{ url, isPrimary: images.length === 0 }] })
         await refreshMedia()
       }
     } catch (err) {
@@ -136,7 +136,7 @@ const PetProfile = () => {
       const up = await apiClient.post('/adoption/manager/pets/upload-document', form, { headers: { 'Content-Type': 'multipart/form-data' } })
       const url = up.data?.data?.url
       if (url) {
-        await apiClient.put(`/adoption/manager/pets/${id}`, { documents: [{ url }] })
+        await apiClient.put(`/adoption/manager/pets/${id}`, { documentIds: [{ url }] })
         await refreshMedia()
       }
     } catch (err) {

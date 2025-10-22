@@ -35,7 +35,7 @@ const ProductDetails = () => {
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Card>
-            <CardMedia component="img" height="400" image={product.images?.[0] || 'https://via.placeholder.com/800x600'} alt={product.name} />
+            <CardMedia component="img" height="400" image={product.images?.[0] || '/placeholder-pet.svg'} alt={product.name} />
           </Card>
         </Grid>
         <Grid item xs={12} md={6}>

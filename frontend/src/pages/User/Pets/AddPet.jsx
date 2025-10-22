@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { Box, Typography, Card, CardContent, Button, Grid, TextField, MenuItem, Alert, Avatar } from '@mui/material'
-import { ArrowBack as ArrowBackIcon } from '@mui/icons-material'
+import { Box, Typography, Card, CardContent, Button, Grid, TextField, MenuItem, Alert, Avatar, IconButton, CircularProgress } from '@mui/material'
+import { ArrowBack as ArrowBackIcon, AddAPhoto as AddPhotoIcon, Delete as DeleteIcon } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import { userPetsAPI, petsAPI } from '../../../services/api'
+import { userPetsAPI } from '../../../services/api'
+import { processImageFiles } from '../../../utils/imageUtils'
 import RequestModal from '../../../components/Common/RequestModal'
 
 const AddPet = () => {
@@ -22,7 +23,6 @@ const AddPet = () => {
   const [categoryId, setCategoryId] = useState('')
   const [speciesList, setSpeciesList] = useState([])
   const [breedList, setBreedList] = useState([])
-  const [petDetailsOptions, setPetDetailsOptions] = useState([])
   const [requestMessage, setRequestMessage] = useState('')
   const [showRequestModal, setShowRequestModal] = useState(false)
 
@@ -32,56 +32,94 @@ const AddPet = () => {
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setIsSubmitting(true)
-    setError('')
+    e.preventDefault();
+    console.log('📤 Submitting pet creation form');
+    setIsSubmitting(true);
+    setError('');
     try {
-      if (!form.name?.trim()) throw new Error('Pet name is required')
-      if (!form.gender) throw new Error('Gender is required')
-      if (form.age === '' || form.age === null) throw new Error('Age is required')
-      // Step 1 does not submit; proceed to details step with collected basics
-      const step1 = {
+      if (!form.name?.trim()) throw new Error('Pet name is required');
+      if (!form.gender) throw new Error('Gender is required');
+      if (form.age === '' || form.age === null) throw new Error('Age is required');
+      
+      // Prepare data for submission
+      const payload = {
         name: form.name,
         age: form.age ? Number(form.age) : undefined,
         ageUnit: form.ageUnit,
         gender: form.gender,
         speciesId: form.speciesId || undefined,
         breedId: form.breedId || undefined,
-        images: images.map((b64, idx) => ({ url: b64, isPrimary: idx === 0 }))
-      }
-      navigate('/User/pets/add/details', { state: { step1 } })
+        images: images.map((img, idx) => ({ url: img.url, isPrimary: idx === 0 }))
+      };
+      
+      console.log('📦 Sending payload:', JSON.stringify(payload, null, 2));
+      
+      // Add a timeout to see if there's a network issue
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      const res = await userPetsAPI.create(payload);
+      clearTimeout(timeoutId);
+      
+      console.log('✅ Pet creation response:', res);
+      
+      const pet = res?.data?.data?.pet || res?.data?.pet;
+      
+      // Navigate to success page with pet info
+      navigate('/User/pets/add/success', { 
+        state: { 
+          petId: pet?._id, 
+          petCode: pet?.petCode, 
+          name: pet?.name 
+        } 
+      });
     } catch (err) {
-      setError(err?.response?.data?.message || 'Failed to create pet')
+      console.error('❌ Error creating pet:', err);
+      if (err.name === 'AbortError') {
+        setError('Request timeout. Please try again.');
+      } else {
+        setError(err?.response?.data?.message || err.message || 'Failed to create pet');
+      }
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleFileSelect = async (event) => {
+    const files = event.target.files;
+    console.log('📁 Selected files:', files.length);
+    
+    if (!files || files.length === 0) return;
+    
+    try {
+      const result = await processImageFiles(files, 5, 5); // Max 5 files, 5MB each
+      
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      
+      if (result.images.length + images.length > 5) {
+        setError('You can upload maximum 5 images');
+        return;
+      }
+      
+      setImages(prev => [...prev, ...result.images]);
+    } catch (err) {
+      console.error('❌ Error processing files:', err);
+      setError('Error processing files: ' + err.message);
     }
   }
 
-  const onFilesSelected = async (event) => {
-    const files = Array.from(event.target.files || [])
-    const toBase64 = (file) => new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result)
-      reader.onerror = reject
-      reader.readAsDataURL(file)
-    })
-    const results = []
-    for (const file of files) {
-      try {
-        const b64 = await toBase64(file)
-        results.push(b64)
-      } catch (e) { /* ignore single file failure */ }
-    }
-    setImages((prev) => [...prev, ...results])
+  const removeImage = (index) => {
+    setImages(prev => prev.filter((_, i) => i !== index))
   }
 
   // Load categories and species on mount
   useEffect(() => {
     (async () => {
       try {
-        const [catRes] = await Promise.all([
-          userPetsAPI.getCategories()
-        ])
+        const catRes = await userPetsAPI.getCategories()
         const cats = catRes.data?.data || []
         setCategories(cats)
         if (cats.length && !categoryId) {
@@ -100,8 +138,8 @@ const AddPet = () => {
         setSpeciesList([])
       }
     })()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
   // When category changes, load species for that category
   useEffect(() => {
     (async () => {
@@ -115,15 +153,13 @@ const AddPet = () => {
         setSpeciesList([])
       }
     })()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryId])
+  }, [categoryId, categories])
 
   // Load breeds when species changes
   useEffect(() => {
     (async () => {
       setBreedList([])
       setForm((f) => ({ ...f, breedId: '', petDetailsId: '' }))
-      setPetDetailsOptions([])
       if (!form.speciesId) return
       try {
         const res = await userPetsAPI.getBreedsBySpecies(form.speciesId)
@@ -132,10 +168,7 @@ const AddPet = () => {
         setBreedList([])
       }
     })()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.speciesId])
-
-  // Pet details selection removed per requirements
 
   const submitRequest = async (type) => {
     try {
@@ -157,7 +190,7 @@ const AddPet = () => {
         })
       }
       setRequestMessage('')
-      navigate('/pets')
+      // Show success message or redirect
     } catch (e) {
       setError(e?.response?.data?.message || 'Failed to submit request')
     } finally {
@@ -192,16 +225,89 @@ const AddPet = () => {
       <Card component="form" onSubmit={handleSubmit}>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>
-            Add New Pet
+            Pet Information
           </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Please provide information about your pet. You can upload up to 5 images.
+          </Typography>
+          
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          
+          {/* Image Upload Section */}
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" sx={{ mb: 1 }}>Pet Images</Typography>
+            <input
+              accept="image/*"
+              style={{ display: 'none' }}
+              id="image-upload"
+              type="file"
+              onChange={handleFileSelect}
+              multiple
+            />
+            <label htmlFor="image-upload">
+              <Button 
+                variant="outlined" 
+                component="span" 
+                startIcon={<AddPhotoIcon />}
+                disabled={images.length >= 5}
+              >
+                Upload Images ({images.length}/5)
+              </Button>
+            </label>
+            
+            {images.length > 0 && (
+              <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
+                {images.map((img, index) => (
+                  <Box key={index} sx={{ position: 'relative' }}>
+                    <Avatar 
+                      src={img.url} 
+                      sx={{ width: 80, height: 80, borderRadius: 1 }} 
+                      variant="rounded"
+                    />
+                    <IconButton 
+                      size="small" 
+                      sx={{ 
+                        position: 'absolute', 
+                        top: -8, 
+                        right: -8, 
+                        bgcolor: 'white',
+                        boxShadow: 1
+                      }}
+                      onClick={() => removeImage(index)}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                    {index === 0 && (
+                      <Typography 
+                        variant="caption" 
+                        sx={{ 
+                          position: 'absolute', 
+                          bottom: 0, 
+                          left: 0, 
+                          right: 0, 
+                          bgcolor: 'rgba(0,0,0,0.7)', 
+                          color: 'white', 
+                          textAlign: 'center',
+                          borderBottomLeftRadius: 4,
+                          borderBottomRightRadius: 4
+                        }}
+                      >
+                        Primary
+                      </Typography>
+                    )}
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
+          
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
               <TextField fullWidth required label="Name" name="name" value={form.name} onChange={handleChange} />
             </Grid>
             {categories.length > 0 && (
               <Grid item xs={12} sm={6}>
-                <TextField select fullWidth required label="Category" name="categoryId" value={categoryId} onChange={(e)=>{ setCategoryId(e.target.value); setForm((f)=>({ ...f, speciesId: '', breedId: '', petDetailsId: '' })); setBreedList([]); setPetDetailsOptions([]); }}>
+                <TextField select fullWidth required label="Category" name="categoryId" value={categoryId} onChange={(e)=>{ setCategoryId(e.target.value); setForm((f)=>({ ...f, speciesId: '', breedId: '', petDetailsId: '' })); setBreedList([]); }}>
                   {categories.map((c) => (
                     <MenuItem key={c._id} value={c._id}>{c.displayName || c.name}</MenuItem>
                   ))}
@@ -247,7 +353,6 @@ const AddPet = () => {
                 </Alert>
               )}
             </Grid>
-            {/* Color moved to details step */}
             <Grid item xs={12} sm={6}>
               <TextField select fullWidth label="Gender" name="gender" value={form.gender} onChange={handleChange}>
                 {['Male','Female','Unknown'].map((g) => (
@@ -266,9 +371,19 @@ const AddPet = () => {
               </TextField>
             </Grid>
           </Grid>
-          <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
-            <Button variant="outlined" onClick={() => navigate('/User/pets')}>Cancel</Button>
-            <Button type="submit" variant="contained" disabled={isSubmitting}>Save Pet</Button>
+          
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Button variant="outlined" onClick={() => navigate('/User/pets')}>
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              variant="contained" 
+              disabled={isSubmitting}
+              endIcon={isSubmitting ? <CircularProgress size={20} /> : null}
+            >
+              {isSubmitting ? 'Creating Pet...' : 'Create Pet'}
+            </Button>
           </Box>
         </CardContent>
       </Card>
@@ -286,5 +401,3 @@ const AddPet = () => {
 }
 
 export default AddPet
-
-

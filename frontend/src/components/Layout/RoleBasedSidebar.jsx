@@ -73,9 +73,14 @@ const getMenuItems = (userRole, userDetails) => {
           : '/User/dashboard')
   )
 
-  const profilePath = (typeof userRole === 'string' && userRole.endsWith('_manager'))
-    ? '/manager/profile'
-    : '/User/profile'
+  // Role-aware profile path
+  const profilePath = (
+    userRole === 'admin' || userRole === 'super_admin'
+      ? '/admin/profile'
+      : (typeof userRole === 'string' && userRole.endsWith('_manager')
+          ? '/manager/profile'
+          : '/User/profile')
+  )
 
   const baseItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: dashboardPath, roles: ['all'] },
@@ -135,45 +140,63 @@ const getMenuItems = (userRole, userDetails) => {
 
   // Module Managers get access to their specific module
   if (userRole.includes('_manager')) {
-    const moduleName = userRole.replace('_manager', '')
     const moduleItems = []
     
-    // Add module-specific access based on the manager's role
+    // VETERINARY MANAGER - Only veterinary-specific functions
+    if (userRole === 'veterinary_manager') {
+      return [
+        { text: 'Dashboard', icon: <DashboardIcon />, path: '/manager/dashboard', roles: ['veterinary_manager'] },
+        { text: 'Appointments', icon: <ScheduleIcon />, path: '/manager/veterinary/appointments', roles: ['veterinary_manager'] },
+        { text: 'Medical Records', icon: <LocalHospitalIcon />, path: '/manager/veterinary/records', roles: ['veterinary_manager'] },
+        { text: 'Patients', icon: <PetsIcon />, path: '/manager/veterinary/patients', roles: ['veterinary_manager'] },
+        { text: 'Staff Management', icon: <PeopleIcon />, path: '/manager/veterinary/staff', roles: ['veterinary_manager'] },
+        { text: 'Services', icon: <BusinessIcon />, path: '/manager/veterinary/services', roles: ['veterinary_manager'] },
+        { text: 'Reports', icon: <AnalyticsIcon />, path: '/manager/veterinary/reports', roles: ['veterinary_manager'] },
+        { text: 'Profile', icon: <ProfileIcon />, path: '/manager/profile', roles: ['veterinary_manager'] },
+      ]
+    }
+    
+    // TEMPORARY CARE MANAGER - Only temporary care-specific functions
+    if (userRole === 'temporary-care_manager' || userRole === 'temporary_care_manager') {
+      return [
+        { text: 'Dashboard', icon: <DashboardIcon />, path: '/manager/dashboard', roles: ['temporary-care_manager', 'temporary_care_manager'] },
+        { text: 'Bookings', icon: <AssignmentIcon />, path: '/manager/temporary-care/bookings', roles: ['temporary-care_manager', 'temporary_care_manager'] },
+        { text: 'Facilities', icon: <HomeIcon />, path: '/manager/temporary-care/facilities', roles: ['temporary-care_manager', 'temporary_care_manager'] },
+        { text: 'Caregivers', icon: <PeopleIcon />, path: '/manager/temporary-care/caregivers', roles: ['temporary-care_manager', 'temporary_care_manager'] },
+        { text: 'Pets in Care', icon: <PetsIcon />, path: '/manager/temporary-care/pets', roles: ['temporary-care_manager', 'temporary_care_manager'] },
+        { text: 'Reports', icon: <AnalyticsIcon />, path: '/manager/temporary-care/reports', roles: ['temporary-care_manager', 'temporary_care_manager'] },
+        { text: 'Profile', icon: <ProfileIcon />, path: '/manager/profile', roles: ['temporary-care_manager', 'temporary_care_manager'] },
+      ]
+    }
+    
+    // ADOPTION MANAGER
     if (userRole === 'adoption_manager') {
-      moduleItems.push(
+      return [
+        { text: 'Dashboard', icon: <DashboardIcon />, path: '/manager/dashboard', roles: ['adoption_manager'] },
         { text: 'Pets', icon: <PetsIcon />, path: '/manager/adoption/pets', roles: ['adoption_manager'] },
         { text: 'Applications', icon: <AssignmentIcon />, path: '/manager/adoption/applications', roles: ['adoption_manager'] },
         { text: 'Import (CSV)', icon: <FileUploadIcon />, path: '/manager/adoption/import', roles: ['adoption_manager'] },
-        { text: 'Reports', icon: <AnalyticsIcon />, path: '/manager/adoption/reports', roles: ['adoption_manager'] }
-      )
-    } else if (userRole === 'petshop_manager') {
-      // No extra Dashboard item; base Dashboard handles routing. Add other petshop-specific links here if needed.
-    } else if (userRole === 'rescue_manager') {
-      // No duplicate dashboard
-    } else if (userRole === 'ecommerce_manager') {
-      // No duplicate dashboard
-    } else if (userRole === 'pharmacy_manager') {
-      // No duplicate dashboard
-    } else if (userRole === 'temporary-care_manager') {
-      // No duplicate dashboard
-    } else if (userRole === 'veterinary_manager') {
-      // No duplicate dashboard
+        { text: 'Reports', icon: <AnalyticsIcon />, path: '/manager/adoption/reports', roles: ['adoption_manager'] },
+        { text: 'Profile', icon: <ProfileIcon />, path: '/manager/profile', roles: ['adoption_manager'] },
+      ]
+    }
+    
+    // PETSHOP MANAGER
+    if (userRole === 'petshop_manager') {
+      return [
+        { text: 'Dashboard', icon: <DashboardIcon />, path: '/manager/dashboard', roles: ['petshop_manager'] },
+        { text: 'Inventory', icon: <StoreIcon />, path: '/manager/petshop/inventory', roles: ['petshop_manager'] },
+        { text: 'Orders', icon: <ShoppingCartIcon />, path: '/manager/petshop/orders', roles: ['petshop_manager'] },
+        { text: 'Reservations', icon: <AssignmentIcon />, path: '/manager/petshop/reservations', roles: ['petshop_manager'] },
+        { text: 'Reports', icon: <AnalyticsIcon />, path: '/manager/petshop/reports', roles: ['petshop_manager'] },
+        { text: 'Profile', icon: <ProfileIcon />, path: '/manager/profile', roles: ['petshop_manager'] },
+      ]
     }
 
-    // Filter out any accidental dashboard items if present
-    const prunedModuleItems = moduleItems.filter(it => !String(it.text || '').toLowerCase().includes('dashboard'))
-
+    // Fallback for other managers
     return [
       ...baseItems,
-      ...prunedModuleItems,
-      {
-        text: 'Analytics',
-        icon: <StatsIcon />,
-        children: [
-          { text: 'Module Overview', icon: <DashboardIcon />, path: '/analytics/module', roles: [userRole] },
-          { text: 'Performance Metrics', icon: <TrendingUpIcon />, path: '/analytics/performance', roles: [userRole] },
-        ]
-      }
+      ...moduleItems,
     ]
   }
 
@@ -235,6 +258,17 @@ const RoleBasedSidebar = ({ onClose }) => {
     logout()
     navigate('/login')
   }
+
+  // Get portal title based on role
+  const getPortalTitle = () => {
+    if (user?.role === 'admin' || user?.role === 'super_admin') {
+      return 'Admin Portal';
+    } else if (typeof user?.role === 'string' && user.role.endsWith('_manager')) {
+      return 'Manager Portal';
+    } else {
+      return 'User Portal';
+    }
+  };
 
   // Get menu items based on user role
   const menuItems = getMenuItems(user?.role || 'public_user', user?.details)
@@ -342,7 +376,7 @@ const RoleBasedSidebar = ({ onClose }) => {
           </Avatar>
           <Box>
             <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 0.25 }}>Pet Welfare</Typography>
-            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: 0.2 }}>Manager Portal</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: 0.2 }}>{getPortalTitle()}</Typography>
           </Box>
         </Box>
       </Box>
@@ -350,7 +384,10 @@ const RoleBasedSidebar = ({ onClose }) => {
       {/* User Info */}
       <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider', backgroundColor: 'background.paper' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar sx={{ bgcolor: 'secondary.main', width: 48, height: 48, fontWeight: 700 }}>
+          <Avatar 
+            src={user?.profilePicture}
+            sx={{ bgcolor: 'secondary.main', width: 48, height: 48, fontWeight: 700 }}
+          >
             {user?.name?.charAt(0)?.toUpperCase()}
           </Avatar>
           <Box sx={{ flex: 1 }}>

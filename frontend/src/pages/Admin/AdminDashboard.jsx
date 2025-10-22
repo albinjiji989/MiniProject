@@ -606,6 +606,15 @@ const AdminDashboard = () => {
             onClick={() => navigate('/admin/custom-breed-requests')}
           />
         </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <QuickActionCard
+            title="Centralized Pets"
+            description="View all pets in registry"
+            icon={<PetsIcon />}
+            color="primary"
+            onClick={() => navigate('/admin/pets/centralized')}
+          />
+        </Grid>
               </Grid>
               
       {/* Quick Actions */}

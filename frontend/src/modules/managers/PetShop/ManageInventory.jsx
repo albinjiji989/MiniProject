@@ -5,6 +5,7 @@ import {
   Typography,
   Card,
   CardContent,
+  CardActions,
   Grid,
   Button,
   Table,
@@ -30,7 +31,18 @@ import {
   Checkbox,
   Tabs,
   Tab,
-  Badge
+  Badge,
+  CircularProgress,
+  Avatar,
+  Divider,
+  Fab,
+  Menu,
+  ListItemIcon,
+  ListItemText,
+  Pagination,
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup
 } from '@mui/material'
 import {
   ArrowBack as ArrowBackIcon,
@@ -38,9 +50,24 @@ import {
   Visibility as ViewIcon,
   Publish as PublishIcon,
   Delete as DeleteIcon,
-  History as HistoryIcon
+  History as HistoryIcon,
+  Image as ImageIcon,
+  AddPhotoAlternate as AddPhotoAlternateIcon,
+  CloudUpload as CloudUploadIcon,
+  FilterList as FilterListIcon,
+  Search as SearchIcon,
+  CheckCircle as CheckCircleIcon,
+  Pending as PendingIcon,
+  Pets as PetsIcon,
+  PriceChange as PriceChangeIcon,
+  FileUpload as FileUploadIcon,
+  MoreVert as MoreVertIcon,
+  Check as CheckIcon,
+  Close as CloseIcon,
+  ShoppingCart as ShoppingCartIcon
 } from '@mui/icons-material'
 import { apiClient } from '../../../services/api'
+
 // Component
 const ManageInventory = () => {
   const navigate = useNavigate()
@@ -48,9 +75,13 @@ const ManageInventory = () => {
   const [loading, setLoading] = useState(false)
   const [inventory, setInventory] = useState([])
   const [readyForRelease, setReadyForRelease] = useState([])
+  const [releasedPets, setReleasedPets] = useState([])
+  const [purchasedPets, setPurchasedPets] = useState([])
   const [selectedIds, setSelectedIds] = useState([])
   const [selectedReadyIds, setSelectedReadyIds] = useState([])
-  const [activeTab, setActiveTab] = useState(0) // 0: Pending Images, 1: Ready for Release
+  const [selectedReleasedIds, setSelectedReleasedIds] = useState([])
+  const [selectedPurchasedIds, setSelectedPurchasedIds] = useState([])
+  const [activeTab, setActiveTab] = useState(0) // 0: Pending Images, 1: Ready for Release, 2: Released, 3: Purchased
   const [editDialog, setEditDialog] = useState(false)
   const [editingPet, setEditingPet] = useState(null)
   const [editForm, setEditForm] = useState({
@@ -73,17 +104,27 @@ const ManageInventory = () => {
   const [ageMax, setAgeMax] = useState('')
   const [speciesOptions, setSpeciesOptions] = useState([])
   const [breedOptions, setBreedOptions] = useState([])
+  
   // Bulk price update
   const [bulkPriceOpen, setBulkPriceOpen] = useState(false)
   const [bulkPriceForm, setBulkPriceForm] = useState({ mode: 'percent', op: 'increase', value: 10 })
+  
   // CSV import
   const [csvOpen, setCsvOpen] = useState(false)
   const [csvParsing, setCsvParsing] = useState(false)
   const [csvFileName, setCsvFileName] = useState('')
   const [csvPreview, setCsvPreview] = useState({ headers: [], rows: [], items: [] })
+  
   // Image upload state
   const [imageDialog, setImageDialog] = useState({ open: false, item: null })
   const [imageFile, setImageFile] = useState(null)
+  
+  // Filter menu
+  const [filterAnchorEl, setFilterAnchorEl] = useState(null)
+  const filterOpen = Boolean(filterAnchorEl)
+  
+  // View mode
+  const [viewMode, setViewMode] = useState('table') // table or grid
 
   // initial load and when filters change
   useEffect(() => {
@@ -131,54 +172,28 @@ const ManageInventory = () => {
       if (ageMax) qs.set('ageMax', ageMax)
       if (searchText) qs.set('q', searchText.trim())
       
-      console.log('🔍 Fetching inventory with URL:', `/petshop/inventory?${qs.toString()}`)
-      console.log('👤 Current user from localStorage:', JSON.parse(localStorage.getItem('user') || '{}'))
-      const response = await apiClient.get(`/petshop/inventory?${qs.toString()}`)
-      console.log('📦 Raw API Response:', response)
-      console.log('📊 Response Data:', response?.data)
+      const response = await apiClient.get(`/petshop/manager/inventory?${qs.toString()}`)
       
       const body = response?.data || {}
-      console.log('🎯 Body structure:', body)
       const dataNode = body.data ?? body
-      console.log('🎯 DataNode structure:', dataNode)
-      console.log('🎯 DataNode.items:', dataNode?.items)
-      console.log('🎯 DataNode keys:', Object.keys(dataNode || {}))
       
       let items = Array.isArray(dataNode?.items) ? dataNode.items
         : (Array.isArray(dataNode) ? dataNode : [])
       
-      console.log('🐾 Found items before filtering:', items.length, items)
-      
-      // Client-side filtering safety net
-      const needle = (searchText || '').toLowerCase().trim()
-      items = items.filter(it => {
-        const withinMin = priceMin === '' || Number(it.price || 0) >= Number(priceMin)
-        const withinMax = priceMax === '' || Number(it.price || 0) <= Number(priceMax)
-        const speciesOk = !speciesFilter || (it.speciesId && (it.speciesId._id === speciesFilter || it.speciesId === speciesFilter))
-        const breedOk = !breedFilter || (it.breedId && (it.breedId._id === breedFilter || it.breedId === breedFilter))
-        const genderOk = !genderFilter || String(it.gender || '').toLowerCase() === String(genderFilter).toLowerCase()
-        const ageOk = (
-          (ageMin === '' || Number(it.age || 0) >= Number(ageMin)) &&
-          (ageMax === '' || Number(it.age || 0) <= Number(ageMax))
-        )
-        const textOk = !needle || (
-          String(it.petCode || '').toLowerCase().includes(needle) ||
-          String(it.name || '').toLowerCase().includes(needle) ||
-          String(it.breedId?.name || '').toLowerCase().includes(needle) ||
-          String(it.speciesId?.name || it.speciesId?.displayName || '').toLowerCase().includes(needle)
-        )
-        return withinMin && withinMax && speciesOk && breedOk && genderOk && ageOk && textOk
-      })
-      
-      console.log('✅ Items after filtering:', items.length, items)
-      
-      // Separate items based on whether they have images
+      // Separate items based on their status
       const itemsWithoutImages = items.filter(item => !item.images || item.images.length === 0)
       const itemsWithImages = items.filter(item => item.images && item.images.length > 0)
+      const releasedItems = items.filter(item => item.status === 'available_for_sale')
+      const purchasedItems = items.filter(item => item.status === 'sold')
+      const readyItems = itemsWithImages.filter(item => item.status !== 'available_for_sale' && item.status !== 'sold')
       
       const paginationData = dataNode?.pagination || body.pagination || { current: page, pages: 1, total: items.length }
+      
       setInventory(itemsWithoutImages)
-      setReadyForRelease(itemsWithImages)
+      setReadyForRelease(readyItems)
+      setReleasedPets(releasedItems)
+      setPurchasedPets(purchasedItems)
+      
       setPagination({
         current: paginationData.current || paginationData.page || page,
         pages: paginationData.pages || paginationData.totalPages || 1,
@@ -386,7 +401,7 @@ const ManageInventory = () => {
       formData.append('isPrimary', 'true') // Set as primary image
       
       // Use the correct endpoint with item ID in URL path
-      await apiClient.post(`/petshop/inventory/${imageDialog.item._id}/images`, formData, {
+      const response = await apiClient.post(`/petshop/inventory/${imageDialog.item._id}/images`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -395,7 +410,28 @@ const ManageInventory = () => {
       showSnackbar('Image uploaded successfully! Pet moved to Ready for Release.')
       setImageDialog({ open: false, item: null })
       setImageFile(null)
-      fetchInventory(pagination.current)
+      
+      // Update the local state immediately for better UX
+      if (response?.data?.data?.item) {
+        // Find the item in the current inventory and update it
+        setInventory(prev => prev.map(item => 
+          item._id === response.data.data.item._id ? response.data.data.item : item
+        ))
+        
+        // Also update the readyForRelease if the item is now ready
+        if (response.data.data.item.images && response.data.data.item.images.length > 0) {
+          setReadyForRelease(prev => {
+            // Remove from pending if it was there
+            const updatedPending = prev.filter(item => item._id !== response.data.data.item._id)
+            // Add to ready if not already there
+            const exists = updatedPending.some(item => item._id === response.data.data.item._id)
+            return exists ? updatedPending : [...updatedPending, response.data.data.item]
+          })
+        }
+      } else {
+        // Fallback to fetching all data if response doesn't contain updated item
+        fetchInventory(pagination.current)
+      }
     } catch (err) {
       console.error('Upload image error:', err)
       showSnackbar(err.response?.data?.message || 'Failed to upload image', 'error')
@@ -404,8 +440,251 @@ const ManageInventory = () => {
     }
   }
 
+  const handleSelectAllPending = () => {
+    if (selectedIds.length === inventory.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(inventory.map(item => item._id))
+    }
+  }
+
+  const handleSelectAllReady = () => {
+    if (selectedReadyIds.length === readyForRelease.length) {
+      setSelectedReadyIds([])
+    } else {
+      setSelectedReadyIds(readyForRelease.map(item => item._id))
+    }
+  }
+
+  const handleSelectAllReleased = () => {
+    if (selectedReleasedIds.length === releasedPets.length) {
+      setSelectedReleasedIds([])
+    } else {
+      setSelectedReleasedIds(releasedPets.map(item => item._id))
+    }
+  }
+
+  const handleSelectAllPurchased = () => {
+    if (selectedPurchasedIds.length === purchasedPets.length) {
+      setSelectedPurchasedIds([])
+    } else {
+      setSelectedPurchasedIds(purchasedPets.map(item => item._id))
+    }
+  }
+
+  const handlePageChange = (event, value) => {
+    fetchInventory(value)
+  }
+
+  const openFilterMenu = (event) => {
+    setFilterAnchorEl(event.currentTarget)
+  }
+
+  const closeFilterMenu = () => {
+    setFilterAnchorEl(null)
+  }
+
+  const resetFilters = () => {
+    setStatusFilter('')
+    setSpeciesFilter('')
+    setBreedFilter('')
+    setPriceMin('')
+    setPriceMax('')
+    setGenderFilter('')
+    setAgeMin('')
+    setAgeMax('')
+    setSearchText('')
+    closeFilterMenu()
+  }
+
+  // Pet Card Component for Grid View
+  const PetCard = ({ item, isSelected, onSelect, onAction, isPending = false }) => (
+    <Card 
+      sx={{ 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column',
+        border: isSelected ? '2px solid #1976d2' : '1px solid #e0e0e0',
+        boxShadow: isSelected ? 3 : 1,
+        transition: 'all 0.2s ease-in-out',
+        '&:hover': {
+          boxShadow: 4,
+          transform: 'translateY(-2px)'
+        }
+      }}
+    >
+      <Box sx={{ position: 'relative', pt: '75%' }}>
+        {item.images && item.images.length > 0 ? (
+          <img 
+            src={item.images[0]?.url || '/placeholder-image.png'} 
+            alt={item.name || item.petCode}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover'
+            }}
+            onError={(e) => {
+              e.target.src = '/placeholder-image.png'
+            }}
+          />
+        ) : (
+          <Box 
+            sx={{ 
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: '#f5f5f5'
+            }}
+          >
+            <AddPhotoAlternateIcon sx={{ fontSize: 48, color: '#9e9e9e' }} />
+          </Box>
+        )}
+        {isPending && (
+          <Chip 
+            icon={<PendingIcon />}
+            label="Needs Images"
+            color="warning"
+            size="small"
+            sx={{ 
+              position: 'absolute', 
+              top: 8, 
+              left: 8,
+              fontWeight: 'bold'
+            }}
+          />
+        )}
+        <Checkbox
+          checked={isSelected}
+          onChange={() => onSelect(item._id)}
+          sx={{ 
+            position: 'absolute', 
+            top: 8, 
+            right: 8,
+            bgcolor: 'white',
+            borderRadius: '50%',
+            '& .MuiSvgIcon-root': { fontSize: 20 }
+          }}
+        />
+        {item.images && item.images.length > 0 && (
+          <Chip 
+            label={`${item.images.length} image${item.images.length > 1 ? 's' : ''}`}
+            size="small"
+            sx={{ 
+              position: 'absolute', 
+              bottom: 8, 
+              right: 8,
+              bgcolor: 'rgba(0, 0, 0, 0.7)',
+              color: 'white',
+              fontWeight: 'bold'
+            }}
+          />
+        )}
+      </Box>
+      
+      <CardContent sx={{ flexGrow: 1, pb: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+          <Typography variant="subtitle1" fontWeight="bold" noWrap>
+            {item.name || 'Unnamed Pet'}
+          </Typography>
+          <Chip 
+            label={item.petCode || `PET-${item._id?.slice(-6)}`} 
+            size="small" 
+            color="primary" 
+            variant="outlined"
+          />
+        </Box>
+        
+        <Box sx={{ mb: 1 }}>
+          <Typography variant="body2" color="textSecondary" noWrap>
+            {item.speciesId?.displayName || item.speciesId?.name || 'Unknown Species'} • {item.breedId?.name || 'Unknown Breed'}
+          </Typography>
+          <Typography variant="body2" color="textSecondary">
+            {item.age} {item.ageUnit} • {item.gender}
+          </Typography>
+        </Box>
+        
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6" color="primary" fontWeight="bold">
+            ₹{Number(item.price || 0).toLocaleString()}
+          </Typography>
+          <Chip 
+            label={item.status?.replace('_', ' ') || 'in stock'} 
+            size="small" 
+            color={item.status === 'available_for_sale' ? 'success' : 'default'}
+          />
+        </Box>
+      </CardContent>
+      
+      <CardActions sx={{ pt: 0, px: 1, pb: 1 }}>
+        <Tooltip title="Edit Pet Details">
+          <IconButton size="small" onClick={() => onAction('edit', item)}>
+            <EditIcon />
+          </IconButton>
+        </Tooltip>
+        
+        {isPending ? (
+          <Tooltip title="Add Image">
+            <IconButton 
+              size="small" 
+              color="secondary" 
+              onClick={() => onAction('upload', item)}
+            >
+              <ImageIcon />
+            </IconButton>
+          </Tooltip>
+        ) : (
+          <Tooltip title="View Details">
+            <IconButton size="small" onClick={() => onAction('view', item)}>
+              <ViewIcon />
+            </IconButton>
+          </Tooltip>
+        )}
+        
+        <Tooltip title="View Pet History">
+          <IconButton 
+            size="small" 
+            color="info"
+            onClick={() => onAction('history', item)}
+          >
+            <HistoryIcon />
+          </IconButton>
+        </Tooltip>
+        
+        {!isPending && item.status !== 'available_for_sale' && (
+          <Tooltip title="Release to Public">
+            <IconButton 
+              size="small" 
+              color="primary"
+              onClick={() => onAction('release', [item._id])}
+            >
+              <PublishIcon />
+            </IconButton>
+          </Tooltip>
+        )}
+        
+        <Tooltip title="More Actions">
+          <IconButton 
+            size="small" 
+            color="error"
+            onClick={() => onAction('delete', item._id)}
+          >
+            <DeleteIcon />
+          </IconButton>
+        </Tooltip>
+      </CardActions>
+    </Card>
+  )
+
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3, bgcolor: '#f5f7fa', minHeight: '100vh' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <Button
@@ -413,122 +692,271 @@ const ManageInventory = () => {
           onClick={() => navigate('/manager/petshop/inventory')}
           sx={{ mr: 2 }}
         >
-          Back to Overview
+          Back
         </Button>
-        <Typography variant="h4" component="h1">
-          Manage Inventory
-        </Typography>
+        <Box sx={{ flexGrow: 1 }}>
+          <Typography variant="h4" component="h1" fontWeight="bold">
+            Inventory Management
+          </Typography>
+          <Typography variant="subtitle1" color="textSecondary">
+            Manage your pet inventory and prepare pets for public viewing
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<PriceChangeIcon />}
+            onClick={() => setBulkPriceOpen(true)}
+          >
+            Bulk Price Update
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<FileUploadIcon />}
+            onClick={() => setCsvOpen(true)}
+          >
+            Import CSV
+          </Button>
+        </Box>
       </Box>
 
-      {/* Actions Bar */}
+      {/* Stats Cards */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ bgcolor: '#e3f2fd', borderLeft: '4px solid #1976d2' }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Typography variant="h4" fontWeight="bold">
+                    {inventory.length + readyForRelease.length + releasedPets.length + purchasedPets.length}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Total Pets
+                  </Typography>
+                </Box>
+                <PetsIcon sx={{ fontSize: 40, color: '#1976d2' }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ bgcolor: '#fff3e0', borderLeft: '4px solid #f57c00' }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Typography variant="h4" fontWeight="bold">
+                    {inventory.length}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Need Images
+                  </Typography>
+                </Box>
+                <PendingIcon sx={{ fontSize: 40, color: '#f57c00' }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ bgcolor: '#e8f5e9', borderLeft: '4px solid #4caf50' }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Typography variant="h4" fontWeight="bold">
+                    {readyForRelease.length}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Ready for Release
+                  </Typography>
+                </Box>
+                <CheckCircleIcon sx={{ fontSize: 40, color: '#4caf50' }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ bgcolor: '#fce4ec', borderLeft: '4px solid #e91e63' }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Typography variant="h4" fontWeight="bold">
+                    {selectedIds.length + selectedReadyIds.length + selectedReleasedIds.length + selectedPurchasedIds.length}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Selected
+                  </Typography>
+                </Box>
+                <CheckIcon sx={{ fontSize: 40, color: '#e91e63' }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Search and Filters */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-            <TextField
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1, maxWidth: 400 }}>
+              <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />
+              <TextField
+                fullWidth
+                placeholder="Search by code, name, species, breed..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                size="small"
+              />
+            </Box>
+            
+            <Button
+              variant="outlined"
+              startIcon={<FilterListIcon />}
+              onClick={openFilterMenu}
+              sx={{ minWidth: 120 }}
+            >
+              Filters
+            </Button>
+            
+            <ToggleButtonGroup
+              value={viewMode}
+              exclusive
+              onChange={(e, newValue) => newValue && setViewMode(newValue)}
               size="small"
-              label="Search (code/name/species/breed)"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              sx={{ minWidth: 260 }}
-            />
-
-            <FormControl size="small" sx={{ minWidth: 180 }}>
-              <InputLabel>Status Filter</InputLabel>
-              <Select label="Status Filter" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                <MenuItem value="">All Statuses</MenuItem>
-                <MenuItem value="in_petshop">In PetShop</MenuItem>
-                <MenuItem value="available_for_sale">Available for Sale</MenuItem>
-                <MenuItem value="reserved">Reserved</MenuItem>
-                <MenuItem value="out_of_stock">Out of Stock</MenuItem>
-                <MenuItem value="sold">Sold</MenuItem>
-              </Select>
-            </FormControl>
-
-            <FormControl size="small" sx={{ minWidth: 180 }}>
-              <InputLabel>Species</InputLabel>
-              <Select label="Species" value={speciesFilter} onChange={(e) => setSpeciesFilter(e.target.value)}>
-                <MenuItem value="">All Species</MenuItem>
-                {speciesOptions.map(s => (
-                  <MenuItem key={s._id} value={s._id}>{s.displayName || s.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <FormControl size="small" sx={{ minWidth: 180 }} disabled={!speciesFilter}>
-              <InputLabel>Breed</InputLabel>
-              <Select label="Breed" value={breedFilter} onChange={(e) => setBreedFilter(e.target.value)}>
-                <MenuItem value="">All Breeds</MenuItem>
-                {breedOptions.map(b => (
-                  <MenuItem key={b._id} value={b._id}>{b.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <FormControl size="small" sx={{ minWidth: 160 }}>
-              <InputLabel>Gender</InputLabel>
-              <Select label="Gender" value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)}>
-                <MenuItem value="">All</MenuItem>
-                <MenuItem value="Male">Male</MenuItem>
-                <MenuItem value="Female">Female</MenuItem>
-                <MenuItem value="Unknown">Unknown</MenuItem>
-              </Select>
-            </FormControl>
-
-            <TextField size="small" type="number" label="Min Price" value={priceMin} onChange={(e) => setPriceMin(e.target.value)} sx={{ width: 120 }} />
-            <TextField size="small" type="number" label="Max Price" value={priceMax} onChange={(e) => setPriceMax(e.target.value)} sx={{ width: 120 }} />
-            <TextField size="small" type="number" label="Min Age" value={ageMin} onChange={(e) => setAgeMin(e.target.value)} sx={{ width: 120 }} />
-            <TextField size="small" type="number" label="Max Age" value={ageMax} onChange={(e) => setAgeMax(e.target.value)} sx={{ width: 120 }} />
+            >
+              <ToggleButton value="table">Table</ToggleButton>
+              <ToggleButton value="grid">Grid</ToggleButton>
+            </ToggleButtonGroup>
             
             <Button 
               variant="outlined" 
               color="info" 
-              onClick={() => {
-                console.log('🔄 Reset filters triggered')
-                setStatusFilter('')
-                setSpeciesFilter('')
-                setBreedFilter('')
-                setPriceMin('')
-                setPriceMax('')
-                setGenderFilter('')
-                setAgeMin('')
-                setAgeMax('')
-                setSearchText('')
-                fetchInventory(1)
-              }}
+              onClick={resetFilters}
+              startIcon={<CloseIcon />}
             >
-              Reset Filters
+              Reset
             </Button>
-
-            {activeTab === 1 && (
-              <Button
-                variant="contained"
-                disabled={selectedReadyIds.length === 0}
-                onClick={() => handleReleaseToPublic(selectedReadyIds)}
-                startIcon={<PublishIcon />}
-              >
-                Release Selected to Public ({selectedReadyIds.length})
-              </Button>
-            )}
-            <Button
-              variant="outlined"
-              disabled={selectedIds.length === 0}
-              onClick={() => setBulkPriceOpen(true)}
-            >
-              Bulk Price Update
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => setCsvOpen(true)}
-            >
-              Import CSV
-            </Button>
-            
-            <Typography variant="body2" color="textSecondary">
-              Select pets to release for public viewing and booking
-            </Typography>
           </Box>
         </CardContent>
       </Card>
+
+      {/* Filter Menu */}
+      <Menu
+        anchorEl={filterAnchorEl}
+        open={filterOpen}
+        onClose={closeFilterMenu}
+        PaperProps={{
+          style: {
+            maxHeight: 400,
+            width: '300px',
+          },
+        }}
+      >
+        <Box sx={{ p: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            Filters
+          </Typography>
+          
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Status</InputLabel>
+                <Select label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                  <MenuItem value="">All Statuses</MenuItem>
+                  <MenuItem value="in_petshop">In PetShop</MenuItem>
+                  <MenuItem value="available_for_sale">Available for Sale</MenuItem>
+                  <MenuItem value="reserved">Reserved</MenuItem>
+                  <MenuItem value="out_of_stock">Out of Stock</MenuItem>
+                  <MenuItem value="sold">Sold</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Species</InputLabel>
+                <Select label="Species" value={speciesFilter} onChange={(e) => setSpeciesFilter(e.target.value)}>
+                  <MenuItem value="">All Species</MenuItem>
+                  {speciesOptions.map(s => (
+                    <MenuItem key={s._id} value={s._id}>{s.displayName || s.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <FormControl fullWidth size="small" disabled={!speciesFilter}>
+                <InputLabel>Breed</InputLabel>
+                <Select label="Breed" value={breedFilter} onChange={(e) => setBreedFilter(e.target.value)}>
+                  <MenuItem value="">All Breeds</MenuItem>
+                  {breedOptions.map(b => (
+                    <MenuItem key={b._id} value={b._id}>{b.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <TextField 
+                fullWidth 
+                size="small" 
+                type="number" 
+                label="Min Price" 
+                value={priceMin} 
+                onChange={(e) => setPriceMin(e.target.value)} 
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <TextField 
+                fullWidth 
+                size="small" 
+                type="number" 
+                label="Max Price" 
+                value={priceMax} 
+                onChange={(e) => setPriceMax(e.target.value)} 
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <TextField 
+                fullWidth 
+                size="small" 
+                type="number" 
+                label="Min Age" 
+                value={ageMin} 
+                onChange={(e) => setAgeMin(e.target.value)} 
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <TextField 
+                fullWidth 
+                size="small" 
+                type="number" 
+                label="Max Age" 
+                value={ageMax} 
+                onChange={(e) => setAgeMax(e.target.value)} 
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Gender</InputLabel>
+                <Select label="Gender" value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)}>
+                  <MenuItem value="">All</MenuItem>
+                  <MenuItem value="Male">Male</MenuItem>
+                  <MenuItem value="Female">Female</MenuItem>
+                  <MenuItem value="Unknown">Unknown</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+          
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2, gap: 1 }}>
+            <Button onClick={closeFilterMenu}>Cancel</Button>
+            <Button variant="contained" onClick={closeFilterMenu}>Apply</Button>
+          </Box>
+        </Box>
+      </Menu>
 
       {/* Tabs for different sections */}
       <Card sx={{ mb: 3 }}>
@@ -539,222 +967,1101 @@ const ManageInventory = () => {
         >
           <Tab 
             label={
-              <Badge badgeContent={inventory.length} color="warning" showZero>
-                Pending Images
-              </Badge>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <PendingIcon style={{ fontSize: 18 }} />
+                <span>Pending Images</span>
+                <Badge badgeContent={inventory.length} color="warning" showZero>
+                </Badge>
+              </Box>
             } 
+            sx={{ 
+              minHeight: 48,
+              color: activeTab === 0 ? 'primary.main' : 'text.secondary',
+              fontWeight: activeTab === 0 ? 'bold' : 'normal'
+            }}
           />
           <Tab 
             label={
-              <Badge badgeContent={readyForRelease.length} color="success" showZero>
-                Ready for Release
-              </Badge>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CheckCircleIcon style={{ fontSize: 18 }} />
+                <span>Ready for Release</span>
+                <Badge badgeContent={readyForRelease.length} color="success" showZero>
+                </Badge>
+              </Box>
             } 
+            sx={{ 
+              minHeight: 48,
+              color: activeTab === 1 ? 'primary.main' : 'text.secondary',
+              fontWeight: activeTab === 1 ? 'bold' : 'normal'
+            }}
+          />
+          <Tab 
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <PublishIcon style={{ fontSize: 18 }} />
+                <span>Released Pets</span>
+                <Badge badgeContent={releasedPets.length} color="info" showZero>
+                </Badge>
+              </Box>
+            } 
+            sx={{ 
+              minHeight: 48,
+              color: activeTab === 2 ? 'primary.main' : 'text.secondary',
+              fontWeight: activeTab === 2 ? 'bold' : 'normal'
+            }}
+          />
+          <Tab 
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <ShoppingCartIcon style={{ fontSize: 18 }} />
+                <span>Purchased Pets</span>
+                <Badge badgeContent={purchasedPets.length} color="secondary" showZero>
+                </Badge>
+              </Box>
+            } 
+            sx={{ 
+              minHeight: 48,
+              color: activeTab === 3 ? 'primary.main' : 'text.secondary',
+              fontWeight: activeTab === 3 ? 'bold' : 'normal'
+            }}
           />
         </Tabs>
       </Card>
 
-      {/* Inventory Table */}
+      {/* Main Content Area */}
       <Card>
         <CardContent>
-          {activeTab === 0 && (
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
             <>
-              <Typography variant="h6" gutterBottom>
-                Pets Pending Images ({inventory.length} pets)
-              </Typography>
-              <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                These pets need images before they can be released to users. Upload images to move them to "Ready for Release".
-              </Typography>
-            </>
-          )}
-          {activeTab === 1 && (
-            <>
-              <Typography variant="h6" gutterBottom>
-                Ready for Release ({readyForRelease.length} pets)
-              </Typography>
-              <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                These pets have images and are ready to be released to users for viewing and booking.
-              </Typography>
-            </>
-          )}
-
-          <TableContainer component={Paper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      indeterminate={
-                        activeTab === 0 
-                          ? (selectedIds.length > 0 && selectedIds.length < inventory.length)
-                          : (selectedReadyIds.length > 0 && selectedReadyIds.length < readyForRelease.length)
-                      }
-                      checked={
-                        activeTab === 0 
-                          ? (inventory.length > 0 && selectedIds.length === inventory.length)
-                          : (readyForRelease.length > 0 && selectedReadyIds.length === readyForRelease.length)
-                      }
-                      onChange={(e) => {
-                        if (activeTab === 0) {
-                          if (e.target.checked) setSelectedIds(inventory.map(x => x._id))
-                          else setSelectedIds([])
-                        } else {
-                          if (e.target.checked) setSelectedReadyIds(readyForRelease.map(x => x._id))
-                          else setSelectedReadyIds([])
-                        }
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>Pet Code</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Species/Breed</TableCell>
-                  <TableCell>Age/Gender</TableCell>
-                  <TableCell>Price</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(activeTab === 0 ? inventory : readyForRelease).map(item => (
-                  <TableRow key={item._id}>
-                    <TableCell padding="checkbox">
-                      <Checkbox
-                        checked={
-                          activeTab === 0 
-                            ? selectedIds.includes(item._id)
-                            : selectedReadyIds.includes(item._id)
-                        }
-                        onChange={(e) => {
-                          if (activeTab === 0) {
-                            setSelectedIds(prev => 
-                              e.target.checked 
-                                ? [...new Set([...prev, item._id])] 
-                                : prev.filter(id => id !== item._id)
-                            )
-                          } else {
-                            setSelectedReadyIds(prev => 
-                              e.target.checked 
-                                ? [...new Set([...prev, item._id])] 
-                                : prev.filter(id => id !== item._id)
-                            )
+              {activeTab === 0 && (
+                <>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Box>
+                      <Typography variant="h6" gutterBottom>
+                        Pets Pending Images
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        These pets need images before they can be released to users
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        onClick={handleSelectAllPending}
+                        startIcon={selectedIds.length === inventory.length && inventory.length > 0 ? <CloseIcon /> : <CheckIcon />}
+                      >
+                        {selectedIds.length === inventory.length && inventory.length > 0 ? 'Deselect All' : 'Select All'}
+                      </Button>
+                      <Button
+                        variant="contained"
+                        disabled={selectedIds.length === 0}
+                        onClick={() => {
+                          // Find the first selected item to open the image dialog
+                          const firstSelected = inventory.find(item => selectedIds.includes(item._id));
+                          if (firstSelected) {
+                            handleOpenImageDialog(firstSelected);
                           }
                         }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={item.petCode || `PET-${item._id.slice(-6)}`} 
-                        size="small" 
-                        color="primary" 
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {item.name || 'Unnamed Pet'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Box>
-                        <Typography variant="body2">
-                          {item.speciesId?.displayName || item.speciesId?.name || 'Unknown Species'}
-                        </Typography>
-                        <Typography variant="caption" color="textSecondary">
-                          {item.breedId?.name || 'Unknown Breed'}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Box>
-                        <Typography variant="body2">
-                          {item.age} {item.ageUnit} • {item.gender}
-                        </Typography>
-                        {item.ageGroup && (
-                          <Typography variant="caption" color="textSecondary">
-                            {item.ageGroup}
-                          </Typography>
-                        )}
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Typography 
-                        variant="body2" 
-                        color={item.price > 0 ? 'text.primary' : 'text.secondary'}
+                        startIcon={<CloudUploadIcon />}
                       >
-                        ₹{Number(item.price || 0).toLocaleString()}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={item.status?.replace('_', ' ') || 'in stock'} 
-                        size="small" 
-                        color={item.status === 'available_for_sale' ? 'success' : 'default'}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        <Tooltip title="Edit Pet Details">
-                          <IconButton size="small" onClick={() => handleEditPet(item)}>
-                            <EditIcon />
-                          </IconButton>
-                        </Tooltip>
-                        {activeTab === 0 && (
-                          <Tooltip title="Add Image">
-                            <IconButton size="small" color="secondary" onClick={() => handleOpenImageDialog(item)}>
-                              <span className="material-icons">image</span>
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                        
-                        <Tooltip title="View Details">
-                          <IconButton size="small">
-                            <ViewIcon />
-                          </IconButton>
-                        </Tooltip>
-
-                        <Tooltip title="View Pet History">
-                          <IconButton 
-                            size="small" 
-                            color="info"
-                            onClick={() => navigate(`/manager/petshop/pets/${item._id}/history`)}
-                          >
-                            <HistoryIcon />
-                          </IconButton>
-                        </Tooltip>
-                        
-                        {activeTab === 1 && item.status !== 'available_for_sale' && (
-                          <Tooltip title="Release to Public">
-                            <IconButton 
-                              size="small" 
-                              color="primary"
-                              onClick={() => handleReleaseToPublic([item._id])}
-                            >
-                              <PublishIcon />
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                        
-                        <Tooltip title="Delete Pet">
-                          <IconButton 
-                            size="small" 
-                            color="error"
-                            onClick={() => handleDeletePet(item._id)}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Tooltip>
+                        Upload Images ({selectedIds.length})
+                      </Button>
+                    </Box>
+                  </Box>
+                  
+                  {inventory.length === 0 ? (
+                    <Box sx={{ textAlign: 'center', py: 6 }}>
+                      <Box sx={{ 
+                        width: 120, 
+                        height: 120, 
+                        borderRadius: '50%', 
+                        bgcolor: '#e3f2fd', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        margin: '0 auto 24px'
+                      }}>
+                        <AddPhotoAlternateIcon sx={{ fontSize: 60, color: '#1976d2' }} />
                       </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                      <Typography variant="h5" gutterBottom>
+                        No pets pending images
+                      </Typography>
+                      <Typography variant="body1" color="textSecondary" sx={{ mb: 2 }}>
+                        All pets have images and are ready for release, or there are no pets in inventory.
+                      </Typography>
+                      <Button 
+                        variant="outlined" 
+                        onClick={() => setActiveTab(1)}
+                        startIcon={<CheckCircleIcon />}
+                      >
+                        View Ready Pets
+                      </Button>
+                    </Box>
+                  ) : (
+                    <>
+                      {viewMode === 'grid' ? (
+                        <Grid container spacing={2}>
+                          {inventory.map(item => (
+                            <Grid item xs={12} sm={6} md={4} lg={3} key={item._id}>
+                              <PetCard 
+                                item={item}
+                                isSelected={selectedIds.includes(item._id)}
+                                onSelect={(id) => {
+                                  setSelectedIds(prev => 
+                                    prev.includes(id) 
+                                      ? prev.filter(i => i !== id) 
+                                      : [...prev, id]
+                                  )
+                                }}
+                                onAction={(action, data) => {
+                                  switch(action) {
+                                    case 'edit': handleEditPet(data); break;
+                                    case 'upload': handleOpenImageDialog(data); break;
+                                    case 'history': navigate(`/manager/petshop/pets/${data._id}/history`); break;
+                                    case 'delete': handleDeletePet(data); break;
+                                    default: break;
+                                  }
+                                }}
+                                isPending={true}
+                              />
+                            </Grid>
+                          ))}
+                        </Grid>
+                      ) : (
+                        <>
+                          <TableContainer component={Paper}>
+                            <Table>
+                              <TableHead>
+                                <TableRow sx={{ bgcolor: '#f5f7fa' }}>
+                                  <TableCell padding="checkbox">
+                                    <Checkbox
+                                      indeterminate={selectedIds.length > 0 && selectedIds.length < inventory.length}
+                                      checked={inventory.length > 0 && selectedIds.length === inventory.length}
+                                      onChange={handleSelectAllPending}
+                                    />
+                                  </TableCell>
+                                  <TableCell>Pet Code</TableCell>
+                                  <TableCell>Name</TableCell>
+                                  <TableCell>Species/Breed</TableCell>
+                                  <TableCell>Age/Gender</TableCell>
+                                  <TableCell>Price</TableCell>
+                                  <TableCell>Status</TableCell>
+                                  <TableCell>Actions</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {inventory.map(item => (
+                                  <TableRow 
+                                    key={item._id}
+                                    selected={selectedIds.includes(item._id)}
+                                    sx={{ 
+                                      '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                                      backgroundColor: selectedIds.includes(item._id) ? 'rgba(25, 118, 210, 0.08)' : 'inherit'
+                                    }}
+                                  >
+                                    <TableCell padding="checkbox">
+                                      <Checkbox
+                                        checked={selectedIds.includes(item._id)}
+                                        onChange={(e) => {
+                                          setSelectedIds(prev => 
+                                            e.target.checked 
+                                              ? [...new Set([...prev, item._id])] 
+                                              : prev.filter(id => id !== item._id)
+                                          )
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Chip 
+                                        label={item.petCode || `PET-${item._id.slice(-6)}`} 
+                                        size="small" 
+                                        color="primary" 
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography variant="body2">
+                                        {item.name || 'Unnamed Pet'}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Typography variant="body2">
+                                          {item.speciesId?.displayName || item.speciesId?.name || 'Unknown Species'}
+                                        </Typography>
+                                        <Typography variant="caption" color="textSecondary">
+                                          {item.breedId?.name || 'Unknown Breed'}
+                                        </Typography>
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Typography variant="body2">
+                                          {item.age} {item.ageUnit} • {item.gender}
+                                        </Typography>
+                                        {item.ageGroup && (
+                                          <Typography variant="caption" color="textSecondary">
+                                            {item.ageGroup}
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography 
+                                        variant="body2" 
+                                        color={item.price > 0 ? 'text.primary' : 'text.secondary'}
+                                      >
+                                        ₹{Number(item.price || 0).toLocaleString()}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Chip 
+                                          label={item.status?.replace('_', ' ') || 'in stock'} 
+                                          size="small" 
+                                          color={item.status === 'available_for_sale' ? 'success' : 'default'}
+                                        />
+                                        {item.images && item.images.length > 0 && (
+                                          <Chip 
+                                            label={`${item.images.length} image${item.images.length > 1 ? 's' : ''}`}
+                                            size="small"
+                                            color="primary"
+                                            variant="outlined"
+                                            sx={{ ml: 1 }}
+                                          />
+                                        )}
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                        <Tooltip title="Edit Pet Details">
+                                          <IconButton size="small" onClick={() => handleEditPet(item)}>
+                                            <EditIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                        <Tooltip title="Add Image">
+                                          <IconButton size="small" color="secondary" onClick={() => handleOpenImageDialog(item)}>
+                                            <ImageIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                        
+                                        <Tooltip title="View Details">
+                                          <IconButton size="small">
+                                            <ViewIcon />
+                                          </IconButton>
+                                        </Tooltip>
+
+                                        <Tooltip title="View Pet History">
+                                          <IconButton 
+                                            size="small" 
+                                            color="info"
+                                            onClick={() => navigate(`/manager/petshop/pets/${item._id}/history`)}
+                                          >
+                                            <HistoryIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                        
+                                        <Tooltip title="Delete Pet">
+                                          <IconButton 
+                                            size="small" 
+                                            color="error"
+                                            onClick={() => handleDeletePet(item._id)}
+                                          >
+                                            <DeleteIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                      </Box>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                          
+                          {pagination.pages > 1 && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                              <Pagination 
+                                count={pagination.pages} 
+                                page={pagination.current} 
+                                onChange={handlePageChange}
+                                color="primary"
+                              />
+                            </Box>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+              
+              {activeTab === 1 && (
+                <>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Box>
+                      <Typography variant="h6" gutterBottom>
+                        Ready for Release
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        These pets have images and are ready to be released to users
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        onClick={handleSelectAllReady}
+                        startIcon={selectedReadyIds.length === readyForRelease.length && readyForRelease.length > 0 ? <CloseIcon /> : <CheckIcon />}
+                      >
+                        {selectedReadyIds.length === readyForRelease.length && readyForRelease.length > 0 ? 'Deselect All' : 'Select All'}
+                      </Button>
+                      <Button
+                        variant="contained"
+                        disabled={selectedReadyIds.length === 0}
+                        onClick={() => handleReleaseToPublic(selectedReadyIds)}
+                        startIcon={<PublishIcon />}
+                      >
+                        Release Selected ({selectedReadyIds.length})
+                      </Button>
+                    </Box>
+                  </Box>
+                  
+                  {readyForRelease.length === 0 ? (
+                    <Box sx={{ textAlign: 'center', py: 6 }}>
+                      <Box sx={{ 
+                        width: 120, 
+                        height: 120, 
+                        borderRadius: '50%', 
+                        bgcolor: '#e8f5e9', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        margin: '0 auto 24px'
+                      }}>
+                        <CheckCircleIcon sx={{ fontSize: 60, color: '#4caf50' }} />
+                      </Box>
+                      <Typography variant="h5" gutterBottom>
+                        No pets ready for release
+                      </Typography>
+                      <Typography variant="body1" color="textSecondary" sx={{ mb: 2 }}>
+                        Upload images for pets in the "Pending Images" tab to make them available for release.
+                      </Typography>
+                      <Button 
+                        variant="outlined" 
+                        onClick={() => setActiveTab(0)}
+                        startIcon={<PendingIcon />}
+                      >
+                        Add Pet Images
+                      </Button>
+                    </Box>
+                  ) : (
+                    <>
+                      {viewMode === 'grid' ? (
+                        <Grid container spacing={2}>
+                          {readyForRelease.map(item => (
+                            <Grid item xs={12} sm={6} md={4} lg={3} key={item._id}>
+                              <PetCard 
+                                item={item}
+                                isSelected={selectedReadyIds.includes(item._id)}
+                                onSelect={(id) => {
+                                  setSelectedReadyIds(prev => 
+                                    prev.includes(id) 
+                                      ? prev.filter(i => i !== id) 
+                                      : [...prev, id]
+                                  )
+                                }}
+                                onAction={(action, data) => {
+                                  switch(action) {
+                                    case 'edit': handleEditPet(data); break;
+                                    case 'view': console.log('View details'); break;
+                                    case 'history': navigate(`/manager/petshop/pets/${data._id}/history`); break;
+                                    case 'release': handleReleaseToPublic(data); break;
+                                    case 'delete': handleDeletePet(data); break;
+                                    default: break;
+                                  }
+                                }}
+                              />
+                            </Grid>
+                          ))}
+                        </Grid>
+                      ) : (
+                        <>
+                          <TableContainer component={Paper}>
+                            <Table>
+                              <TableHead>
+                                <TableRow sx={{ bgcolor: '#f5f7fa' }}>
+                                  <TableCell padding="checkbox">
+                                    <Checkbox
+                                      indeterminate={selectedReadyIds.length > 0 && selectedReadyIds.length < readyForRelease.length}
+                                      checked={readyForRelease.length > 0 && selectedReadyIds.length === readyForRelease.length}
+                                      onChange={handleSelectAllReady}
+                                    />
+                                  </TableCell>
+                                  <TableCell>Pet Code</TableCell>
+                                  <TableCell>Name</TableCell>
+                                  <TableCell>Species/Breed</TableCell>
+                                  <TableCell>Age/Gender</TableCell>
+                                  <TableCell>Price</TableCell>
+                                  <TableCell>Status</TableCell>
+                                  <TableCell>Actions</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {readyForRelease.map(item => (
+                                  <TableRow 
+                                    key={item._id}
+                                    selected={selectedReadyIds.includes(item._id)}
+                                    sx={{ 
+                                      '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                                      backgroundColor: selectedReadyIds.includes(item._id) ? 'rgba(25, 118, 210, 0.08)' : 'inherit'
+                                    }}
+                                  >
+                                    <TableCell padding="checkbox">
+                                      <Checkbox
+                                        checked={selectedReadyIds.includes(item._id)}
+                                        onChange={(e) => {
+                                          setSelectedReadyIds(prev => 
+                                            e.target.checked 
+                                              ? [...new Set([...prev, item._id])] 
+                                              : prev.filter(id => id !== item._id)
+                                          )
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Chip 
+                                        label={item.petCode || `PET-${item._id.slice(-6)}`} 
+                                        size="small" 
+                                        color="primary" 
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography variant="body2">
+                                        {item.name || 'Unnamed Pet'}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Typography variant="body2">
+                                          {item.speciesId?.displayName || item.speciesId?.name || 'Unknown Species'}
+                                        </Typography>
+                                        <Typography variant="caption" color="textSecondary">
+                                          {item.breedId?.name || 'Unknown Breed'}
+                                        </Typography>
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Typography variant="body2">
+                                          {item.age} {item.ageUnit} • {item.gender}
+                                        </Typography>
+                                        {item.ageGroup && (
+                                          <Typography variant="caption" color="textSecondary">
+                                            {item.ageGroup}
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography 
+                                        variant="body2" 
+                                        color={item.price > 0 ? 'text.primary' : 'text.secondary'}
+                                      >
+                                        ₹{Number(item.price || 0).toLocaleString()}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Chip 
+                                          label={item.status?.replace('_', ' ') || 'in stock'} 
+                                          size="small" 
+                                          color={item.status === 'available_for_sale' ? 'success' : 'default'}
+                                        />
+                                        {item.images && item.images.length > 0 && (
+                                          <Chip 
+                                            label={`${item.images.length} image${item.images.length > 1 ? 's' : ''}`}
+                                            size="small"
+                                            color="primary"
+                                            variant="outlined"
+                                            sx={{ ml: 1 }}
+                                          />
+                                        )}
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                        <Tooltip title="Edit Pet Details">
+                                          <IconButton size="small" onClick={() => handleEditPet(item)}>
+                                            <EditIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                        
+                                        <Tooltip title="View Details">
+                                          <IconButton size="small">
+                                            <ViewIcon />
+                                          </IconButton>
+                                        </Tooltip>
+
+                                        <Tooltip title="View Pet History">
+                                          <IconButton 
+                                            size="small" 
+                                            color="info"
+                                            onClick={() => navigate(`/manager/petshop/pets/${item._id}/history`)}
+                                          >
+                                            <HistoryIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                        
+                                        {item.status !== 'available_for_sale' && (
+                                          <Tooltip title="Release to Public">
+                                            <IconButton 
+                                              size="small" 
+                                              color="primary"
+                                              onClick={() => handleReleaseToPublic([item._id])}
+                                            >
+                                              <PublishIcon />
+                                            </IconButton>
+                                          </Tooltip>
+                                        )}
+                                        
+                                        <Tooltip title="Delete Pet">
+                                          <IconButton 
+                                            size="small" 
+                                            color="error"
+                                            onClick={() => handleDeletePet(item._id)}
+                                          >
+                                            <DeleteIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                      </Box>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                          
+                          {pagination.pages > 1 && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                              <Pagination 
+                                count={pagination.pages} 
+                                page={pagination.current} 
+                                onChange={handlePageChange}
+                                color="primary"
+                              />
+                            </Box>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+              
+              {activeTab === 2 && (
+                <>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Box>
+                      <Typography variant="h6" gutterBottom>
+                        Released Pets
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        These pets are currently available for public viewing and purchase
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        onClick={handleSelectAllReleased}
+                        startIcon={selectedReleasedIds.length === releasedPets.length && releasedPets.length > 0 ? <CloseIcon /> : <CheckIcon />}
+                      >
+                        {selectedReleasedIds.length === releasedPets.length && releasedPets.length > 0 ? 'Deselect All' : 'Select All'}
+                      </Button>
+                    </Box>
+                  </Box>
+                  
+                  {releasedPets.length === 0 ? (
+                    <Box sx={{ textAlign: 'center', py: 6 }}>
+                      <Box sx={{ 
+                        width: 120, 
+                        height: 120, 
+                        borderRadius: '50%', 
+                        bgcolor: '#e1f5fe', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        margin: '0 auto 24px'
+                      }}>
+                        <PublishIcon sx={{ fontSize: 60, color: '#0288d1' }} />
+                      </Box>
+                      <Typography variant="h5" gutterBottom>
+                        No pets released yet
+                      </Typography>
+                      <Typography variant="body1" color="textSecondary" sx={{ mb: 2 }}>
+                        Release pets from the "Ready for Release" section to make them available to the public.
+                      </Typography>
+                      <Button 
+                        variant="outlined" 
+                        onClick={() => setActiveTab(1)}
+                        startIcon={<CheckCircleIcon />}
+                      >
+                        Prepare Pets for Release
+                      </Button>
+                    </Box>
+                  ) : (
+                    <>
+                      {viewMode === 'grid' ? (
+                        <Grid container spacing={2}>
+                          {releasedPets.map(item => (
+                            <Grid item xs={12} sm={6} md={4} lg={3} key={item._id}>
+                              <PetCard 
+                                item={item}
+                                isSelected={selectedReleasedIds.includes(item._id)}
+                                onSelect={(id) => {
+                                  setSelectedReleasedIds(prev => 
+                                    prev.includes(id) 
+                                      ? prev.filter(i => i !== id) 
+                                      : [...prev, id]
+                                  )
+                                }}
+                                onAction={(action, data) => {
+                                  switch(action) {
+                                    case 'edit': handleEditPet(data); break;
+                                    case 'view': console.log('View details'); break;
+                                    case 'history': navigate(`/manager/petshop/pets/${data._id}/history`); break;
+                                    case 'delete': handleDeletePet(data); break;
+                                    default: break;
+                                  }
+                                }}
+                              />
+                            </Grid>
+                          ))}
+                        </Grid>
+                      ) : (
+                        <>
+                          <TableContainer component={Paper}>
+                            <Table>
+                              <TableHead>
+                                <TableRow sx={{ bgcolor: '#f5f7fa' }}>
+                                  <TableCell padding="checkbox">
+                                    <Checkbox
+                                      indeterminate={selectedReleasedIds.length > 0 && selectedReleasedIds.length < releasedPets.length}
+                                      checked={releasedPets.length > 0 && selectedReleasedIds.length === releasedPets.length}
+                                      onChange={handleSelectAllReleased}
+                                    />
+                                  </TableCell>
+                                  <TableCell>Pet Code</TableCell>
+                                  <TableCell>Name</TableCell>
+                                  <TableCell>Species/Breed</TableCell>
+                                  <TableCell>Age/Gender</TableCell>
+                                  <TableCell>Price</TableCell>
+                                  <TableCell>Status</TableCell>
+                                  <TableCell>Actions</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {releasedPets.map(item => (
+                                  <TableRow 
+                                    key={item._id}
+                                    selected={selectedReleasedIds.includes(item._id)}
+                                    sx={{ 
+                                      '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                                      backgroundColor: selectedReleasedIds.includes(item._id) ? 'rgba(25, 118, 210, 0.08)' : 'inherit'
+                                    }}
+                                  >
+                                    <TableCell padding="checkbox">
+                                      <Checkbox
+                                        checked={selectedReleasedIds.includes(item._id)}
+                                        onChange={(e) => {
+                                          setSelectedReleasedIds(prev => 
+                                            e.target.checked 
+                                              ? [...new Set([...prev, item._id])] 
+                                              : prev.filter(id => id !== item._id)
+                                          )
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Chip 
+                                        label={item.petCode || `PET-${item._id.slice(-6)}`} 
+                                        size="small" 
+                                        color="primary" 
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography variant="body2">
+                                        {item.name || 'Unnamed Pet'}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Typography variant="body2">
+                                          {item.speciesId?.displayName || item.speciesId?.name || 'Unknown Species'}
+                                        </Typography>
+                                        <Typography variant="caption" color="textSecondary">
+                                          {item.breedId?.name || 'Unknown Breed'}
+                                        </Typography>
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Typography variant="body2">
+                                          {item.age} {item.ageUnit} • {item.gender}
+                                        </Typography>
+                                        {item.ageGroup && (
+                                          <Typography variant="caption" color="textSecondary">
+                                            {item.ageGroup}
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography 
+                                        variant="body2" 
+                                        color={item.price > 0 ? 'text.primary' : 'text.secondary'}
+                                      >
+                                        ₹{Number(item.price || 0).toLocaleString()}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Chip 
+                                          label={item.status?.replace('_', ' ') || 'in stock'} 
+                                          size="small" 
+                                          color={item.status === 'available_for_sale' ? 'success' : 'default'}
+                                        />
+                                        {item.images && item.images.length > 0 && (
+                                          <Chip 
+                                            label={`${item.images.length} image${item.images.length > 1 ? 's' : ''}`}
+                                            size="small"
+                                            color="primary"
+                                            variant="outlined"
+                                            sx={{ ml: 1 }}
+                                          />
+                                        )}
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                        <Tooltip title="Edit Pet Details">
+                                          <IconButton size="small" onClick={() => handleEditPet(item)}>
+                                            <EditIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                        
+                                        <Tooltip title="View Details">
+                                          <IconButton size="small">
+                                            <ViewIcon />
+                                          </IconButton>
+                                        </Tooltip>
+
+                                        <Tooltip title="View Pet History">
+                                          <IconButton 
+                                            size="small" 
+                                            color="info"
+                                            onClick={() => navigate(`/manager/petshop/pets/${item._id}/history`)}
+                                          >
+                                            <HistoryIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                        
+                                        <Tooltip title="Delete Pet">
+                                          <IconButton 
+                                            size="small" 
+                                            color="error"
+                                            onClick={() => handleDeletePet(item._id)}
+                                          >
+                                            <DeleteIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                      </Box>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                          
+                          {pagination.pages > 1 && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                              <Pagination 
+                                count={pagination.pages} 
+                                page={pagination.current} 
+                                onChange={handlePageChange}
+                                color="primary"
+                              />
+                            </Box>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+              
+              {activeTab === 3 && (
+                <>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Box>
+                      <Typography variant="h6" gutterBottom>
+                        Purchased Pets
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        These pets have been purchased by customers
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        onClick={handleSelectAllPurchased}
+                        startIcon={selectedPurchasedIds.length === purchasedPets.length && purchasedPets.length > 0 ? <CloseIcon /> : <CheckIcon />}
+                      >
+                        {selectedPurchasedIds.length === purchasedPets.length && purchasedPets.length > 0 ? 'Deselect All' : 'Select All'}
+                      </Button>
+                    </Box>
+                  </Box>
+                  
+                  {purchasedPets.length === 0 ? (
+                    <Box sx={{ textAlign: 'center', py: 6 }}>
+                      <Box sx={{ 
+                        width: 120, 
+                        height: 120, 
+                        borderRadius: '50%', 
+                        bgcolor: '#f3e5f5', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        margin: '0 auto 24px'
+                      }}>
+                        <ShoppingCartIcon sx={{ fontSize: 60, color: '#7b1fa2' }} />
+                      </Box>
+                      <Typography variant="h5" gutterBottom>
+                        No pets purchased yet
+                      </Typography>
+                      <Typography variant="body1" color="textSecondary" sx={{ mb: 2 }}>
+                        Pets will appear here after customers complete their purchases.
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <>
+                      {viewMode === 'grid' ? (
+                        <Grid container spacing={2}>
+                          {purchasedPets.map(item => (
+                            <Grid item xs={12} sm={6} md={4} lg={3} key={item._id}>
+                              <PetCard 
+                                item={item}
+                                isSelected={selectedPurchasedIds.includes(item._id)}
+                                onSelect={(id) => {
+                                  setSelectedPurchasedIds(prev => 
+                                    prev.includes(id) 
+                                      ? prev.filter(i => i !== id) 
+                                      : [...prev, id]
+                                  )
+                                }}
+                                onAction={(action, data) => {
+                                  switch(action) {
+                                    case 'edit': handleEditPet(data); break;
+                                    case 'view': console.log('View details'); break;
+                                    case 'history': navigate(`/manager/petshop/pets/${data._id}/history`); break;
+                                    case 'delete': handleDeletePet(data); break;
+                                    default: break;
+                                  }
+                                }}
+                              />
+                            </Grid>
+                          ))}
+                        </Grid>
+                      ) : (
+                        <>
+                          <TableContainer component={Paper}>
+                            <Table>
+                              <TableHead>
+                                <TableRow sx={{ bgcolor: '#f5f7fa' }}>
+                                  <TableCell padding="checkbox">
+                                    <Checkbox
+                                      indeterminate={selectedPurchasedIds.length > 0 && selectedPurchasedIds.length < purchasedPets.length}
+                                      checked={purchasedPets.length > 0 && selectedPurchasedIds.length === purchasedPets.length}
+                                      onChange={handleSelectAllPurchased}
+                                    />
+                                  </TableCell>
+                                  <TableCell>Pet Code</TableCell>
+                                  <TableCell>Name</TableCell>
+                                  <TableCell>Species/Breed</TableCell>
+                                  <TableCell>Age/Gender</TableCell>
+                                  <TableCell>Price</TableCell>
+                                  <TableCell>Status</TableCell>
+                                  <TableCell>Actions</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {purchasedPets.map(item => (
+                                  <TableRow 
+                                    key={item._id}
+                                    selected={selectedPurchasedIds.includes(item._id)}
+                                    sx={{ 
+                                      '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' },
+                                      backgroundColor: selectedPurchasedIds.includes(item._id) ? 'rgba(25, 118, 210, 0.08)' : 'inherit'
+                                    }}
+                                  >
+                                    <TableCell padding="checkbox">
+                                      <Checkbox
+                                        checked={selectedPurchasedIds.includes(item._id)}
+                                        onChange={(e) => {
+                                          setSelectedPurchasedIds(prev => 
+                                            e.target.checked 
+                                              ? [...new Set([...prev, item._id])] 
+                                              : prev.filter(id => id !== item._id)
+                                          )
+                                        }}
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Chip 
+                                        label={item.petCode || `PET-${item._id.slice(-6)}`} 
+                                        size="small" 
+                                        color="primary" 
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography variant="body2">
+                                        {item.name || 'Unnamed Pet'}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Typography variant="body2">
+                                          {item.speciesId?.displayName || item.speciesId?.name || 'Unknown Species'}
+                                        </Typography>
+                                        <Typography variant="caption" color="textSecondary">
+                                          {item.breedId?.name || 'Unknown Breed'}
+                                        </Typography>
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Typography variant="body2">
+                                          {item.age} {item.ageUnit} • {item.gender}
+                                        </Typography>
+                                        {item.ageGroup && (
+                                          <Typography variant="caption" color="textSecondary">
+                                            {item.ageGroup}
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography 
+                                        variant="body2" 
+                                        color={item.price > 0 ? 'text.primary' : 'text.secondary'}
+                                      >
+                                        ₹{Number(item.price || 0).toLocaleString()}
+                                      </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box>
+                                        <Chip 
+                                          label={item.status?.replace('_', ' ') || 'in stock'} 
+                                          size="small" 
+                                          color={item.status === 'sold' ? 'secondary' : 'default'}
+                                        />
+                                        {item.images && item.images.length > 0 && (
+                                          <Chip 
+                                            label={`${item.images.length} image${item.images.length > 1 ? 's' : ''}`}
+                                            size="small"
+                                            color="primary"
+                                            variant="outlined"
+                                            sx={{ ml: 1 }}
+                                          />
+                                        )}
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                        <Tooltip title="Edit Pet Details">
+                                          <IconButton size="small" onClick={() => handleEditPet(item)}>
+                                            <EditIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                        
+                                        <Tooltip title="View Details">
+                                          <IconButton size="small">
+                                            <ViewIcon />
+                                          </IconButton>
+                                        </Tooltip>
+
+                                        <Tooltip title="View Pet History">
+                                          <IconButton 
+                                            size="small" 
+                                            color="info"
+                                            onClick={() => navigate(`/manager/petshop/pets/${item._id}/history`)}
+                                          >
+                                            <HistoryIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                        
+                                        <Tooltip title="Delete Pet">
+                                          <IconButton 
+                                            size="small" 
+                                            color="error"
+                                            onClick={() => handleDeletePet(item._id)}
+                                          >
+                                            <DeleteIcon />
+                                          </IconButton>
+                                        </Tooltip>
+                                      </Box>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                          
+                          {pagination.pages > 1 && (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                              <Pagination 
+                                count={pagination.pages} 
+                                page={pagination.current} 
+                                onChange={handlePageChange}
+                                color="primary"
+                              />
+                            </Box>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
+      {/* Floating Action Button for Quick Actions */}
+      <Fab 
+        color="primary" 
+        aria-label="add" 
+        sx={{ 
+          position: 'fixed', 
+          bottom: 16, 
+          right: 16,
+          boxShadow: 6
+        }}
+        onClick={() => navigate('/manager/petshop/add-stock')}
+      >
+        <AddPhotoAlternateIcon />
+      </Fab>
+
       {/* Edit Pet Dialog */}
       <Dialog open={editDialog} onClose={() => setEditDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit Pet Details</DialogTitle>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <EditIcon />
+            Edit Pet Details
+          </Box>
+        </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
@@ -848,27 +2155,130 @@ const ManageInventory = () => {
       </Dialog>
 
       {/* Image Upload Dialog */}
-      <Dialog open={imageDialog.open} onClose={() => setImageDialog({ open: false, item: null })} maxWidth="xs" fullWidth>
-        <DialogTitle>Upload Image</DialogTitle>
+      <Dialog open={imageDialog.open} onClose={() => setImageDialog({ open: false, item: null })} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ImageIcon />
+            Upload Image
+          </Box>
+        </DialogTitle>
         <DialogContent>
-          <Typography variant="body2" sx={{ mb: 1 }}>Pet: {imageDialog.item?.name || imageDialog.item?.petCode || ''}</Typography>
-          <Button variant="outlined" component="label">
-            Choose File
-            <input hidden type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
-          </Button>
-          {imageFile && (
-            <Typography variant="caption" sx={{ ml: 2 }}>{imageFile.name}</Typography>
+          {imageDialog.item && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Pet Information
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Box sx={{ width: 60, height: 60, borderRadius: '50%', bgcolor: 'primary.light', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <PetsIcon style={{ color: 'white' }} />
+                </Box>
+                <Box>
+                  <Typography variant="body1" fontWeight="medium">
+                    {imageDialog.item.name || 'Unnamed Pet'}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Code: {imageDialog.item.petCode || `PET-${imageDialog.item._id?.slice(-6)}`}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    {imageDialog.item.speciesId?.displayName || imageDialog.item.speciesId?.name || 'Unknown Species'} • {imageDialog.item.breedId?.name || 'Unknown Breed'}
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
           )}
+          
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" gutterBottom>
+              Select an image file to upload
+            </Typography>
+            <Button 
+              variant="outlined" 
+              component="label" 
+              fullWidth
+              sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CloudUploadIcon />
+                {imageFile ? (
+                  <Typography variant="body2">{imageFile.name}</Typography>
+                ) : (
+                  <Typography variant="body2">Choose image file (JPG, PNG, WEBP, GIF)</Typography>
+                )}
+              </Box>
+              <input 
+                hidden 
+                type="file" 
+                accept="image/*" 
+                onChange={(e) => setImageFile(e.target.files?.[0] || null)} 
+              />
+            </Button>
+            
+            {imageFile && (
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Image Preview
+                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                  <img 
+                    src={URL.createObjectURL(imageFile)} 
+                    alt="Preview" 
+                    style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 4 }}
+                    onError={(e) => {
+                      e.target.src = '/placeholder-pet.svg'; // Fallback image
+                    }}
+                  />
+                </Box>
+              </Box>
+            )}
+            
+            <TextField
+              fullWidth
+              label="Caption (optional)"
+              value={imageDialog.item?.name ? `Image for ${imageDialog.item.name}` : ''}
+              disabled
+              sx={{ mt: 2 }}
+            />
+            
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+              <Checkbox 
+                checked 
+                disabled 
+                size="small"
+              />
+              <Typography variant="caption">
+                Set as primary image
+              </Typography>
+            </Box>
+          </Box>
+          
+          <Alert severity="info" sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              <strong>Tip:</strong> Upload high-quality images (minimum 800x600px) for best results. 
+              Pets with images can be released to the public for viewing and booking.
+            </Typography>
+          </Alert>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setImageDialog({ open: false, item: null })}>Cancel</Button>
-          <Button onClick={handleUploadImage} variant="contained" disabled={!imageFile}>Upload</Button>
+          <Button 
+            onClick={handleUploadImage} 
+            variant="contained" 
+            disabled={!imageFile}
+            startIcon={<CloudUploadIcon />}
+          >
+            Upload Image
+          </Button>
         </DialogActions>
       </Dialog>
 
       {/* Bulk Price Update Dialog */}
       <Dialog open={bulkPriceOpen} onClose={() => setBulkPriceOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Bulk Price Update</DialogTitle>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PriceChangeIcon />
+            Bulk Price Update
+          </Box>
+        </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
             Updating {selectedIds.length} item(s). Choose mode and amount.
@@ -905,7 +2315,12 @@ const ManageInventory = () => {
 
       {/* CSV Import Dialog */}
       <Dialog open={csvOpen} onClose={() => setCsvOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Import Inventory from CSV</DialogTitle>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FileUploadIcon />
+            Import Inventory from CSV
+          </Box>
+        </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
             Required headers: categoryId,speciesId,breedId,gender,age,ageUnit,price,status,source,notes,arrivalDate

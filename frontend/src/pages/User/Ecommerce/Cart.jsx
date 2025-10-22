@@ -28,7 +28,7 @@ const Cart = () => {
             <Card>
               <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'space-between' }}>
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                  <img src={it.product?.images?.[0] || 'https://via.placeholder.com/80'} alt={it.product?.name} width={80} height={80} style={{ objectFit: 'cover', borderRadius: 8 }} />
+                  <img src={it.product?.images?.[0] || '/placeholder-pet.svg'} alt={it.product?.name} width={80} height={80} style={{ objectFit: 'cover', borderRadius: 8 }} />
                   <Box>
                     <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{it.product?.name}</Typography>
                     <Typography variant="body2">₹{(it.product?.price ?? it.priceAtAdd).toFixed(2)}</Typography>

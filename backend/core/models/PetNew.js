@@ -68,6 +68,30 @@ const petSchema = new mongoose.Schema({
     default: 'medium'
   },
   
+  // Unique 5-digit Pet ID
+  petId: {
+    type: String,
+    unique: true,
+    required: false,
+    validate: {
+      validator: function(v) {
+        return !v || /^\d{5}$/.test(v);
+      },
+      message: 'Pet ID must be a 5-digit number'
+    }
+  },
+  
+  // Unique pet identifier (same format as adoption/petshop: 3 letters + 5 digits)
+  petCode: {
+    type: String,
+    validate: {
+      validator: function(v) {
+        return !v || /^[A-Z]{3}\d{5}$/.test(v)
+      },
+      message: 'petCode must be 3 uppercase letters followed by 5 digits'
+    }
+  },
+  
   // Status and availability
   currentStatus: {
     type: String,
@@ -156,44 +180,14 @@ const petSchema = new mongoose.Schema({
     default: true
   },
   
-  // Media and documentation
-  images: [{
-    url: {
-      type: String,
-      required: true
-    },
-    alt: {
-      type: String,
-      trim: true
-    },
-    isPrimary: {
-      type: Boolean,
-      default: false
-    },
-    uploadedAt: {
-      type: Date,
-      default: Date.now
-    }
+  // Media and documentation - REPLACED EMBEDDED STRUCTURE WITH REFERENCES
+  imageIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Image'
   }],
-  documents: [{
-    type: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    url: {
-      type: String,
-      required: true
-    },
-    name: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    uploadedAt: {
-      type: Date,
-      default: Date.now
-    }
+  documentIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Document'
   }],
   
   // Location information (optional)
@@ -306,6 +300,8 @@ petSchema.index({ speciesId: 1 });
 petSchema.index({ breedId: 1 });
 petSchema.index({ currentStatus: 1 });
 petSchema.index({ healthStatus: 1 });
+petSchema.index({ petId: 1 }, { unique: true, sparse: true });
+petSchema.index({ petCode: 1 }, { unique: true, sparse: true });
 // Create a partial 2dsphere index only when coordinates exist to avoid insertion errors
 petSchema.index(
   { location: '2dsphere' },
@@ -340,16 +336,94 @@ petSchema.virtual('petDetails', {
   justOne: true
 });
 
+// Virtual populate images
+petSchema.virtual('images', {
+  ref: 'Image',
+  localField: 'imageIds',
+  foreignField: '_id',
+  justOne: false
+});
+
+// Virtual populate documents
+petSchema.virtual('documents', {
+  ref: 'Document',
+  localField: 'documentIds',
+  foreignField: '_id',
+  justOne: false
+});
+
 // Pre-save middleware
-petSchema.pre('save', function(next) {
+petSchema.pre('save', async function(next) {
+  console.log('💾 Saving PetNew document:', {
+    name: this.name,
+    age: this.age,
+    gender: this.gender,
+    speciesId: this.speciesId,
+    breedId: this.breedId,
+    ownerId: this.ownerId,
+    imageIds: this.imageIds?.length || 0
+  });
+  
   if (this.isModified('name')) {
     this.name = this.name.trim();
   }
   if (this.isModified('color')) {
     this.color = this.color.trim();
   }
+  
+  // Generate unique 5-digit petId if not provided
+  if (!this.petId) {
+    try {
+      this.petId = await this.constructor.generatePetId();
+    } catch (err) {
+      console.error('Error generating petId for PetNew:', err);
+      return next(err);
+    }
+  }
+  
+  // Generate unique petCode if not provided
+  if (!this.petCode) {
+    try {
+      const PetCodeGenerator = require('../utils/petCodeGenerator');
+      this.petCode = await PetCodeGenerator.generateUniquePetCode();
+    } catch (err) {
+      console.error('Error generating petCode for PetNew:', err);
+      return next(err);
+    }
+  }
+  
   next();
 });
+
+// Pre-insertMany: assign codes for bulk inserts
+petSchema.pre('insertMany', async function(docs) {
+  const PetCodeGenerator = require('../utils/petCodeGenerator');
+  for (const doc of docs) {
+    if (!doc.petCode) {
+      // eslint-disable-next-line no-await-in-loop
+      doc.petCode = await PetCodeGenerator.generateUniquePetCode();
+    }
+  }
+});
+
+// Static method to generate unique 5-digit petId
+petSchema.statics.generatePetId = async function() {
+  let petId;
+  let isUnique = false;
+  
+  while (!isUnique) {
+    // Generate random 5-digit number
+    petId = Math.floor(10000 + Math.random() * 90000).toString();
+    
+    // Check if ID already exists
+    const existingPet = await this.findOne({ petId, isActive: true });
+    if (!existingPet) {
+      isUnique = true;
+    }
+  }
+  
+  return petId;
+};
 
 // Static methods
 petSchema.statics.findByOwner = function(ownerId) {
@@ -443,6 +517,46 @@ petSchema.methods.softDelete = function(userId) {
   this.isActive = false;
   this.deletedAt = new Date();
   this.lastUpdatedBy = userId;
+  return this.save();
+};
+
+// Instance methods for managing images
+petSchema.methods.addImage = async function(imageData) {
+  const Image = mongoose.model('Image');
+  const image = new Image({
+    ...imageData,
+    entityType: 'PetNew',
+    entityId: this._id
+  });
+  const savedImage = await image.save();
+  this.imageIds.push(savedImage._id);
+  return this.save();
+};
+
+petSchema.methods.removeImage = async function(imageId) {
+  const Image = mongoose.model('Image');
+  await Image.findByIdAndDelete(imageId);
+  this.imageIds = this.imageIds.filter(id => id.toString() !== imageId.toString());
+  return this.save();
+};
+
+// Instance methods for managing documents
+petSchema.methods.addDocument = async function(documentData) {
+  const Document = mongoose.model('Document');
+  const document = new Document({
+    ...documentData,
+    entityType: 'PetNew',
+    entityId: this._id
+  });
+  const savedDocument = await document.save();
+  this.documentIds.push(savedDocument._id);
+  return this.save();
+};
+
+petSchema.methods.removeDocument = async function(documentId) {
+  const Document = mongoose.model('Document');
+  await Document.findByIdAndDelete(documentId);
+  this.documentIds = this.documentIds.filter(id => id.toString() !== documentId.toString());
   return this.save();
 };
 

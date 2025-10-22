@@ -34,6 +34,10 @@ function getTransporter() {
         refreshToken,
         accessToken,
       },
+      // Add timeout and retry settings
+      connectionTimeout: 30000, // 30 seconds
+      greetingTimeout: 30000,   // 30 seconds
+      socketTimeout: 30000,     // 30 seconds
     });
     return transporter;
   }
@@ -53,30 +57,61 @@ function getTransporter() {
     port,
     secure: port === 465,
     auth: { user, pass },
+    // Add timeout and retry settings
+    connectionTimeout: 30000, // 30 seconds
+    greetingTimeout: 30000,   // 30 seconds
+    socketTimeout: 30000,     // 30 seconds
   });
   return transporter;
 }
 
-async function sendMail({ to, subject, html }) {
-  const from = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'noreply@example.com';
+// Add retry mechanism for sending emails
+async function sendMailWithRetry({ to, subject, html }, maxRetries = 3) {
+  // Use the admin email as the sender for all emails if configured
+  const fromEmail = process.env.ADMIN_EMAIL || process.env.FROM_EMAIL || process.env.SMTP_EMAIL || process.env.EMAIL_USER || 'noreply@example.com';
+  const fromName = process.env.FROM_NAME || 'Pet Adoption Center';
+  const from = `"${fromName}" <${fromEmail}>`;
+  
   const tx = getTransporter();
   if (!tx) {
     console.log(`[EMAIL-DRYRUN] No EMAIL_USER/EMAIL_PASS configured. Would send -> to:"${to}" subject:"${subject}"`);
     return { success: true, dryRun: true };
   }
-  try {
-    const usingOAuth2 = tx.options?.auth?.type === 'OAuth2';
-    const via = usingOAuth2 ? 'gmail-oauth2' : `${tx.options.host}:${tx.options.port}`;
-    console.log(`[EMAIL] Sending to:"${to}" subject:"${subject}" via ${via}`);
-    const info = await tx.sendMail({ from, to, subject, html });
-    console.log(`[EMAIL] Success messageId:${info.messageId}`);
-    return { success: true, messageId: info.messageId };
-  } catch (err) {
-    console.error(`[EMAIL] Failed to send to:"${to}" subject:"${subject}" error:`, err.message);
-    throw err;
+  
+  let lastError = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const usingOAuth2 = tx.options?.auth?.type === 'OAuth2';
+      const via = usingOAuth2 ? 'gmail-oauth2' : `${tx.options.host}:${tx.options.port}`;
+      console.log(`[EMAIL] Sending to:"${to}" subject:"${subject}" via ${via} (attempt ${attempt}/${maxRetries})`);
+      const info = await tx.sendMail({ from, to, subject, html });
+      console.log(`[EMAIL] Success messageId:${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+    } catch (err) {
+      lastError = err;
+      console.error(`[EMAIL] Failed to send to:"${to}" subject:"${subject}" attempt ${attempt}/${maxRetries} error:`, err.message);
+      
+      // Don't retry on certain errors that won't improve with retries
+      if (err.code === 'EAUTH' || err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') {
+        break;
+      }
+      
+      // Wait before retrying (exponential backoff)
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000; // 2^attempt seconds
+        console.log(`[EMAIL] Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
+  
+  // If we get here, all retries failed
+  throw lastError;
+}
+
+async function sendMail({ to, subject, html }) {
+  return await sendMailWithRetry({ to, subject, html });
 }
 
 module.exports = { sendMail };
-
-

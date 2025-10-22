@@ -10,9 +10,13 @@ import {
   Divider
 } from '@mui/material';
 import { Lock as LockIcon, Security as SecurityIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 
 const PasswordUpdate = ({ profileData, onUpdateSuccess, onUpdateError }) => {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const [formData, setFormData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -61,14 +65,18 @@ const PasswordUpdate = ({ profileData, onUpdateSuccess, onUpdateError }) => {
 
       await api.put('/profile/password', payload);
       
-      // Reset form
-      setFormData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      });
+      // Show success message briefly
+      onUpdateSuccess('Password updated successfully! Redirecting to login...');
       
-      onUpdateSuccess('Password updated successfully!');
+      // Wait 2 seconds to show the message, then logout and redirect
+      setTimeout(() => {
+        logout();
+        navigate('/login', { 
+          state: { 
+            message: 'Your password has been updated. Please login with your new password.' 
+          }
+        });
+      }, 2000);
     } catch (error) {
       console.error('Error updating password:', error);
       onUpdateError(error.response?.data?.message || 'Failed to update password');

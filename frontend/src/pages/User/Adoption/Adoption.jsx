@@ -71,8 +71,8 @@ const Adoption = () => {
   const loadPets = React.useCallback(async () => {
     try {
       setLoading(true)
-      // Use adoption public list with pagination
-      const res = await apiClient.get('/adoption/public/pets', { params: { page, limit, ...filters } })
+      // Use adoption user public list with pagination (aligned to backend)
+      const res = await apiClient.get('/adoption/user/public/pets', { params: { page, limit, ...filters } })
       const raw = res?.data?.data?.pets || res?.data?.pets || res?.data || []
       const normalized = (Array.isArray(raw) ? raw : []).map((p) => ({
         id: p._id || p.id,
@@ -81,7 +81,7 @@ const Adoption = () => {
         age: p.age || p.ageYears || 0,
         ageUnit: p.ageUnit || 'months',
         gender: p.gender || 'Unknown',
-        image: resolveMediaUrl((p.images?.[0]?.url) || p.image || p.photoUrl || '' ) || 'https://via.placeholder.com/400x300?text=Pet',
+        image: resolveMediaUrl((p.images?.[0]?.url) || p.image || p.photoUrl || '' ) || '/placeholder-pet.svg',
         status: p.status || p.currentStatus || 'available',
         description: p.description || 'No description provided.',
         code: p.petCode || p.code || p.pet_code || '',
@@ -89,7 +89,8 @@ const Adoption = () => {
         species: p.species || 'Unknown',
         color: p.color || 'Unknown',
         healthStatus: p.healthStatus || 'good',
-        temperament: p.temperament || 'friendly'
+        temperament: p.temperament || 'friendly',
+        createdBy: p.createdBy || null // Include creator information
       }))
       setPets(normalized)
       const pag = res?.data?.data?.pagination
@@ -257,13 +258,6 @@ const Adoption = () => {
               </Select>
             </FormControl>
             <Button variant="outlined" startIcon={<FilterIcon />} sx={{ borderColor: '#4caf50', color: '#4caf50' }} onClick={applyFilters}>Apply</Button>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              sx={{ backgroundColor: '#4caf50', '&:hover': { backgroundColor: '#388e3c' } }}
-            >
-              Add Pet
-            </Button>
           </Box>
         </Box>
 
@@ -323,19 +317,53 @@ const Adoption = () => {
           </Grid>
         </Grid>
 
+        {/* Debug link for troubleshooting */}
+        <Box sx={{ mb: 2, textAlign: 'right' }}>
+          <Button 
+            size="small" 
+            variant="text" 
+            onClick={() => navigate('/User/adoption/debug')}
+            sx={{ color: '#666', textDecoration: 'underline' }}
+          >
+            Debug Pet Issues
+          </Button>
+        </Box>
+
         {/* Pets Grid */}
-        <Grid container spacing={3}>
+        <Grid container spacing={2}>
           {loading && (
             <Grid item xs={12}><Typography>Loading...</Typography></Grid>
           )}
           {!loading && pets.length === 0 && (
-            <Grid item xs={12}><Typography color="text.secondary">No pets found.</Typography></Grid>
+            <Grid item xs={12}>
+              <Typography color="text.secondary">No pets found.</Typography>
+              <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+                <Button 
+                  variant="outlined" 
+                  onClick={() => navigate('/User/adoption/debug')}
+                >
+                  Debug Pet Issues
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  onClick={() => {
+                    setFilters({ species: '', breed: '', gender: '', age: '' })
+                    setPage(1)
+                    loadPets()
+                  }}
+                >
+                  Reset Filters
+                </Button>
+              </Box>
+            </Grid>
           )}
           {pets.map((pet) => (
             <Grid item xs={12} sm={6} md={4} lg={3} key={pet.id}>
               <Card 
                 sx={{ 
                   height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
                   transition: 'all 0.3s ease',
                   '&:hover': {
                     transform: 'translateY(-4px)',
@@ -345,53 +373,52 @@ const Adoption = () => {
               >
                 <CardMedia
                   component="img"
-                  height="200"
+                  height="180"
                   image={pet.image}
                   alt={pet.name}
                   sx={{ objectFit: 'cover' }}
                 />
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <span>{pet.name}</span>
-                      {pet.code && (
-                        <Chip label={pet.code} size="small" variant="outlined" sx={{ fontFamily: 'monospace' }} />
-                      )}
+                <CardContent sx={{ flexGrow: 1, pb: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
+                      {pet.name}
                     </Typography>
                     <Chip 
                       label={pet.status} 
                       color={getStatusColor(pet.status)}
                       size="small"
+                      sx={{ height: 20 }}
                     />
                   </Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    {pet.breed} • {pet.age} {pet.ageUnit} old • {pet.gender}
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontSize: '0.85rem' }}>
+                    {pet.breed} • {pet.gender}
                   </Typography>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    {pet.description}
+                  <Typography variant="body2" sx={{ mb: 1, fontSize: '0.85rem', minHeight: 40 }}>
+                    {pet.description.length > 80 ? `${pet.description.substring(0, 80)}...` : pet.description}
                   </Typography>
-                  {pet.adoptionFee > 0 && (
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#4caf50', mb: 1 }}>
-                      Adoption Fee: ₹{pet.adoptionFee}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#4caf50' }}>
+                      {pet.adoptionFee > 0 ? `₹${pet.adoptionFee}` : 'Free'}
                     </Typography>
-                  )}
+                    {pet.code && (
+                      <Chip label={pet.code} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem', fontFamily: 'monospace' }} />
+                    )}
+                  </Box>
                 </CardContent>
-                <CardActions sx={{ p: 2, pt: 0 }}>
+                <CardActions sx={{ p: 1, pt: 0 }}>
                   <Button 
                     size="small" 
                     variant="outlined"
-                    sx={{ borderColor: '#4caf50', color: '#4caf50' }}
+                    fullWidth
+                    sx={{ 
+                      borderColor: '#4caf50', 
+                      color: '#4caf50',
+                      fontSize: '0.75rem',
+                      minHeight: 32
+                    }}
                     onClick={() => navigate(`/User/adoption/${pet.id}`)}
                   >
                     View Details
-                  </Button>
-                  <Button 
-                    size="small" 
-                    variant="contained"
-                    sx={{ backgroundColor: '#4caf50', '&:hover': { backgroundColor: '#388e3c' } }}
-                    onClick={() => navigate(`/User/adoption/apply/applicant?petId=${pet.id}`)}
-                  >
-                    Adopt
                   </Button>
                 </CardActions>
               </Card>

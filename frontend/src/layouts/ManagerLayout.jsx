@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Box, Drawer, AppBar, Toolbar, Typography, IconButton, Avatar, Badge, Menu, MenuItem, ListItemIcon, useMediaQuery, useTheme } from '@mui/material'
 import { Menu as MenuIcon, Logout as LogoutIcon, Notifications as NotificationIcon } from '@mui/icons-material'
 import ManagerSidebar from '../components/Navigation/ManagerSidebar'
 import { useAuth } from '../contexts/AuthContext'
 import { Navigate, useNavigate } from 'react-router-dom'
+import StoreNameSetupDialog from '../components/Manager/StoreNameSetupDialog'
 
 const drawerWidth = 280
 
@@ -12,6 +13,7 @@ const ManagerLayout = ({ children }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [mobileOpen, setMobileOpen] = useState(false)
   const [anchorEl, setAnchorEl] = useState(null)
+  const [storeDialogOpen, setStoreDialogOpen] = useState(false)
   const { user, logout } = useAuth()
   const navigate = useNavigate()
 
@@ -20,6 +22,14 @@ const ManagerLayout = ({ children }) => {
   if (!isManager) {
     return <Navigate to="/User/dashboard" replace />
   }
+
+  // Check if user needs to set up store name
+  useEffect(() => {
+    const needsSetup = user?.role?.includes('manager') && user?.storeId && !user?.storeName;
+    if (needsSetup) {
+      setStoreDialogOpen(true)
+    }
+  }, [user])
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen)
   const handleProfileMenuOpen = (e) => setAnchorEl(e.currentTarget)
@@ -105,6 +115,14 @@ const ManagerLayout = ({ children }) => {
           Logout
         </MenuItem>
       </Menu>
+
+      {/* Store Name Setup Dialog */}
+      <StoreNameSetupDialog
+        open={storeDialogOpen}
+        onClose={() => setStoreDialogOpen(false)}
+        user={user}
+        moduleKey={moduleType}
+      />
     </Box>
   )
 }

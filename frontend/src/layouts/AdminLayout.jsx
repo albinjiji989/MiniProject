@@ -100,7 +100,10 @@ const AdminLayout = ({ children }) => {
             </IconButton>
             
             <IconButton onClick={handleProfileMenuOpen} sx={{ p: 0 }}>
-              <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+              <Avatar 
+                src={user?.profilePicture}
+                sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}
+              >
                 {user?.name?.charAt(0)?.toUpperCase() || 'A'}
               </Avatar>
             </IconButton>

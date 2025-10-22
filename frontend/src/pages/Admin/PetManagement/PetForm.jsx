@@ -59,9 +59,7 @@ const PetForm = () => {
     dateOfBirth: '',
     age: '',
     ageUnit: 'months',
-    color: '',
     weight: '',
-    size: 'medium',
     currentStatus: 'Available',
     healthStatus: 'Good',
     isAdoptionReady: true,
@@ -127,9 +125,7 @@ const PetForm = () => {
         dateOfBirth: pet.dateOfBirth ? new Date(pet.dateOfBirth).toISOString().split('T')[0] : '',
         age: pet.age || '',
         ageUnit: pet.ageUnit || 'months',
-        color: pet.color || '',
         weight: pet.weight || '',
-        size: pet.size || 'medium',
         currentStatus: pet.currentStatus || 'Available',
         healthStatus: pet.healthStatus || 'Good',
         isAdoptionReady: pet.isAdoptionReady !== false,
@@ -293,34 +289,11 @@ const PetForm = () => {
                   <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
-                      label="Color"
-                      value={formData.color}
-                      onChange={(e) => handleInputChange('color', e.target.value)}
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
                       label="Weight (kg)"
                       type="number"
                       value={formData.weight}
                       onChange={(e) => handleInputChange('weight', e.target.value)}
                     />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth>
-                      <InputLabel>Size</InputLabel>
-                      <Select
-                        value={formData.size}
-                        onChange={(e) => handleInputChange('size', e.target.value)}
-                      >
-                        <MenuItem value="tiny">Tiny</MenuItem>
-                        <MenuItem value="small">Small</MenuItem>
-                        <MenuItem value="medium">Medium</MenuItem>
-                        <MenuItem value="large">Large</MenuItem>
-                        <MenuItem value="giant">Giant</MenuItem>
-                      </Select>
-                    </FormControl>
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <TextField
