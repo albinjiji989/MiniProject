@@ -1,0 +1,1348 @@
+const crypto = require('crypto');
+const PetReservation = require('../models/PetReservation');
+const PetInventoryItem = require('../../manager/models/PetInventoryItem');
+const OwnershipHistory = require('../../../../core/models/OwnershipHistory');
+const PetHistory = require('../../../../core/models/PetHistory');
+const PetRegistryService = require('../../../../core/services/petRegistryService');
+const { sendMail } = require('../../../../core/utils/email');
+const paymentService = require('../../../../core/services/paymentService');
+
+// ===== Payment Gateway =====
+const createRazorpayOrder = async (req, res) => {
+  try {
+    const { reservationId, amount, deliveryMethod, deliveryAddress } = req.body;
+    
+    console.log('Creating payment order for:', {
+      reservationId,
+      userId: req.user._id,
+      deliveryMethod,
+      hasRazorpayKeys: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)
+    });
+    
+    // Verify reservation exists and belongs to user
+    const reservation = await PetReservation.findOne({ 
+      _id: reservationId, 
+      userId: req.user._id 
+    }).populate('itemId');
+    
+    if (!reservation) {
+      console.log('Reservation not found for ID:', reservationId);
+      return res.status(404).json({ success: false, message: 'Reservation not found' });
+    }
+    
+    console.log('Found reservation:', {
+      id: reservation._id,
+      status: reservation.status,
+      itemId: reservation.itemId?._id,
+      itemPrice: reservation.itemId?.price
+    });
+    
+    if (reservation.status === 'paid' || reservation.status === 'completed') {
+      return res.status(400).json({ success: false, message: 'Reservation already paid' });
+    }
+    // Only allow payment when user has confirmed intent or already pending
+    if (!['going_to_buy', 'payment_pending', 'approved'].includes(reservation.status)) {
+      return res.status(400).json({ success: false, message: `Reservation not ready for payment (status=${reservation.status})` })
+    }
+    
+    // Calculate total amount
+    const petPrice = Number(reservation.itemId?.price || 0);
+    if (!petPrice || Number.isNaN(petPrice) || petPrice <= 0) {
+      return res.status(400).json({ success: false, message: 'Item price not set for this reservation' })
+    }
+    const deliveryCharges = deliveryMethod === 'delivery' ? 500 : 0;
+    const taxes = Math.round(petPrice * 0.18);
+    const totalAmount = petPrice + deliveryCharges + taxes;
+    
+    // Use the shared payment service
+    const orderResult = await paymentService.createOrder(totalAmount, 'INR', {
+      reservationId: reservationId,
+      userId: req.user._id,
+      itemId: reservation.itemId._id,
+      deliveryMethod,
+      deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : null
+    });
+
+    if (!orderResult.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: orderResult.error || 'Failed to create payment order'
+      });
+    }
+
+    // Update reservation with order details
+    reservation.paymentInfo = {
+      ...reservation.paymentInfo,
+      orderId: orderResult.order.id,
+      amount: totalAmount,
+      currency: 'INR',
+      deliveryMethod,
+      deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : null,
+      paymentStatus: 'pending'
+    };
+    reservation.status = 'payment_pending';
+    await reservation.save();
+    
+    res.json({
+      success: true,
+      data: {
+        orderId: orderResult.order.id,
+        amount: totalAmount * 100,
+        currency: 'INR',
+        key: process.env.RAZORPAY_KEY_ID
+      }
+    });
+  
+  } catch (err) {
+    console.error('Create Razorpay order error:', err);
+    console.error('Error details:', {
+      message: err.message,
+      stack: err.stack,
+      statusCode: err.statusCode,
+      error: err.error
+    });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to create payment order',
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Server error'
+    });
+  }
+};
+
+const verifyRazorpaySignature = async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      reservationId,
+      deliveryMethod,
+      deliveryAddress
+    } = req.body;
+    
+    console.log('Verifying payment:', {
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      reservationId
+    });
+    
+    // Use the shared payment service to verify payment
+    const isVerified = paymentService.verifyPayment(razorpay_signature, razorpay_order_id, razorpay_payment_id);
+    
+    if (!isVerified) {
+      return res.status(400).json({ success: false, message: 'Invalid payment signature' });
+    }
+    
+    // Update reservation
+    const reservation = await PetReservation.findOne({ 
+      _id: reservationId, 
+      userId: req.user._id 
+    }).populate('itemId').populate('userId', 'name email');
+
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found' });
+    }
+
+    // Get payment details from Razorpay
+    const paymentDetails = await paymentService.getPaymentDetails(razorpay_payment_id);
+    if (!paymentDetails.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Failed to fetch payment details' 
+      });
+    }
+
+    // Update payment details
+    reservation.paymentInfo = {
+      ...reservation.paymentInfo,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature,
+      paymentStatus: 'completed',
+      paidAt: new Date(),
+      amount: reservation.paymentInfo?.amount || 0
+    };
+    reservation.status = 'paid';
+
+    // Update inventory item status
+    const inventoryItem = await PetInventoryItem.findById(reservation.itemId._id);
+    if (inventoryItem) {
+      inventoryItem.status = 'sold';
+      inventoryItem.soldAt = new Date();
+      inventoryItem.buyerId = req.user._id;
+      await inventoryItem.save();
+    }
+
+    await reservation.save();
+
+    // Create ownership history
+    await OwnershipHistory.create({
+      pet: reservation.itemId._id,
+      previousOwner: null, // No previous owner for pet shop purchase
+      newOwner: req.user._id,
+      transferDate: new Date(),
+      transferType: 'Sale',
+      reason: 'Pet shop purchase',
+      transferFee: {
+        amount: reservation.paymentInfo.amount,
+        currency: 'INR',
+        paid: true,
+        paymentMethod: 'Card'
+      },
+      notes: `Purchased through Pet Shop - ${deliveryMethod === 'delivery' ? 'Home Delivery' : 'Store Pickup'}`,
+      createdBy: req.user._id,
+      status: 'Completed'
+    });
+
+    // Update centralized pet registry with initial ownership
+    try {
+      const PetRegistryService = require('../../../../core/services/petRegistryService');
+      
+      // Create/update registry entry with source tracking
+      await PetRegistryService.upsertAndSetState({
+        petCode: inventoryItem.petCode,
+        name: inventoryItem.name,
+        species: inventoryItem.speciesId,
+        breed: inventoryItem.breedId,
+        imageIds: inventoryItem.imageIds || [], // Fixed: Use imageIds instead of images
+        source: 'petshop',
+        petShopItemId: inventoryItem._id,
+        actorUserId: req.user._id,
+        firstAddedSource: 'pet_shop',
+        firstAddedBy: req.user._id // The store/manager who added it
+      }, {
+        currentOwnerId: req.user._id,
+        currentLocation: 'at_petshop', // Always at petshop for pickup
+        currentStatus: 'sold',
+        lastTransferAt: new Date()
+      });
+      
+      // Record ownership transfer in registry
+      await PetRegistryService.recordOwnershipTransfer({
+        petCode: inventoryItem.petCode,
+        previousOwnerId: null,
+        newOwnerId: req.user._id,
+        transferType: 'purchase',
+        transferPrice: reservation.paymentInfo.amount,
+        transferReason: 'Pet Shop Purchase',
+        source: 'petshop',
+        notes: `Payment completed - Store pickup scheduled`,
+        performedBy: req.user._id
+      });
+    } catch (regErr) {
+      console.warn('PetRegistry ownership tracking failed:', regErr?.message || regErr);
+    }
+
+    // Create user pet in Pet collection after successful payment
+    try {
+      const Pet = require('../../../../core/models/Pet');
+      const newPet = new Pet({
+        name: inventoryItem.name || 'Unnamed Pet',
+        species: inventoryItem.speciesId,
+        breed: inventoryItem.breedId,
+        owner: req.user._id,
+        createdBy: req.user._id,
+        currentStatus: 'sold',
+        gender: inventoryItem.gender || 'Unknown',
+        age: inventoryItem.age || 0,
+        ageUnit: inventoryItem.ageUnit || 'months',
+        color: inventoryItem.color || '',
+        petCode: inventoryItem.petCode,
+        imageIds: inventoryItem.imageIds || [],
+        description: `Purchased from ${reservation.itemId.storeName || 'Pet Shop'}`,
+        storeId: reservation.itemId.storeId,
+        storeName: reservation.itemId.storeName,
+        // Set default values for required fields
+        healthStatus: 'Good',
+        adoptionFee: 0,
+        isAdoptionReady: false,
+        tags: ['petshop', 'purchased'],
+        location: {
+          address: '',
+          city: '',
+          state: '',
+          country: ''
+        },
+        weight: {
+          value: inventoryItem.weight || 0,
+          unit: 'kg'
+        },
+        size: 'medium',
+        temperament: [],
+        behaviorNotes: '',
+        specialNeeds: [],
+        adoptionRequirements: []
+      });
+      
+      await newPet.save();
+      
+      // Populate the pet with related data
+      await newPet.populate([
+        { path: 'species', select: 'name displayName' },
+        { path: 'breed', select: 'name' },
+        { path: 'owner', select: 'name email' }
+      ]);
+      
+      console.log('User pet created successfully:', newPet._id);
+    } catch (petErr) {
+      console.error('Failed to create user pet:', petErr);
+      // Don't fail the payment if pet creation fails, but log the error
+    }
+
+    // Log pet history events
+    // Payment completed event
+    await PetHistory.logEvent({
+      petId: reservation.itemId._id,
+      inventoryItemId: reservation.itemId._id,
+      eventType: 'payment_completed',
+      eventDescription: `Payment of ₹${reservation.paymentInfo.amount} completed via Razorpay`,
+      performedBy: req.user._id,
+      performedByRole: 'user',
+      relatedDocuments: [{
+        documentType: 'payment',
+        documentId: reservation._id
+      }],
+      metadata: {
+        paymentAmount: reservation.paymentInfo.amount,
+        paymentMethod: 'razorpay',
+        deliveryMethod: 'pickup', // Always pickup
+        notes: `Transaction ID: ${razorpay_payment_id}`,
+        systemGenerated: false
+      },
+      storeId: reservation.itemId.storeId,
+      storeName: reservation.itemId.storeName
+    });
+
+    // Ownership transferred event
+    await PetHistory.logEvent({
+      petId: reservation.itemId._id,
+      inventoryItemId: reservation.itemId._id,
+      eventType: 'ownership_transferred',
+      eventDescription: `Pet ownership transferred to ${reservation.userId.name}`,
+      performedBy: req.user._id,
+      performedByRole: 'user',
+      relatedDocuments: [{
+        documentType: 'ownership_transfer',
+        documentId: reservation._id
+      }],
+      previousValue: { owner: null },
+      newValue: { owner: req.user._id },
+      metadata: {
+        paymentAmount: reservation.paymentInfo.amount,
+        deliveryMethod: 'pickup', // Always pickup
+        notes: `Purchased from Pet Shop`,
+        systemGenerated: true
+      },
+      storeId: reservation.itemId.storeId,
+      storeName: reservation.itemId.storeName
+    });
+    
+    res.json({
+      success: true,
+      message: 'Payment verified successfully. Please wait for the manager to schedule your pickup.',
+      data: {
+        transactionId: reservation._id,
+        paymentId: razorpay_payment_id,
+        amount: reservation.paymentInfo.amount,
+        status: 'completed',
+        deliveryMethod: 'pickup', // Always pickup
+        deliveryAddress: null
+      }
+    });
+    
+  } catch (err) {
+    console.error('Verify Razorpay signature error:', err);
+    console.error('Error details:', {
+      message: err.message,
+      stack: err.stack,
+      reservationId,
+      orderId: razorpay_order_id
+    });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Payment verification failed',
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Server error'
+    });
+  }
+};
+
+// User confirms they want to buy after manager approval
+const confirmPurchaseDecision = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { wantsToBuy, notes } = req.body;
+    
+    console.log('Confirm purchase decision called with reservationId:', reservationId);
+    console.log('User ID:', req.user._id);
+    
+    // First, try to find the reservation by ID
+    console.log('Looking for reservation with ID:', reservationId);
+    const reservationById = await PetReservation.findById(reservationId);
+    console.log('Found reservation by ID:', reservationById);
+    
+    // Then try with user filter
+    console.log('Looking for reservation with ID and user ID filter');
+    const reservation = await PetReservation.findOne({
+      _id: reservationId,
+      userId: req.user._id
+    }).populate('itemId');
+    console.log('Found reservation with user filter:', reservation);
+    
+    if (!reservation) {
+      // Check if reservation exists but doesn't belong to user
+      if (reservationById) {
+        console.log('Reservation exists but belongs to different user');
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Reservation does not belong to current user' 
+        });
+      }
+      
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Reservation not found' 
+      });
+    }
+    
+    // Check if reservation is in a valid status for purchase decision
+    const validStatuses = ['approved', 'paid', 'manager_review'];
+    if (!validStatuses.includes(reservation.status)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Reservation status is ${reservation.status}, but must be one of: ${validStatuses.join(', ')} to confirm purchase decision` 
+      });
+    }
+    
+    // Update user decision
+    reservation.userDecision = {
+      wantsToBuy: wantsToBuy,
+      decisionDate: new Date(),
+      decisionNotes: notes || '',
+      remindersSent: 0
+    };
+    
+    // Update status based on decision
+    if (wantsToBuy) {
+      reservation.status = 'going_to_buy';
+      reservation._statusChangeNote = 'User confirmed purchase intention';
+    } else {
+      reservation.status = 'cancelled';
+      reservation._statusChangeNote = 'User declined to purchase';
+      
+      // Make pet available again
+      if (reservation.itemId) {
+        reservation.itemId.status = 'available_for_sale';
+        await reservation.itemId.save();
+      }
+    }
+    
+    reservation._updatedBy = req.user._id;
+    await reservation.save();
+    
+    // Log pet history
+    await PetHistory.logEvent({
+      petId: reservation.itemId._id,
+      inventoryItemId: reservation.itemId._id,
+      eventType: wantsToBuy ? 'reservation_confirmed' : 'reservation_declined',
+      eventDescription: wantsToBuy ? 
+        'User confirmed intention to purchase pet' : 
+        'User declined to purchase pet',
+      performedBy: req.user._id,
+      performedByRole: 'user',
+      relatedDocuments: [{
+        documentType: 'reservation',
+        documentId: reservation._id
+      }],
+      metadata: {
+        userDecision: wantsToBuy,
+        notes: notes || '',
+        systemGenerated: false
+      },
+      storeId: reservation.itemId.storeId,
+      storeName: reservation.itemId.storeName
+    });
+    
+    res.json({
+      success: true,
+      message: wantsToBuy ? 
+        'Purchase confirmed! You can now proceed to payment.' : 
+        'Reservation cancelled successfully.',
+      data: { 
+        reservation,
+        nextStep: wantsToBuy ? 'payment' : 'completed'
+      }
+    });
+    
+  } catch (err) {
+    console.error('Confirm purchase decision error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Update delivery status (for managers)
+const updateDeliveryStatus = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { status, deliveryNotes, actualDate } = req.body;
+    
+    const reservation = await PetReservation.findById(reservationId)
+      .populate('itemId')
+      .populate('userId', 'name email');
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found' });
+    }
+    
+    // Update delivery info
+    if (!reservation.deliveryInfo) {
+      reservation.deliveryInfo = {};
+    }
+    
+    if (actualDate) {
+      reservation.deliveryInfo.actualDate = new Date(actualDate);
+    }
+    
+    if (deliveryNotes) {
+      reservation.deliveryInfo.deliveryNotes = deliveryNotes;
+    }
+    
+    // Update reservation status
+    const previousStatus = reservation.status;
+    reservation.status = status;
+    reservation._statusChangeNote = `Delivery status updated: ${status}`;
+    reservation._updatedBy = req.user._id;
+    
+    // If status is cancelled, also update the pet's status back to available_for_sale
+    if (status === 'cancelled' && previousStatus !== 'cancelled') {
+      const PetInventoryItem = require('../../manager/models/PetInventoryItem');
+      await PetInventoryItem.findByIdAndUpdate(reservation.itemId, { status: 'available_for_sale' });
+    }
+    
+    await reservation.save();
+    
+    // If status is completed (or legacy at_owner), transfer ownership and create pet record
+    if ((status === 'completed' || status === 'at_owner') && previousStatus !== status) {
+      await handlePetOwnershipTransfer(reservation, req.user._id);
+    }
+    
+    // Log pet history for delivery status change
+    try {
+      await PetHistory.logEvent({
+        petId: reservation.itemId?._id || reservation.itemId,
+        inventoryItemId: reservation.itemId?._id || reservation.itemId,
+        eventType: 'status_changed',
+        eventDescription: `Delivery status updated to ${status}`,
+        performedBy: req.user._id,
+        performedByRole: 'manager',
+        relatedDocuments: [{
+          documentType: 'reservation',
+          documentId: reservation._id
+        }],
+        metadata: {
+          deliveryMethod: reservation.deliveryInfo?.method || 'pickup',
+          deliveryNotes: deliveryNotes || '',
+          actualDeliveryDate: actualDate || new Date(),
+          systemGenerated: false
+        },
+        storeId: reservation.itemId?.storeId,
+        storeName: reservation.itemId?.storeName
+      });
+    } catch (logErr) {
+      console.warn('PetHistory log failed (updateDeliveryStatus):', logErr?.message || logErr);
+    }
+    
+    // Central registry sync (identity + state)
+    try {
+      const item = reservation.itemId
+      if (item?.petCode) {
+        // Identity upsert from inventory
+        await PetRegistryService.upsertIdentity({
+          petCode: item.petCode,
+          name: item.name || 'Pet',
+          species: item.speciesId,
+          breed: item.breedId,
+          images: Array.isArray(item.images) ? item.images.map(img => ({ url: img.url, caption: img.caption, isPrimary: !!img.isPrimary })) : [],
+          source: 'petshop',
+          petShopItemId: item._id,
+          actorUserId: req.user._id,
+          metadata: { storeId: item.storeId, storeName: item.storeName }
+        })
+
+        // State mapping based on reservation status
+        let currentLocation = 'at_petshop'
+        let currentStatus = item.status || 'in_petshop'
+        let currentOwnerId = undefined
+        if (status === 'ready_pickup') {
+          currentLocation = 'in_transit'
+          currentStatus = 'reserved'
+        }
+        if (status === 'completed' || status === 'at_owner') {
+          currentLocation = 'at_owner'
+          currentStatus = 'sold'
+          currentOwnerId = reservation.userId?._id || reservation.userId
+        }
+        // If reservation is cancelled, pet should be available for sale
+        if (status === 'cancelled') {
+          currentStatus = 'available_for_sale'
+        }
+        await PetRegistryService.updateState({
+          petCode: item.petCode,
+          currentOwnerId,
+          currentLocation,
+          currentStatus,
+          actorUserId: req.user._id,
+          lastTransferAt: (status === 'completed' || status === 'at_owner') ? new Date() : undefined
+        })
+      }
+    } catch (regErr) {
+      console.warn('PetRegistry sync failed (updateDeliveryStatus):', regErr?.message || regErr)
+    }
+    
+    res.json({
+      success: true,
+      message: `Delivery status updated to ${status}`,
+      data: { reservation }
+    });
+    
+  } catch (err) {
+    console.error('Update delivery status error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Handle pet ownership transfer when order is completed
+const handlePetOwnershipTransfer = async (reservation, managerId) => {
+  try {
+    // Note: Pet is already created in the payment verification step
+    // Just log the transfer event
+    
+    // Log comprehensive pet history
+    await PetHistory.logEvent({
+      petId: reservation.itemId._id,
+      inventoryItemId: reservation.itemId._id,
+      eventType: 'ownership_transferred',
+      eventDescription: `Pet ownership transferred to ${reservation.userId.name} after successful pickup`,
+      performedBy: managerId,
+      performedByRole: 'manager',
+      relatedDocuments: [{
+        documentType: 'reservation',
+        documentId: reservation._id
+      }],
+      metadata: {
+        purchaseAmount: reservation.paymentInfo.amount,
+        deliveryMethod: 'pickup',
+        customerName: reservation.userId.name,
+        customerEmail: reservation.userId.email,
+        completionDate: new Date(),
+        systemGenerated: false
+      },
+      storeId: reservation.itemId.storeId,
+      storeName: reservation.itemId.storeName
+    });
+    
+    console.log(`Pet ownership transferred: ${reservation.itemId.petCode} -> ${reservation.userId.name}`);
+    
+  } catch (error) {
+    console.error('Error in pet ownership transfer:', error);
+  }
+};
+
+// Schedule pickup (manager side)
+const schedulePickup = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { pickupDate, pickupTime, notes } = req.body;
+    
+    // Find the reservation
+    const reservation = await PetReservation.findById(reservationId)
+      .populate('itemId')
+      .populate('userId');
+      
+    if (!reservation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reservation not found'
+      });
+    }
+    
+    // Verify reservation is in correct status
+    if (reservation.status !== 'paid') {
+      return res.status(400).json({
+        success: false,
+        message: 'Reservation must be paid to schedule pickup'
+      });
+    }
+    
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Update reservation with pickup details
+    reservation.pickupInfo = {
+      scheduledDate: new Date(`${pickupDate}T${pickupTime}`),
+      otp: otp,
+      status: 'scheduled',
+      notes: notes || ''
+    };
+    
+    // Update reservation status
+    reservation.status = 'pickup_scheduled';
+    reservation._statusChangeNote = 'Pickup scheduled by manager';
+    reservation._updatedBy = req.user._id;
+    
+    await reservation.save();
+    
+    // Update pet inventory status
+    const PetInventoryItem = require('../../manager/models/PetInventoryItem');
+    await PetInventoryItem.findByIdAndUpdate(reservation.itemId._id, { 
+      status: 'reserved',
+      buyerId: reservation.userId._id
+    });
+    
+    // Log pet history
+    await PetHistory.logEvent({
+      petId: reservation.itemId._id,
+      inventoryItemId: reservation.itemId._id,
+      eventType: 'pickup_scheduled',
+      eventDescription: `Pickup scheduled for ${pickupDate} at ${pickupTime}`,
+      performedBy: req.user._id,
+      performedByRole: 'manager',
+      relatedDocuments: [{
+        documentType: 'reservation',
+        documentId: reservation._id
+      }],
+      metadata: {
+        scheduledDate: pickupDate,
+        scheduledTime: pickupTime,
+        otp: otp,
+        notes: notes || '',
+        systemGenerated: false
+      },
+      storeId: reservation.itemId.storeId,
+      storeName: reservation.itemId.storeName
+    });
+    
+    // Send notification to user (in real app, this would be email/SMS)
+    console.log(`Pickup scheduled for user ${reservation.userId.name}. OTP: ${otp}`);
+    
+    res.json({
+      success: true,
+      message: 'Pickup scheduled successfully',
+      data: {
+        reservationId: reservation._id,
+        scheduledDate: pickupDate,
+        scheduledTime: pickupTime,
+        status: 'scheduled'
+      }
+    });
+    
+  } catch (err) {
+    console.error('Schedule pickup error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to schedule pickup'
+    });
+  }
+};
+
+// Verify pickup OTP (user side)
+const verifyPickupOTP = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { otp } = req.body;
+    
+    // Find the reservation
+    const reservation = await PetReservation.findById(reservationId)
+      .populate('itemId')
+      .populate('userId');
+      
+    if (!reservation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reservation not found'
+      });
+    }
+    
+    // Verify reservation is in correct status
+    if (reservation.status !== 'pickup_scheduled') {
+      return res.status(400).json({
+        success: false,
+        message: 'Pickup not scheduled for this reservation'
+      });
+    }
+    
+    // Verify OTP
+    if (reservation.pickupInfo.otp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid OTP'
+      });
+    }
+    
+    // Check if pickup time has passed
+    const now = new Date();
+    if (now < reservation.pickupInfo.scheduledDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Pickup time has not arrived yet'
+      });
+    }
+    
+    // Update reservation status
+    reservation.pickupInfo.status = 'completed';
+    reservation.pickupInfo.completedAt = new Date();
+    reservation.status = 'completed';
+    reservation._statusChangeNote = 'Pickup completed with OTP verification';
+    reservation._updatedBy = req.user._id;
+    
+    await reservation.save();
+    
+    // Update pet inventory status to sold
+    const PetInventoryItem = require('../../manager/models/PetInventoryItem');
+    await PetInventoryItem.findByIdAndUpdate(reservation.itemId._id, { 
+      status: 'sold',
+      soldAt: new Date(),
+      buyerId: reservation.userId._id
+    });
+    
+    // Update centralized pet registry
+    try {
+      const PetRegistryService = require('../../../../core/services/petRegistryService');
+      await PetRegistryService.updateState({
+        petCode: reservation.itemId.petCode,
+        currentOwnerId: reservation.userId._id,
+        currentLocation: 'at_owner',
+        currentStatus: 'sold',
+        actorUserId: req.user._id,
+        lastTransferAt: new Date()
+      });
+    } catch (regErr) {
+      console.warn('PetRegistry update failed:', regErr?.message || regErr);
+    }
+    
+    // Log pet history
+    await PetHistory.logEvent({
+      petId: reservation.itemId._id,
+      inventoryItemId: reservation.itemId._id,
+      eventType: 'pickup_completed',
+      eventDescription: `Pickup completed by ${reservation.userId.name} with OTP verification`,
+      performedBy: req.user._id,
+      performedByRole: 'user',
+      relatedDocuments: [{
+        documentType: 'reservation',
+        documentId: reservation._id
+      }],
+      metadata: {
+        otp: otp,
+        completedAt: new Date(),
+        systemGenerated: false
+      },
+      storeId: reservation.itemId.storeId,
+      storeName: reservation.itemId.storeName
+    });
+    
+    // Handle pet ownership transfer
+    await handlePetOwnershipTransfer(reservation, req.user._id);
+    
+    res.json({
+      success: true,
+      message: 'Pickup verified successfully. Pet has been transferred to your dashboard.',
+      data: {
+        reservationId: reservation._id,
+        status: 'completed'
+      }
+    });
+    
+  } catch (err) {
+    console.error('Verify pickup OTP error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify pickup'
+    });
+  }
+};
+
+// Get pickup details for user
+const getPickupDetails = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    
+    // Find the reservation with user filter for security
+    const reservation = await PetReservation.findOne({
+      _id: reservationId,
+      userId: req.user._id
+    })
+    .populate('itemId')
+    .populate('userId');
+      
+    if (!reservation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reservation not found'
+      });
+    }
+    
+    // Return pickup details (without OTP for security)
+    const pickupDetails = reservation.pickupInfo ? {
+      scheduledDate: reservation.pickupInfo.scheduledDate,
+      status: reservation.pickupInfo.status,
+      notes: reservation.pickupInfo.notes,
+      completedAt: reservation.pickupInfo.completedAt
+    } : null;
+    
+    res.json({
+      success: true,
+      data: {
+        reservationId: reservation._id,
+        status: reservation.status,
+        pickupDetails: pickupDetails
+      }
+    });
+    
+  } catch (err) {
+    console.error('Get pickup details error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get pickup details'
+    });
+  }
+};
+
+// ===== HANDOVER FUNCTIONS =====
+
+// Schedule handover with OTP generation
+const scheduleHandover = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { scheduledDate, scheduledTime, notes } = req.body;
+    
+    // Find reservation and verify ownership
+    const reservation = await PetReservation.findOne({ 
+      _id: reservationId, 
+      userId: req.user._id,
+      status: 'paid'
+    }).populate('itemId').populate('userId', 'name email');
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found or not ready for handover' });
+    }
+    
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Update reservation with handover details
+    reservation.handover = {
+      ...reservation.handover,
+      status: 'scheduled',
+      method: 'pickup',
+      scheduledAt: scheduledDate ? new Date(scheduledDate) : new Date(),
+      notes: notes || '',
+      location: {
+        ...(reservation.handover?.location || {}),
+        phone: reservation.contactInfo?.phone || ''
+      }
+    };
+    
+    // Add OTP to history
+    if (!reservation.handover.otpHistory) {
+      reservation.handover.otpHistory = [];
+    }
+    reservation.handover.otpHistory.push({
+      otp: otp,
+      generatedAt: new Date()
+    });
+    
+    reservation.status = 'ready_pickup';
+    
+    await reservation.save();
+    
+    // Send email notification with OTP
+    try {
+      await sendMail({
+        to: reservation.userId.email,
+        subject: 'Pet Handover Scheduled - OTP Included',
+        html: `
+          <h2>Pet Handover Scheduled</h2>
+          <p>Hello ${reservation.userId.name},</p>
+          <p>Your pet handover has been scheduled for ${new Date(scheduledDate).toLocaleDateString()} at ${scheduledTime}.</p>
+          <p><strong>Your OTP for pickup: ${otp}</strong></p>
+          <p>Please bring this OTP and a valid ID to the store for verification.</p>
+          <p>Reservation Code: ${reservation.reservationCode}</p>
+          <p>Pet: ${reservation.itemId.name}</p>
+        `
+      });
+    } catch (emailError) {
+      console.error('Failed to send handover email:', emailError);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Handover scheduled successfully',
+      data: { reservation }
+    });
+    
+  } catch (err) {
+    console.error('Schedule handover error:', err);
+    res.status(500).json({ success: false, message: 'Failed to schedule handover' });
+  }
+};
+
+// Complete handover with OTP verification
+const completeHandover = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { otp } = req.body;
+    
+    // Find reservation and verify ownership
+    const reservation = await PetReservation.findOne({ 
+      _id: reservationId, 
+      userId: req.user._id,
+      status: 'ready_pickup'
+    }).populate('itemId').populate('userId', 'name email');
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found or not ready for handover' });
+    }
+    
+    // Verify OTP from the handover field
+    const latestOtpRecord = reservation.handover.otpHistory
+      .filter(record => !record.used)
+      .sort((a, b) => b.generatedAt - a.generatedAt)[0];
+    
+    if (!latestOtpRecord || latestOtpRecord.otp !== otp) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    }
+    
+    // Mark OTP as used
+    const otpRecord = reservation.handover.otpHistory.find(record => record.otp === otp);
+    if (otpRecord) {
+      otpRecord.used = true;
+      otpRecord.usedAt = new Date();
+    }
+    
+    // Update reservation status
+    reservation.handover.status = 'completed';
+    reservation.handoverCompletedAt = new Date();
+    reservation.status = 'completed';
+    
+    await reservation.save();
+    
+    // Update inventory item status
+    const inventoryItem = await PetInventoryItem.findById(reservation.itemId._id);
+    if (inventoryItem) {
+      inventoryItem.status = 'sold';
+      inventoryItem.soldAt = new Date();
+      inventoryItem.buyerId = req.user._id;
+      await inventoryItem.save();
+    }
+    
+    // Create ownership history
+    await OwnershipHistory.create({
+      pet: reservation.itemId._id,
+      previousOwner: null, // No previous owner for pet shop purchase
+      newOwner: req.user._id,
+      transferDate: new Date(),
+      transferType: 'Sale',
+      reason: 'Pet shop purchase',
+      transferFee: {
+        amount: reservation.paymentInfo?.amount || 0,
+        currency: 'INR'
+      }
+    });
+    
+    // Send completion email
+    try {
+      await sendMail({
+        to: reservation.userId.email,
+        subject: 'Pet Handover Completed Successfully',
+        html: `
+          <h2>Pet Handover Completed</h2>
+          <p>Hello ${reservation.userId.name},</p>
+          <p>Congratulations! Your pet handover has been completed successfully.</p>
+          <p>Reservation Code: ${reservation.reservationCode}</p>
+          <p>Pet: ${reservation.itemId.name}</p>
+          <p>Thank you for choosing our pet shop!</p>
+        `
+      });
+    } catch (emailError) {
+      console.error('Failed to send completion email:', emailError);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Handover completed successfully',
+      data: { reservation }
+    });
+    
+  } catch (err) {
+    console.error('Complete handover error:', err);
+    res.status(500).json({ success: false, message: 'Failed to complete handover' });
+  }
+};
+
+// Regenerate handover OTP
+const regenerateHandoverOTP = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    
+    // Find reservation and verify ownership
+    const reservation = await PetReservation.findOne({ 
+      _id: reservationId, 
+      userId: req.user._id,
+      status: 'ready_pickup'
+    }).populate('userId', 'name email');
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found or not ready for handover' });
+    }
+    
+    // Generate new 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Add new OTP to history
+    reservation.handover.otpHistory.push({
+      otp: otp,
+      generatedAt: new Date()
+    });
+    
+    await reservation.save();
+    
+    // Send email with new OTP
+    try {
+      await sendMail({
+        to: reservation.userId.email,
+        subject: 'New OTP for Pet Handover',
+        html: `
+          <h2>New OTP for Pet Handover</h2>
+          <p>Hello ${reservation.userId.name},</p>
+          <p>Your new OTP for pet pickup: <strong>${otp}</strong></p>
+          <p>Please bring this OTP and a valid ID to the store for verification.</p>
+          <p>Reservation Code: ${reservation.reservationCode}</p>
+        `
+      });
+    } catch (emailError) {
+      console.error('Failed to send OTP regeneration email:', emailError);
+    }
+    
+    res.json({
+      success: true,
+      message: 'New OTP generated successfully',
+      data: { reservation }
+    });
+    
+  } catch (err) {
+    console.error('Regenerate handover OTP error:', err);
+    res.status(500).json({ success: false, message: 'Failed to regenerate OTP' });
+  }
+};
+
+module.exports = {
+  createRazorpayOrder,
+  verifyRazorpaySignature,
+  confirmPurchaseDecision,
+  updateDeliveryStatus,
+  scheduleHandover,
+  completeHandover,
+  regenerateHandoverOTP
+};
+    
+    // Add OTP to history
+    if (!reservation.handover.otpHistory) {
+      reservation.handover.otpHistory = [];
+    }
+    reservation.handover.otpHistory.push({
+      otp: otp,
+      generatedAt: new Date()
+    });
+    
+    reservation.status = 'ready_pickup';
+    
+    await reservation.save();
+    
+    // Send email notification with OTP
+    try {
+      await sendMail({
+        to: reservation.userId.email,
+        subject: 'Pet Handover Scheduled - OTP Included',
+        html: `
+          <h2>Pet Handover Scheduled</h2>
+          <p>Hello ${reservation.userId.name},</p>
+          <p>Your pet handover has been scheduled for ${new Date(scheduledDate).toLocaleDateString()} at ${scheduledTime}.</p>
+          <p><strong>Your OTP for pickup: ${otp}</strong></p>
+          <p>Please bring this OTP and a valid ID to the store for verification.</p>
+          <p>Reservation Code: ${reservation.reservationCode}</p>
+          <p>Pet: ${reservation.itemId.name}</p>
+        `
+      });
+    } catch (emailError) {
+      console.error('Failed to send handover email:', emailError);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Handover scheduled successfully',
+      data: { reservation }
+    });
+    
+  } catch (err) {
+    console.error('Schedule handover error:', err);
+    res.status(500).json({ success: false, message: 'Failed to schedule handover' });
+  }
+};
+
+// Complete handover with OTP verification
+const completeHandover = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { otp } = req.body;
+    
+    // Find reservation and verify ownership
+    const reservation = await PetReservation.findOne({ 
+      _id: reservationId, 
+      userId: req.user._id,
+      status: 'ready_pickup'
+    }).populate('itemId').populate('userId', 'name email');
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found or not ready for handover' });
+    }
+    
+    // Verify OTP from the handover field
+    const latestOtpRecord = reservation.handover.otpHistory
+      .filter(record => !record.used)
+      .sort((a, b) => b.generatedAt - a.generatedAt)[0];
+    
+    if (!latestOtpRecord || latestOtpRecord.otp !== otp) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    }
+    
+    // Mark OTP as used
+    const otpRecord = reservation.handover.otpHistory.find(record => record.otp === otp);
+    if (otpRecord) {
+      otpRecord.used = true;
+      otpRecord.usedAt = new Date();
+    }
+    
+    // Update reservation status
+    reservation.handover.status = 'completed';
+    reservation.handoverCompletedAt = new Date();
+    reservation.status = 'completed';
+    
+    await reservation.save();
+    
+    // Update inventory item status
+    const inventoryItem = await PetInventoryItem.findById(reservation.itemId._id);
+    if (inventoryItem) {
+      inventoryItem.status = 'sold';
+      inventoryItem.soldAt = new Date();
+      inventoryItem.buyerId = req.user._id;
+      await inventoryItem.save();
+    }
+    
+    // Create ownership history
+    await OwnershipHistory.create({
+      pet: reservation.itemId._id,
+      previousOwner: null, // No previous owner for pet shop purchase
+      newOwner: req.user._id,
+      transferDate: new Date(),
+      transferType: 'Sale',
+      reason: 'Pet shop purchase',
+      transferFee: {
+        amount: reservation.paymentInfo?.amount || 0,
+        currency: 'INR'
+      }
+    });
+    
+    // Send completion email
+    try {
+      await sendMail({
+        to: reservation.userId.email,
+        subject: 'Pet Handover Completed Successfully',
+        html: `
+          <h2>Pet Handover Completed</h2>
+          <p>Hello ${reservation.userId.name},</p>
+          <p>Congratulations! Your pet handover has been completed successfully.</p>
+          <p>Reservation Code: ${reservation.reservationCode}</p>
+          <p>Pet: ${reservation.itemId.name}</p>
+          <p>Thank you for choosing our pet shop!</p>
+        `
+      });
+    } catch (emailError) {
+      console.error('Failed to send completion email:', emailError);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Handover completed successfully',
+      data: { reservation }
+    });
+    
+  } catch (err) {
+    console.error('Complete handover error:', err);
+    res.status(500).json({ success: false, message: 'Failed to complete handover' });
+  }
+};
+
+// Regenerate handover OTP
+const regenerateHandoverOTP = async (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    
+    // Find reservation and verify ownership
+    const reservation = await PetReservation.findOne({ 
+      _id: reservationId, 
+      userId: req.user._id,
+      status: 'ready_pickup'
+    }).populate('userId', 'name email');
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found or not ready for handover' });
+    }
+    
+    // Generate new 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Add new OTP to history
+    reservation.handover.otpHistory.push({
+      otp: otp,
+      generatedAt: new Date()
+    });
+    
+    await reservation.save();
+    
+    // Send email with new OTP
+    try {
+      await sendMail({
+        to: reservation.userId.email,
+        subject: 'New OTP for Pet Handover',
+        html: `
+          <h2>New OTP for Pet Handover</h2>
+          <p>Hello ${reservation.userId.name},</p>
+          <p>Your new OTP for pet pickup: <strong>${otp}</strong></p>
+          <p>Please bring this OTP and a valid ID to the store for verification.</p>
+          <p>Reservation Code: ${reservation.reservationCode}</p>
+        `
+      });
+    } catch (emailError) {
+      console.error('Failed to send OTP regeneration email:', emailError);
+    }
+    
+    res.json({
+      success: true,
+      message: 'New OTP generated successfully',
+      data: { reservation }
+    });
+    
+  } catch (err) {
+    console.error('Regenerate handover OTP error:', err);
+    res.status(500).json({ success: false, message: 'Failed to regenerate OTP' });
+  }
+};
+
+module.exports = {
+  createRazorpayOrder,
+  verifyRazorpaySignature,
+  confirmPurchaseDecision,
+  updateDeliveryStatus,
+  scheduleHandover,
+  completeHandover,
+  regenerateHandoverOTP
+};

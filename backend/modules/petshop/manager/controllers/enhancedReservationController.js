@@ -57,9 +57,14 @@ const createEnhancedReservation = async (req, res) => {
     
     // Populate the response
     await reservation.populate([
-      { path: 'itemId', select: 'name petCode price images' },
+      { path: 'itemId', select: 'name petCode price images', populate: [{ path: 'imageIds' }] },
       { path: 'userId', select: 'name email' }
     ]);
+    
+    // Manually populate the virtual 'images' field
+    if (reservation.itemId) {
+      await reservation.itemId.populate('images');
+    }
     
     res.status(201).json({ 
       success: true, 
@@ -75,6 +80,7 @@ const createEnhancedReservation = async (req, res) => {
 // List reservations with enhanced filtering
 const listEnhancedReservations = async (req, res) => {
   try {
+    console.log('Manager user info:', { userId: req.user._id, role: req.user.role, storeId: req.user.storeId });
     const { 
       page = 1, 
       limit = 10, 
@@ -87,11 +93,18 @@ const listEnhancedReservations = async (req, res) => {
     let filter = {};
     
     // Apply role-based filtering
-    if (req.user.role === 'manager') {
+    // Check if user is a manager (could be 'manager' or 'petshop_manager')
+    const isManager = req.user.role && (req.user.role === 'manager' || req.user.role.includes('_manager'));
+    console.log('User role check:', { userRole: req.user.role, isManager });
+    
+    if (isManager) {
       // Manager sees only reservations for their store's items
       const storeFilter = getStoreFilter(req.user);
-      const storeItems = await PetInventoryItem.find(storeFilter, '_id');
+      console.log('Store filter for manager:', storeFilter);
+      const storeItems = await PetInventoryItem.find(storeFilter, '_id storeId name petCode');
+      console.log('Store items found:', storeItems.map(item => ({ id: item._id, storeId: item.storeId, name: item.name, petCode: item.petCode })));
       filter.itemId = { $in: storeItems.map(item => item._id) };
+      console.log('Reservation filter:', filter);
     } else if (req.user.role !== 'admin') {
       // Regular users see only their own reservations
       filter.userId = req.user._id;
@@ -108,7 +121,7 @@ const listEnhancedReservations = async (req, res) => {
     
     const reservations = await PetReservation.find(filter)
       .populate([
-        { path: 'itemId', select: 'name petCode price images' },
+        { path: 'itemId', select: 'name petCode price images storeId', populate: [{ path: 'imageIds' }] },
         { path: 'userId', select: 'name email phone' },
         { path: 'managerReview.reviewedBy', select: 'name' }
       ])
@@ -116,6 +129,28 @@ const listEnhancedReservations = async (req, res) => {
       .limit(limit * 1)
       .skip((page - 1) * limit);
       
+    // Debug log to see what reservations are being returned
+    console.log('Reservations found:', reservations.map(r => ({
+      id: r._id,
+      reservationCode: r.reservationCode,
+      pet: r.itemId ? { id: r.itemId._id, name: r.itemId.name, petCode: r.itemId.petCode, storeId: r.itemId.storeId } : null,
+      user: r.userId ? { id: r.userId._id, name: r.userId.name } : null,
+      status: r.status
+    })));
+      
+    // Manually populate the virtual 'images' field for each item
+    for (const reservation of reservations) {
+      if (reservation.itemId) {
+        await reservation.itemId.populate('images');
+        console.log('Populated item for reservation:', {
+          reservationId: reservation._id,
+          itemId: reservation.itemId._id,
+          itemName: reservation.itemId.name,
+          itemImages: reservation.itemId.images?.length || 0
+        });
+      }
+    }
+    
     const total = await PetReservation.countDocuments(filter);
     
     res.json({ 
@@ -147,7 +182,12 @@ const getReservationByCode = async (req, res) => {
       ]
     })
     .populate('userId', 'name email')
-    .populate('itemId', 'name petCode price images speciesId breedId storeId storeName');
+    .populate('itemId', 'name petCode price images speciesId breedId storeId storeName', null, { populate: [{ path: 'imageIds' }] });
+    
+    // Manually populate the virtual 'images' field
+    if (reservation && reservation.itemId) {
+      await reservation.itemId.populate('images');
+    }
     
     if (!reservation) {
       return res.status(404).json({ success: false, message: 'Reservation not found' });
@@ -169,8 +209,93 @@ const getReservationByCode = async (req, res) => {
   }
 };
 
+// Get reservation by ID for managers
+const getReservationById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const reservation = await PetReservation.findById(id)
+      .populate('userId', 'name email phone')
+      .populate('itemId', 'name petCode price images speciesId breedId storeId storeName', null, { populate: [{ path: 'imageIds' }] });
+    
+    // Manually populate the virtual 'images' field
+    if (reservation && reservation.itemId) {
+      await reservation.itemId.populate('images');
+    }
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found' });
+    }
+
+    // Only allow manager to see reservations for their store
+    const storeFilter = getStoreFilter(req.user);
+    if (reservation.itemId && reservation.itemId.storeId.toString() !== storeFilter.storeId.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    res.json({
+      success: true,
+      data: { reservation }
+    });
+
+  } catch (err) {
+    console.error('Get reservation by ID error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Manager approves/initiates payment for a reservation
+const approvePayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    
+    // Find the reservation
+    const reservation = await PetReservation.findById(id)
+      .populate('userId', 'name email phone')
+      .populate('itemId', 'name petCode price images speciesId breedId storeId storeName', null, { populate: [{ path: 'imageIds' }] });
+    
+    if (!reservation) {
+      return res.status(404).json({ success: false, message: 'Reservation not found' });
+    }
+    
+    // Only allow manager to approve reservations for their store
+    const storeFilter = getStoreFilter(req.user);
+    if (reservation.itemId && reservation.itemId.storeId.toString() !== storeFilter.storeId.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+    
+    // Check if reservation is in correct status for payment approval
+    if (reservation.status !== 'going_to_buy') {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Reservation must be in 'going_to_buy' status to approve payment. Current status: ${reservation.status}` 
+      });
+    }
+    
+    // Update reservation status to allow payment
+    reservation.status = 'payment_pending';
+    reservation._statusChangeNote = `Payment approved by manager: ${notes || 'No notes provided'}`;
+    reservation._updatedBy = req.user._id;
+    
+    await reservation.save();
+    
+    res.json({
+      success: true,
+      message: 'Payment approved successfully. User can now proceed to payment.',
+      data: { reservation }
+    });
+
+  } catch (err) {
+    console.error('Approve payment error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 module.exports = {
   createEnhancedReservation,
   listEnhancedReservations,
-  getReservationByCode
+  getReservationByCode,
+  getReservationById,
+  approvePayment
 };

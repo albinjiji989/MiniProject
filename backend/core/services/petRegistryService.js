@@ -22,7 +22,11 @@ const PetRegistryService = {
     actorUserId,
     metadata = {},
     firstAddedSource,
-    firstAddedBy
+    firstAddedBy,
+    gender,
+    age,
+    ageUnit,
+    color
   }) {
     if (!petCode) throw new Error('petCode required for registry upsert')
     
@@ -55,6 +59,12 @@ const PetRegistryService = {
       updatedBy: actorUserId || undefined,
       metadata
     }
+    
+    // Add physical characteristics
+    if (gender) update.gender = gender
+    if (typeof age !== 'undefined') update.age = age
+    if (ageUnit) update.ageUnit = ageUnit
+    if (color) update.color = color
     
     // Only update imageIds if we have valid IDs
     if (imageIds.length > 0) {
@@ -198,9 +208,7 @@ const PetRegistryService = {
       firstAddedSource: registry.firstAddedSource,
       firstAddedAt: registry.firstAddedAt,
       firstAddedBy: registry.firstAddedBy,
-      sourceLabel: registry.sourceLabel,
-      ownershipHistory: registry.ownershipHistory,
-      summary: registry.getOwnershipSummary()
+      ownershipHistory: registry.ownershipHistory || []
     }
   }
 }

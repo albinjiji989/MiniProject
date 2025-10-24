@@ -38,9 +38,9 @@ const InventoryOverview = () => {
     try {
       setLoading(true)
       const [allRes, inShopRes, pubRes] = await Promise.all([
-        apiClient.get('/petshop/inventory?limit=1'),
-        apiClient.get('/petshop/inventory?status=in_petshop&limit=1'),
-        apiClient.get('/petshop/inventory?status=available_for_sale&limit=50')
+        apiClient.get('/petshop/manager/inventory?limit=1'),
+        apiClient.get('/petshop/manager/inventory?status=in_petshop&limit=1'),
+        apiClient.get('/petshop/manager/inventory?status=available_for_sale&limit=50')
       ])
       const totalInventory = allRes.data?.data?.pagination?.total || 0
       const inPetshop = inShopRes.data?.data?.pagination?.total || 0
@@ -135,13 +135,12 @@ const InventoryOverview = () => {
               <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
                 Add new pets to your inventory with multi-step age and gender distribution
               </Typography>
-              <Button
-                variant="contained"
-                size="large"
-                fullWidth
-                onClick={() => navigate('/manager/petshop/add-stock')}
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />}
+                onClick={() => navigate('/manager/petshop/wizard/basic')}
               >
-                Add Stock
+                Add New Stock
               </Button>
             </CardContent>
           </Card>
@@ -170,7 +169,7 @@ const InventoryOverview = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        {/* <Grid item xs={12} md={6}>
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ p: 4 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -185,36 +184,12 @@ const InventoryOverview = () => {
                 size="large"
                 fullWidth
                 color="warning"
-                onClick={() => navigate('/manager/petshop/pricing-rules')}
               >
                 Manage Pricing
               </Button>
             </CardContent>
           </Card>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent sx={{ p: 4 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <AssessmentIcon sx={{ fontSize: 40, color: 'info.main', mr: 2 }} />
-                <Typography variant="h5">Reports & Analytics</Typography>
-              </Box>
-              <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
-                View sales reports, inventory analytics, and performance metrics
-              </Typography>
-              <Button
-                variant="contained"
-                size="large"
-                fullWidth
-                color="info"
-                onClick={() => navigate('/manager/petshop/reports')}
-              >
-                View Reports
-              </Button>
-            </CardContent>
-          </Card>
-        </Grid>
+        </Grid> */}
       </Grid>
 
       {/* Snackbar */}

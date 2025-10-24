@@ -45,13 +45,10 @@ const PetShopInventory = () => {
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>Inventory</Typography>
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => load(page)}>Refresh</Button>
-          <Button variant="contained" onClick={() => navigate('/manager/petshop/add-stock')}>Add Stock</Button>
-        </Stack>
-      </Stack>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>PetShop Inventory</Typography>
+        <Button variant="contained" onClick={() => navigate('/manager/petshop/wizard/basic')}>Add New Stock</Button>
+      </Box>
 
       <Paper>
         <Toolbar>
@@ -86,7 +83,25 @@ const PetShopInventory = () => {
                     <TableCell>{it.petCode || '-'}</TableCell>
                     <TableCell>₹{Number(it.price||0).toLocaleString()}</TableCell>
                     <TableCell>
-                      <Chip size="small" label={(it.status||'').replaceAll('_',' ') || 'in_stock'} color={it.status === 'available_for_sale' ? 'success' : 'default'} />
+                      <Chip 
+                        size="small" 
+                        label={
+                          it.status === 'in_stock' ? 'Pending Image' :
+                          it.status === 'available_for_sale' ? 'Ready for Release' :
+                          it.status === 'reserved' ? 'Reserved' :
+                          it.status === 'sold' ? 'Purchased' :
+                          it.status === 'archived' ? 'Archived' :
+                          (it.status||'').replaceAll('_',' ') || 'in_stock'
+                        } 
+                        color={
+                          it.status === 'available_for_sale' ? 'success' :
+                          it.status === 'reserved' ? 'warning' :
+                          it.status === 'sold' ? 'primary' :
+                          it.status === 'archived' ? 'default' :
+                          'default'
+                        } 
+                        variant={it.status === 'sold' ? 'filled' : 'outlined'}
+                      />
                     </TableCell>
                     <TableCell align="right">
                       <IconButton onClick={() => navigate(`/manager/petshop/manage-inventory?id=${it._id}`)}><EditIcon /></IconButton>

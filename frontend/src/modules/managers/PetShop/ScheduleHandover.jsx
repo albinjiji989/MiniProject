@@ -8,26 +8,28 @@ import {
   Grid,
   Button,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Paper,
   Alert,
   CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  FormControl,
+  InputLabel,
+  OutlinedInput,
+  InputAdornment,
+  IconButton
 } from '@mui/material'
 import {
   ArrowBack as ArrowBackIcon,
   Schedule as ScheduleIcon,
   CheckCircle as CheckIcon,
-  QrCode as QrCodeIcon
+  QrCode as QrCodeIcon,
+  Visibility,
+  VisibilityOff
 } from '@mui/icons-material'
 import { petShopManagerAPI, petShopAPI } from '../../../services/api'
-import { QRCodeSVG } from 'qrcode.react'
 
 const ScheduleHandover = () => {
   const { reservationId } = useParams()
@@ -37,7 +39,9 @@ const ScheduleHandover = () => {
   const [reservation, setReservation] = useState(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
-  const [showQRCode, setShowQRCode] = useState(false)
+  const [showOTPDialog, setShowOTPDialog] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [showOtp, setShowOtp] = useState(false)
   
   // Form data
   const [handoverData, setHandoverData] = useState({
@@ -52,7 +56,16 @@ const ScheduleHandover = () => {
   const fetchReservationDetails = async () => {
     try {
       setLoading(true)
-      const response = await petShopAPI.getReservationById(reservationId)
+      // Try to get reservation using manager API first
+      let response;
+      try {
+        response = await petShopManagerAPI.getReservationById(reservationId)
+      } catch (managerErr) {
+        // If manager API fails, try user API as fallback
+        console.log('Manager API failed, trying user API:', managerErr)
+        response = await petShopAPI.getReservationById(reservationId)
+      }
+      
       const reservationData = response.data.data.reservation
       
       setReservation(reservationData)
@@ -66,7 +79,8 @@ const ScheduleHandover = () => {
         }
       }))
     } catch (err) {
-      setError('Failed to load reservation details')
+      console.error('Failed to load reservation details:', err)
+      setError('Failed to load reservation details: ' + (err?.response?.data?.message || err.message || 'Unknown error'))
     } finally {
       setLoading(false)
     }
@@ -143,6 +157,31 @@ const ScheduleHandover = () => {
     }
   }
 
+  const handleCompleteHandover = async () => {
+    if (!otp || otp.length !== 6) {
+      setError('Please enter a valid 6-digit OTP')
+      return
+    }
+    
+    try {
+      setProcessing(true)
+      setError('')
+      
+      await petShopManagerAPI.completeHandover(reservationId, { otp })
+      
+      setSuccess(true)
+      setShowOTPDialog(false)
+      setOtp('')
+      // Refresh reservation data
+      await fetchReservationDetails()
+      
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to complete handover')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   const handleRegenerateOTP = async () => {
     try {
       setProcessing(true)
@@ -183,6 +222,7 @@ const ScheduleHandover = () => {
 
   const pet = reservation.itemId
   const isHandoverScheduled = reservation.handover && reservation.handover.status === 'scheduled'
+  const isHandoverCompleted = reservation.status === 'completed' || reservation.handover?.status === 'completed'
 
   return (
     <Box sx={{ p: 3 }}>
@@ -246,8 +286,8 @@ const ScheduleHandover = () => {
             </CardContent>
           </Card>
           
-          {/* Handover Form */}
-          {!isHandoverScheduled ? (
+          {/* Handover Form or Status Display */}
+          {!isHandoverScheduled && !isHandoverCompleted && reservation.status === 'paid' ? (
             <Card sx={{ mt: 3 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
@@ -267,7 +307,7 @@ const ScheduleHandover = () => {
                       disabled={processing}
                     />
                   </Grid>
-                  
+                
                   <Grid item xs={12}>
                     <TextField
                       fullWidth
@@ -278,7 +318,7 @@ const ScheduleHandover = () => {
                       disabled={processing}
                     />
                   </Grid>
-                  
+                
                   <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
@@ -289,7 +329,7 @@ const ScheduleHandover = () => {
                       disabled={processing}
                     />
                   </Grid>
-                  
+                
                   <Grid item xs={12}>
                     <TextField
                       fullWidth
@@ -302,13 +342,13 @@ const ScheduleHandover = () => {
                       disabled={processing}
                     />
                   </Grid>
-                  
+                
                   {error && (
                     <Grid item xs={12}>
                       <Alert severity="error">{error}</Alert>
                     </Grid>
                   )}
-                  
+                
                   <Grid item xs={12}>
                     <Button
                       variant="contained"
@@ -324,67 +364,84 @@ const ScheduleHandover = () => {
               </CardContent>
             </Card>
           ) : (
-            /* Handover Scheduled */
+            /* Handover Scheduled or Completed */
             <Card sx={{ mt: 3 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
-                  <CheckCircle sx={{ mr: 1, verticalAlign: 'middle', color: 'success.main' }} />
-                  Handover Scheduled
+                  {isHandoverCompleted ? (
+                    <CheckIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'success.main' }} />
+                  ) : (
+                    <ScheduleIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'warning.main' }} />
+                  )}
+                  {isHandoverCompleted ? 'Handover Completed' : 'Handover Scheduled'}
                 </Typography>
                 
-                <Paper sx={{ p: 2, mb: 2 }}>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body2">
-                        <strong>Date:</strong> {new Date(reservation.handover.scheduledAt).toLocaleDateString()}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body2">
-                        <strong>Time:</strong> {new Date(reservation.handover.scheduledAt).toLocaleTimeString()}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Typography variant="body2">
-                        <strong>Location:</strong> {reservation.handover.location?.address || 'Pet Shop'}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Typography variant="body2">
-                        <strong>Contact:</strong> {reservation.handover.location?.phone || 'N/A'}
-                      </Typography>
-                    </Grid>
-                    {reservation.handover.notes && (
-                      <Grid item xs={12}>
-                        <Typography variant="body2">
-                          <strong>Notes:</strong> {reservation.handover.notes}
-                        </Typography>
+                {!isHandoverCompleted ? (
+                  <>
+                    <Paper sx={{ p: 2, mb: 2 }}>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2">
+                            <strong>Date:</strong> {new Date(reservation.handover.scheduledAt).toLocaleDateString()}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2">
+                            <strong>Time:</strong> {new Date(reservation.handover.scheduledAt).toLocaleTimeString()}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Typography variant="body2">
+                            <strong>Location:</strong> {reservation.handover.location?.address || 'Pet Shop'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Typography variant="body2">
+                            <strong>Contact:</strong> {reservation.handover.location?.phone || 'N/A'}
+                          </Typography>
+                        </Grid>
+                        {reservation.handover.notes && (
+                          <Grid item xs={12}>
+                            <Typography variant="body2">
+                              <strong>Notes:</strong> {reservation.handover.notes}
+                            </Typography>
+                          </Grid>
+                        )}
                       </Grid>
-                    )}
-                  </Grid>
-                </Paper>
-                
-                <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-                  <Button
-                    variant="outlined"
-                    startIcon={<QrCodeIcon />}
-                    onClick={() => setShowQRCode(true)}
-                  >
-                    View QR Code
-                  </Button>
-                  
-                  <Button
-                    variant="contained"
-                    onClick={handleRegenerateOTP}
-                    disabled={processing}
-                  >
-                    {processing ? <CircularProgress size={20} /> : 'Regenerate OTP'}
-                  </Button>
-                </Box>
+                    </Paper>
+                    
+                    <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+                      <Button
+                        variant="contained"
+                        onClick={() => setShowOTPDialog(true)}
+                        disabled={processing}
+                      >
+                        Complete Handover
+                      </Button>
+                    
+                      <Button
+                        variant="outlined"
+                        onClick={handleRegenerateOTP}
+                        disabled={processing}
+                      >
+                        {processing ? <CircularProgress size={20} /> : 'Regenerate OTP'}
+                      </Button>
+                    </Box>
+                  </>
+                ) : (
+                  <Paper sx={{ p: 2, mb: 2 }}>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>Handover completed on:</strong> {new Date(reservation.handoverCompletedAt).toLocaleString()}
+                    </Typography>
+                    <Typography variant="body2">
+                      The pet has been successfully transferred to the user's dashboard.
+                    </Typography>
+                  </Paper>
+                )}
                 
                 {success && (
                   <Alert severity="success" sx={{ mt: 2 }}>
-                    Handover details updated successfully!
+                    {isHandoverCompleted ? 'Handover completed successfully!' : 'Handover details updated successfully!'}
                   </Alert>
                 )}
                 
@@ -421,7 +478,12 @@ const ScheduleHandover = () => {
               </li>
               <li>
                 <Typography variant="body2">
-                  <strong>Verify at Pickup:</strong> Customer presents the OTP at the pet shop for verification
+                  <strong>Customer Provides OTP:</strong> Customer gives the OTP to the manager at pickup
+                </Typography>
+              </li>
+              <li>
+                <Typography variant="body2">
+                  <strong>Manager Verifies OTP:</strong> Manager enters the OTP to complete the handover
                 </Typography>
               </li>
               <li>
@@ -441,24 +503,43 @@ const ScheduleHandover = () => {
         </Grid>
       </Grid>
       
-      {/* QR Code Dialog */}
-      <Dialog open={showQRCode} onClose={() => setShowQRCode(false)} maxWidth="sm" fullWidth>
+      {/* OTP Dialog */}
+      <Dialog open={showOTPDialog} onClose={() => setShowOTPDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
           <QrCodeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          Handover QR Code
+          Complete Handover
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ textAlign: 'center', py: 2 }}>
+          <Box sx={{ py: 2 }}>
             <Typography variant="body1" sx={{ mb: 2 }}>
-              Scan this QR code to verify handover details:
+              Please enter the 6-digit OTP provided by the customer to complete the handover:
             </Typography>
             
-            <Box sx={{ p: 2, bgcolor: 'white', display: 'inline-block', borderRadius: 1 }}>
-              <QRCodeSVG 
-                value={`PETSHOP_HANDOVER:${reservationId}`} 
-                size={200} 
+            <FormControl fullWidth variant="outlined">
+              <InputLabel htmlFor="otp-input">OTP</InputLabel>
+              <OutlinedInput
+                id="otp-input"
+                type={showOtp ? 'text' : 'password'}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                endAdornment={
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle otp visibility"
+                      onClick={() => setShowOtp(!showOtp)}
+                      edge="end"
+                    >
+                      {showOtp ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                }
+                label="OTP"
+                inputProps={{
+                  maxLength: 6,
+                  pattern: "[0-9]{6}"
+                }}
               />
-            </Box>
+            </FormControl>
             
             <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
               Reservation ID: {reservation.reservationCode}
@@ -466,7 +547,14 @@ const ScheduleHandover = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowQRCode(false)}>Close</Button>
+          <Button onClick={() => setShowOTPDialog(false)}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            onClick={handleCompleteHandover}
+            disabled={processing || !otp || otp.length !== 6}
+          >
+            {processing ? <CircularProgress size={20} /> : 'Complete Handover'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

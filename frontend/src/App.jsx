@@ -50,7 +50,6 @@ import PetShopInventory from './modules/managers/PetShop/Inventory'
 import PetShopInvoice from './modules/managers/PetShop/Invoice'
 import PetShopAddStock from './modules/managers/PetShop/AddStock'
 import PetShopManageInventory from './modules/managers/PetShop/ManageInventory'
-import PetShopPricingRules from './modules/managers/PetShop/PricingRules'
 import PetShopReports from './modules/managers/PetShop/Reports'
 import AvailableForSale from './modules/managers/PetShop/AvailableForSale'
 import PetProfile from './modules/managers/Adoption/PetProfile'
@@ -91,12 +90,20 @@ import AdoptionStepBasic from './modules/managers/Adoption/Wizard/StepBasicInfo'
 import AdoptionStepHealth from './modules/managers/Adoption/Wizard/StepHealthMedia'
 import AdoptionStepAvailability from './modules/managers/Adoption/Wizard/StepAvailability'
 import AdoptionStepReview from './modules/managers/Adoption/Wizard/StepReview'
+// PetShop Wizard Components - Improved Version
+import WizardLayoutImproved from './modules/managers/PetShop/Wizard/WizardLayoutImproved'
+import StepBasicInfoImproved from './modules/managers/PetShop/Wizard/StepBasicInfoImproved'
+import StepClassificationImproved from './modules/managers/PetShop/Wizard/StepClassificationImproved'
+import StepPricingImproved from './modules/managers/PetShop/Wizard/StepPricingImproved'
+import StepGenderClassification from './modules/managers/PetShop/Wizard/StepGenderClassification'
+import StepReviewImproved from './modules/managers/PetShop/Wizard/StepReviewImproved'
 import UserPetsList from './pages/User/Pets/List'
 import AddPet from './pages/User/Pets/AddPet'
 import AddPetDetails from './pages/User/Pets/AddPetDetails'
 import AddPetSuccess from './pages/User/Pets/AddPetSuccess'
 import UserPetDetails from './pages/User/Pets/Details'
 import EditPet from './pages/User/Pets/EditPet'
+import EditBasicPet from './pages/User/Pets/EditBasicPet'
 import UserPetMedicalHistory from './pages/User/Pets/MedicalHistory'
 import UserPetHistory from './pages/User/Pets/History'
 import UserProfile from './pages/User/Profile'
@@ -121,6 +128,7 @@ import DebugPetCheck from './pages/User/Adoption/DebugPetCheck'
 import PetShop from './pages/User/PetShop/PetShop'
 import PetShopDashboard from './pages/User/PetShop/PetShopDashboard'
 import UserPetShopDashboard from './pages/User/PetShop/UserPetShopDashboard'
+import BeautifulPetShopDashboard from './pages/User/PetShop/BeautifulPetShopDashboard'
 import PetShopShop from './pages/User/PetShop/Shop'
 import PetShopPetDetails from './pages/User/PetShop/PetDetails'
 import PetShopMyReservations from './pages/User/PetShop/MyReservations'
@@ -129,6 +137,9 @@ import PaymentGateway from './pages/User/PetShop/PaymentGateway'
 import PurchaseDecision from './pages/User/PetShop/PurchaseDecision'
 import PurchaseConfirmation from './pages/User/PetShop/PurchaseConfirmation'
 import ReservationWizard from './pages/User/PetShop/ReservationWizard'
+import NewReservationWizard from './pages/User/PetShop/NewReservationWizard'
+// Add the test component  
+import TestPetDetails from './pages/User/PetShop/TestPetDetails'
 import Rescue from './pages/User/Rescue/Rescue'
 import RescueDashboard from './pages/User/Rescue/RescueDashboard'
 import EcommerceDashboard from './pages/User/Ecommerce/EcommerceDashboard'
@@ -178,6 +189,11 @@ import ReservationDetails from './pages/User/PetShop/ReservationDetails'
 import Wishlist from './pages/User/PetShop/Wishlist'
 import Payment from './pages/User/PetShop/Payment'
 import Handover from './pages/User/PetShop/Handover'
+import PurchasePet from './modules/managers/PetShop/PurchasePet'
+import ManagePetImages from './modules/managers/PetShop/ManagePetImages'
+import ReservedPets from './modules/managers/PetShop/ReservedPets'
+import PurchasedPets from './modules/managers/PetShop/PurchasedPets'
+import PetShopDeliveryManagement from './pages/Manager/PetShopDeliveryManagement'
 
 function App() {
   const { user, loading } = useAuth()
@@ -393,6 +409,7 @@ function App() {
                 <Route path="/pets/add/success" element={<AddPetSuccess />} />
                 <Route path="/pets/:id" element={<UserPetDetails />} />
                 <Route path="/pets/:id/edit" element={<EditPet />} />
+                <Route path="/pets/:id/edit-basic" element={<EditBasicPet />} />
                 <Route path="/pets/:id/medical-history" element={<UserPetMedicalHistory />} />
                 <Route path="/pets/:id/history" element={<UserPetHistory />} />
                 <Route path="/pets/request-breed" element={<RequestBreed />} />
@@ -417,13 +434,17 @@ function App() {
                 <Route path="/petshop" element={<PetShopDashboard />} />
                 <Route path="/petshop/shop" element={<BrowsePets />} />
                 <Route path="/petshop/pet/:id" element={<NewPetDetails />} />
-                <Route path="/petshop/reserve/:petId" element={<ReservationWizard />} />
-                <Route path="/petshop/reservations" element={<Reservations />} />
-                <Route path="/petshop/reservation/:reservationId" element={<ReservationDetails />} />
+                <Route path="/petshop/reserve/:petId" element={<NewReservationWizard />} />
+                <Route path="/petshop/reservations" element={<PetShopMyReservations />} />
+                <Route path="/petshop/reservation/:reservationId" element={<PetShopReservationDetails />} />
                 <Route path="/petshop/wishlist" element={<Wishlist />} />
                 <Route path="/petshop/payment/:reservationId" element={<Payment />} />
                 <Route path="/petshop/purchase-decision/:reservationId" element={<PurchaseDecision />} />
+                <Route path="/petshop/purchase-confirmation/:reservationId" element={<PurchaseConfirmation />} />
                 <Route path="/petshop/handover/:reservationId" element={<Handover />} />
+                {/* Test route */}
+                <Route path="/petshop/test/:id" element={<TestPetDetails />} />
+                <Route path="/" element={<Navigate to="/User/petshop/dashboard" replace />} />
                 <Route path="/rescue" element={<RescueDashboard />} />
                 <Route path="/ecommerce" element={<EcommerceDashboard />} />
                 <Route path="/ecommerce/product/:id" element={<ProductDetails />} />
@@ -572,19 +593,30 @@ function App() {
             <ManagerLayout>
               <Routes>
                 <Route path="/dashboard" element={<PetShopManagerDashboard />} />
-                <Route path="/add-pet" element={<AddPet />} />
-                <Route path="/add-stock" element={<PetShopAddStock />} />
+                {/* PetShop Wizard Routes */}
+                <Route path="/wizard/*" element={<WizardLayoutImproved />}>
+                  <Route path="basic" element={<StepBasicInfoImproved />} />
+                  <Route path="classification" element={<StepClassificationImproved />} />
+                  <Route path="pricing" element={<StepPricingImproved />} />
+                  <Route path="gender" element={<StepGenderClassification />} />
+                  <Route path="review" element={<StepReviewImproved />} />
+                  <Route index element={<Navigate to="/manager/petshop/wizard/basic" replace />} />
+                </Route>
                 <Route path="/orders" element={<PetShopOrders />} />
                 <Route path="/orders/:id/invoice" element={<PetShopInvoice />} />
                 <Route path="/inventory" element={<PetShopInventory />} />
                 <Route path="/manage-inventory" element={<PetShopManageInventory />} />
+                <Route path="/manage-images/:id" element={<ManagePetImages />} />
+                <Route path="/reserved-pets" element={<ReservedPets />} />
                 <Route path="/for-sale" element={<AvailableForSale />} />
-                <Route path="/pricing-rules" element={<PetShopPricingRules />} />
                 <Route path="/reports" element={<PetShopReports />} />
                 <Route path="/reservations" element={<PetShopManageReservations />} />
+                <Route path="/purchased-pets" element={<PurchasedPets />} />
+                <Route path="/purchase/:id" element={<PurchasePet />} />
                 <Route path="/schedule-handover/:reservationId" element={<ScheduleHandover />} />
                 <Route path="/pets/:petId/history" element={<PetShopPetHistory />} />
                 <Route path="/handover/:reservationId" element={<HandoverManagement />} />
+                <Route path="/delivery" element={<PetShopDeliveryManagement />} />
                 <Route path="/" element={<Navigate to="/manager/petshop/dashboard" replace />} />
               </Routes>
             </ManagerLayout>
@@ -645,10 +677,10 @@ function App() {
           <ProtectedRoute>
             <UserLayout>
               <Routes>
-                <Route path="/dashboard" element={<UserPetShopDashboard />} />
+                <Route path="/dashboard" element={<BeautifulPetShopDashboard />} />
                 <Route path="/shop" element={<EnhancedBrowsePets />} />
                 <Route path="/pet/:id" element={<EnhancedPetDetails />} />
-                <Route path="/reserve/:petId" element={<ReservationWizard />} />
+                <Route path="/reserve/:petId" element={<NewReservationWizard />} />
                 <Route path="/reservations" element={<Reservations />} />
                 <Route path="/reservation/:reservationId" element={<ReservationDetails />} />
                 <Route path="/wishlist" element={<Wishlist />} />

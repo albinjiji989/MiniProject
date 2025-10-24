@@ -1,23 +1,44 @@
 import React, { useEffect, useState } from 'react'
 import ModuleDashboardLayout from '../../../components/Module/ModuleDashboardLayout'
 import { useNavigate } from 'react-router-dom'
-
-// If ecommerceAPI exists later, wire here
-// import { ecommerceAPI } from '../../../services/api'
+import { ecommerceAPI, shopAPI } from '../../../services/api'
 
 export default function EcommerceDashboard() {
   const navigate = useNavigate()
   const [products, setProducts] = useState([])
   const [cartItems, setCartItems] = useState([])
   const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState('shop')
 
   useEffect(() => {
-    // TODO: connect to real ecommerce APIs when available
-    setProducts([])
-    setCartItems([])
-    setOrders([])
+    loadData()
   }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      // Load products
+      const productsRes = await shopAPI.listProducts()
+      setProducts(productsRes.data?.data?.products || [])
+      
+      // Load cart items
+      const cartRes = await shopAPI.getCart()
+      setCartItems(cartRes.data?.data?.items || [])
+      
+      // Load orders
+      const ordersRes = await ecommerceAPI.listOrders()
+      setOrders(ordersRes.data?.data?.orders || [])
+    } catch (error) {
+      console.error('Error loading ecommerce data:', error)
+      setProducts([])
+      setCartItems([])
+      setOrders([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const actions = [
     { label: 'Shop Now', onClick: () => setTab('shop'), color: 'bg-emerald-600' },
     { label: 'My Cart', onClick: () => setTab('cart'), color: 'bg-blue-600' },
@@ -44,7 +65,12 @@ export default function EcommerceDashboard() {
           <div className="text-gray-600 text-sm">{p.category || '-'}</div>
           <div className="mt-1 font-medium">₹{p.price || 0}</div>
           <div className="mt-2">
-            <button className="px-3 py-1 bg-emerald-600 text-white rounded">Add to Cart</button>
+            <button 
+              className="px-3 py-1 bg-emerald-600 text-white rounded"
+              onClick={() => shopAPI.addToCart(p._id)}
+            >
+              Add to Cart
+            </button>
           </div>
         </div>
       ))}
@@ -122,9 +148,17 @@ export default function EcommerceDashboard() {
       activeTab={tab}
       onTabChange={setTab}
     >
-      {tab === 'shop' && <Shop />}
-      {tab === 'cart' && <Cart />}
-      {tab === 'orders' && <Orders />}
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        </div>
+      ) : (
+        <>
+          {tab === 'shop' && <Shop />}
+          {tab === 'cart' && <Cart />}
+          {tab === 'orders' && <Orders />}
+        </>
+      )}
     </ModuleDashboardLayout>
   )
 }

@@ -27,7 +27,7 @@ import {
   Person as PersonIcon,
   AttachMoney as CostIcon
 } from '@mui/icons-material'
-import { userPetsAPI } from '../../../services/api'
+import { userPetsAPI, petsAPI } from '../../../services/api'
 
 const UserPetMedicalHistory = () => {
   const { id } = useParams()
@@ -43,10 +43,28 @@ const UserPetMedicalHistory = () => {
   const loadMedicalHistory = async () => {
     try {
       setLoading(true)
-      const res = await userPetsAPI.getMedicalHistory(id)
-      setMedicalHistory(res.data?.data || null)
+      setError('')
+      
+      // First try to load from centralized registry (for pets from petshop/adoption)
+      try {
+        const res = await petsAPI.getHistory(id)
+        const historyData = {
+          petName: res.data?.data?.pet?.name || 'Pet',
+          medicalHistory: res.data?.data?.history?.filter(record => record.eventType === 'medical_checkup' || record.eventType === 'treatment') || [],
+          vaccinations: res.data?.data?.history?.filter(record => record.eventType === 'vaccination') || []
+        };
+        setMedicalHistory(historyData)
+      } catch (centralizedError) {
+        // Fall back to userPetsAPI (for user-created pets)
+        try {
+          const res = await userPetsAPI.getMedicalHistory(id)
+          setMedicalHistory(res.data?.data || null)
+        } catch (userError) {
+          throw new Error('Medical history not found in any system')
+        }
+      }
     } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to load medical history')
+      setError(e?.message || 'Failed to load medical history')
     } finally {
       setLoading(false)
     }

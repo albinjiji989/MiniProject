@@ -205,9 +205,36 @@ const UserPetsList = () => {
     handleMenuClose()
   }
 
-  const handleDeletePet = () => {
-    // TODO: delete flow for user pet
-    handleMenuClose()
+  const handleDeletePet = async () => {
+    if (!selectedPet) return;
+    
+    if (!window.confirm('Are you sure you want to delete this pet? This action cannot be undone.')) {
+      handleMenuClose();
+      return;
+    }
+    
+    try {
+      // Check if this is an adopted pet
+      if (selectedPet?.tags?.includes('adoption')) {
+        alert('Adopted pets cannot be deleted. Please contact the adoption center if you need to make changes.');
+        handleMenuClose();
+        return;
+      }
+      
+      // Delete the pet
+      await userPetsAPI.delete(selectedPet._id);
+      
+      // Reload the pets list
+      await loadPets(page);
+      
+      // Show success message
+      alert('Pet deleted successfully');
+    } catch (error) {
+      console.error('Error deleting pet:', error);
+      alert('Failed to delete pet. Please try again.');
+    } finally {
+      handleMenuClose();
+    }
   }
 
   const getStatusColor = (status) => {
@@ -608,6 +635,7 @@ const UserPetsList = () => {
                           undefined
                         }
                         onError={(e) => { 
+                          console.log('Avatar image load error for pet:', pet.name, 'Image data:', pet.images);
                           e.currentTarget.src = '/placeholder-pet.svg' 
                         }}
                       >
@@ -615,7 +643,7 @@ const UserPetsList = () => {
                       </Avatar>
                       
                       <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
-                        {pet.name}
+                        {pet.name || 'Unnamed Pet'}
                       </Typography>
                       
                       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -640,21 +668,21 @@ const UserPetsList = () => {
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography variant="body2" color="text.secondary">Species:</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {pet.species || pet.speciesId?.displayName || pet.speciesId?.name || '-'}
+                          {pet.species?.name || pet.species?.displayName || pet.speciesId?.displayName || pet.speciesId?.name || pet.species || '-'}
                         </Typography>
                       </Box>
                       
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography variant="body2" color="text.secondary">Breed:</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {pet.breed || pet.breedId?.name || '-'}
+                          {pet.breed?.name || pet.breedId?.name || pet.breed || '-'}
                         </Typography>
                       </Box>
                       
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                         <Typography variant="body2" color="text.secondary">Color:</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {pet.color || '-'}
+                          {pet.color?.name || pet.color || '-'}
                         </Typography>
                       </Box>
                     </Box>

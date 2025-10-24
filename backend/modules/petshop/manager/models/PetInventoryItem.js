@@ -23,21 +23,19 @@ const petInventoryItemSchema = new mongoose.Schema({
   breedId: { type: mongoose.Schema.Types.ObjectId, ref: 'Breed', required: true },
 
   // Basic attributes
-  name: { type: String, trim: true },
+  name: { type: String, trim: true, default: '' }, // Make name optional with default empty string
   gender: { type: String, enum: ['Male', 'Female', 'Unknown'], default: 'Unknown' },
   age: { type: Number, min: 0, default: 0 },
   ageUnit: { type: String, enum: ['weeks', 'months', 'years'], default: 'months' },
-  color: { type: String, trim: true },
-  size: { type: String, enum: ['tiny', 'small', 'medium', 'large', 'giant'], default: 'medium' },
+  color: { type: String, trim: true, default: '' }, // Make color optional with default empty string
 
-  // Special attributes for pricing
+
+  // Special attributes
   specialAttributes: [{ type: String }], // e.g., ["champion bloodline", "rare color"]
 
   // Costs and pricing
   unitCost: { type: Number, min: 0, default: 0 },
   price: { type: Number, min: 0, default: 0 },
-  calculatedPrice: { type: Number, min: 0, default: 0 }, // Auto-calculated from pricing rules
-  pricingRuleId: { type: mongoose.Schema.Types.ObjectId, ref: 'PetPricing' },
   quantity: { type: Number, min: 0, default: 1 },
 
   // Status within petshop
@@ -96,7 +94,7 @@ petInventoryItemSchema.virtual('images', {
 });
 
 // Include virtuals in JSON/Object outputs
-petInventoryItemSchema.set('toJSON', { virtuals: true })
+petInventoryItemSchema.set('toJSON', { virtuals: true });
 petInventoryItemSchema.set('toObject', { virtuals: true })
 
 // Pre-save: assign petCode if missing using centralized generator
@@ -104,7 +102,7 @@ petInventoryItemSchema.pre('save', async function(next) {
   try {
     if (!this.petCode) {
       console.log('Generating petCode for single item');
-      const PetCodeGenerator = require('../../../core/utils/petCodeGenerator')
+      const PetCodeGenerator = require('../../../../core/utils/petCodeGenerator')
       this.petCode = await PetCodeGenerator.generateUniquePetCode()
       console.log('Generated petCode:', this.petCode);
     }
@@ -137,7 +135,7 @@ petInventoryItemSchema.pre('insertMany', async function(next, docs) {
     }
     
     console.log('Generating petCodes for bulk insert, docs count:', docs.length);
-    const PetCodeGenerator = require('../../../core/utils/petCodeGenerator')
+    const PetCodeGenerator = require('../../../../core/utils/petCodeGenerator')
     
     // Generate all codes first to avoid potential conflicts
     const codePromises = [];
@@ -176,37 +174,35 @@ petInventoryItemSchema.pre('insertMany', async function(next, docs) {
 })
 
 // Method to calculate price using pricing rules
-petInventoryItemSchema.methods.calculatePriceFromRules = async function() {
-  const PetPricing = require('./PetPricing');
-  
-  // Find applicable pricing rule
-  const pricingRule = await PetPricing.findOne({
-    categoryId: this.categoryId,
-    speciesId: this.speciesId,
-    breedId: this.breedId,
-    storeId: this.storeId,
-    isActive: true
-  });
-  
-  if (pricingRule) {
-    const petAttributes = {
-      age: this.age,
-      ageUnit: this.ageUnit,
-      size: this.size,
-      gender: this.gender,
-      specialAttributes: this.specialAttributes
-    };
-    
-    this.calculatedPrice = pricingRule.calculatePrice(petAttributes);
-    this.pricingRuleId = pricingRule._id;
-    
-    // Use calculated price if no manual price is set
-    if (!this.price || this.price === 0) {
-      this.price = this.calculatedPrice;
-    }
-  }
-  
-  return this.calculatedPrice;
-};
+// petInventoryItemSchema.methods.calculatePriceFromRules = async function() {
+//   // Find applicable pricing rule
+//   // const pricingRule = await PetPricing.findOne({
+//   //   categoryId: this.categoryId,
+//   //   speciesId: this.speciesId,
+//   //   breedId: this.breedId,
+//   //   storeId: this.storeId,
+//   //   isActive: true
+//   // });
+//   
+//   // if (pricingRule) {
+//   //   const petAttributes = {
+//   //     age: this.age,
+//   //     ageUnit: this.ageUnit,
+
+//   //     gender: this.gender,
+//   //     specialAttributes: this.specialAttributes
+//   //   };
+//   //   
+//   //   this.calculatedPrice = pricingRule.calculatePrice(petAttributes);
+//   //   this.pricingRuleId = pricingRule._id;
+//   //   
+//   //   // Use calculated price if no manual price is set
+//   //   if (!this.price || this.price === 0) {
+//   //     this.price = this.calculatedPrice;
+//   //   }
+//   // }
+//   
+//   return this.calculatedPrice;
+// };
 
 module.exports = mongoose.model('PetInventoryItem', petInventoryItemSchema)

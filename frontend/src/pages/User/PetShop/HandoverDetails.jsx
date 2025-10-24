@@ -37,14 +37,11 @@ import {
   Refresh as RefreshIcon,
   Info as InfoIcon
 } from '@mui/icons-material'
-import { petShopAPI } from '../../../services/api'
+import { petShopAPI, resolveMediaUrl } from '../../../services/api'
 
 const buildImageUrl = (url) => {
   if (!url) return '/placeholder-pet.svg'
-  if (/^https?:\/\//i.test(url)) return url
-  const apiBase = import.meta.env.VITE_API_URL || process.env.REACT_APP_API_URL || 'http://localhost:5000/api'
-  const origin = apiBase.replace(/\/?api\/?$/, '')
-  return `${origin}${url.startsWith('/') ? '' : '/'}${url}`
+  return resolveMediaUrl(url)
 }
 
 const HandoverDetails = () => {

@@ -20,7 +20,10 @@ import {
   ListItemIcon,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  ImageList,
+  ImageListItem,
+  ImageListItemBar
 } from '@mui/material'
 import {
   ArrowBack as ArrowBackIcon,
@@ -36,9 +39,10 @@ import {
   Home as HomeIcon,
   Store as StoreIcon,
   ExpandMore as ExpandMoreIcon,
-  Visibility as ViewIcon
+  Visibility as ViewIcon,
+  Image as ImageIcon
 } from '@mui/icons-material'
-import { apiClient } from '../../../services/api'
+import { apiClient, resolveMediaUrl } from '../../../services/api'
 
 const PetHistory = () => {
   const { petId } = useParams()
@@ -55,18 +59,39 @@ const PetHistory = () => {
   const fetchPetHistory = async () => {
     try {
       setLoading(true)
-      const [historyResponse, petResponse] = await Promise.all([
-        apiClient.get(`/petshop/manager/pets/${petId}/history`),
-        apiClient.get(`/petshop/inventory/${petId}`)
-      ])
+      // Fix: Use the correct endpoints for manager and get pet details from history response
+      const historyResponse = await apiClient.get(`/petshop/manager/pet-history/${petId}`)
       
+      // Use pet details from history response
       setHistory(historyResponse.data.data.history || [])
-      setPetDetails(petResponse.data.data.item || null)
+      setPetDetails(historyResponse.data.data.pet || null)
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load pet history')
     } finally {
       setLoading(false)
     }
+  }
+
+  // Helper function to build proper image URLs
+  const buildImageUrl = (url) => {
+    if (!url) return null
+    return resolveMediaUrl(url)
+  }
+
+  // Helper function to get pet image
+  const getPetImage = (pet) => {
+    if (pet.images && pet.images.length > 0) {
+      // Try to get the primary image first
+      const primaryImage = pet.images.find(img => img.isPrimary);
+      if (primaryImage && primaryImage.url) {
+        return buildImageUrl(primaryImage.url);
+      }
+      // Fallback to first image
+      if (pet.images[0].url) {
+        return buildImageUrl(pet.images[0].url);
+      }
+    }
+    return null;
   }
 
   const getEventIcon = (eventType) => {
@@ -166,9 +191,12 @@ const PetHistory = () => {
                     <Typography variant="body1" color="text.secondary">
                       Pet Code: {petDetails.petCode}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Status: <Chip label={petDetails.status} size="small" />
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Status:
+                      </Typography>
+                      <Chip label={petDetails.status} size="small" />
+                    </Box>
                   </Box>
                 </Box>
               </Grid>
@@ -183,6 +211,37 @@ const PetHistory = () => {
                 </Box>
               </Grid>
             </Grid>
+
+            {/* Pet Images */}
+            {petDetails.images && petDetails.images.length > 0 && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <ImageIcon /> Pet Images
+                </Typography>
+                <ImageList sx={{ width: '100%', maxHeight: 200 }} cols={4} rowHeight={164}>
+                  {petDetails.images.map((image) => (
+                    <ImageListItem key={image._id}>
+                      <img
+                        src={buildImageUrl(image.url)}
+                        alt={image.caption || 'Pet image'}
+                        loading="lazy"
+                        style={{ objectFit: 'cover', height: '100%', width: '100%' }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
+                      />
+                      {image.caption && (
+                        <ImageListItemBar
+                          title={image.caption}
+                          position="below"
+                        />
+                      )}
+                    </ImageListItem>
+                  ))}
+                </ImageList>
+              </Box>
+            )}
           </CardContent>
         </Card>
       )}

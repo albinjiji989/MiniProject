@@ -9,6 +9,7 @@ router.get('/my-pets', auth, petController.getOwnedPets);
 router.post('/', auth, petController.createPet);
 router.get('/', auth, petController.getPets);
 router.get('/:id', auth, petController.getPetById);
+router.get('/registry/:id', auth, petController.getRegistryPetById);
 router.put('/:id', auth, petController.updatePet);
 router.delete('/:id', auth, petController.deletePet);
 

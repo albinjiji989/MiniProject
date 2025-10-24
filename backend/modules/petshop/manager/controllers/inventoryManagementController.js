@@ -1,10 +1,9 @@
 const PetInventoryItem = require('../models/PetInventoryItem');
 const PetShop = require('../models/PetShop');
-const Pet = require('../../../core/models/Pet');
-const User = require('../../../core/models/User');
+const User = require('../../../../core/models/User');
 const PetReservation = require('../../user/models/PetReservation');
-const { getStoreFilter } = require('../../../core/utils/storeFilter');
-const { generateStoreId } = require('../../../core/utils/storeIdGenerator');
+const { getStoreFilter } = require('../../../../core/utils/storeFilter');
+const { generateStoreId } = require('../../../../core/utils/storeIdGenerator');
 const logger = require('winston');
 
 // Log controller actions with user context and operation details

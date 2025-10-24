@@ -1,6 +1,6 @@
-# Adoption System Management Scripts
+# System Management Scripts
 
-This directory contains utility scripts to help manage the adoption system, especially when dealing with large numbers of pets.
+This directory contains utility scripts to help manage the system, especially when dealing with large numbers of pets and data cleanup operations.
 
 ## Scripts Overview
 
@@ -139,6 +139,48 @@ For adding many pets at once:
 ```bash
 node scripts/bulkAddAdoptionPets.js --dryRun true  # Test first
 node scripts/bulkAddAdoptionPets.js --dryRun false # Then execute
+```
+
+## PetShop Cleanup Scripts
+
+### 1. `cleanup-petshop-completely.js`
+Completely remove all petshop data including inventory items, reservations, shops, wishlists, reviews, orders, and associated images.
+
+**Usage:**
+```bash
+node cleanup-petshop-completely.js
+```
+
+### 2. `cleanup-petshop-data.js`
+Remove petshop inventory items and associated images.
+
+**Usage:**
+```bash
+node cleanup-petshop-data.js
+```
+
+### 3. `cleanup-petshop-user-pets.js`
+Remove user pets that were created through the petshop module.
+
+**Usage:**
+```bash
+node cleanup-petshop-user-pets.js
+```
+
+### 4. `cleanup-all-petshop-data.js`
+Run all petshop cleanup operations in sequence.
+
+**Usage:**
+```bash
+node cleanup-all-petshop-data.js
+```
+
+### 5. `verify-petshop-cleanup.js`
+Verify that all petshop data has been removed from the database.
+
+**Usage:**
+```bash
+node verify-petshop-cleanup.js
 ```
 
 ## Best Practices

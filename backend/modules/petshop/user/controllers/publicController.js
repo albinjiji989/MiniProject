@@ -16,9 +16,20 @@ const listPublicListings = async (req, res) => {
     if (minPrice) filter.price.$gte = Number(minPrice);
     if (maxPrice) filter.price.$lte = Number(maxPrice);
     const items = await PetInventoryItem.find(filter)
+      .populate('imageIds') // Populate images
+      .populate('speciesId', 'name')
+      .populate('breedId', 'name')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
+    
+    // Manually populate the virtual 'images' field for each item
+    for (const item of items) {
+      await item.populate('images');
+      // Debug log to see what's happening with images
+      console.log(`Pet ${item._id}: imageIds=${item.imageIds?.length || 0}, images=${item.images?.length || 0}`);
+    }
+    
     const total = await PetInventoryItem.countDocuments(filter);
     res.json({ success: true, data: { items, pagination: { current: parseInt(page), pages: Math.ceil(total / limit), total } } });
   } catch (e) {
@@ -65,12 +76,16 @@ const getPublicListingById = async (req, res) => {
       .populate('speciesId', 'name')
       .populate('breedId', 'name')
       .populate('storeId', 'name address')
+      .populate('imageIds') // Populate images
     
     console.log('Found item:', item ? { id: item._id, status: item.status, name: item.name } : 'null')
     
     if (!item) {
       return res.status(404).json({ success: false, message: 'Pet not found' })
     }
+    
+    // Manually populate the virtual 'images' field
+    await item.populate('images');
     
     // Allow viewing of pets that are available, reserved, or sold (for transparency)
     if (!['available_for_sale', 'reserved', 'sold'].includes(item.status)) {
@@ -99,8 +114,13 @@ const getUserAccessibleItemById = async (req, res) => {
     const item = await PetInventoryItem.findById(req.params.id)
       .populate('speciesId', 'name displayName')
       .populate('breedId', 'name')
+      .populate('imageIds') // Populate images
+      
     if (!item) return res.status(404).json({ success: false, message: 'Item not found' })
 
+    // Manually populate the virtual 'images' field
+    await item.populate('images');
+    
     if (item.isActive && item.status === 'available_for_sale') {
       return res.json({ success: true, data: { item } })
     }
@@ -172,9 +192,23 @@ const listMyWishlist = async (req, res) => {
     const wishlistItems = await Wishlist.find({ userId: req.user._id })
       .populate({
         path: 'itemId',
-        select: 'name price images storeName'
+        select: 'name price images storeName',
+        populate: [
+          { path: 'speciesId', select: 'name' },
+          { path: 'breedId', select: 'name' },
+          { path: 'imageIds' } // Populate imageIds
+        ]
       })
       .sort({ createdAt: -1 });
+
+    // Manually populate the virtual 'images' field for each wishlist item
+    for (const wishlistItem of wishlistItems) {
+      if (wishlistItem.itemId) {
+        await wishlistItem.itemId.populate('images');
+        // Debug log to see what's happening with images
+        console.log(`Wishlist item ${wishlistItem._id}: imageIds=${wishlistItem.itemId.imageIds?.length || 0}, images=${wishlistItem.itemId.images?.length || 0}`);
+      }
+    }
 
     res.json({
       success: true,
@@ -293,11 +327,18 @@ const listShopReviews = async (req, res) => {
     
     const reviews = await Review.find({ shopId, type: 'shop' })
       .populate('userId', 'name avatar')
-      .populate('itemId', 'name images')
+      .populate('itemId', 'name images', null, { populate: [{ path: 'imageIds' }] })
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
       
+    // Manually populate the virtual 'images' field for each item
+    for (const review of reviews) {
+      if (review.itemId) {
+        await review.itemId.populate('images');
+      }
+    }
+    
     const total = await Review.countDocuments({ shopId, type: 'shop' });
 
     res.json({
@@ -357,6 +398,7 @@ const createPurchaseReservation = async (req, res) => {
 
     // Check if item exists and is available
     const item = await PetInventoryItem.findById(itemId);
+    console.log('Item found for reservation:', { itemId, item: item ? { id: item._id, storeId: item.storeId, name: item.name } : null });
     if (!item) {
       return res.status(404).json({
         success: false,
@@ -376,8 +418,9 @@ const createPurchaseReservation = async (req, res) => {
     const reservationData = {
       userId,
       itemId,
+      // Simplified reservation type
+      reservationType: 'reservation',
       status: 'pending',
-      reservationType: reservationType || 'direct_purchase',
       contactInfo: {
         phone: contactInfo?.phone,
         email: contactInfo?.email,
@@ -391,6 +434,11 @@ const createPurchaseReservation = async (req, res) => {
         notes: 'Reservation created by user'
       }]
     };
+    
+    console.log('Reservation type mapping:', { 
+      frontendType: reservationType, 
+      backendType: reservationData.reservationType 
+    }); // Debug log
 
     // Add visit details if provided
     if (visitDetails) {
@@ -417,17 +465,25 @@ const createPurchaseReservation = async (req, res) => {
 
     // Create reservation
     const reservation = new PetReservation(reservationData);
+    console.log('Creating reservation with data:', reservationData); // Debug log
 
     await reservation.save();
+    console.log('Saved reservation:', reservation); // Debug log
+    console.log('Reservation code after save:', reservation.reservationCode); // Debug log
 
     // Update item status to reserved
     item.status = 'reserved';
     await item.save();
 
     // Populate item and user info for response
-    await reservation.populate('itemId', 'name price images petCode storeId');
+    await reservation.populate('itemId', 'name price images petCode storeId', null, { populate: [{ path: 'imageIds' }] });
     await reservation.populate('userId', 'name email');
-
+    
+    // Manually populate the virtual 'images' field
+    if (reservation.itemId) {
+      await reservation.itemId.populate('images');
+    }
+    
     // Send notification to pet shop manager
     // In a real implementation, this would send an email/SMS to the manager
     console.log(`New reservation created for pet ${item.name} (${item.petCode}) by user ${req.user.name}`);
@@ -442,7 +498,7 @@ const createPurchaseReservation = async (req, res) => {
     });
   } catch (e) {
     console.error('Create purchase reservation error:', e);
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ success: false, message: 'Server error: ' + e.message });
   }
 };
 

@@ -55,9 +55,23 @@ const listMyWishlist = async (req, res) => {
     const wishlistItems = await Wishlist.find({ userId: req.user._id })
       .populate({
         path: 'itemId',
-        select: 'name price images storeName'
+        select: 'name price images storeName',
+        populate: [
+          { path: 'speciesId', select: 'name' },
+          { path: 'breedId', select: 'name' },
+          { path: 'imageIds' } // Populate imageIds
+        ]
       })
       .sort({ createdAt: -1 });
+
+    // Manually populate the virtual 'images' field for each wishlist item
+    for (const wishlistItem of wishlistItems) {
+      if (wishlistItem.itemId) {
+        await wishlistItem.itemId.populate('images');
+        // Debug log to see what's happening with images
+        console.log(`Wishlist item ${wishlistItem._id}: imageIds=${wishlistItem.itemId.imageIds?.length || 0}, images=${wishlistItem.itemId.images?.length || 0}`);
+      }
+    }
 
     res.json({
       success: true,

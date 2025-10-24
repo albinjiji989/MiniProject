@@ -46,6 +46,7 @@ import {
 } from '@mui/icons-material'
 import { petShopManagerAPI, apiClient } from '../../services/api'
 import InvoiceTemplate from '../../components/PetShop/InvoiceTemplate'
+import { resolveMediaUrl } from '../../services/api'
 
 const PetShopManagerDashboard = () => {
   const [activeTab, setActiveTab] = useState(0)
@@ -144,6 +145,16 @@ const PetShopManagerDashboard = () => {
     }
   }
 
+  const buildImageUrl = (url) => {
+    if (!url) return '/placeholder-pet.svg'
+    // Support base64 data URLs
+    if (/^data:image\//i.test(url)) return url
+    // If absolute URL, return directly
+    if (/^https?:\/\//i.test(url)) return url
+    // If relative (like /modules/petshop/uploads/...), prefix backend origin
+    return resolveMediaUrl(url)
+  }
+
   const renderDashboardOverview = () => (
     <Grid container spacing={3}>
       <Grid item xs={12} sm={6} md={3}>
@@ -198,6 +209,35 @@ const PetShopManagerDashboard = () => {
                 <Typography variant="body2" color="text.secondary">Pending Deliveries</Typography>
               </Box>
             </Box>
+          </CardContent>
+        </Card>
+      </Grid>
+      
+      {/* Gender Statistics */}
+      <Grid item xs={12}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>Inventory by Gender</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={4}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                  <Typography>Male</Typography>
+                  <Typography variant="h5" color="primary">{stats.genderStats?.Male || 0}</Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                  <Typography>Female</Typography>
+                  <Typography variant="h5" color="secondary">{stats.genderStats?.Female || 0}</Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                  <Typography>Unknown</Typography>
+                  <Typography variant="h5" color="text.secondary">{stats.genderStats?.Unknown || 0}</Typography>
+                </Box>
+              </Grid>
+            </Grid>
           </CardContent>
         </Card>
       </Grid>

@@ -29,11 +29,11 @@ const petReservationSchema = new mongoose.Schema({
     default: 'pending' 
   },
   
-  // Reservation type
+  // Reservation type - simplified to remove online/offline distinction
   reservationType: {
     type: String,
-    enum: ['online_booking', 'offline_verification', 'direct_purchase'],
-    default: 'online_booking'
+    enum: ['reservation'], // Simplified to just 'reservation'
+    default: 'reservation'
   },
   
   // Contact and visit details
@@ -46,7 +46,7 @@ const petReservationSchema = new mongoose.Schema({
   visitDetails: {
     preferredDate: { type: Date },
     preferredTime: { type: String }, // e.g., "morning", "afternoon", "evening"
-    visitPurpose: { type: String, enum: ['meet_pet', 'final_purchase', 'health_check'], default: 'meet_pet' }
+    visitPurpose: { type: String, enum: ['meet_pet', 'final_purchase'], default: 'meet_pet' }
   },
   
   // Manager review
@@ -148,12 +148,30 @@ petReservationSchema.statics.generateReservationCode = async function() {
 
   let code
   let exists = true
-  while (exists) {
+  let attempts = 0
+  
+  // Try to generate a unique code with better collision avoidance
+  while (exists && attempts < 5) { // Limit attempts to prevent infinite loop
     code = `R${randomLetters()}${randomNumber()}` // Format: RAA12345
+    console.log('Attempting to generate code:', code); // Debug log
     
     // Check collision in reservation system
     exists = await this.exists({ reservationCode: code })
+    console.log('Code exists:', exists); // Debug log
+    attempts++
   }
+  
+  // If we still have collision, use a more unique approach
+  if (exists) {
+    // Use timestamp + random + user ID fragment for better uniqueness
+    const timestampPart = Date.now().toString().slice(-4)
+    const randomPart = Math.floor(1000 + Math.random() * 9000).toString()
+    const userPart = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
+    code = `R${timestampPart}${randomPart}${userPart}` // Format: R12345678901
+    console.log('Using highly unique fallback code:', code); // Debug log
+  }
+  
+  console.log('Final generated code:', code); // Debug log
   return code
 }
 
@@ -162,6 +180,7 @@ petReservationSchema.pre('save', async function(next) {
   if (!this.reservationCode) {
     const Model = this.constructor
     this.reservationCode = await Model.generateReservationCode()
+    console.log('Generated reservation code:', this.reservationCode); // Debug log
   }
   
   // Add to timeline when status changes

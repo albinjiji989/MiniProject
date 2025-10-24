@@ -62,6 +62,41 @@ const PurchaseDecision = () => {
     loadReservation()
   }, [reservationId])
 
+  // Redirect user to appropriate page if reservation status is not valid for purchase decision
+  useEffect(() => {
+    if (reservation && reservation.status) {
+      const validStatuses = ['approved'];
+      if (!validStatuses.includes(reservation.status)) {
+        // Redirect based on current status
+        switch (reservation.status) {
+          case 'pending':
+          case 'manager_review':
+            // Stay on current page, these statuses are valid for making a decision
+            break;
+          case 'going_to_buy':
+          case 'payment_pending':
+            // Redirect to payment page
+            navigate(`/User/petshop/payment/${reservationId}`);
+            break;
+          case 'paid':
+          case 'ready_pickup':
+          case 'completed':
+            // Redirect to handover page
+            navigate(`/User/petshop/handover/${reservationId}`);
+            break;
+          case 'cancelled':
+          case 'rejected':
+            // Redirect to reservations list
+            navigate('/User/petshop/reservations');
+            break;
+          default:
+            // For any other status, redirect to reservation details
+            navigate(`/User/petshop/reservations/${reservationId}`);
+        }
+      }
+    }
+  }, [reservation, reservationId, navigate]);
+
   const formatAge = (age, ageUnit) => {
     if (!age) return 'Age not specified'
     if (ageUnit === 'months' && age >= 12) {
@@ -81,6 +116,16 @@ const PurchaseDecision = () => {
       setProcessing(true)
       setConfirmationDialogOpen(false)
       
+      // Check if reservation status is still valid before submitting
+      if (reservation && reservation.status) {
+        const validStatuses = ['approved'];
+        if (!validStatuses.includes(reservation.status)) {
+          setError(`Reservation status is ${reservation.status}, but must be 'approved' to confirm purchase decision`);
+          setProcessing(false);
+          return;
+        }
+      }
+      
       const payload = {
         wantsToBuy: decision === 'proceed',
         notes: notes
@@ -88,15 +133,13 @@ const PurchaseDecision = () => {
       
       await petShopAPI.confirmPurchaseDecision(reservationId, payload)
       
-      // Refresh reservation data
-      await loadReservation()
-      
       // Show success message
-      alert(`Your decision has been recorded successfully!`)
+      alert(`Your decision has been recorded successfully! ${decision === 'proceed' ? 'Please wait for manager approval before proceeding to payment.' : 'Your reservation has been cancelled.'}`)
       
-      // If user wants to proceed, redirect to reservation details
+      // If user wants to proceed, don't redirect to payment yet - they need to wait for manager approval
       if (decision === 'proceed') {
-        navigate(`/User/petshop/reservation/${reservationId}`)
+        // Just refresh the reservation data to show updated status
+        loadReservation()
       } else {
         // If user wants to cancel, redirect to reservations list
         navigate('/User/petshop/reservations')
@@ -149,7 +192,7 @@ const PurchaseDecision = () => {
           Purchase Decision
         </Typography>
         <Typography variant="subtitle1" color="text.secondary">
-          Reservation {reservation.reservationCode} - Payment Successful
+          Reservation {reservation.reservationCode} - Make Your Purchase Decision
         </Typography>
       </Box>
 
@@ -203,7 +246,7 @@ const PurchaseDecision = () => {
             <CardContent>
               <Typography variant="h6" gutterBottom>What would you like to do?</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Your payment has been processed successfully. Please confirm your decision to proceed with the purchase or cancel.
+                Please confirm your decision to proceed with the purchase or cancel. After confirmation, please wait for manager approval before proceeding to payment.
               </Typography>
               
               <FormControl component="fieldset" fullWidth>
@@ -300,19 +343,19 @@ const PurchaseDecision = () => {
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <CheckIcon color="success" />
                     <Typography variant="body2">
-                      Your purchase will be confirmed and the pet will be prepared for pickup
+                      Your purchase decision has been recorded
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <ScheduleIcon color="primary" />
                     <Typography variant="body2">
-                      You will receive a pickup schedule within 24 hours
+                      Please wait for manager approval before proceeding to payment
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <InfoIcon color="primary" />
                     <Typography variant="body2">
-                      Bring valid ID and proof of address for verification
+                      You will receive a notification when payment can be initiated
                     </Typography>
                   </Box>
                 </Box>
@@ -321,13 +364,13 @@ const PurchaseDecision = () => {
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <InfoIcon color="primary" />
                     <Typography variant="body2">
-                      Your purchase will be cancelled and refund initiated
+                      Your reservation will be cancelled and the pet will be available for others
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <ScheduleIcon color="primary" />
                     <Typography variant="body2">
-                      Refund will be processed to your original payment method
+                      If you've already paid, refund will be processed to your original payment method
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>

@@ -21,6 +21,7 @@ const getManagerDashboardStats = async (req, res) => {
   try {
     const storeFilter = getStoreFilter(req.user);
     
+    // Get basic stats
     const [totalReservations, paidOrders, totalRevenue, pendingDeliveries] = await Promise.all([
       PetReservation.countDocuments({ ...storeFilter }),
       PetReservation.countDocuments({ ...storeFilter, status: { $in: ['paid', 'delivered', 'at_owner'] } }),
@@ -31,13 +32,31 @@ const getManagerDashboardStats = async (req, res) => {
       PetReservation.countDocuments({ ...storeFilter, status: 'ready_pickup' })
     ]);
     
+    // Get gender statistics for inventory items
+    const genderStats = await PetInventoryItem.aggregate([
+      { $match: { ...storeFilter } },
+      {
+        $group: {
+          _id: '$gender',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    // Format gender stats
+    const genderData = {};
+    genderStats.forEach(stat => {
+      genderData[stat._id || 'Unknown'] = stat.count;
+    });
+    
     res.json({
       success: true,
       data: {
         totalReservations,
         paidOrders,
         totalRevenue: totalRevenue[0]?.total || 0,
-        pendingDeliveries
+        pendingDeliveries,
+        genderStats: genderData
       }
     });
   } catch (err) {
@@ -55,11 +74,18 @@ const getManagerOrders = async (req, res) => {
     if (status) query.status = status;
     
     const orders = await PetReservation.find(query)
-      .populate('itemId', 'name petCode price images')
+      .populate('itemId', 'name petCode price images', null, { populate: [{ path: 'imageIds' }] })
       .populate('userId', 'name email phone')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
+      
+    // Manually populate the virtual 'images' field for each item
+    for (const order of orders) {
+      if (order.itemId) {
+        await order.itemId.populate('images');
+      }
+    }
     
     const total = await PetReservation.countDocuments(query);
     
@@ -132,10 +158,15 @@ const generateInvoice = async (req, res) => {
       _id: reservationId,
       ...storeFilter
     })
-    .populate('itemId', 'name petCode price images speciesId breedId')
+    .populate('itemId', 'name petCode price images speciesId breedId', null, { populate: [{ path: 'imageIds' }] })
     .populate('userId', 'name email phone address')
     .populate('itemId.speciesId', 'name')
     .populate('itemId.breedId', 'name');
+    
+    // Manually populate the virtual 'images' field
+    if (reservation && reservation.itemId) {
+      await reservation.itemId.populate('images');
+    }
     
     if (!reservation) {
       return res.status(404).json({ success: false, message: 'Reservation not found' });

@@ -17,7 +17,7 @@ export const API_ORIGIN = (() => {
 // Helper to resolve media URLs that backend returns as relative paths
 // Example: '/modules/petshop/uploads/file.jpg' -> 'http://localhost:5000/modules/petshop/uploads/file.jpg'
 export const resolveMediaUrl = (pathOrUrl) => {
-  if (!pathOrUrl) return ''
+  if (!pathOrUrl) return '/placeholder-pet.svg'
   try {
     // If it's already absolute, keep it
     const u = new URL(pathOrUrl)
@@ -145,6 +145,7 @@ export const usersAPI = {
 export const petsAPI = {
   getPets: (params) => api.get('/pets', { params }),
   getPet: (id) => api.get(`/pets/${id}`),
+  getRegistryPet: (id) => api.get(`/pets/registry/${id}`),
   createPet: (petData) => api.post('/pets', petData),
   updatePet: (id, petData) => api.put(`/pets/${id}`, petData),
   deletePet: (id) => api.delete(`/pets/${id}`),
@@ -253,10 +254,14 @@ export const petShopAPI = {
     form.append('isPrimary', String(isPrimary))
     return api.post(`/petshop/inventory/${id}/images`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
+  // Manager: Reservations
+  listReservations: (params) => api.get('/petshop/manager/reservations/enhanced', { params }),
   // Public listings (mounted under /petshop/user/... on backend)
   listPublicListings: (params) => api.get('/petshop/user/public/listings', { params }),
   getPublicListing: (id) => api.get(`/petshop/user/public/listings/${id}`),
-  // Public shops (user-facing; no auth required but under /user prefix)
+  // Add the missing method for user-accessible items
+  getUserAccessibleItem: (id) => api.get(`/petshop/user/listings/${id}`),
+// Public shops (user-facing; no auth required but under /user prefix)
   listPublicShops: (params) => api.get('/petshop/user/public/shops', { params }),
   // User dashboard stats
   getUserStats: () => api.get('/petshop/user/stats'),
@@ -266,8 +271,8 @@ export const petShopAPI = {
   getReservationById: (id) => api.get(`/petshop/user/public/reservations/${id}`),
   cancelReservation: (id) => api.post(`/petshop/user/public/reservations/${id}/cancel`),
   // Payments - Razorpay
-  createRazorpayOrder: (payload) => api.post('/petshop/payments/razorpay/order', payload),
-  verifyRazorpay: (payload) => api.post('/petshop/payments/razorpay/verify', payload),
+  createRazorpayOrder: (payload) => api.post('/petshop/user/payments/razorpay/order', payload),
+  verifyRazorpay: (payload) => api.post('/petshop/user/payments/razorpay/verify', payload),
   // Wishlist
   addToWishlist: (itemId) => api.post('/petshop/user/public/wishlist', { itemId }),
   listMyWishlist: () => api.get('/petshop/user/public/wishlist'),
@@ -282,7 +287,11 @@ export const petShopAPI = {
   // Manager: Store name change
   requestStoreNameChange: (requestedStoreName, reason='') => api.post('/petshop/manager/store-name-change', { requestedStoreName, reason }),
   // User decision routes
-  confirmPurchaseDecision: (reservationId, payload) => api.post(`/petshop/reservations/${reservationId}/confirm-purchase`, payload),
+  confirmPurchaseDecision: (reservationId, payload) => api.post(`/petshop/user/reservations/${reservationId}/confirm-purchase`, payload),
+  // Handover functions
+  scheduleHandover: (reservationId, data) => api.post(`/petshop/user/payments/handover/${reservationId}/schedule`, data),
+  completeHandover: (reservationId, data) => api.post(`/petshop/user/payments/handover/${reservationId}/complete`, data),
+  regenerateHandoverOTP: (reservationId) => api.post(`/petshop/user/payments/handover/${reservationId}/regenerate-otp`),
 }
 
 // Rescue API
@@ -305,6 +314,9 @@ export const ecommerceAPI = {
   updateOrderStatus: (id, statusData) => api.put(`/ecommerce/orders/${id}/status`, statusData),
   getAnalyticsSummary: () => api.get('/ecommerce/admin/analytics/summary'),
   getSalesSeries: (days = 14) => api.get('/ecommerce/admin/analytics/sales-series', { params: { days } }),
+  // Add missing methods for EcommerceDashboard
+  listProducts: (params) => api.get('/ecommerce/catalog/products', { params }),
+  listOrders: (params) => api.get('/ecommerce/orders', { params }),
 }
 
 // Ecommerce Public + Cart API
@@ -357,8 +369,14 @@ export const petShopManagerAPI = {
   getOrders: (params) => api.get('/petshop/manager/orders', { params }),
   getSalesReport: (params) => api.get('/petshop/manager/sales-report', { params }),
   // Reservations
-  listReservations: (params) => api.get('/petshop/reservations', { params }),
-  updateReservationStatus: (id, status, notes) => api.put(`/petshop/manager/reservations/${id}`, { status, notes }),
+  listReservations: (params) => api.get('/petshop/manager/reservations/enhanced', { params }),
+  updateReservationStatus: (id, status, notes) => api.put(`/petshop/manager/reservations/${id}/status`, { status, notes }),
+  updateDeliveryStatus: (id, status, deliveryNotes) => api.put(`/petshop/manager/reservations/${id}/delivery`, { status, deliveryNotes, actualDate: new Date().toISOString() }),
+  generateInvoice: (id) => api.get(`/petshop/manager/reservations/${id}/invoice`),
+  // Reservations
+  getReservationById: (id) => api.get(`/petshop/manager/reservations/${id}`),
+  listReservations: (params) => api.get('/petshop/manager/reservations/enhanced', { params }),
+  updateReservationStatus: (id, status, notes) => api.put(`/petshop/manager/reservations/${id}/status`, { status, notes }),
   updateDeliveryStatus: (id, status, deliveryNotes) => api.put(`/petshop/manager/reservations/${id}/delivery`, { status, deliveryNotes, actualDate: new Date().toISOString() }),
   generateInvoice: (id) => api.get(`/petshop/manager/reservations/${id}/invoice`),
   // Handover with OTP
@@ -367,6 +385,8 @@ export const petShopManagerAPI = {
   regenerateHandoverOTP: (id) => api.post(`/petshop/manager/reservations/${id}/handover/regenerate-otp`),
   generateHandoverOTP: (id) => api.post(`/petshop/manager/reservations/${id}/handover/generate-otp`),
   verifyHandoverOTP: (id, otp) => api.post(`/petshop/manager/reservations/${id}/handover/verify-otp`, { otp }),
+  // Payment approval
+  approvePayment: (id, data) => api.post(`/petshop/manager/reservations/${id}/approve-payment`, data),
 }
 
 // Pharmacy API
@@ -414,6 +434,9 @@ export const temporaryCareAPI = {
   listMyRequests: () => api.get('/temporary-care/user/requests'),
   listMyActiveCare: () => api.get('/temporary-care/user/my-active-care'),
   listPublicCenters: () => api.get('/temporary-care/user/public/centers'),
+  // Add missing methods for TemporaryCareDashboard
+  listHosts: () => api.get('/temporary-care/user/public/centers'),
+  listMyStays: () => api.get('/temporary-care/user/my-active-care'),
 }
 
 // Veterinary API

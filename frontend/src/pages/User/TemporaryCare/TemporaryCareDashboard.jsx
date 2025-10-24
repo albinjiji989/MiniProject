@@ -6,13 +6,31 @@ import { temporaryCareAPI } from '../../../services/api'
 export default function TemporaryCareDashboard() {
   const [hosts, setHosts] = useState([])
   const [stays, setStays] = useState([])
+  const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState('overview')
 
   useEffect(() => {
-    // TODO: replace with real API when available
-    setHosts([])
-    setStays([])
+    loadData()
   }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      // Load hosts
+      const hostsRes = await temporaryCareAPI.listHosts()
+      setHosts(hostsRes.data?.data?.hosts || [])
+      
+      // Load stays
+      const staysRes = await temporaryCareAPI.listMyStays()
+      setStays(staysRes.data?.data?.stays || [])
+    } catch (error) {
+      console.error('Error loading temporary care data:', error)
+      setHosts([])
+      setStays([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const actions = [
     { label: 'Find Host', onClick: () => setTab('find'), color: 'bg-emerald-600' },
@@ -60,6 +78,14 @@ export default function TemporaryCareDashboard() {
           <div className="font-semibold">{h.name || 'Host'}</div>
           <div className="text-gray-600 text-sm">{h.city || '-'}</div>
           <div className="text-xs text-gray-500 mt-1">Capacity: {h.capacity || '-'}</div>
+          <div className="mt-2">
+            <button 
+              className="px-3 py-1 bg-emerald-600 text-white rounded text-sm"
+              onClick={() => window.location.href = `/User/temporary-care/hosts/${h._id}`}
+            >
+              View Details
+            </button>
+          </div>
         </div>
       ))}
       {hosts.length===0 && <div className="text-gray-500">No hosts available.</div>}
@@ -83,9 +109,18 @@ export default function TemporaryCareDashboard() {
             <tr key={i} className="border-b">
               <td className="py-2 px-3">{s.petName || 'Pet'}</td>
               <td className="py-2 px-3">{s.hostName || '-'}</td>
-              <td className="py-2 px-3">{s.from || '-'}</td>
-              <td className="py-2 px-3">{s.to || '-'}</td>
-              <td className="py-2 px-3">{s.status || '-'}</td>
+              <td className="py-2 px-3">{s.from ? new Date(s.from).toLocaleDateString() : '-'}</td>
+              <td className="py-2 px-3">{s.to ? new Date(s.to).toLocaleDateString() : '-'}</td>
+              <td className="py-2 px-3">
+                <span className={`px-2 py-1 rounded text-xs ${
+                  s.status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                  s.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                  s.status === 'completed' ? 'bg-blue-100 text-blue-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {s.status || '-'}
+                </span>
+              </td>
             </tr>
           ))}
           {stays.length===0 && <tr><td className="py-3 px-3 text-gray-500" colSpan={5}>No stays found.</td></tr>}
@@ -104,9 +139,17 @@ export default function TemporaryCareDashboard() {
       activeTab={tab}
       onTabChange={setTab}
     >
-      {tab === 'overview' && <Overview />}
-      {tab === 'find' && <Find />}
-      {tab === 'stays' && <MyStays />}
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        </div>
+      ) : (
+        <>
+          {tab === 'overview' && <Overview />}
+          {tab === 'find' && <Find />}
+          {tab === 'stays' && <MyStays />}
+        </>
+      )}
     </ModuleDashboardLayout>
   )
 }

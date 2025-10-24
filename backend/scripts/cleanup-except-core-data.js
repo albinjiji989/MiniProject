@@ -52,7 +52,6 @@ const Review = require('../modules/petshop/user/models/Review');
 const Reservation = require('../modules/petshop/user/models/Reservation');
 const ShopOrder = require('../modules/petshop/user/models/ShopOrder');
 const InventoryItem = require('../modules/petshop/manager/models/InventoryItem');
-const PetPricing = require('../modules/petshop/manager/models/PetPricing');
 const Promotion = require('../modules/petshop/manager/models/Promotion');
 const PurchaseOrder = require('../modules/petshop/manager/models/PurchaseOrder');
 const PetShopService = require('../modules/petshop/manager/models/Service');
@@ -214,9 +213,6 @@ const cleanupDatabase = async () => {
 
     const inventoryItemResult = await InventoryItem.deleteMany({});
     console.log(`   ✓ Deleted ${inventoryItemResult.deletedCount} inventory items`);
-
-    const pricingResult = await PetPricing.deleteMany({});
-    console.log(`   ✓ Deleted ${pricingResult.deletedCount} pet pricing records`);
 
     const promotionResult = await Promotion.deleteMany({});
     console.log(`   ✓ Deleted ${promotionResult.deletedCount} promotions`);

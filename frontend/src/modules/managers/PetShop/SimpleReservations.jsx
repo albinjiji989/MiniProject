@@ -66,7 +66,7 @@ const SimpleReservations = () => {
       setLoading(true)
       setError('')
       
-      const response = await apiClient.get('/petshop/manager/reservations')
+      const response = await apiClient.get('/petshop/manager/reservations/enhanced')
       const data = response.data.data || {}
       
       setReservations(data.reservations || [])
@@ -345,7 +345,7 @@ const SimpleReservations = () => {
                       </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                          {reservation.status === 'pending' && (
+                          {(reservation.status === 'pending' || reservation.status === 'manager_review') && (
                             <>
                               <Button
                                 size="small"
@@ -398,14 +398,26 @@ const SimpleReservations = () => {
                           )}
                           {reservation.status === 'ready_pickup' && (
                             <>
-                              <Button
-                                size="small"
-                                variant="contained"
-                                color="success"
-                                onClick={() => handleOpenDialog(reservation, 'delivered')}
-                              >
-                                Mark Delivered
-                              </Button>
+                              {/* Check if handover has been scheduled but not completed */}
+                              {reservation.handover?.status === 'scheduled' ? (
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  color="primary"
+                                  onClick={() => navigate(`/manager/petshop/schedule-handover/${reservation._id}`)}
+                                >
+                                  Complete Handover
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  color="success"
+                                  onClick={() => handleOpenDialog(reservation, 'delivered')}
+                                >
+                                  Mark Delivered
+                                </Button>
+                              )}
                             </>
                           )}
                           {reservation.status === 'delivered' && (

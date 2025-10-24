@@ -27,7 +27,7 @@ import {
   CalendarToday as CalendarIcon,
   Notes as NotesIcon
 } from '@mui/icons-material'
-import { userPetsAPI } from '../../../services/api'
+import { userPetsAPI, petsAPI } from '../../../services/api'
 
 const UserPetHistory = () => {
   const { id } = useParams()
@@ -43,10 +43,27 @@ const UserPetHistory = () => {
   const loadHistory = async () => {
     try {
       setLoading(true)
-      const res = await userPetsAPI.getOwnershipHistory(id)
-      setHistory(res.data?.data || null)
+      setError('')
+      
+      // First try to load from centralized registry (for pets from petshop/adoption)
+      try {
+        const res = await petsAPI.getHistory(id)
+        const historyData = {
+          petName: res.data?.data?.pet?.name || 'Pet',
+          ownershipHistory: res.data?.data?.history?.filter(record => record.eventType === 'ownership_transferred') || []
+        };
+        setHistory(historyData)
+      } catch (centralizedError) {
+        // Fall back to userPetsAPI (for user-created pets)
+        try {
+          const res = await userPetsAPI.getOwnershipHistory(id)
+          setHistory(res.data?.data || null)
+        } catch (userError) {
+          throw new Error('History not found in any system')
+        }
+      }
     } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to load history')
+      setError(e?.message || 'Failed to load history')
     } finally {
       setLoading(false)
     }

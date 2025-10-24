@@ -56,7 +56,7 @@ import {
   Search as SearchIcon,
   Refresh as RefreshIcon
 } from '@mui/icons-material'
-import { apiClient } from '../../../services/api'
+import { apiClient, petShopManagerAPI } from '../../../services/api'
 
 const ManageReservations = () => {
   const navigate = useNavigate()
@@ -77,6 +77,7 @@ const ManageReservations = () => {
     { value: 'manager_review', label: 'Under Review', color: 'info' },
     { value: 'approved', label: 'Approved', color: 'success' },
     { value: 'rejected', label: 'Rejected', color: 'error' },
+    { value: 'going_to_buy', label: 'Going to Buy', color: 'primary' },
     { value: 'payment_pending', label: 'Payment Pending', color: 'warning' },
     { value: 'paid', label: 'Paid', color: 'success' },
     { value: 'ready_pickup', label: 'Ready for Pickup', color: 'primary' },
@@ -88,6 +89,7 @@ const ManageReservations = () => {
     { label: 'All Reservations', status: 'all' },
     { label: 'Pending Review', status: 'pending' },
     { label: 'Approved', status: 'approved' },
+    { label: 'Ready for Payment', status: 'going_to_buy' },
     { label: 'Payment Pending', status: 'payment_pending' },
     { label: 'Ready for Pickup', status: 'ready_pickup' }
   ]
@@ -103,7 +105,7 @@ const ManageReservations = () => {
   const fetchReservations = async () => {
     try {
       setLoading(true)
-      const response = await apiClient.get('/petshop/manager/reservations')
+      const response = await petShopManagerAPI.listReservations()
       setReservations(response.data.data.reservations || [])
     } catch (err) {
       console.error('Fetch reservations error:', err)
@@ -119,7 +121,7 @@ const ManageReservations = () => {
     // Filter by tab status
     const currentTab = tabLabels[tabValue]
     if (currentTab.status !== 'all') {
-      filtered = filtered.filter(res => res.status === currentTab.status)
+      filtered = filtered.filter(res => res.status?.trim() === currentTab.status)
     }
     
     // Filter by search query
@@ -145,10 +147,7 @@ const ManageReservations = () => {
 
     try {
       setLoading(true)
-      await apiClient.put(`/petshop/manager/reservations/${selectedReservation._id}/status`, {
-        status: updateData.status,
-        notes: updateData.notes
-      })
+      await petShopManagerAPI.updateReservationStatus(selectedReservation._id, updateData.status, updateData.notes)
       
       showSnackbar('Reservation status updated successfully!')
       setUpdateDialog(false)
@@ -158,6 +157,22 @@ const ManageReservations = () => {
     } catch (err) {
       console.error('Update status error:', err)
       showSnackbar(err.response?.data?.message || 'Failed to update status', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // New function to approve payment for a reservation
+  const handleApprovePayment = async (reservation) => {
+    try {
+      setLoading(true)
+      await petShopManagerAPI.approvePayment(reservation._id, { notes: 'Payment approved by manager' })
+      
+      showSnackbar('Payment approved successfully! User can now proceed to payment.')
+      fetchReservations()
+    } catch (err) {
+      console.error('Approve payment error:', err)
+      showSnackbar(err.response?.data?.message || 'Failed to approve payment', 'error')
     } finally {
       setLoading(false)
     }
@@ -191,6 +206,21 @@ const ManageReservations = () => {
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  // Helper function to determine what action to show for a reservation
+  const getReservationAction = (reservation) => {
+    const status = reservation.status?.trim()
+    
+    // Define action mappings
+    const actionMap = {
+      'going_to_buy': 'approve_payment',
+      'payment_pending': 'waiting_for_user',
+      'paid': 'schedule_pickup',
+      'ready_pickup': 'complete_handover'
+    }
+    
+    return actionMap[status] || 'default'
   }
 
   if (loading && reservations.length === 0) {
@@ -496,6 +526,26 @@ const ManageReservations = () => {
                               <EditIcon />
                             </IconButton>
                           </Tooltip>
+                          
+                          {/* Show appropriate action based on reservation status */}
+                          {getReservationAction(reservation) === 'approve_payment' ? (
+                            <Tooltip title="Approve Payment">
+                              <IconButton 
+                                size="small"
+                                onClick={() => handleApprovePayment(reservation)}
+                                color="success"
+                              >
+                                <PaymentIcon />
+                              </IconButton>
+                            </Tooltip>
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">
+                              {getReservationAction(reservation) === 'waiting_for_user' 
+                                ? 'Waiting for User Payment' 
+                                : 'Waiting for User'}
+                              {reservation.status && ` (Status: ${reservation.status})`}
+                            </Typography>
+                          )}
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -564,6 +614,19 @@ const ManageReservations = () => {
                         <Typography><strong>Notes:</strong></Typography>
                         <Typography variant="body2" sx={{ mt: 1, p: 1, bgcolor: 'grey.100', borderRadius: 1 }}>
                           {selectedReservation.notes}
+                        </Typography>
+                      </Box>
+                    )}
+                    
+                    {/* Show payment approval information */}
+                    {selectedReservation && getReservationAction(selectedReservation) === 'approve_payment' && (
+                      <Box sx={{ mt: 2, p: 2, bgcolor: 'warning.light', borderRadius: 1 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                          <PaymentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                          Payment Approval Required
+                        </Typography>
+                        <Typography variant="body2">
+                          Customer has confirmed they want to buy this pet. Click the payment approval button to allow them to proceed with payment.
                         </Typography>
                       </Box>
                     )}

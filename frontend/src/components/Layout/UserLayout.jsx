@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useContext } from 'react'
 import {
   Box,
   CssBaseline,
@@ -9,6 +9,7 @@ import {
 } from '@mui/material'
 import Sidebar from '../Navigation/Sidebar'
 import TopNavbar from '../Navigation/TopNavbar'
+import { useAuth } from '../../contexts/AuthContext'
 
 const DRAWER_WIDTH = 280
 
@@ -94,7 +95,8 @@ const createCustomTheme = (isDarkMode) => createTheme({
   }
 })
 
-const UserLayout = ({ children, user }) => {
+const UserLayout = ({ children }) => {
+  const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false) // Start closed by default
   const [isDarkMode, setIsDarkMode] = useState(false)
   const isMobile = useMediaQuery('(max-width:900px)')

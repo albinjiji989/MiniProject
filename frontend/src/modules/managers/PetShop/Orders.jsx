@@ -70,7 +70,7 @@ const Orders = () => {
   const create = async () => {
     try {
       setLoading(true)
-      await apiClient.post('/petshop/orders', { items: newOrderItems })
+      await apiClient.post('/petshop/manager/orders', { items: newOrderItems })
       setCreating(false)
       setNewOrderItems([{ categoryId: '', speciesId: '', breedId: '', quantity: 1, unitCost: 0, gender: 'Unknown', age: 0, ageUnit: 'months' }])
       await load()
@@ -80,12 +80,12 @@ const Orders = () => {
   }
 
   const submit = async (id) => {
-    await apiClient.post(`/petshop/orders/${id}/submit`)
+    await apiClient.post(`/petshop/manager/orders/${id}/submit`)
     await load()
   }
 
   const receive = async (id) => {
-    await apiClient.post(`/petshop/orders/${id}/receive`)
+    await apiClient.post(`/petshop/manager/orders/${id}/receive`)
     await load()
   }
 
@@ -105,10 +105,10 @@ const Orders = () => {
         <Box>
           <Button 
             variant="outlined" 
-            onClick={() => navigate('/manager/petshop/add-stock')}
-            sx={{ mr: 1 }}
+            startIcon={<AddIcon />}
+            onClick={() => navigate('/manager/petshop/wizard/basic')}
           >
-            Add Stock Directly
+            Add New Stock Directly
           </Button>
           <Button startIcon={<RefreshIcon />} onClick={load} sx={{ mr: 1 }}>Refresh</Button>
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreating(true)}>New Purchase Order</Button>

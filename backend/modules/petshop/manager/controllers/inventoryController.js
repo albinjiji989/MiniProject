@@ -44,12 +44,17 @@ const listInventory = async (req, res) => {
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
     const items = await PetInventoryItem.find(filter)
-      .populate('speciesId', 'name')
+      .populate('speciesId', 'name displayName')
       .populate('breedId', 'name')
       .populate('imageIds') // Populate the imageIds field
       .sort(sort)
       .limit(limit * 1)
       .skip((page - 1) * limit);
+
+    // Manually populate the virtual 'images' field for each item
+    for (const item of items) {
+      await item.populate('images');
+    }
 
     const total = await PetInventoryItem.countDocuments(filter);
 
@@ -70,9 +75,90 @@ const listInventory = async (req, res) => {
   }
 };
 
+// List reserved pets
+const listReservedPets = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      search, 
+      sortBy = 'createdAt', 
+      sortOrder = 'desc',
+      speciesId,
+      breedId,
+      minPrice,
+      maxPrice
+    } = req.query;
+
+    // Filter for reserved pets in the manager's store
+    const filter = { ...getStoreFilter(req.user), isActive: true, status: 'reserved' };
+    
+    // Apply additional filters
+    if (speciesId) filter.speciesId = speciesId;
+    if (breedId) filter.breedId = breedId;
+    
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = Number(minPrice);
+      if (maxPrice) filter.price.$lte = Number(maxPrice);
+    }
+    
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { petCode: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const sort = {};
+    sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+    const items = await PetInventoryItem.find(filter)
+      .populate('speciesId', 'name displayName')
+      .populate('breedId', 'name')
+      .populate('imageIds')
+      .sort(sort)
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    // Manually populate the virtual 'images' field for each item
+    for (const item of items) {
+      await item.populate('images');
+    }
+
+    const total = await PetInventoryItem.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: {
+        items,
+        pagination: {
+          current: parseInt(page),
+          pages: Math.ceil(total / limit),
+          total
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get reserved pets error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 const createInventoryItem = async (req, res) => {
   try {
-    const itemData = { ...req.body, ...getStoreFilter(req.user) };
+    // Add createdBy field from authenticated user
+    const itemData = { 
+      ...req.body, 
+      ...getStoreFilter(req.user),
+      createdBy: req.user.id  // Explicitly set createdBy from authenticated user
+    };
+    
+    // Handle optional color field
+    if (itemData.color !== undefined) {
+      itemData.color = itemData.color || ''; // Ensure empty string for null/undefined
+    }
     
     // Handle images if provided (convert base64 to file and save path)
     let imageIds = [];
@@ -86,17 +172,19 @@ const createInventoryItem = async (req, res) => {
         // Handle images using our new standardized image upload system
         const { processEntityImages } = require('../../../../core/utils/imageUploadHandler');
         
+        // Create a more specific directory for pet images
         // Process images using our new utility
         const savedImages = await processEntityImages(
           itemData.images, 
           'PetInventoryItem', 
           null, // Will be set after item is created
           req.user.id, 
-          'petshop', 
+          'petshop/manager/pets',  // More specific path for pet images
           'manager'
         );
         
         imageIds = savedImages.map(img => img._id);
+        console.log('🖼️  Successfully processed images, got imageIds:', imageIds);
       } catch (imgErr) {
         console.error('❌ Failed to save pet inventory images:', imgErr);
       }
@@ -119,12 +207,17 @@ const createInventoryItem = async (req, res) => {
       // Add image references to the item
       item.imageIds = imageIds;
       await item.save();
+      console.log('🖼️  Updated image documents with entityId:', item._id);
     }
     
     // Populate references for response
-    await item.populate('speciesId', 'name');
+    await item.populate('speciesId', 'name displayName');
     await item.populate('breedId', 'name');
     await item.populate('imageIds'); // Also populate images
+    
+    // Manually populate the virtual 'images' field
+    await item.populate('images');
+    console.log('🖼️  Final item with images:', item.images);
     
     res.status(201).json({
       success: true,
@@ -142,7 +235,7 @@ const getInventoryItemById = async (req, res) => {
     const item = await PetInventoryItem.findOne({ 
       _id: req.params.id, 
       ...getStoreFilter(req.user) 
-    }).populate('imageIds'); // Populate images
+    }).populate('imageIds').populate('speciesId', 'name displayName').populate('breedId', 'name');
     
     if (!item) {
       return res.status(404).json({ 
@@ -150,6 +243,9 @@ const getInventoryItemById = async (req, res) => {
         message: 'Inventory item not found' 
       });
     }
+    
+    // Manually populate the virtual 'images' field to ensure it's available
+    await item.populate('images');
     
     res.json({ success: true, data: { item } });
   } catch (error) {
@@ -160,9 +256,24 @@ const getInventoryItemById = async (req, res) => {
 
 const updateInventoryItem = async (req, res) => {
   try {
+    // When updating a pet, if a name is provided and the pet is being marked as sold,
+    // this indicates a customer is naming their pet during purchase
+    const updateData = { ...req.body };
+    
+    // If the pet is being marked as sold and a name is provided, 
+    // this is when the customer gives the pet its name
+    if (updateData.status === 'sold' && updateData.name) {
+      console.log(`Customer is naming pet ${req.params.id} as "${updateData.name}" during purchase`);
+    }
+    
+    // Ensure color is handled properly (optional field)
+    if (updateData.color !== undefined) {
+      updateData.color = updateData.color || ''; // Ensure empty string for null/undefined
+    }
+    
     const item = await PetInventoryItem.findOneAndUpdate(
       { _id: req.params.id, ...getStoreFilter(req.user) },
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     ).populate('imageIds'); // Populate images
     
@@ -172,6 +283,11 @@ const updateInventoryItem = async (req, res) => {
         message: 'Inventory item not found' 
       });
     }
+    
+    // Also populate the virtual 'images' field
+    await item.populate('images');
+    await item.populate('speciesId', 'name displayName');
+    await item.populate('breedId', 'name');
     
     res.json({
       success: true,
@@ -269,24 +385,55 @@ const bulkCreateInventoryItems = async (req, res) => {
       });
     }
     
-    const itemsWithStore = itemsData.map((item, index) => {
-      console.log(`Processing item ${index}:`, item);
+    const itemsWithStore = [];
+    for (let i = 0; i < itemsData.length; i++) {
+      const item = itemsData[i];
+      console.log(`Processing item ${i}:`, item);
+      
+      // Process images for this item if they exist
+      let imageIds = [];
+      if (item.images && Array.isArray(item.images) && item.images.length > 0) {
+        try {
+          const { processEntityImages } = require('../../../../core/utils/imageUploadHandler');
+          const Image = require('../../../core/models/Image');
+          
+          const savedImages = await processEntityImages(
+            item.images,
+            'PetInventoryItem',
+            null, // Will be set after item is created
+            req.user.id,
+            'petshop/manager/pets',
+            'manager'
+          );
+          
+          imageIds = savedImages.map(img => img._id);
+          console.log(`🖼️  Processed images for item ${i}, got imageIds:`, imageIds);
+        } catch (imgErr) {
+          console.error(`Error processing images for item ${i}:`, imgErr);
+        }
+      }
+      
+      // Remove images from item data
+      delete item.images;
       
       // Ensure proper data types and include all required fields
       const processedItem = {
         ...item,
         ...storeFilter,
-        createdBy: req.user.id,  // Add the required createdBy field
+        createdBy: req.user.id,
+        name: item.name || '', // Pets in inventory can have names
         categoryId: item.categoryId,
         speciesId: item.speciesId,
         breedId: item.breedId,
         unitCost: parseFloat(item.unitCost) || 0,
         price: parseFloat(item.price) || 0,
-        quantity: parseInt(item.quantity) || 1,
+        quantity: 1, // Each pet is a single item
         age: parseFloat(item.age) || 0,
         gender: item.gender || 'Unknown',
+        color: item.color || '',
         source: item.source || 'Other',
-        notes: item.notes || ''
+        notes: item.notes || '',
+        size: item.size || 'medium'
       };
       
       // Handle arrivalDate
@@ -294,20 +441,58 @@ const bulkCreateInventoryItems = async (req, res) => {
         processedItem.arrivalDate = new Date(item.arrivalDate);
       }
       
-      console.log(`Processed item ${index + 1}:`, processedItem);
-      return processedItem;
-    });
+      // Add imageIds to processed item
+      if (imageIds.length > 0) {
+        processedItem.imageIds = imageIds;
+      }
+      
+      console.log(`Processed item ${i + 1}:`, processedItem);
+      itemsWithStore.push(processedItem);
+    }
 
     console.log('Items with store:', itemsWithStore);
     console.log('Items with store count:', itemsWithStore.length);
     
-    const items = await PetInventoryItem.insertMany(itemsWithStore);
-    console.log('Successfully created items:', items.length);
+    // Create items one by one to properly handle images
+    const createdItems = [];
+    for (let i = 0; i < itemsWithStore.length; i++) {
+      try {
+        const itemData = itemsWithStore[i];
+        const item = new PetInventoryItem(itemData);
+        await item.save();
+        
+        // Update image documents with the correct entityId
+        if (itemData.imageIds && itemData.imageIds.length > 0) {
+          const Image = require('../../../core/models/Image');
+          await Image.updateMany(
+            { _id: { $in: itemData.imageIds } },
+            { entityId: item._id }
+          );
+          console.log(`🖼️  Updated image documents for item ${i} with entityId:`, item._id);
+        }
+        
+        // Populate references
+        await item.populate('speciesId', 'name displayName');
+        await item.populate('breedId', 'name');
+        await item.populate('imageIds');
+        
+        // Also populate the virtual 'images' field
+        await item.populate('images');
+        console.log(`🖼️  Final item ${i} with images:`, item.images);
+        
+        createdItems.push(item);
+      } catch (itemErr) {
+        console.error(`Error creating item ${i}:`, itemErr);
+        throw new Error(`Failed to create item ${i + 1}: ${itemErr.message}`);
+      }
+    }
+    
+    console.log('Successfully created items:', createdItems.length);
     
     res.status(201).json({
       success: true,
-      data: { items },
-      message: `${items.length} items created successfully`
+      data: { items: createdItems },
+      message: `${createdItems.length} items created successfully`
     });
   } catch (error) {
     console.error('Bulk create inventory items error:', error);
@@ -404,42 +589,85 @@ const uploadInventoryImage = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Only image files are allowed' })
     }
     
-    // Save file to organized folder structure like adoption system
-    const path = require('path')
-    const fs = require('fs')
-    const crypto = require('crypto')
-    const extMap = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' }
-    const filename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${extMap[req.file.mimetype] || ''}`
-    const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'images', 'inventory')
-    try { fs.mkdirSync(uploadDir, { recursive: true }) } catch (_) {}
-    const filePath = path.join(uploadDir, filename)
-    fs.writeFileSync(filePath, req.file.buffer)
+    // Use the standardized image upload handler for consistent file handling
+    const { processEntityImages } = require('../../../../core/utils/imageUploadHandler');
+    const Image = require('../../../../core/models/Image');
     
-    // Store URL path in database (not base64)
-    const url = `/modules/petshop/uploads/images/inventory/${filename}`;
+    // Create a more specific directory for pet images: uploads/petshop/manager/pets
+    const savedImages = await processEntityImages(
+      [{ url: `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}` }], 
+      'PetInventoryItem', 
+      item._id, 
+      req.user._id, 
+      'petshop/manager/pets',  // More specific path for pet images
+      'manager'
+    );
     
-    // Create new image record
-    const Image = require('../../../core/models/Image');
-    const img = new Image({
-      url: url,
-      caption: req.body.caption || '',
-      isPrimary: req.body.isPrimary === 'true',
-      entityType: 'PetInventoryItem',
-      entityId: item._id,
-      uploadedBy: req.user._id
-    });
-    await img.save();
+    if (savedImages.length === 0) {
+      throw new Error('Failed to save image');
+    }
+    
+    const savedImage = savedImages[0];
     
     // Add image reference to item
-    item.imageIds.push(img._id);
+    item.imageIds.push(savedImage._id);
     await item.save();
     
     // Re-fetch the item with populated images to ensure frontend gets updated data
     const updatedItem = await PetInventoryItem.findById(item._id).populate('imageIds');
+    // Also populate the virtual 'images' field
+    await updatedItem.populate('images');
+    await updatedItem.populate('speciesId', 'name displayName');
+    await updatedItem.populate('breedId', 'name');
     
-    res.status(201).json({ success: true, message: 'Image uploaded', data: { image: img, item: updatedItem } });
+    res.status(201).json({ success: true, message: 'Image uploaded', data: { image: savedImage, item: updatedItem } });
   } catch (e) {
     console.error('Upload inventory image error:', e);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Remove inventory image
+const removeInventoryImage = async (req, res) => {
+  try {
+    const { id, imageId } = req.params;
+    
+    // Derive store filter
+    const rawStoreFilter = getStoreFilter(req.user) || {};
+    const isBlockingFilter = Object.prototype.hasOwnProperty.call(rawStoreFilter, '_id') && rawStoreFilter._id === null;
+    const isManagerNoStore = (req.user?.role || '').includes('_manager') && !req.user?.storeId;
+    const storeFilter = (isBlockingFilter || isManagerNoStore) ? {} : rawStoreFilter;
+
+    // Find the inventory item
+    const item = await PetInventoryItem.findOne({ _id: id, ...storeFilter });
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Inventory item not found' });
+    }
+    
+    // Check if the image exists in the item's imageIds
+    const imageIndex = item.imageIds.findIndex(imgId => imgId.toString() === imageId);
+    if (imageIndex === -1) {
+      return res.status(404).json({ success: false, message: 'Image not found in inventory item' });
+    }
+    
+    // Remove the image reference from the item
+    item.imageIds.splice(imageIndex, 1);
+    await item.save();
+    
+    // Also delete the actual image document from the database
+    const Image = require('../../../../core/models/Image');
+    await Image.findByIdAndDelete(imageId);
+    
+    // Re-fetch the item with populated images to ensure frontend gets updated data
+    const updatedItem = await PetInventoryItem.findById(item._id).populate('imageIds');
+    // Also populate the virtual 'images' field
+    await updatedItem.populate('images');
+    await updatedItem.populate('speciesId', 'name displayName');
+    await updatedItem.populate('breedId', 'name');
+    
+    res.json({ success: true, message: 'Image removed successfully', data: { item: updatedItem } });
+  } catch (e) {
+    console.error('Remove inventory image error:', e);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -479,6 +707,7 @@ const uploadInventoryHealthDoc = async (req, res) => {
 
 module.exports = {
   listInventory,
+  listReservedPets,
   createInventoryItem,
   getInventoryItemById,
   updateInventoryItem,
@@ -486,5 +715,6 @@ module.exports = {
   bulkCreateInventoryItems,
   bulkPublishInventoryItems,
   uploadInventoryImage,
+  removeInventoryImage,
   uploadInventoryHealthDoc
 };

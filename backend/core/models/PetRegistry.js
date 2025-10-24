@@ -21,6 +21,27 @@ const petRegistrySchema = new mongoose.Schema({
     ref: 'Image'
   }],
 
+  // Physical characteristics
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Unknown'],
+    default: 'Unknown'
+  },
+  age: {
+    type: Number,
+    min: [0, 'Age cannot be negative']
+  },
+  ageUnit: {
+    type: String,
+    enum: ['weeks', 'months', 'years'],
+    default: 'months'
+  },
+  color: {
+    type: String,
+    trim: true,
+    maxlength: [50, 'Color cannot exceed 50 characters']
+  },
+
   // Source references (sparse, only one is typically set)
   source: { type: String, enum: ['core', 'petshop', 'adoption'], required: true },
   sourceLabel: { type: String, default: '' }, // Human-readable source label

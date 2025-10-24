@@ -35,7 +35,7 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon
 } from '@mui/icons-material'
-import { apiClient, userPetsAPI } from '../../services/api'
+import { apiClient, userPetsAPI, resolveMediaUrl } from '../../services/api'
 
 const MyOwnedPets = () => {
   const navigate = useNavigate()
@@ -189,16 +189,16 @@ const MyOwnedPets = () => {
   }
 
   const handleEdit = () => {
-    // Only allow editing of user-created pets
-    if (!menuPet?.isUserCreated && menuPet?.source && ['adoption', 'petshop'].includes(menuPet.source)) {
-      setError('Cannot edit pets from adoption or pet shop. Please contact the respective service.')
-      handleMenuClose()
-      return
-    }
+    // Allow editing of all pets, including those from adoption or pet shop
     if (menuPet) {
-      // Use userPetId if available (for PetNew model), otherwise use _id
-      const petId = menuPet.userPetId || menuPet._id
-      navigate(`/User/pets/${petId}/edit`)
+      // For user-created pets, use the PetNew _id
+      // For other pets (adoption, petshop), use the registry _id
+      if (menuPet.isUserCreated && menuPet.userPetId) {
+        navigate(`/User/pets/${menuPet.userPetId}/edit`)
+      } else {
+        // For pets from pet shop or adoption, we'll create a special edit route
+        navigate(`/User/pets/${menuPet._id}/edit-basic`)
+      }
     }
     handleMenuClose()
   }
@@ -285,13 +285,8 @@ const MyOwnedPets = () => {
   }
 
   const buildImageUrl = (url) => {
-    if (!url) return '/placeholder-pet.svg'
-    // Support data URLs saved from Add Pet flow
-    if (/^data:image\//i.test(url)) return url
-    if (/^https?:\/\//i.test(url)) return url
-    const apiBase = import.meta.env.VITE_API_URL || process.env.REACT_APP_API_URL || 'http://localhost:5000/api'
-    const origin = apiBase.replace(/\/?api\/?$/, '')
-    return `${origin}${url.startsWith('/') ? '' : '/'}${url}`
+    console.log('Building image URL from:', url);
+    return resolveMediaUrl(url);
   }
 
   const renderPetCard = (pet) => (
@@ -309,7 +304,16 @@ const MyOwnedPets = () => {
         <CardMedia
           component="img"
           height="200"
-          image={buildImageUrl(pet.images?.find(img => img.isPrimary)?.url || pet.images?.[0]?.url)}
+          image={
+            (() => {
+              const primaryImage = pet.images?.find(img => img.isPrimary);
+              const firstImage = pet.images?.[0];
+              console.log('Pet:', pet.name, 'Primary image:', primaryImage, 'First image:', firstImage);
+              const imageUrl = primaryImage?.url || firstImage?.url;
+              console.log('Selected image URL:', imageUrl);
+              return buildImageUrl(imageUrl);
+            })()
+          }
           alt={pet.name}
           sx={{ objectFit: 'cover', cursor: 'pointer' }}
           onClick={() => {
@@ -321,72 +325,65 @@ const MyOwnedPets = () => {
               navigate(`/User/pets/${pet._id}`)
             }
           }}
+          onError={(e) => {
+            console.log('Image load error for pet:', pet.name, 'Image data:', pet.images);
+            e.currentTarget.src = '/placeholder-pet.svg';
+          }}
+          onLoad={(e) => {
+            console.log('Image loaded successfully for pet:', pet.name, 'Image data:', pet.images);
+          }}
         />
         <CardContent sx={{ flexGrow: 1 }}>
-          <Typography variant="h6" gutterBottom>
-            {pet.name}
-          </Typography>
+          <Box display="flex" justifyContent="space-between" alignItems="flex-start">
+            <Box>
+              <Typography gutterBottom variant="h6" component="div" sx={{ fontWeight: 600 }}>
+                {pet.name || 'Unnamed Pet'}
+              </Typography>
+              {pet.petCode && (
+                <Chip 
+                  label={pet.petCode} 
+                  size="small" 
+                  color="primary" 
+                  variant="outlined" 
+                  sx={{ mb: 1 }}
+                />
+              )}
+            </Box>
+            <IconButton onClick={(e) => handleMenuOpen(e, pet)}>
+              <MoreVertIcon />
+            </IconButton>
+          </Box>
           
           <Box display="flex" alignItems="center" gap={1} mb={1}>
-            {pet.petId && (
+            <Avatar 
+              sx={{ width: 24, height: 24, fontSize: 12 }}
+              src={buildImageUrl(pet.images?.find(img => img.isPrimary)?.url || pet.images?.[0]?.url)}
+            >
+              {pet.speciesId?.displayName?.charAt(0) || pet.speciesId?.name?.charAt(0) || 'P'}
+            </Avatar>
+            <Typography variant="body2" color="text.secondary">
+              {pet.speciesId?.displayName || pet.speciesId?.name || 'Unknown Species'} • {pet.breedId?.name || 'Unknown Breed'}
+            </Typography>
+          </Box>
+          
+          <Box display="flex" alignItems="center" gap={1} mb={1}>
+            <Typography variant="body2">
+              Age: {pet.age || 0} {pet.ageUnit || 'months'}
+            </Typography>
+            {pet.gender && (
               <Chip 
-                label={`ID: ${pet.petId}`}
+                label={pet.gender} 
                 size="small" 
-                color="secondary" 
-                variant="outlined"
+                color={pet.gender === 'Male' ? 'primary' : pet.gender === 'Female' ? 'secondary' : 'default'}
+                sx={{ ml: 1 }}
               />
-            )}
-            <Chip 
-              label={pet.petCode} 
-              size="small" 
-              color="primary" 
-              variant="outlined"
-            />
-            <Chip 
-              label={pet.status || pet.currentStatus || 'Owned'} 
-              size="small" 
-              color="success"
-            />
-            {((pet.tags && pet.tags.includes('petshop')) || pet.source === 'petshop') && (
-              <Chip label="Pet Shop" size="small" color="secondary" variant="outlined" />
-            )}
-            {pet.source === 'adoption' && (
-              <Chip label="Adoption" size="small" color="secondary" variant="outlined" />
             )}
           </Box>
           
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            <strong>Species:</strong> {pet.speciesId?.name || pet.species?.name || 'Unknown'}
-          </Typography>
-          
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            <strong>Breed:</strong> {pet.breedId?.name || pet.breed?.name || 'Unknown'}
-          </Typography>
-          
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            <strong>Age:</strong> {pet.age || 'Unknown'}
-          </Typography>
-          
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            <strong>Gender:</strong> {pet.gender || 'Unknown'}
-          </Typography>
-          
-          {pet.sourceLabel && (
-            <Box display="flex" alignItems="center" gap={0.5} mt={1}>
-              <HomeIcon sx={{ fontSize: 16, color: 'primary.main' }} />
-              <Typography variant="body2" color="primary.main" fontWeight="bold">
-                Source: {pet.sourceLabel}
-              </Typography>
-            </Box>
-          )}
-          
-          {pet.firstAddedAt && (
-            <Box display="flex" alignItems="center" gap={0.5} mt={0.5}>
-              <DateIcon sx={{ fontSize: 16 }} />
-              <Typography variant="caption" color="text.secondary">
-                Added: {new Date(pet.firstAddedAt).toLocaleDateString()}
-              </Typography>
-            </Box>
+          {pet.color && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Color: {pet.color}
+            </Typography>
           )}
           
           {pet.acquiredDate && (

@@ -204,8 +204,11 @@ const AvailableForSale = () => {
                       <Typography variant="body2">₹{Number(item.price || 0).toLocaleString()}</Typography>
                     </TableCell>
                     <TableCell>
-                      <Tooltip title="View Public">
-                        <IconButton component="a" href={`/User/petshop/pet/${item._id}`} target="_blank" size="small">
+                      <Tooltip title="View Details">
+                        <IconButton 
+                          size="small"
+                          onClick={() => navigate(`/manager/petshop/pets/${item._id}/history`)}
+                        >
                           <ViewIcon />
                         </IconButton>
                       </Tooltip>

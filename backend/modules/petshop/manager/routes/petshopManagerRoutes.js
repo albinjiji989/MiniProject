@@ -5,17 +5,19 @@ const { body } = require('express-validator');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
-// Import manager controllers
-const storeController = require('../controllers/storeController');
-const inventoryController = require('../controllers/inventoryController');
-const orderController = require('../controllers/orderController');
-const pricingController = require('../controllers/pricingController');
-const promotionController = require('../controllers/promotionController');
-const reservationController = require('../../user/controllers/reservationController');
-const enhancedReservationController = require('../controllers/enhancedReservationController');
-const dashboardController = require('../controllers/dashboardController');
-const storeNameChangeController = require('../controllers/storeNameChangeController');
-const petHistoryController = require('../../user/controllers/petHistoryController');
+// Import controllers
+const inventoryController = require('../controllers/inventoryController')
+const orderController = require('../controllers/orderController')
+const reservationController = require('../../user/controllers/reservationController') // Fixed import path
+const enhancedReservationController = require('../controllers/enhancedReservationController')
+const dashboardController = require('../controllers/dashboardController')
+const promotionController = require('../controllers/promotionController')
+const petHistoryController = require('../controllers/petHistoryController')
+const storeController = require('../controllers/storeController') // Added missing import
+const storeNameChangeController = require('../controllers/storeNameChangeController') // Added missing import
+const inventoryManagementController = require('../controllers/inventoryManagementController') // Added missing import
+const handoverController = require('../controllers/handoverController') // Added handover controller
+// const pricingController = require('../controllers/pricingController') // Removed pricing controller
 
 // Manager routes - require manager role
 const requireManager = [auth, authorizeModule('petshop'), (req, res, next) => {
@@ -102,12 +104,20 @@ router.post('/inventory/bulk', auth, authorizeModule('petshop'), inventoryContro
 
 // Inventory Image Upload
 router.post('/inventory/:id/images', auth, authorizeModule('petshop'), upload.single('file'), inventoryController.uploadInventoryImage);
+// Inventory Image Removal
+router.delete('/inventory/:id/images/:imageId', auth, authorizeModule('petshop'), inventoryController.removeInventoryImage);
+
+// Bulk Publish Inventory Items
+router.post('/inventory/publish-bulk', auth, authorizeModule('petshop'), inventoryManagementController.bulkPublishInventoryItems);
+
+// Reserved Pets Management
+router.get('/inventory/reserved', auth, authorizeModule('petshop'), inventoryController.listReservedPets);
 
 // Pricing Management
-router.post('/pricing', auth, authorizeModule('petshop'), pricingController.createPricingRule);
-router.get('/pricing', auth, authorizeModule('petshop'), pricingController.listPricingRules);
-router.put('/pricing/:id', auth, authorizeModule('petshop'), pricingController.updatePricingRule);
-router.post('/pricing/calculate', auth, authorizeModule('petshop'), pricingController.calculatePetPrice);
+// router.post('/pricing', auth, authorizeModule('petshop'), pricingController.createPricingRule);
+// router.get('/pricing', auth, authorizeModule('petshop'), pricingController.listPricingRules);
+// router.put('/pricing/:id', auth, authorizeModule('petshop'), pricingController.updatePricingRule);
+// router.post('/pricing/calculate', auth, authorizeModule('petshop'), pricingController.calculatePetPrice);
 
 // Manager Dashboard
 router.get('/dashboard/stats', auth, authorizeModule('petshop'), dashboardController.getManagerDashboardStats);
@@ -126,8 +136,21 @@ router.post('/reservations/enhanced', auth, authorizeModule('petshop'), enhanced
 router.get('/reservations/enhanced', auth, authorizeModule('petshop'), enhancedReservationController.listEnhancedReservations);
 router.get('/reservations/code/:code', auth, authorizeModule('petshop'), enhancedReservationController.getReservationByCode);
 router.put('/reservations/:id/status', auth, authorizeModule('petshop'), reservationController.managerUpdateReservationStatus);
+router.post('/reservations/:id/review', auth, authorizeModule('petshop'), reservationController.managerReviewReservation);
+
+// Manager Handover Functions
+router.post('/reservations/:id/handover/schedule', auth, authorizeModule('petshop'), handoverController.scheduleHandover);
+router.post('/reservations/:id/handover/complete', auth, authorizeModule('petshop'), handoverController.completeHandover);
+router.post('/reservations/:id/handover/regenerate-otp', auth, authorizeModule('petshop'), handoverController.regenerateHandoverOTP);
 
 // Manager Pet History
 router.get('/pet-history/:petId', auth, authorizeModule('petshop'), petHistoryController.getPetHistory);
 
+// Get reservation by ID for managers
+router.get('/reservations/:id', auth, authorizeModule('petshop'), enhancedReservationController.getReservationById);
+
+// Manager approves payment for reservation
+router.post('/reservations/:id/approve-payment', auth, authorizeModule('petshop'), enhancedReservationController.approvePayment);
+
 module.exports = router;
+

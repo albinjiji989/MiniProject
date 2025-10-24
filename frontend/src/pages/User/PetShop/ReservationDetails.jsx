@@ -68,10 +68,12 @@ const ReservationDetails = () => {
       'manager_review': 'info',
       'approved': 'success',
       'rejected': 'error',
+      'going_to_buy': 'info',
       'payment_pending': 'warning',
       'paid': 'success',
       'ready_pickup': 'primary',
-      'completed': 'success',
+      'delivered': 'success',
+      'at_owner': 'success',
       'cancelled': 'error'
     }
     return colors[status] || 'default'
@@ -83,10 +85,12 @@ const ReservationDetails = () => {
       'manager_review': 'Under Review',
       'approved': 'Approved',
       'rejected': 'Rejected',
+      'going_to_buy': 'Going to Buy',
       'payment_pending': 'Payment Pending',
       'paid': 'Paid',
       'ready_pickup': 'Ready for Pickup',
-      'completed': 'Completed',
+      'delivered': 'Delivered',
+      'at_owner': 'Pet with Owner',
       'cancelled': 'Cancelled'
     }
     return labels[status] || status
@@ -327,7 +331,7 @@ const ReservationDetails = () => {
                 
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary">Purchase Method</Typography>
-                  <Typography>{reservation.purchaseMethod === 'online' ? 'Online Purchase' : 'Offline Purchase'}</Typography>
+                  <Typography>Reservation</Typography>
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
@@ -367,7 +371,7 @@ const ReservationDetails = () => {
               <Typography variant="h6" gutterBottom>Actions</Typography>
               
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {['pending', 'manager_review', 'approved', 'payment_pending', 'paid'].includes(reservation.status) && (
+                {['pending', 'manager_review', 'approved', 'going_to_buy', 'payment_pending'].includes(reservation.status) && (
                   <Button 
                     variant="outlined" 
                     startIcon={<CancelIcon />}
@@ -378,7 +382,17 @@ const ReservationDetails = () => {
                   </Button>
                 )}
                 
-                {['approved', 'payment_pending'].includes(reservation.status) && (
+                {reservation.status === 'approved' && (
+                  <Button 
+                    variant="contained" 
+                    color="success"
+                    onClick={() => navigate(`/User/petshop/purchase-decision/${reservationId}`)}
+                  >
+                    Make Decision
+                  </Button>
+                )}
+                
+                {(reservation.status === 'going_to_buy' || reservation.status === 'payment_pending') && (
                   <Button 
                     variant="contained" 
                     startIcon={<PaymentIcon />}
@@ -398,22 +412,40 @@ const ReservationDetails = () => {
                   </Button>
                 )}
                 
-                <Button 
-                  variant="outlined" 
-                  startIcon={<ChatIcon />}
-                >
-                  Contact Pet Shop
-                </Button>
+                {reservation.status === 'paid' && (
+                  <Chip 
+                    label="Awaiting Delivery" 
+                    color="info" 
+                    sx={{ justifyContent: 'center' }}
+                  />
+                )}
+                
+                {reservation.status === 'delivered' && (
+                  <Chip 
+                    label="Pet Delivered" 
+                    color="success" 
+                    sx={{ justifyContent: 'center' }}
+                  />
+                )}
+                
+                {reservation.status === 'at_owner' && (
+                  <Chip 
+                    label="Pet with Owner" 
+                    color="success" 
+                    sx={{ justifyContent: 'center' }}
+                  />
+                )}
               </Box>
             </CardContent>
           </Card>
           
+          {/* Store Information */}
           <Card sx={{ mt: 3 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>Store Information</Typography>
               
-              <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                {reservation.store?.name || 'Pet Shop'}
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                {reservation.store?.name || 'Store Name Not Available'}
               </Typography>
               
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>

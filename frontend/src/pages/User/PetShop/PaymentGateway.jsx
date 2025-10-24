@@ -151,11 +151,13 @@ const PaymentGateway = () => {
       setProcessing(true)
       
       // Verify payment with backend
-      const verificationResponse = await apiClient.post('/petshop/payments/razorpay/verify', {
+      const verificationResponse = await apiClient.post('/petshop/user/payments/razorpay/verify', {
         razorpay_order_id: response.razorpay_order_id,
         razorpay_payment_id: response.razorpay_payment_id,
         razorpay_signature: response.razorpay_signature,
-        reservationId: reservationId
+        reservationId: reservationId,
+        deliveryMethod: deliveryMethod,
+        deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : null
       })
 
       if (verificationResponse.data.success) {
@@ -190,7 +192,7 @@ const PaymentGateway = () => {
       const totalAmount = base + deliveryFee + taxes
 
       // Create Razorpay order for total amount (in paise)
-      const orderResponse = await apiClient.post('/petshop/payments/razorpay/order', {
+      const orderResponse = await apiClient.post('/petshop/user/payments/razorpay/order', {
         reservationId,
         amount: Math.round(totalAmount * 100),
         deliveryMethod,

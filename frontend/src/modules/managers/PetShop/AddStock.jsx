@@ -205,11 +205,8 @@ const AddStock = () => {
       
       console.log('Gender distribution:', genderDistribution);
       
-      // Validate gender distribution data
-      if (!Array.isArray(genderDistribution) || genderDistribution.length === 0) {
-        throw new Error('No gender distribution data found. Please complete all steps.');
-      }
-      
+      // Always use the age group/gender distribution approach
+      // Individual pet names are not assigned during inventory creation
       genderDistribution.forEach((ageGroup, index) => {
         console.log(`Processing age group ${index}:`, ageGroup);
         
@@ -263,21 +260,23 @@ const AddStock = () => {
       });
       
       console.log('🚀 Sending bulk inventory request:', { items });
-      console.log('📝 Sample item structure:', items[0]);
+      if (items.length > 0) {
+        console.log('📝 Sample item structure:', items[0]);
+      }
       
       // Validate that we have items to send
       if (items.length === 0) {
         throw new Error('No items to create. Please add pets to age groups.');
       }
       
-      const response = await apiClient.post('/petshop/inventory/bulk', { items });
+      const response = await apiClient.post('/petshop/manager/inventory/bulk', { items });
       console.log('✅ Bulk inventory response:', response);
       
       showSnackbar(`Successfully added ${items.length} pets to stock!`);
       
       // Navigate to Manage Inventory after success
       navigate('/manager/petshop/manage-inventory', { state: { message: `Added ${items.length} pets to stock`, refresh: true } });
-      
+
     } catch (err) {
       console.error('Create stock error:', err);
       // Show more detailed error information

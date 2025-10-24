@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Box, Container, Typography, Grid, Card, CardContent, CardMedia, Chip, Button, CircularProgress, Alert, TextField, Rating, Divider, Stack } from '@mui/material'
-import { petShopAPI, apiClient } from '../../../services/api'
+import { petShopAPI, apiClient, resolveMediaUrl } from '../../../services/api'
 import { Pets as PetsIcon, ArrowBack as BackIcon } from '@mui/icons-material'
 
 const PetDetails = () => {
@@ -12,7 +12,6 @@ const PetDetails = () => {
   const [item, setItem] = useState(null)
   const [notes, setNotes] = useState('')
   const [reserving, setReserving] = useState(false)
-  const [paying, setPaying] = useState(false)
   const [wishloading, setWishloading] = useState(false)
   const [isWishlisted, setIsWishlisted] = useState(false)
   const [reviews, setReviews] = useState([])
@@ -25,10 +24,7 @@ const PetDetails = () => {
     // If absolute URL, return directly
     if (/^https?:\/\//i.test(url)) return url
     // If relative (like /modules/petshop/uploads/...), prefix backend origin
-    const apiBase = import.meta.env.VITE_API_URL || process.env.REACT_APP_API_URL || ''
-    // Strip trailing /api if present
-    const origin = apiBase.replace(/\/?api\/?$/, '')
-    return `${origin}${url.startsWith('/') ? '' : '/'}${url}`
+    return resolveMediaUrl(url)
   }
 
   const load = async () => {
@@ -73,52 +69,6 @@ const PetDetails = () => {
       setReviews(r?.data?.data?.reviews || [])
     } catch (e) {
       alert('Failed to submit review')
-    }
-  }
-
-  const buyNow = async () => {
-    try {
-      if (!item?.price || item.price <= 0) return alert('Price not set for this listing')
-      setPaying(true)
-      const amountPaise = Math.round(Number(item.price) * 100)
-      const orderRes = await petShopAPI.createRazorpayOrder({ amount: amountPaise, currency: 'INR', receipt: `pet_${id}_${Date.now()}` })
-      const { data, keyId } = orderRes.data
-      const options = {
-        key: keyId,
-        amount: data.amount,
-        currency: data.currency,
-        name: item.name || 'Pet Listing',
-        description: 'Pet purchase',
-        order_id: data.id,
-        handler: async function (response) {
-          try {
-            const verifyRes = await petShopAPI.verifyRazorpay({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature
-            })
-            if (verifyRes.data?.success || verifyRes.data?.data?.valid) {
-              alert('Payment successful! Our team will contact you shortly.')
-            } else {
-              alert('Payment verification failed. If amount deducted, please contact support.')
-            }
-          } catch (e) {
-            alert('Payment verification error')
-          }
-        },
-        prefill: {},
-        theme: { color: '#0ea5ea' }
-      }
-      if (window.Razorpay) {
-        const rz = new window.Razorpay(options)
-        rz.open()
-      } else {
-        alert('Payment SDK not loaded')
-      }
-    } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to start payment')
-    } finally {
-      setPaying(false)
     }
   }
 
@@ -214,7 +164,7 @@ const PetDetails = () => {
               <TextField fullWidth label="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} multiline minRows={2} sx={{ mb: 2 }} />
               <Box sx={{ display: 'flex', gap: 2 }}>
                 <Button variant="contained" disabled={reserving} onClick={handleReserve}>Reserve</Button>
-                <Button variant="outlined" color="success" disabled={paying} onClick={buyNow}>Buy Now</Button>
+                {/* Removed Buy Now button as per requirements */}
                 <Button variant="text" disabled={wishloading} onClick={toggleWishlist}>{isWishlisted ? 'Remove from Wishlist' : 'Add to Wishlist'}</Button>
               </Box>
             </Grid>

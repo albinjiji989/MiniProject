@@ -78,17 +78,26 @@ const Handover = () => {
     try {
       setVerifying(true)
       
-      // In a real implementation, this would call the API to verify the OTP
-      // For now, we'll simulate a successful verification
-      setTimeout(() => {
-        alert('OTP verified successfully! You can now pick up your pet.')
-        loadReservation() // Refresh to show updated status
-        setVerifying(false)
-        setOtp('')
-      }, 1500)
+      // Call the API to verify the OTP
+      await petShopAPI.completeHandover(reservationId, { otp })
+      
+      alert('OTP verified successfully! You can now pick up your pet.')
+      loadReservation() // Refresh to show updated status
+      setVerifying(false)
+      setOtp('')
     } catch (e) {
       setError(e?.response?.data?.message || 'Failed to verify OTP')
       setVerifying(false)
+    }
+  }
+
+  const handleRegenerateOtp = async () => {
+    try {
+      await petShopAPI.regenerateHandoverOTP(reservationId)
+      alert('New OTP has been sent to your email!')
+      loadReservation() // Refresh to show any updates
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to regenerate OTP')
     }
   }
 
@@ -252,43 +261,6 @@ const Handover = () => {
               </Stepper>
             </CardContent>
           </Card>
-          
-          {/* OTP Verification */}
-          {reservation.status === 'ready_pickup' && (
-            <Card sx={{ mt: 3 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>OTP Verification</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  Enter the OTP sent to your phone to verify your identity at pickup.
-                </Typography>
-                
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                  <TextField
-                    label="Enter OTP"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    inputProps={{ maxLength: 6 }}
-                  />
-                  <Button 
-                    variant="contained" 
-                    onClick={handleVerifyOtp}
-                    disabled={verifying || otp.length !== 6}
-                  >
-                    {verifying ? <CircularProgress size={24} /> : 'Verify'}
-                  </Button>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-                  <Button 
-                    startIcon={<QrCodeIcon />}
-                    onClick={handleShowQrCode}
-                  >
-                    Show QR Code
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
-          )}
         </Grid>
         
         {/* Right Column - Store Information */}
@@ -384,6 +356,69 @@ const Handover = () => {
         </Grid>
       </Grid>
       
+      {/* OTP Verification */}
+      {reservation.status === 'ready_pickup' && (
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>Verify Pickup</Typography>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Enter the OTP sent to your email to verify your identity and complete the pickup process.
+                </Typography>
+                
+                <TextField
+                  label="Enter OTP"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  variant="outlined"
+                  fullWidth
+                  disabled={verifying}
+                />
+                
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Button 
+                    variant="contained" 
+                    onClick={handleVerifyOtp}
+                    disabled={verifying || otp.length !== 6}
+                  >
+                    {verifying ? <CircularProgress size={24} /> : 'Verify OTP'}
+                  </Button>
+                  
+                  <Button 
+                    variant="outlined" 
+                    onClick={handleRegenerateOtp}
+                  >
+                    Regenerate OTP
+                  </Button>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
+
+      {reservation.status === 'completed' && (
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <CheckCircleIcon color="success" />
+                <Typography variant="h6" color="success.main">
+                  Pickup Completed
+                </Typography>
+              </Box>
+              
+              <Typography variant="body2" color="text.secondary">
+                Congratulations! Your pet pickup has been completed successfully. 
+                Your pet is now ready to go home with you.
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
+
       {/* QR Code Dialog */}
       <Dialog 
         open={qrDialogOpen} 

@@ -18,7 +18,12 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Paper
+  Paper,
+  Divider,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material'
 import {
   ArrowBack as BackIcon,
@@ -328,7 +333,9 @@ const PurchaseConfirmation = () => {
             <Box sx={{ p: 2, bgcolor: 'white', display: 'inline-block', borderRadius: 1 }}>
               <QRCodeSVG 
                 value={`PETSHOP_PICKUP:${reservationId}`} 
-                size={200} 
+                size={200}
+                level="H"
+                includeMargin={true}
               />
             </Box>
             

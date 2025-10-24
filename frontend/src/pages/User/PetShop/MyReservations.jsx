@@ -1,16 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Container, Typography, Card, CardContent, Chip, Button, CircularProgress, Alert, Grid, CardMedia, Stack } from '@mui/material'
-import { Payment as PaymentIcon, Cancel as CancelIcon } from '@mui/icons-material'
-import { petShopAPI } from '../../../services/api'
+import { Payment as PaymentIcon, Cancel as CancelIcon, QrCode as QrCodeIcon } from '@mui/icons-material'
+import { petShopAPI, resolveMediaUrl } from '../../../services/api'
 import { useNavigate } from 'react-router-dom'
-
-const buildImageUrl = (url) => {
-  if (!url) return '/placeholder-pet.svg'
-  if (/^https?:\/\//i.test(url)) return url
-  const apiBase = import.meta.env.VITE_API_URL || process.env.REACT_APP_API_URL || 'http://localhost:5000/api'
-  const origin = apiBase.replace(/\/?api\/?$/, '')
-  return `${origin}${url.startsWith('/') ? '' : '/'}${url}`
-}
 
 const MyReservations = () => {
   const [loading, setLoading] = useState(true)
@@ -56,7 +48,7 @@ const MyReservations = () => {
                     <CardMedia
                       component="img"
                       height="90"
-                      image={buildImageUrl(r?.itemId?.images?.find?.(i => i.isPrimary)?.url || r?.itemId?.images?.[0]?.url)}
+                      image={resolveMediaUrl(r?.itemId?.images?.find?.(i => i.isPrimary)?.url || r?.itemId?.images?.[0]?.url)}
                       alt={r?.itemId?.name || 'Pet'}
                       sx={{ borderRadius: 1, objectFit: 'cover' }}
                     />
@@ -79,19 +71,36 @@ const MyReservations = () => {
                       </Box>
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                         <Chip 
-                          label={r.status}
+                          label={
+                            r.status === 'pending' ? 'Pending Approval' :
+                            r.status === 'approved' ? 'Approved' :
+                            r.status === 'rejected' ? 'Rejected' :
+                            r.status === 'going_to_buy' ? 'Going to Buy' :
+                            r.status === 'payment_pending' ? 'Payment Pending' :
+                            r.status === 'paid' ? 'Paid' :
+                            r.status === 'ready_pickup' ? 'Ready for Pickup' :
+                            r.status === 'delivered' ? 'Delivered' :
+                            r.status === 'at_owner' ? 'Purchased' :
+                            r.status === 'cancelled' ? 'Cancelled' :
+                            r.status
+                          }
                           color={
                             r.status==='pending' ? 'warning' :
                             r.status==='approved' ? 'success' :
                             r.status==='rejected' ? 'error' :
+                            r.status==='going_to_buy' ? 'info' :
                             r.status==='payment_pending' ? 'info' :
                             r.status==='paid' ? 'info' :
-                            (r.status==='delivered' || r.status==='at_owner') ? 'success' : 'default'
+                            r.status==='ready_pickup' ? 'primary' :
+                            (r.status==='delivered' || r.status==='at_owner') ? 'success' :
+                            r.status==='cancelled' ? 'error' : 'default'
                           }
                           size="small"
+                          variant={r.status === 'at_owner' ? 'filled' : 'outlined'}
                         />
                         <Button size="small" onClick={() => navigate(`/User/petshop/reservation/${r._id}`)}>View Details</Button>
                         <Button size="small" onClick={() => navigate(`/User/petshop/pet/${r?.itemId?._id || r.itemId}`)}>View Pet</Button>
+                        
                         {r.status === 'approved' && (
                           <Button 
                             size="small" 
@@ -102,6 +111,7 @@ const MyReservations = () => {
                             Make Decision
                           </Button>
                         )}
+                        
                         {(r.status === 'going_to_buy' || r.status === 'payment_pending') && (
                           <Button 
                             size="small" 
@@ -113,16 +123,32 @@ const MyReservations = () => {
                             Pay Now
                           </Button>
                         )}
+                        
+                        {r.status === 'ready_pickup' && (
+                          <Button 
+                            size="small" 
+                            variant="contained" 
+                            color="primary"
+                            startIcon={<QrCodeIcon />}
+                            onClick={() => navigate(`/User/petshop/handover/${r._id}`)}
+                          >
+                            Handover
+                          </Button>
+                        )}
+                        
                         {r.status === 'paid' && (
                           <Chip label="Awaiting Delivery" color="info" size="small" />
                         )}
+                        
                         {r.status === 'delivered' && (
                           <Chip label="Pet Delivered" color="success" size="small" />
                         )}
+                        
                         {r.status === 'at_owner' && (
                           <Chip label="Pet with Owner" color="success" size="small" />
                         )}
-                        {r.status === 'pending' && (
+                        
+                        {['pending', 'approved', 'going_to_buy', 'payment_pending'].includes(r.status) && (
                           <Button 
                             size="small" 
                             color="error" 

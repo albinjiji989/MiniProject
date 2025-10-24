@@ -243,10 +243,10 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
             active: location.pathname.includes('/inventory')
           },
           {
-            title: 'Add Stock',
+            title: 'Add New Stock',
             icon: <InventoryIcon />,
-            path: `/manager/${type}/add-stock`,
-            active: location.pathname.includes('/add-stock')
+            path: `/manager/${type}/wizard/basic`,
+            active: location.pathname.includes('/wizard/basic')
           },
           {
             title: 'Manage Inventory',
@@ -260,12 +260,12 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
             path: `/manager/${type}/for-sale`,
             active: location.pathname.includes('/for-sale')
           },
-          {
-            title: 'Pricing Rules',
-            icon: <SettingsIcon />,
-            path: `/manager/${type}/pricing-rules`,
-            active: location.pathname.includes('/pricing-rules')
-          }
+          // {
+          //   title: 'Pricing Rules',
+          //   icon: <SettingsIcon />,
+          //   path: `/manager/${type}/pricing-rules`,
+          //   active: location.pathname.includes('/pricing-rules')
+          // }
         ]
       },
       {
@@ -423,14 +423,14 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
             }}
             onClick={() => {
               let path = `/manager/${moduleType}/dashboard`
-              if (moduleType === 'petshop') path = `/manager/${moduleType}/add-stock`
+              if (moduleType === 'petshop') path = `/manager/${moduleType}/wizard/basic`
               if (moduleType === 'adoption') path = `/manager/${moduleType}/wizard/start`
               if (moduleType === 'veterinary') path = `/manager/veterinary/appointments`
               if (moduleType === 'temporary-care') path = `/manager/temporary-care/bookings`
               handleNavigation(path)
             }}
           >
-            {moduleType === 'petshop' && 'Add Stock'}
+            {moduleType === 'petshop' && 'Add New Stock'}
             {moduleType === 'adoption' && 'Start Add Pet Wizard'}
             {moduleType === 'veterinary' && 'New Appointment'}
             {moduleType === 'temporary-care' && 'New Booking'}

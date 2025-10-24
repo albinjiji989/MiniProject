@@ -13,29 +13,26 @@ import {
   Chip,
   CircularProgress,
   Alert,
-  Paper,
   useTheme,
-  alpha,
-  LinearProgress
+  alpha
 } from '@mui/material'
 import {
   Store as PetShopIcon,
   Pets as PetsIcon,
   People as StaffIcon,
-  Warning as WarningIcon,
   ShoppingCart as ProductIcon,
   Build as ServiceIcon,
   AttachMoney as RevenueIcon,
-  Inventory as InventoryIcon,
   Assessment as ReportsIcon,
   BookOnline as ReservationsIcon,
-  LocalShipping as OrdersIcon,
+  Receipt as ReceiptIcon,
+  Refresh as RefreshIcon,
   TrendingUp as TrendingUpIcon,
+  Assessment as AssessmentIcon,
   Settings as SettingsIcon,
-  Add as AddIcon,
   Favorite as FavoriteIcon,
-  AttachMoney as AttachMoneyIcon,
-  Refresh as RefreshIcon
+  Inventory as InventoryIcon,
+  AttachMoney as AttachMoneyIcon
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, authAPI } from '../../../services/api'
@@ -48,7 +45,6 @@ import {
   TextField
 } from '@mui/material'
 import { formatDistanceToNow } from 'date-fns'
-import { useContext } from 'react' // Import useContext hook
 
 const PetShopManagerDashboard = () => {
   const theme = useTheme()
@@ -82,10 +78,20 @@ const PetShopManagerDashboard = () => {
       try {
         const res = await authAPI.getMe()
         if (res?.data?.data?.user) {
-          dispatch({
-            type: 'UPDATE_USER',
-            payload: res.data.data.user
-          })
+          // Only update profile if there are actual changes to avoid infinite loops
+          const currentUser = user || {};
+          const newUser = res.data.data.user || {};
+          
+          // Check if there are meaningful changes
+          const hasChanges = 
+            currentUser.storeName !== newUser.storeName ||
+            currentUser.storeId !== newUser.storeId ||
+            currentUser.needsStoreSetup !== newUser.needsStoreSetup;
+            
+          if (hasChanges) {
+            // Use updateProfile function properly
+            await updateProfile(res.data.data.user);
+          }
         }
       } catch (err) {
         console.warn('Failed to refresh user data:', err)
@@ -114,12 +120,7 @@ const PetShopManagerDashboard = () => {
     }
     
     initializeDashboard()
-    
-    const intervalId = setInterval(() => {
-      loadDashboardData()
-    }, 60000) // auto-refresh every 60s
-    return () => clearInterval(intervalId)
-  }, [user])
+  }, []) // Empty dependency array to only run once on mount
 
   const loadStats = async () => {
     try {
@@ -159,6 +160,7 @@ const PetShopManagerDashboard = () => {
       throw new Error('Failed to load pet shop statistics')
     }
   }
+  
   const loadRecentActivities = async () => {
     try {
       setActivitiesLoading(true)
@@ -261,6 +263,7 @@ const PetShopManagerDashboard = () => {
       </>
     )
   }
+  
   // Don't block render for activities loading, show partial data
   return (
     <>
@@ -291,10 +294,20 @@ const PetShopManagerDashboard = () => {
             try {
               const res = await authAPI.getMe()
               if (res?.data?.data?.user) {
-                dispatch({
-                  type: 'UPDATE_USER',
-                  payload: res.data.data.user
-                })
+                // Only update if there are actual changes
+                const currentUser = user || {};
+                const newUser = res.data.data.user || {};
+                
+                // Check if there are meaningful changes
+                const hasChanges = 
+                  currentUser.storeName !== newUser.storeName ||
+                  currentUser.storeId !== newUser.storeId ||
+                  currentUser.needsStoreSetup !== newUser.needsStoreSetup;
+                  
+                if (hasChanges) {
+                  // Use updateProfile function properly
+                  await updateProfile(res.data.data.user);
+                }
               }
             } catch (err) {
               console.warn('Failed to refresh user data:', err)
@@ -350,9 +363,9 @@ const PetShopManagerDashboard = () => {
         </Alert>
       )}
 
-      {/* Stats Cards */}
+      {/* Essential Stats Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={2.4}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ 
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
             color: 'white',
@@ -374,79 +387,7 @@ const PetShopManagerDashboard = () => {
           </Card>
         </Grid>
 
-      {/* Management Shortcuts */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12}>
-          <Typography variant="h6" sx={{ mb: 1 }}>Management Shortcuts</Typography>
-        </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/add-pet')}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Add New Pet</Typography>
-                  <Typography variant="body2" color="textSecondary">Add individual pets to inventory</Typography>
-                </Box>
-                <AddIcon color="primary" />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/add-stock')}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Add Pet Stock</Typography>
-                  <Typography variant="body2" color="textSecondary">Create new inventory entries</Typography>
-                </Box>
-                <InventoryIcon color="primary" />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/manage-inventory')}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Manage Inventory</Typography>
-                  <Typography variant="body2" color="textSecondary">Search, filter, bulk actions</Typography>
-                </Box>
-                <SettingsIcon color="primary" />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/pricing-rules')}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Pricing Rules</Typography>
-                  <Typography variant="body2" color="textSecondary">Define automatic pricing</Typography>
-                </Box>
-                <TrendingUpIcon color="primary" />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/for-sale')}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Available For Sale</Typography>
-                  <Typography variant="body2" color="textSecondary">Released items ({stats.availableForSale || 0})</Typography>
-                </Box>
-                <PetsIcon color="primary" />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-        
-        <Grid item xs={12} sm={6} md={2.4}>
           <Card sx={{ 
             background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', 
             color: 'white',
@@ -468,7 +409,7 @@ const PetShopManagerDashboard = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={2.4}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ 
             background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', 
             color: 'white',
@@ -490,29 +431,7 @@ const PetShopManagerDashboard = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card sx={{ 
-            background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', 
-            color: 'white',
-            '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' }
-          }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography variant="h4" component="div" sx={{ fontWeight: 'bold', mb: 1 }}>
-                    {stats.totalServices || 0}
-                  </Typography>
-                  <Typography variant="body2">
-                    Services
-                  </Typography>
-                </Box>
-                <ServiceIcon sx={{ fontSize: 40, opacity: 0.8 }} />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={2.4}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ 
             background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', 
             color: 'white',
@@ -536,6 +455,55 @@ const PetShopManagerDashboard = () => {
       </Grid>
 
       <Grid container spacing={3}>
+        {/* Essential Management Sections */}
+        <Grid item xs={12}>
+          <Typography variant="h5" sx={{ mb: 2, fontWeight: 'bold' }}>Essential Management</Typography>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={4}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/manage-inventory')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Manage Inventory</Typography>
+                  <Typography variant="body2" color="textSecondary">View and manage your pet inventory</Typography>
+                </Box>
+                <SettingsIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={4}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/reservations')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Reservations</Typography>
+                  <Typography variant="body2" color="textSecondary">Manage pet reservations</Typography>
+                </Box>
+                <ReservationsIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={4}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/orders')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Orders & Invoices</Typography>
+                  <Typography variant="body2" color="textSecondary">View orders and invoices</Typography>
+                </Box>
+                <ReceiptIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={3} sx={{ mt: 2 }}>
         {/* Recent Activities */}
         <Grid item xs={12} md={8}>
           <Card>
@@ -582,95 +550,28 @@ const PetShopManagerDashboard = () => {
           </Card>
         </Grid>
 
-        {/* Quick Actions */}
+          {/* Quick Stats Summary */}
         <Grid item xs={12} md={4}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
-              <Typography variant="h6" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <TrendingUpIcon color="primary" />
-                Quick Actions
+              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AssessmentIcon color="primary" />
+                Quick Stats
               </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Button 
-                    variant="contained" 
-                    fullWidth
-                    startIcon={<InventoryIcon />}
-                    onClick={() => navigate('/manager/petshop/inventory')}
-                    sx={{ 
-                      py: 2, 
-                      flexDirection: 'column', 
-                      gap: 1,
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                    }}
-                  >
-                    <Box>Inventory</Box>
-                    <Typography variant="caption">Manage Stock</Typography>
-                  </Button>
-                </Grid>
-                <Grid item xs={6}>
-                  <Button 
-                    variant="contained" 
-                    fullWidth
-                    startIcon={<OrdersIcon />}
-                    onClick={() => navigate('/manager/petshop/orders')}
-                    sx={{ 
-                      py: 2, 
-                      flexDirection: 'column', 
-                      gap: 1,
-                      background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
-                    }}
-                  >
-                    <Box>Orders</Box>
-                    <Typography variant="caption">View & Process</Typography>
-                  </Button>
-                </Grid>
-                <Grid item xs={6}>
-                  <Button 
-                    variant="contained" 
-                    fullWidth
-                    startIcon={<ReservationsIcon />}
-                    onClick={() => navigate('/manager/petshop/reservations')}
-                    sx={{ 
-                      py: 2, 
-                      flexDirection: 'column', 
-                      gap: 1,
-                      background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
-                    }}
-                  >
-                    <Box>Reservations</Box>
-                    <Typography variant="caption">Bookings</Typography>
-                  </Button>
-                </Grid>
-                <Grid item xs={6}>
-                  <Button 
-                    variant="contained" 
-                    fullWidth
-                    startIcon={<ReportsIcon />}
-                    onClick={() => navigate('/manager/petshop/reports')}
-                    sx={{ 
-                      py: 2, 
-                      flexDirection: 'column', 
-                      gap: 1,
-                      background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)'
-                    }}
-                  >
-                    <Box>Reports</Box>
-                    <Typography variant="caption">Analytics</Typography>
-                  </Button>
-                </Grid>
-                <Grid item xs={12}>
-                  <Button 
-                    variant="outlined" 
-                    fullWidth
-                    startIcon={<StaffIcon />}
-                    onClick={() => navigate('/manager/petshop/staff')}
-                    sx={{ py: 1.5 }}
-                  >
-                    Manage Staff & Settings
-                  </Button>
-                </Grid>
-              </Grid>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Box>
+                  <Typography variant="body2" color="textSecondary">Total Revenue</Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 'bold' }}>₹{stats.monthlyRevenue?.toLocaleString() || '0'}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="body2" color="textSecondary">Available Pets</Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 'bold' }}>{stats.availableForSale || 0}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="body2" color="textSecondary">Pending Reservations</Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 'bold' }}>{stats.pendingOrders || 0}</Typography>
+                </Box>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
@@ -719,11 +620,20 @@ const PetShopManagerDashboard = () => {
                 // Refresh the user data from the backend to get updated store info
                 const res = await authAPI.getMe()
                 if (res?.data?.data?.user) {
-                  // Update the AuthContext with fresh user data
-                  dispatch({
-                    type: 'UPDATE_USER',
-                    payload: res.data.data.user
-                  })
+                  // Only update if there are actual changes
+                  const currentUser = user || {};
+                  const newUser = res.data.data.user || {};
+                  
+                  // Check if there are meaningful changes
+                  const hasChanges = 
+                    currentUser.storeName !== newUser.storeName ||
+                    currentUser.storeId !== newUser.storeId ||
+                    currentUser.needsStoreSetup !== newUser.needsStoreSetup;
+                    
+                  if (hasChanges) {
+                    // Use updateProfile function properly
+                    await updateProfile(res.data.data.user);
+                  }
                 }
                 setStoreDialogOpen(false)
                 setLastUpdated(new Date())

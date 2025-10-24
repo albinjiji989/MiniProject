@@ -60,25 +60,8 @@ const Sidebar = ({ open, onClose, user }) => {
   const navigationItems = [
     { title: 'Dashboard', icon: <DashboardIcon />, path: '/User/dashboard', active: location.pathname === '/User/dashboard' },
     { title: 'Adoption', icon: <FavoriteIcon />, path: '/User/adoption', active: location.pathname.startsWith('/User/adoption') },
-    { title: 'Pet Shop', icon: <StoreIcon />, path: '/User/petshop', active: location.pathname.startsWith('/User/petshop'), badge: 'Popular' },
-    { title: 'Rescue', icon: <LocalShippingIcon />, path: '/User/rescue', active: location.pathname.startsWith('/User/rescue') },
-    { title: 'Veterinary', icon: <LocalHospitalIcon />, path: '/User/veterinary', active: location.pathname.startsWith('/User/veterinary') },
-    { title: 'Pharmacy', icon: <LocalPharmacyIcon />, path: '/User/pharmacy', active: location.pathname.startsWith('/User/pharmacy') },
-    { title: 'Temporary Care', icon: <HomeIcon />, path: '/User/temporary-care', active: location.pathname.startsWith('/User/temporary-care') },
-    { title: 'Ecommerce', icon: <ShoppingCartIcon />, path: '/User/ecommerce', active: location.pathname.startsWith('/User/ecommerce') },
-    // Small My Pets group retained
-    {
-      title: 'My Pets',
-      icon: <PetsIcon />,
-      expandable: true,
-      expanded: expandedItems.pets,
-      children: [
-        { title: 'All Pets', icon: <PetsIcon />, path: '/User/pets', active: location.pathname === '/User/pets' },
-        { title: 'Add Pet', icon: <HomeIcon />, path: '/User/pets/add', active: location.pathname === '/User/pets/add' },
-        { title: 'Request Breed', icon: <BookOnlineIcon />, path: '/User/pets/request-breed', active: location.pathname.includes('/request-breed') },
-        { title: 'Owned Pets', icon: <FavoriteIcon />, path: '/User/owned-pets', active: location.pathname === '/User/owned-pets' }
-      ]
-    }
+    { title: 'Pet Shop', icon: <StoreIcon />, path: '/User/petshop', active: location.pathname.startsWith('/User/petshop') },
+    { title: 'My Pets', icon: <PetsIcon />, path: '/User/pets', active: location.pathname.startsWith('/User/pets') }
   ]
 
   const bottomItems = [

@@ -39,10 +39,16 @@ router.get('/public/reservations', auth, reservationController.listMyReservation
 router.get('/public/reservations/:id', auth, reservationController.getReservationById);
 router.get('/public/reservations/track/:code', auth, enhancedReservationController.getReservationByCode);
 router.post('/public/reservations/:id/cancel', auth, reservationController.cancelReservation);
+router.post('/reservations/:id/confirm-purchase', auth, paymentController.confirmPurchaseDecision);
 
 // Payment routes
 router.post('/payments/razorpay/order', auth, paymentController.createRazorpayOrder);
 router.post('/payments/razorpay/verify', auth, paymentController.verifyRazorpaySignature);
+
+// New pickup routes
+router.post('/pickup/:reservationId/schedule', auth, paymentController.schedulePickup);
+router.post('/pickup/:reservationId/verify-otp', auth, paymentController.verifyPickupOTP);
+router.get('/pickup/:reservationId/details', auth, paymentController.getPickupDetails);
 
 // User routes
 router.get('/addresses', auth, userAddressController.listUserAddresses);

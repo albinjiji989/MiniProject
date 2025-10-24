@@ -82,7 +82,15 @@ const processEntityImages = async (images, entityType, entityId, userId, module,
   
   try {
     // Create upload directory based on module and role
-    const uploadDir = path.join(__dirname, `../../uploads/${module}/${role}`);
+    // For petshop, save to uploads/petshop/manager/pets
+    let uploadDir;
+    if (module === 'petshop/manager/pets' || (module === 'petshop' && role === 'manager')) {
+      uploadDir = path.join(__dirname, `../../uploads/petshop/manager/pets`);
+    } else {
+      // Split module path and join with role
+      const moduleParts = module.split('/');
+      uploadDir = path.join(__dirname, `../../uploads`, ...moduleParts, role);
+    }
     await createDirectoryIfNotExists(uploadDir);
     
     for (let i = 0; i < images.length; i++) {
@@ -102,14 +110,25 @@ const processEntityImages = async (images, entityType, entityId, userId, module,
           }
           
           // Generate unique filename
-          const filename = generateUniqueFilename(originalName, entityId);
+          const filename = generateUniqueFilename(originalName, entityId || 'unknown');
           const filepath = path.join(uploadDir, filename);
           
           // Save image to file system
           await saveBase64Image(imageData, filepath);
           
-          // Store relative path in database
-          const relativePath = `/uploads/${module}/${role}/${filename}`;
+          // Store relative path in database - make sure it matches the actual file location
+          let relativePath;
+          if (module === 'petshop/manager/pets' || (module === 'petshop' && role === 'manager')) {
+            relativePath = `/uploads/petshop/manager/pets/${filename}`;
+          } else {
+            // For other modules, use the standard path
+            const moduleParts = module.split('/');
+            relativePath = `/uploads/${moduleParts.join('/')}/${role}/${filename}`;
+          }
+          
+          // For petshop images, use a consistent module and role
+          const imageModule = module === 'petshop/manager/pets' || (module === 'petshop' && role === 'manager') ? 'petshop' : module;
+          const imageRole = module === 'petshop/manager/pets' || (module === 'petshop' && role === 'manager') ? 'manager' : role;
           
           const imageDoc = new Image({
             url: relativePath,
@@ -117,13 +136,14 @@ const processEntityImages = async (images, entityType, entityId, userId, module,
             entityType: entityType,
             entityId: entityId,
             isPrimary: isPrimary,
-            module: module,
-            role: role,
+            module: imageModule,
+            role: imageRole,
             uploadedBy: userId
           });
           
           const savedImage = await imageDoc.save();
           savedImages.push(savedImage);
+          console.log('🖼️  Saved image:', { relativePath, entityId, filename });
         } else if (imageData && typeof imageData === 'string' && imageData.startsWith('/')) {
           // Already a file path, store as-is
           const imageDoc = new Image({
@@ -152,6 +172,7 @@ const processEntityImages = async (images, entityType, entityId, userId, module,
   
   return savedImages;
 };
+
 /**
  * Process and save documents for an entity
  * @param {Array} documents - Array of document objects

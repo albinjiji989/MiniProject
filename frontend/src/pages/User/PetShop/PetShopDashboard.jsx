@@ -40,7 +40,17 @@ import {
   Container,
   useTheme,
   alpha,
-  Skeleton
+  Skeleton,
+  Rating,
+  Pagination,
+  ToggleButton,
+  ToggleButtonGroup,
+  Slider,
+  Checkbox,
+  ListItemText,
+  OutlinedInput,
+  InputAdornment,
+  useMediaQuery
 } from '@mui/material'
 import {
   Store as PetShopIcon,
@@ -62,7 +72,17 @@ import {
   QrCode as QrCodeIcon,
   TrendingUp as TrendingIcon,
   FilterList as FilterIcon,
-  Sort as SortIcon
+  Sort as SortIcon,
+  AttachMoney as PriceIcon,
+  Male as MaleIcon,
+  Female as FemaleIcon,
+  CalendarToday as AgeIcon,
+  Palette as ColorIcon,
+  Scale as WeightIcon,
+  ArrowDownward as ArrowDownIcon,
+  ArrowUpward as ArrowUpIcon,
+  Clear as ClearIcon,
+  LocalOffer as TagIcon
 } from '@mui/icons-material'
 import ModuleDashboardLayout from '../../../components/Module/ModuleDashboardLayout'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -70,13 +90,13 @@ import { apiClient, resolveMediaUrl } from '../../../services/api'
 
 const PetShopDashboard = () => {
   const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const navigate = useNavigate()
   const { user: currentUser } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tabValue, setTabValue] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterOpen, setFilterOpen] = useState(false)
   
   // State for data
   const [stats, setStats] = useState({
@@ -86,9 +106,24 @@ const PetShopDashboard = () => {
     myReservations: 0
   })
   const [featuredPets, setFeaturedPets] = useState([])
+  const [allPets, setAllPets] = useState([])
   const [petShops, setPetShops] = useState([])
   const [wishlistItems, setWishlistItems] = useState([])
   const [reservations, setReservations] = useState([])
+  
+  // Filtering and sorting state
+  const [filters, setFilters] = useState({
+    species: [],
+    breed: [],
+    gender: [],
+    minPrice: 0,
+    maxPrice: 50000,
+    minAge: 0,
+    maxAge: 20
+  })
+  const [sortOption, setSortOption] = useState('featured')
+  const [currentPage, setCurrentPage] = useState(1)
+  const petsPerPage = 12
   
   // Reservation dialog state
   const [reservationDialog, setReservationDialog] = useState(false)
@@ -127,14 +162,15 @@ const PetShopDashboard = () => {
       // Fetch all data in parallel
       const [statsRes, petsRes, shopsRes, wishlistRes, reservationsRes] = await Promise.all([
         apiClient.get('/petshop/user/stats'),
-        apiClient.get('/petshop/user/public/listings?limit=12'),
+        apiClient.get('/petshop/user/public/listings?limit=50'),
         apiClient.get('/petshop/user/public/shops?limit=8'),
         apiClient.get('/petshop/user/public/wishlist'),
         apiClient.get('/petshop/user/public/reservations')
       ])
       
       setStats(statsRes.data.data)
-      setFeaturedPets(petsRes.data.data.items || [])
+      setFeaturedPets(petsRes.data.data.items?.slice(0, 12) || [])
+      setAllPets(petsRes.data.data.items || [])
       setPetShops(shopsRes.data.data.petShops || [])
       setWishlistItems(wishlistRes.data.data.wishlist || [])
       setReservations(reservationsRes.data.data.reservations || [])
@@ -149,13 +185,16 @@ const PetShopDashboard = () => {
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue)
+    if (newValue === 1) {
+      setCurrentPage(1) // Reset to first page when switching to browse tab
+    }
   }
 
   // Unified layout config
   const quickActions = [
-    { label: 'Browse Pets', onClick: () => navigate('/User/petshop/shop'), color: 'bg-emerald-600' },
-    { label: 'My Wishlist', onClick: () => navigate('/User/petshop/wishlist'), color: 'bg-blue-600' },
-    { label: 'My Reservations', onClick: () => navigate('/User/petshop/reservations'), color: 'bg-indigo-600' },
+    { label: 'Browse Pets', onClick: () => setTabValue(1), color: 'bg-emerald-600' },
+    { label: 'My Wishlist', onClick: () => setTabValue(3), color: 'bg-blue-600' },
+    { label: 'My Reservations', onClick: () => setTabValue(3), color: 'bg-indigo-600' },
   ]
   const statCards = [
     { label: 'Pet Shops', value: stats.totalPetShops || 0, icon: '🏪' },
@@ -164,7 +203,7 @@ const PetShopDashboard = () => {
   ]
   const tabDefs = [
     { key: 'featured', label: 'Featured Pets' },
-    { key: 'browse', label: 'Browse All' },
+    { key: 'browse', label: 'Browse All Pets' },
     { key: 'shops', label: 'Pet Shops' },
     { key: 'activity', label: 'My Activity' },
   ]
@@ -241,10 +280,12 @@ const PetShopDashboard = () => {
       'manager_review': 'info',
       'approved': 'success',
       'rejected': 'error',
+      'going_to_buy': 'info',
       'payment_pending': 'warning',
-      'paid': 'success',
+      'paid': 'info',
       'ready_pickup': 'primary',
-      'completed': 'success',
+      'delivered': 'success',
+      'at_owner': 'success',
       'cancelled': 'error'
     }
     return colors[status] || 'default'
@@ -256,6 +297,89 @@ const PetShopDashboard = () => {
     'Visit Details',
     'Review & Submit'
   ]
+
+  // Format age for display
+  const formatAge = (age, ageUnit) => {
+    if (!age) return 'Age not specified'
+    if (ageUnit === 'months' && age >= 12) {
+      const years = Math.floor(age / 12)
+      const months = age % 12
+      return `${years} year${years > 1 ? 's' : ''}${months > 0 ? ` ${months} month${months > 1 ? 's' : ''}` : ''}`
+    }
+    return `${age} ${ageUnit || 'year'}${age > 1 && ageUnit ? (ageUnit.endsWith('s') ? '' : 's') : ''}`
+  }
+
+  // Filter and sort pets
+  const getFilteredAndSortedPets = () => {
+    let filtered = allPets.filter(pet => {
+      // Search query filter
+      if (searchQuery && !pet.name?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          !pet.breedId?.name?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          !pet.speciesId?.name?.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false
+      }
+      
+      // Price filter
+      if (pet.price < filters.minPrice || pet.price > filters.maxPrice) {
+        return false
+      }
+      
+      // Age filter
+      if (pet.age < filters.minAge || pet.age > filters.maxAge) {
+        return false
+      }
+      
+      // Gender filter
+      if (filters.gender.length > 0 && !filters.gender.includes(pet.gender)) {
+        return false
+      }
+      
+      return true
+    })
+    
+    // Sorting
+    switch (sortOption) {
+      case 'price_low':
+        filtered.sort((a, b) => (a.price || 0) - (b.price || 0))
+        break
+      case 'price_high':
+        filtered.sort((a, b) => (b.price || 0) - (a.price || 0))
+        break
+      case 'newest':
+        filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        break
+      case 'rating':
+        filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0))
+        break
+      default:
+        // Featured (default) - already sorted by backend
+        break
+    }
+    
+    return filtered
+  }
+
+  // Get paginated pets
+  const getPaginatedPets = () => {
+    const filteredPets = getFilteredAndSortedPets()
+    const startIndex = (currentPage - 1) * petsPerPage
+    return filteredPets.slice(startIndex, startIndex + petsPerPage)
+  }
+
+  // Reset filters
+  const resetFilters = () => {
+    setFilters({
+      species: [],
+      breed: [],
+      gender: [],
+      minPrice: 0,
+      maxPrice: 50000,
+      minAge: 0,
+      maxAge: 20
+    })
+    setSearchQuery('')
+    setSortOption('featured')
+  }
 
   if (loading) {
     return (
@@ -278,7 +402,7 @@ const PetShopDashboard = () => {
       <Container maxWidth="xl" sx={{ px: 3 }}>
         <ModuleDashboardLayout
           title="Pet Shop"
-          description="Browse pets, manage wishlist and reservations"
+          description="Find your perfect companion and manage your pet journey"
           actions={quickActions}
           stats={statCards}
           tabs={tabDefs}
@@ -335,7 +459,7 @@ const PetShopDashboard = () => {
                         )}
                       </Box>
                       <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                        {pet.storeName || 'Pet Shop'} • {pet.age || 'Age not specified'} {pet.ageUnit || ''}
+                        {pet.storeName || 'Pet Shop'} • {formatAge(pet.age, pet.ageUnit)}
                       </Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                         <StarIcon sx={{ color: 'gold', fontSize: 16, mr: 0.5 }} />
@@ -372,52 +496,174 @@ const PetShopDashboard = () => {
 
       {tabValue === 1 && (
         <Box>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h5" sx={{ fontWeight: 600 }}>
-              Browse All Pets
+          {/* Search and Filters */}
+          <Paper sx={{ p: 2, mb: 3 }}>
+            <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 2, alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', flexGrow: 1, alignItems: 'center' }}>
+                <InputBase
+                  sx={{ ml: 1, flex: 1 }}
+                  placeholder="Search pets by name, breed, or species..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  startAdornment={
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  }
+                />
+                <IconButton onClick={() => setSearchQuery('')}>
+                  <ClearIcon />
+                </IconButton>
+              </Box>
+              
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button 
+                  variant="outlined" 
+                  startIcon={<FilterIcon />}
+                  onClick={() => document.getElementById('filters-dialog').style.display = 'block'}
+                >
+                  Filters
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  startIcon={<SortIcon />}
+                  onClick={() => document.getElementById('sort-dialog').style.display = 'block'}
+                >
+                  Sort
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  startIcon={<ClearIcon />}
+                  onClick={resetFilters}
+                >
+                  Reset
+                </Button>
+              </Box>
+            </Box>
+          </Paper>
+          
+          {/* Results Info */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">
+              {getFilteredAndSortedPets().length} Pets Found
             </Typography>
-            <Button 
-              variant="outlined" 
-              startIcon={<SearchIcon />}
-              onClick={() => navigate('/User/petshop/shop')}
-            >
-              Advanced Search
-            </Button>
+            <Typography variant="body2" color="textSecondary">
+              Page {currentPage} of {Math.ceil(getFilteredAndSortedPets().length / petsPerPage)}
+            </Typography>
           </Box>
-          <Grid container spacing={3}>
-            {featuredPets.map((pet) => (
-              <Grid item xs={12} sm={6} md={3} key={pet._id}>
-                <Card sx={{ 
-                  transition: 'transform 0.2s',
-                  '&:hover': { transform: 'translateY(-2px)' }
-                }}>
-                  <CardMedia
-                    component="img"
-                    height="150"
-                    image={resolveMediaUrl(pet.images?.[0]?.url) || '/placeholder-pet.svg'}
-                    alt={pet.name || 'Pet'}
-                  />
-                  <CardContent>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                      {pet.name || 'Unnamed Pet'}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      ₹{pet.price ? pet.price.toLocaleString() : 'Price not set'}
-                    </Typography>
-                  </CardContent>
-                  <CardActions>
-                    <Button 
-                      size="small" 
-                      onClick={() => navigate(`/User/petshop/pet/${pet._id}`)}
-                      startIcon={<ViewIcon />}
-                    >
-                      View Details
-                    </Button>
-                  </CardActions>
-                </Card>
+          
+          {/* Pets Grid */}
+          {getPaginatedPets().length === 0 ? (
+            <Card>
+              <CardContent sx={{ textAlign: 'center', py: 5 }}>
+                <PetsIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+                <Typography variant="h6" color="textSecondary">
+                  No pets match your search criteria
+                </Typography>
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                  Try adjusting your filters or search terms
+                </Typography>
+                <Button variant="outlined" onClick={resetFilters}>
+                  Reset Filters
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Grid container spacing={3}>
+                {getPaginatedPets().map((pet) => (
+                  <Grid item xs={12} sm={6} md={4} lg={3} key={pet._id}>
+                    <Card sx={{ 
+                      height: '100%', 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: 4
+                      }
+                    }}>
+                      <CardMedia
+                        component="img"
+                        height="180"
+                        image={resolveMediaUrl(pet.images?.[0]?.url) || '/placeholder-pet.svg'}
+                        alt={pet.name || 'Pet'}
+                        sx={{ objectFit: 'cover' }}
+                      />
+                      <CardContent sx={{ flexGrow: 1 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                          <Typography variant="subtitle1" component="div" sx={{ fontWeight: 'bold' }}>
+                            {pet.name || 'Unnamed Pet'}
+                          </Typography>
+                          {pet.petCode && (
+                            <Chip 
+                              label={pet.petCode} 
+                              size="small" 
+                              color="primary" 
+                              variant="outlined"
+                            />
+                          )}
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <Typography variant="body2" color="textSecondary">
+                            {pet.breedId?.name || 'Breed'} • {formatAge(pet.age, pet.ageUnit)}
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          {pet.gender === 'male' ? (
+                            <MaleIcon sx={{ fontSize: 16, color: 'primary.main', mr: 0.5 }} />
+                          ) : pet.gender === 'female' ? (
+                            <FemaleIcon sx={{ fontSize: 16, color: 'secondary.main', mr: 0.5 }} />
+                          ) : null}
+                          <Typography variant="body2" color="textSecondary">
+                            {pet.gender || 'Gender not specified'}
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <StarIcon sx={{ color: 'gold', fontSize: 16, mr: 0.5 }} />
+                          <Typography variant="body2">{pet.rating || 'No rating'}</Typography>
+                        </Box>
+                        
+                        <Typography variant="h6" color="primary" sx={{ fontWeight: 'bold' }}>
+                          ₹{pet.price ? pet.price.toLocaleString() : 'Price not set'}
+                        </Typography>
+                      </CardContent>
+                      <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 2 }}>
+                        <IconButton 
+                          size="small"
+                          onClick={() => handleAddToWishlist(pet._id)}
+                        >
+                          <FavoriteIcon />
+                        </IconButton>
+                        <Button 
+                          size="small" 
+                          variant="contained" 
+                          onClick={() => navigate(`/User/petshop/pet/${pet._id}`)}
+                        >
+                          View Details
+                        </Button>
+                      </CardActions>
+                    </Card>
+                  </Grid>
+                ))}
               </Grid>
-            ))}
-          </Grid>
+              
+              {/* Pagination */}
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <Pagination 
+                  count={Math.ceil(getFilteredAndSortedPets().length / petsPerPage)}
+                  page={currentPage}
+                  onChange={(e, page) => setCurrentPage(page)}
+                  color="primary"
+                  showFirstButton
+                  showLastButton
+                />
+              </Box>
+            </>
+          )}
         </Box>
       )}
 
@@ -431,23 +677,39 @@ const PetShopDashboard = () => {
               <Grid item xs={12} md={6} key={shop._id}>
                 <Card>
                   <CardContent>
-                    <Typography variant="h6" sx={{ mb: 1 }}>
-                      {shop.name}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <PetShopIcon sx={{ mr: 1, color: 'primary.main' }} />
+                      <Typography variant="h6">
+                        {shop.name}
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
                       <LocationIcon sx={{ fontSize: 16, mr: 0.5 }} />
                       {shop.address?.city || 'Location not specified'}
                     </Typography>
-                    <Typography variant="body2">
-                      Capacity: {shop.capacity?.current || 0}/{shop.capacity?.total || 0}
+                    <Typography variant="body2" sx={{ mb: 2 }}>
+                      Capacity: {shop.capacity?.current || 0}/{shop.capacity?.total || 0} pets
                     </Typography>
-                    <Button 
-                      variant="outlined" 
-                      sx={{ mt: 2 }}
-                      onClick={() => navigate(`/User/petshop/shop/${shop._id}`)}
-                    >
-                      Visit Shop
-                    </Button>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button 
+                        variant="outlined" 
+                        size="small"
+                        onClick={() => navigate(`/User/petshop/shop/${shop._id}`)}
+                      >
+                        Visit Shop
+                      </Button>
+                      <Button 
+                        variant="contained" 
+                        size="small"
+                        startIcon={<PetsIcon />}
+                        onClick={() => {
+                          setTabValue(1)
+                          setSearchQuery(shop.name)
+                        }}
+                      >
+                        View Pets
+                      </Button>
+                    </Box>
                   </CardContent>
                 </Card>
               </Grid>
@@ -465,20 +727,47 @@ const PetShopDashboard = () => {
             <Grid item xs={12} md={6}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" sx={{ mb: 2 }}>
-                    My Wishlist ({wishlistItems.length})
-                  </Typography>
-                  {wishlistItems.length === 0 ? (
-                    <Typography variant="body2" color="textSecondary">
-                      Your wishlist is empty. Start adding pets you love!
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <FavoriteIcon sx={{ mr: 1, color: 'error.main' }} />
+                    <Typography variant="h6">
+                      My Wishlist ({wishlistItems.length})
                     </Typography>
+                  </Box>
+                  {wishlistItems.length === 0 ? (
+                    <Box sx={{ textAlign: 'center', py: 3 }}>
+                      <FavoriteIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+                      <Typography variant="body2" color="textSecondary">
+                        Your wishlist is empty. Start adding pets you love!
+                      </Typography>
+                      <Button 
+                        variant="outlined" 
+                        sx={{ mt: 2 }}
+                        onClick={() => setTabValue(1)}
+                      >
+                        Browse Pets
+                      </Button>
+                    </Box>
                   ) : (
                     <Box>
                       {wishlistItems.slice(0, 3).map((wishlistItem, index) => (
-                        <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                          <Typography variant="body2">
-                            {wishlistItem.itemId?.name || 'Pet'}
-                          </Typography>
+                        <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, pb: 2, borderBottom: index < wishlistItems.slice(0, 3).length - 1 ? 1 : 0, borderColor: 'divider' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <CardMedia
+                              component="img"
+                              height="50"
+                              image={resolveMediaUrl(wishlistItem.itemId?.images?.[0]?.url) || '/placeholder-pet.svg'}
+                              alt={wishlistItem.itemId?.name || 'Pet'}
+                              sx={{ width: 50, borderRadius: 1, mr: 2 }}
+                            />
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                                {wishlistItem.itemId?.name || 'Pet'}
+                              </Typography>
+                              <Typography variant="caption" color="textSecondary">
+                                {wishlistItem.itemId?.breedId?.name || 'Breed'}
+                              </Typography>
+                            </Box>
+                          </Box>
                           <Typography variant="body2" color="primary">
                             ₹{wishlistItem.itemId?.price?.toLocaleString() || 'N/A'}
                           </Typography>
@@ -493,6 +782,7 @@ const PetShopDashboard = () => {
                   )}
                   <Button 
                     variant="outlined" 
+                    fullWidth
                     sx={{ mt: 2 }}
                     onClick={() => navigate('/User/petshop/wishlist')}
                   >
@@ -504,13 +794,26 @@ const PetShopDashboard = () => {
             <Grid item xs={12} md={6}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" sx={{ mb: 2 }}>
-                    My Reservations ({reservations.length})
-                  </Typography>
-                  {reservations.length === 0 ? (
-                    <Typography variant="body2" color="textSecondary">
-                      No active reservations. Reserve a pet today!
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <ReserveIcon sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="h6">
+                      My Reservations ({reservations.length})
                     </Typography>
+                  </Box>
+                  {reservations.length === 0 ? (
+                    <Box sx={{ textAlign: 'center', py: 3 }}>
+                      <ScheduleIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+                      <Typography variant="body2" color="textSecondary">
+                        No active reservations. Reserve a pet today!
+                      </Typography>
+                      <Button 
+                        variant="outlined" 
+                        sx={{ mt: 2 }}
+                        onClick={() => setTabValue(1)}
+                      >
+                        Browse Pets
+                      </Button>
+                    </Box>
                   ) : (
                     <Box>
                       {reservations.slice(0, 3).map((reservation, index) => (
@@ -520,23 +823,35 @@ const PetShopDashboard = () => {
                               {reservation.itemId?.name || 'Pet'}
                             </Typography>
                             <Chip 
-                              label={reservation.status} 
+                              label={
+                                reservation.status === 'pending' ? 'Pending Approval' :
+                                reservation.status === 'approved' ? 'Approved' :
+                                reservation.status === 'rejected' ? 'Rejected' :
+                                reservation.status === 'going_to_buy' ? 'Going to Buy' :
+                                reservation.status === 'payment_pending' ? 'Payment Pending' :
+                                reservation.status === 'paid' ? 'Paid' :
+                                reservation.status === 'ready_pickup' ? 'Ready for Pickup' :
+                                reservation.status === 'delivered' ? 'Delivered' :
+                                reservation.status === 'at_owner' ? 'Purchased' :
+                                reservation.status === 'cancelled' ? 'Cancelled' :
+                                reservation.status
+                              } 
                               size="small" 
                               color={getReservationStatusColor(reservation.status)}
+                              variant={reservation.status === 'at_owner' ? 'filled' : 'outlined'}
                             />
                           </Box>
                           <Typography variant="caption" color="textSecondary">
                             Code: {reservation.reservationCode}
                           </Typography>
                           <Box sx={{ mt: 1 }}>
-                            <Tooltip title="View Reservation Details">
-                              <IconButton 
-                                size="small"
-                                onClick={() => navigate(`/User/petshop/reservation/${reservation._id}`)}
-                              >
-                                <ViewIcon />
-                              </IconButton>
-                            </Tooltip>
+                            <Button 
+                              size="small"
+                              variant="outlined"
+                              onClick={() => navigate(`/User/petshop/reservation/${reservation._id}`)}
+                            >
+                              View Details
+                            </Button>
                           </Box>
                         </Box>
                       ))}
@@ -549,6 +864,7 @@ const PetShopDashboard = () => {
                   )}
                   <Button 
                     variant="outlined" 
+                    fullWidth
                     sx={{ mt: 2 }}
                     onClick={() => navigate('/User/petshop/reservations')}
                   >
@@ -563,6 +879,171 @@ const PetShopDashboard = () => {
 
         </ModuleDashboardLayout>
       </Container>
+
+      {/* Filters Dialog */}
+      <Dialog 
+        open={false}
+        id="filters-dialog"
+        onClose={() => document.getElementById('filters-dialog').style.display = 'none'}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Filters</Typography>
+            <IconButton onClick={() => document.getElementById('filters-dialog').style.display = 'none'}>
+              <ClearIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            {/* Price Range */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Price Range
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                <TextField
+                  label="Min Price"
+                  type="number"
+                  value={filters.minPrice}
+                  onChange={(e) => setFilters(prev => ({ ...prev, minPrice: Number(e.target.value) }))}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                  }}
+                  size="small"
+                  fullWidth
+                />
+                <TextField
+                  label="Max Price"
+                  type="number"
+                  value={filters.maxPrice}
+                  onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: Number(e.target.value) }))}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                  }}
+                  size="small"
+                  fullWidth
+                />
+              </Box>
+              <Slider
+                value={[filters.minPrice, filters.maxPrice]}
+                onChange={(e, newValue) => setFilters(prev => ({ ...prev, minPrice: newValue[0], maxPrice: newValue[1] }))}
+                valueLabelDisplay="auto"
+                min={0}
+                max={100000}
+                step={1000}
+              />
+            </Box>
+            
+            {/* Age Range */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Age Range
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                <TextField
+                  label="Min Age"
+                  type="number"
+                  value={filters.minAge}
+                  onChange={(e) => setFilters(prev => ({ ...prev, minAge: Number(e.target.value) }))}
+                  InputProps={{
+                    endAdornment: <InputAdornment position="end">years</InputAdornment>,
+                  }}
+                  size="small"
+                  fullWidth
+                />
+                <TextField
+                  label="Max Age"
+                  type="number"
+                  value={filters.maxAge}
+                  onChange={(e) => setFilters(prev => ({ ...prev, maxAge: Number(e.target.value) }))}
+                  InputProps={{
+                    endAdornment: <InputAdornment position="end">years</InputAdornment>,
+                  }}
+                  size="small"
+                  fullWidth
+                />
+              </Box>
+              <Slider
+                value={[filters.minAge, filters.maxAge]}
+                onChange={(e, newValue) => setFilters(prev => ({ ...prev, minAge: newValue[0], maxAge: newValue[1] }))}
+                valueLabelDisplay="auto"
+                min={0}
+                max={20}
+                step={0.5}
+              />
+            </Box>
+            
+            {/* Gender */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Gender
+              </Typography>
+              <ToggleButtonGroup
+                value={filters.gender}
+                onChange={(e, newGenders) => setFilters(prev => ({ ...prev, gender: newGenders }))}
+                aria-label="gender"
+                fullWidth
+              >
+                <ToggleButton value="male" aria-label="male">
+                  <MaleIcon sx={{ mr: 1 }} />
+                  Male
+                </ToggleButton>
+                <ToggleButton value="female" aria-label="female">
+                  <FemaleIcon sx={{ mr: 1 }} />
+                  Female
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => document.getElementById('filters-dialog').style.display = 'none'}>Cancel</Button>
+          <Button variant="contained" onClick={() => document.getElementById('filters-dialog').style.display = 'none'}>Apply Filters</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Sort Dialog */}
+      <Dialog 
+        open={false}
+        id="sort-dialog"
+        onClose={() => document.getElementById('sort-dialog').style.display = 'none'}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Sort By</Typography>
+            <IconButton onClick={() => document.getElementById('sort-dialog').style.display = 'none'}>
+              <ClearIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <FormControl fullWidth>
+              <InputLabel>Sort Option</InputLabel>
+              <Select
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value)}
+                label="Sort Option"
+              >
+                <MenuItem value="featured">Featured</MenuItem>
+                <MenuItem value="price_low">Price: Low to High</MenuItem>
+                <MenuItem value="price_high">Price: High to Low</MenuItem>
+                <MenuItem value="newest">Newest First</MenuItem>
+                <MenuItem value="rating">Highest Rated</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => document.getElementById('sort-dialog').style.display = 'none'}>Cancel</Button>
+          <Button variant="contained" onClick={() => document.getElementById('sort-dialog').style.display = 'none'}>Apply</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Reservation Dialog */}
       <Dialog 

@@ -46,6 +46,7 @@ const UserPetShopDashboard = () => {
   })
   const [featuredPets, setFeaturedPets] = useState([])
   const [petShops, setPetShops] = useState([])
+  const [purchasedPets, setPurchasedPets] = useState([])
 
   useEffect(() => {
     loadDashboardData()
@@ -56,10 +57,11 @@ const UserPetShopDashboard = () => {
       setLoading(true)
       
       // Load all data in parallel
-      const [statsRes, petsRes, shopsRes] = await Promise.all([
+      const [statsRes, petsRes, shopsRes, reservationsRes] = await Promise.all([
         petShopAPI.getUserStats(),
         petShopAPI.listPublicListings({ limit: 8, status: 'available_for_sale' }),
-        petShopAPI.listPublicShops({ limit: 6 })
+        petShopAPI.listPublicShops({ limit: 6 }),
+        petShopAPI.listMyReservations()
       ])
       
       setStats({
@@ -71,6 +73,10 @@ const UserPetShopDashboard = () => {
       
       setFeaturedPets(petsRes.data.data.items || [])
       setPetShops(shopsRes.data.data.petShops || [])
+      
+      // Filter purchased pets (those with status 'at_owner')
+      const purchased = reservationsRes?.data?.data?.reservations?.filter(r => r.status === 'at_owner') || []
+      setPurchasedPets(purchased)
     } catch (err) {
       console.error('Dashboard data fetch error:', err)
       setError('Failed to load dashboard data')
@@ -433,6 +439,80 @@ const UserPetShopDashboard = () => {
           </Alert>
         )}
       </Box>
+
+      {/* Purchased Pets */}
+      {purchasedPets.length > 0 && (
+        <Box sx={{ mt: 4 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+              My Purchased Pets
+            </Typography>
+            <Button 
+              variant="outlined" 
+              onClick={() => navigate('/User/petshop/reservations')}
+            >
+              View All Reservations
+            </Button>
+          </Box>
+          
+          <Grid container spacing={3}>
+            {purchasedPets.slice(0, 4).map((reservation) => (
+              <Grid item xs={12} sm={6} md={3} key={reservation._id}>
+                <Card 
+                  sx={{ 
+                    height: '100%',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-5px)',
+                      boxShadow: 6
+                    }
+                  }}
+                  onClick={() => navigate(`/User/petshop/reservation/${reservation._id}`)}
+                >
+                  <CardMedia
+                    component="img"
+                    height="150"
+                    image={reservation.itemId?.images?.[0]?.url ? `/modules/petshop/uploads/${reservation.itemId.images[0].url}` : '/placeholder-pet.svg'}
+                    alt={reservation.itemId?.name || 'Pet'}
+                    sx={{ objectFit: 'cover' }}
+                  />
+                  <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                      <Typography variant="h6" component="div">
+                        {reservation.itemId?.name || 'Pet'}
+                      </Typography>
+                      <Chip 
+                        label="Purchased" 
+                        size="small" 
+                        color="success" 
+                      />
+                    </Box>
+                    
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Code: {reservation.reservationCode}
+                    </Typography>
+                    
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Purchased on: {new Date(reservation.updatedAt || reservation.createdAt).toLocaleDateString()}
+                    </Typography>
+                    
+                    <Button 
+                      size="small" 
+                      variant="contained" 
+                      color="primary"
+                      fullWidth
+                      sx={{ mt: 1 }}
+                    >
+                      View Details
+                    </Button>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
     </Container>
   )
 }

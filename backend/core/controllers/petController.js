@@ -23,8 +23,13 @@ const getOwnedPets = async (req, res) => {
     })
       .populate('species', 'name displayName')
       .populate('breed', 'name')
-      .populate('images') // Populate images virtual property
+      .populate('imageIds') // Populate the imageIds field
       .sort({ updatedAt: -1 });
+    
+    // Manually populate the virtual 'images' field for each pet
+    for (const pet of registryPets) {
+      await pet.populate('images');
+    }
     
     console.log('🔍 Registry pets found:', registryPets.length);
     registryPets.forEach((regPet, idx) => {
@@ -41,26 +46,29 @@ const getOwnedPets = async (req, res) => {
     const registryPetsPlain = registryPets.map(p => p.toObject({ virtuals: true }));
     
     // Map registry pets to include source information
-    const pets = registryPetsPlain.map(regPet => ({
-      _id: regPet.corePetId || regPet.petShopItemId || regPet.adoptionPetId || regPet._id,
-      name: regPet.name,
-      petCode: regPet.petCode,
-      images: regPet.images || [],
-      species: regPet.species,
-      speciesId: regPet.species,
-      breed: regPet.breed,
-      breedId: regPet.breed,
-      currentStatus: regPet.currentStatus,
-      source: regPet.source,
-      sourceLabel: regPet.sourceLabel,
-      firstAddedSource: regPet.firstAddedSource,
-      firstAddedAt: regPet.firstAddedAt,
-      acquiredDate: regPet.lastTransferAt || regPet.updatedAt,
-      // Include source IDs for reference
-      corePetId: regPet.corePetId,
-      petShopItemId: regPet.petShopItemId,
-      adoptionPetId: regPet.adoptionPetId
-    }));
+    const pets = registryPetsPlain.map(regPet => {
+      console.log('Processing registry pet:', regPet.name, 'ImageIds:', regPet.imageIds, 'Images:', regPet.images);
+      return {
+        _id: regPet.corePetId || regPet.petShopItemId || regPet.adoptionPetId || regPet._id,
+        name: regPet.name,
+        petCode: regPet.petCode,
+        images: regPet.images || [], // Ensure images are properly included
+        species: regPet.species,
+        speciesId: regPet.species,
+        breed: regPet.breed,
+        breedId: regPet.breed,
+        currentStatus: regPet.currentStatus,
+        source: regPet.source,
+        sourceLabel: regPet.sourceLabel,
+        firstAddedSource: regPet.firstAddedSource,
+        firstAddedAt: regPet.firstAddedAt,
+        acquiredDate: regPet.lastTransferAt || regPet.updatedAt,
+        // Include source IDs for reference
+        corePetId: regPet.corePetId,
+        petShopItemId: regPet.petShopItemId,
+        adoptionPetId: regPet.adoptionPetId
+      };
+    });
     
     console.log('✅ Mapped pets to return:', pets.length);
     pets.forEach((pet, idx) => {
@@ -84,9 +92,16 @@ const getOwnedPets = async (req, res) => {
         })
           .populate('species', 'name displayName')
           .populate('breed', 'name')
-          .populate('images') // Populate images virtual property
+          .populate('imageIds') // Populate the imageIds field
           .sort({ updatedAt: -1 })
           .lean();
+        
+        // Manually populate the virtual 'images' field for each pet
+        for (const pet of legacyPets) {
+          if (pet) {
+            await pet.populate('images');
+          }
+        }
         
         if (legacyPets && legacyPets.length > 0) {
           return res.json({ success: true, data: { pets: legacyPets } });
@@ -101,7 +116,21 @@ const getOwnedPets = async (req, res) => {
         const reservations = await PetReservation.find({
           userId: req.user._id,
           status: { $in: ['completed', 'at_owner'] }
-        }).populate('itemId');
+        }).populate({
+          path: 'itemId',
+          populate: [
+            { path: 'speciesId', select: 'name displayName' },
+            { path: 'breedId', select: 'name' },
+            { path: 'imageIds' }
+          ]
+        });
+        
+        // Manually populate the virtual 'images' field for each item
+        for (const reservation of reservations) {
+          if (reservation && reservation.itemId) {
+            await reservation.itemId.populate('images');
+          }
+        }
         
         const fallbackPets = (reservations || [])
           .filter(r => r.itemId)
@@ -109,7 +138,7 @@ const getOwnedPets = async (req, res) => {
             _id: r.itemId._id,
             name: r.itemId.name,
             petCode: r.itemId.petCode,
-            images: r.itemId.images,
+            images: r.itemId.images || [], // Ensure images are properly included
             species: r.itemId.speciesId,
             breed: r.itemId.breedId,
             gender: r.itemId.gender,
@@ -354,9 +383,98 @@ const getPets = async (req, res) => {
 // @access  Private
 const getPetById = async (req, res) => {
   try {
-    const pet = await Pet.findById(req.params.id)
+    // First try to find in Pet model (user-created pets)
+    let pet = await Pet.findById(req.params.id)
       .populate('createdBy', 'name email')
-      .populate('lastUpdatedBy', 'name email');
+      .populate('lastUpdatedBy', 'name email')
+      .populate('species', 'name displayName')
+      .populate('breed', 'name')
+      .populate('imageIds');
+
+    // Manually populate the virtual 'images' field
+    if (pet) {
+      await pet.populate('images');
+    }
+
+    if (!pet) {
+      // If not found in Pet model, try PetRegistry (pets from petshop/adoption)
+      const PetRegistry = require('../models/PetRegistry');
+      const registryPet = await PetRegistry.findById(req.params.id)
+        .populate('species', 'name displayName')
+        .populate('breed', 'name')
+        .populate('imageIds')
+        .populate('currentOwnerId', 'name email');
+
+      // Manually populate the virtual 'images' field
+      if (registryPet) {
+        await registryPet.populate('images');
+        
+        // Based on the source, fetch the actual pet data
+        let sourcePet = null;
+        if (registryPet.source === 'petshop' && registryPet.petShopItemId) {
+          // Fetch from PetInventoryItem
+          const PetInventoryItem = require('../../modules/petshop/manager/models/PetInventoryItem');
+          sourcePet = await PetInventoryItem.findById(registryPet.petShopItemId)
+            .populate('speciesId', 'name displayName')
+            .populate('breedId', 'name')
+            .populate('imageIds');
+          
+          if (sourcePet) {
+            await sourcePet.populate('images');
+          }
+        } else if (registryPet.source === 'adoption' && registryPet.adoptionPetId) {
+          // Fetch from AdoptionPet
+          const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet');
+          sourcePet = await AdoptionPet.findById(registryPet.adoptionPetId)
+            .populate('species', 'name displayName')
+            .populate('breed', 'name')
+            .populate('imageIds');
+          
+          if (sourcePet) {
+            await sourcePet.populate('images');
+          }
+        } else if (registryPet.source === 'core' && registryPet.corePetId) {
+          // Fetch from PetNew
+          const PetNew = require('../models/PetNew');
+          sourcePet = await PetNew.findById(registryPet.corePetId)
+            .populate('speciesId', 'name displayName')
+            .populate('breedId', 'name')
+            .populate('imageIds');
+          
+          if (sourcePet) {
+            await sourcePet.populate('images');
+          }
+        }
+
+        // Convert to the format expected by the frontend
+        pet = {
+          _id: registryPet._id,
+          name: sourcePet?.name || registryPet.name,
+          petCode: registryPet.petCode,
+          species: sourcePet?.species || sourcePet?.speciesId || registryPet.species,
+          speciesId: sourcePet?.species || sourcePet?.speciesId || registryPet.species,
+          breed: sourcePet?.breed || sourcePet?.breedId || registryPet.breed,
+          breedId: sourcePet?.breed || sourcePet?.breedId || registryPet.breed,
+          currentStatus: registryPet.currentStatus,
+          source: registryPet.source,
+          firstAddedSource: registryPet.firstAddedSource,
+          firstAddedAt: registryPet.firstAddedAt,
+          acquiredDate: registryPet.lastTransferAt || registryPet.updatedAt,
+          images: sourcePet?.images || registryPet.images || [],
+          gender: sourcePet?.gender || 'Unknown',
+          age: sourcePet?.age || 0,
+          ageUnit: sourcePet?.ageUnit || 'months',
+          color: sourcePet?.color || '',
+          healthStatus: sourcePet?.healthStatus || 'Good',
+          size: sourcePet?.size || 'medium',
+          weight: sourcePet?.weight || { value: 0, unit: 'kg' },
+          createdBy: registryPet.currentOwnerId,
+          lastUpdatedBy: registryPet.currentOwnerId,
+          createdAt: registryPet.createdAt,
+          updatedAt: registryPet.updatedAt
+        };
+      }
+    }
 
     if (!pet) {
       return res.status(404).json({
@@ -365,7 +483,8 @@ const getPetById = async (req, res) => {
       });
     }
 
-    if (!canAccessPet(req.user, pet)) {
+    // Check access permissions
+    if (!canAccessPet(req.user, { storeId: pet.storeId, owner: pet.createdBy || pet.currentOwnerId })) {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
 
@@ -782,6 +901,78 @@ const getRegistryHistory = async (req, res) => {
   }
 };
 
+// @route   GET /api/pets/registry/:id
+// @desc    Get pet from registry by ID
+// @access  Private
+const getRegistryPetById = async (req, res) => {
+  try {
+    const PetRegistry = require('../models/PetRegistry');
+    
+    // Try to find in PetRegistry by ID
+    const registryPet = await PetRegistry.findById(req.params.id)
+      .populate('species', 'name displayName')
+      .populate('breed', 'name')
+      .populate('imageIds')
+      .populate('currentOwnerId', 'name email');
+
+    // Manually populate the virtual 'images' field
+    if (registryPet) {
+      await registryPet.populate('images');
+      
+      // Convert to the format expected by the frontend
+      const pet = {
+        _id: registryPet._id,
+        name: registryPet.name,
+        petCode: registryPet.petCode,
+        species: registryPet.species,
+        speciesId: registryPet.species,
+        breed: registryPet.breed,
+        breedId: registryPet.breed,
+        currentStatus: registryPet.currentStatus,
+        source: registryPet.source,
+        firstAddedSource: registryPet.firstAddedSource,
+        firstAddedAt: registryPet.firstAddedAt,
+        acquiredDate: registryPet.lastTransferAt || registryPet.updatedAt,
+        images: registryPet.images || [],
+        gender: 'Unknown', // Default values since these might not be in registry
+        age: 0,
+        ageUnit: 'months',
+        color: '',
+        healthStatus: 'Good',
+        size: 'medium',
+        weight: { value: 0, unit: 'kg' },
+        createdBy: registryPet.currentOwnerId,
+        lastUpdatedBy: registryPet.currentOwnerId,
+        createdAt: registryPet.createdAt,
+        updatedAt: registryPet.updatedAt
+      };
+
+      // Check access permissions
+      if (!canAccessPet(req.user, { storeId: registryPet.storeId, owner: registryPet.currentOwnerId })) {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          pet
+        }
+      });
+    }
+
+    return res.status(404).json({
+      success: false,
+      message: 'Pet not found in registry'
+    });
+  } catch (error) {
+    console.error('Get registry pet error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
 module.exports = {
   getOwnedPets,
   createPet,
@@ -796,5 +987,6 @@ module.exports = {
   getPetHistory,
   searchNearbyPets,
   getPetChangelog,
-  getRegistryHistory
+  getRegistryHistory,
+  getRegistryPetById
 };

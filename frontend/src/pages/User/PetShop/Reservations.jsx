@@ -69,10 +69,12 @@ const Reservations = () => {
       'manager_review': 'info',
       'approved': 'success',
       'rejected': 'error',
+      'going_to_buy': 'info',
       'payment_pending': 'warning',
       'paid': 'success',
       'ready_pickup': 'primary',
-      'completed': 'success',
+      'delivered': 'success',
+      'at_owner': 'success',
       'cancelled': 'error'
     }
     return colors[status] || 'default'
@@ -84,10 +86,12 @@ const Reservations = () => {
       'manager_review': 'Under Review',
       'approved': 'Approved',
       'rejected': 'Rejected',
+      'going_to_buy': 'Going to Buy',
       'payment_pending': 'Payment Pending',
       'paid': 'Paid',
       'ready_pickup': 'Ready for Pickup',
-      'completed': 'Completed',
+      'delivered': 'Delivered',
+      'at_owner': 'Pet with Owner',
       'cancelled': 'Cancelled'
     }
     return labels[status] || status
@@ -122,9 +126,10 @@ const Reservations = () => {
 
   const filteredReservations = reservations.filter(reservation => {
     if (tabValue === 0) return true // All
-    if (tabValue === 1) return ['pending', 'manager_review', 'approved', 'payment_pending', 'paid', 'ready_pickup'].includes(reservation.status)
-    if (tabValue === 2) return reservation.status === 'completed'
-    if (tabValue === 3) return reservation.status === 'cancelled'
+    if (tabValue === 1) return ['pending', 'manager_review', 'approved', 'going_to_buy', 'payment_pending', 'paid', 'ready_pickup'].includes(reservation.status)
+    if (tabValue === 2) return reservation.status === 'delivered'
+    if (tabValue === 3) return reservation.status === 'at_owner'
+    if (tabValue === 4) return reservation.status === 'cancelled'
     return true
   })
 
@@ -170,7 +175,8 @@ const Reservations = () => {
       >
         <Tab label="All Reservations" />
         <Tab label="Active" />
-        <Tab label="Completed" />
+        <Tab label="Delivered" />
+        <Tab label="Pet with Owner" />
         <Tab label="Cancelled" />
       </Tabs>
 
@@ -273,7 +279,7 @@ const Reservations = () => {
                               </IconButton>
                             </Tooltip>
                             
-                            {['pending', 'manager_review', 'approved', 'payment_pending', 'paid'].includes(reservation.status) && (
+                            {['pending', 'manager_review', 'approved', 'going_to_buy', 'payment_pending'].includes(reservation.status) && (
                               <Tooltip title="Cancel Reservation">
                                 <IconButton 
                                   size="small" 
@@ -310,7 +316,7 @@ const Reservations = () => {
                         View Details
                       </Button>
                       
-                      {['pending', 'manager_review', 'approved', 'payment_pending', 'paid'].includes(reservation.status) && (
+                      {['pending', 'manager_review', 'approved', 'going_to_buy', 'payment_pending'].includes(reservation.status) && (
                         <Button 
                           variant="outlined" 
                           size="small"
@@ -321,7 +327,29 @@ const Reservations = () => {
                           Cancel
                         </Button>
                       )}
-                      
+
+                      {reservation.status === 'approved' && (
+                        <Button 
+                          variant="contained" 
+                          size="small"
+                          color="success"
+                          onClick={() => navigate(`/User/petshop/purchase-decision/${reservation._id}`)}
+                        >
+                          Make Decision
+                        </Button>
+                      )}
+
+                      {(reservation.status === 'going_to_buy' || reservation.status === 'payment_pending') && (
+                        <Button 
+                          variant="contained" 
+                          size="small"
+                          startIcon={<PaymentIcon />}
+                          onClick={() => navigate(`/User/petshop/payment/${reservation._id}`)}
+                        >
+                          Pay Now
+                        </Button>
+                      )}
+
                       {reservation.status === 'ready_pickup' && (
                         <Button 
                           variant="contained" 
@@ -332,6 +360,31 @@ const Reservations = () => {
                           Handover Details
                         </Button>
                       )}
+
+                      {reservation.status === 'paid' && (
+                        <Chip 
+                          label="Awaiting Delivery" 
+                          color="info" 
+                          size="small" 
+                        />
+                      )}
+
+                      {reservation.status === 'delivered' && (
+                        <Chip 
+                          label="Pet Delivered" 
+                          color="success" 
+                          size="small" 
+                        />
+                      )}
+
+                      {reservation.status === 'at_owner' && (
+                        <Chip 
+                          label="Pet with Owner" 
+                          color="success" 
+                          size="small" 
+                        />
+                      )}
+
                     </Box>
                   </CardContent>
                 </Card>

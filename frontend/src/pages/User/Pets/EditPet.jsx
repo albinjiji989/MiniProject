@@ -1,301 +1,439 @@
-import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
   Typography,
+  TextField,
+  Button,
   Card,
   CardContent,
-  Button,
-  TextField,
-  Grid,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  Chip,
   Alert,
-  CircularProgress
-} from '@mui/material'
+  CircularProgress,
+  Grid,
+  FormControlLabel,
+  Switch,
+  Avatar
+} from '@mui/material';
 import {
   ArrowBack as BackIcon,
-  Save as SaveIcon
-} from '@mui/icons-material'
-import { userPetsAPI } from '../../../services/api'
+  Save as SaveIcon,
+  Pets as PetsIcon
+} from '@mui/icons-material';
+import { userPetsAPI } from '../../../services/api';
 
 const EditPet = () => {
-  const { id } = useParams()
-  const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [pet, setPet] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     age: '',
     ageUnit: 'months',
     gender: 'Unknown',
+    weight: '',
+    color: '',
+    size: 'medium',
+    currentStatus: 'Available',
     healthStatus: 'Good',
-    currentStatus: 'Available'
-  })
+    specialNeeds: '',
+    temperament: [],
+    behaviorNotes: '',
+    tags: []
+  });
 
-  const [species, setSpecies] = useState([])
-  const [breeds, setBreeds] = useState([])
-
-  useEffect(() => {
-    loadPet()
-    loadDropdowns()
-  }, [id])
+  const temperamentOptions = [
+    'Friendly', 'Intelligent', 'Loyal', 'Active', 'Calm', 'Gentle',
+    'Playful', 'Energetic', 'Quiet', 'Social', 'Independent', 'Curious',
+    'Confident', 'Courageous', 'Outgoing', 'Adaptable', 'Sweet', 'Docile',
+    'Alert', 'Vocal', 'Mischievous', 'Spunky', 'Merry', 'Dignified'
+  ];
 
   const loadPet = async () => {
     try {
-      setLoading(true)
-      const res = await userPetsAPI.get(id)
-      const pet = res.data?.data || res.data?.pet || res.data
+      setLoading(true);
+      const response = await userPetsAPI.get(id);
+      const petData = response.data.data;
+      setPet(petData);
       
+      // Set form data with pet information
       setFormData({
-        name: pet.name || '',
-        age: pet.age || '',
-        ageUnit: pet.ageUnit || 'months',
-        gender: pet.gender || 'Unknown',
-        speciesId: pet.speciesId?._id || pet.speciesId || '',
-        breedId: pet.breedId?._id || pet.breedId || '',
-        healthStatus: pet.healthStatus || 'Good',
-        currentStatus: pet.currentStatus || 'Available',
-        weight: pet.weight?.value || pet.weight || '',
-        location: pet.location?.address || pet.location || '',
-        behaviorNotes: pet.behaviorNotes || ''
-      })
-    } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to load pet')
+        name: petData.name || '',
+        age: petData.age || '',
+        ageUnit: petData.ageUnit || 'months',
+        gender: petData.gender || 'Unknown',
+        weight: petData.weight?.value || '',
+        color: petData.color || '',
+        size: petData.size || 'medium',
+        currentStatus: petData.currentStatus || 'Available',
+        healthStatus: petData.healthStatus || 'Good',
+        specialNeeds: (petData.specialNeeds || []).join(', '),
+        temperament: petData.temperament || [],
+        behaviorNotes: petData.behaviorNotes || '',
+        tags: (petData.tags || []).join(', ')
+      });
+      console.log('Loaded pet data for editing:', petData);
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to load pet details');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  const loadDropdowns = async () => {
-    try {
-      const res = await userPetsAPI.getSpeciesBreedsActive()
-      setSpecies(res.data?.data?.species || [])
-      setBreeds(res.data?.data?.breeds || [])
-    } catch (e) {
-      console.error('Failed to load dropdowns:', e)
-    }
-  }
+  useEffect(() => {
+    loadPet();
+  }, [id]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
-  }
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleTemperamentChange = (temperament) => {
+    setFormData(prev => {
+      const newTemperament = prev.temperament.includes(temperament)
+        ? prev.temperament.filter(t => t !== temperament)
+        : [...prev.temperament, temperament];
+      
+      return {
+        ...prev,
+        temperament: newTemperament
+      };
+    });
+  };
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
     try {
-      setSaving(true)
-      setError('')
-      setSuccess('')
+      setSaving(true);
+      setError('');
+      setSuccess(false);
       
-      // Validate
-      if (!formData.name?.trim()) {
-        setError('Pet name is required')
-        return
-      }
-      if (!formData.age || formData.age < 0) {
-        setError('Valid age is required')
-        return
-      }
-
-      await userPetsAPI.update(id, {
+      // Prepare data for submission
+      const submitData = {
         ...formData,
-        age: Number(formData.age)
-      })
+        weight: formData.weight ? { value: parseFloat(formData.weight), unit: 'kg' } : undefined,
+        specialNeeds: formData.specialNeeds ? formData.specialNeeds.split(',').map(s => s.trim()).filter(s => s) : [],
+        tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(t => t) : []
+      };
       
-      setSuccess('Pet updated successfully!')
+      await userPetsAPI.update(id, submitData);
+      setSuccess(true);
       setTimeout(() => {
-        navigate(`/User/pets/${id}`)
-      }, 1500)
-    } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to update pet')
+        navigate(`/User/pets/${id}`);
+      }, 1500);
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to update pet information');
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   if (loading) {
     return (
-      <Container sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
         <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="md" sx={{ mt: 4 }}>
+        <Alert severity="error">{error}</Alert>
       </Container>
-    )
+    );
+  }
+
+  if (!pet) {
+    return (
+      <Container maxWidth="md" sx={{ mt: 4 }}>
+        <Alert severity="info">Pet not found</Alert>
+      </Container>
+    );
   }
 
   return (
-    <Container sx={{ py: 4 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <Button
-          startIcon={<BackIcon />}
-          onClick={() => navigate(`/User/pets/${id}`)}
-          sx={{ mr: 2 }}
-        >
-          Back
-        </Button>
-        <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          Edit Pet
-        </Typography>
-      </Box>
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
-
-      <Card component="form" onSubmit={handleSubmit}>
+    <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
+      <Button 
+        startIcon={<BackIcon />} 
+        onClick={() => navigate(-1)} 
+        sx={{ mb: 2 }}
+      >
+        Back
+      </Button>
+      
+      <Card>
         <CardContent>
-          <Grid container spacing={3}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                required
-                label="Pet Name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Gender</InputLabel>
-                <Select
-                  name="gender"
-                  value={formData.gender}
-                  onChange={handleChange}
-                  label="Gender"
-                >
-                  <MenuItem value="Male">Male</MenuItem>
-                  <MenuItem value="Female">Female</MenuItem>
-                  <MenuItem value="Unknown">Unknown</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                required
-                type="number"
-                label="Age"
-                name="age"
-                value={formData.age}
-                onChange={handleChange}
-                inputProps={{ min: 0 }}
-              />
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Age Unit</InputLabel>
-                <Select
-                  name="ageUnit"
-                  value={formData.ageUnit}
-                  onChange={handleChange}
-                  label="Age Unit"
-                >
-                  <MenuItem value="weeks">Weeks</MenuItem>
-                  <MenuItem value="months">Months</MenuItem>
-                  <MenuItem value="years">Years</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Health Status</InputLabel>
-                <Select
-                  name="healthStatus"
-                  value={formData.healthStatus}
-                  onChange={handleChange}
-                  label="Health Status"
-                >
-                  <MenuItem value="Excellent">Excellent</MenuItem>
-                  <MenuItem value="Good">Good</MenuItem>
-                  <MenuItem value="Fair">Fair</MenuItem>
-                  <MenuItem value="Poor">Poor</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  name="currentStatus"
-                  value={formData.currentStatus}
-                  onChange={handleChange}
-                  label="Status"
-                >
-                  <MenuItem value="Available">Available</MenuItem>
-                  <MenuItem value="Adopted">Adopted</MenuItem>
-                  <MenuItem value="Under Treatment">Under Treatment</MenuItem>
-                  <MenuItem value="Fostered">Fostered</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                type="number"
-                label="Weight (kg)"
-                name="weight"
-                value={formData.weight}
-                onChange={handleChange}
-                inputProps={{ min: 0, step: 0.1 }}
-              />
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Location"
-                name="location"
-                value={formData.location}
-                onChange={handleChange}
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                multiline
-                rows={3}
-                label="Behavior Notes"
-                name="behaviorNotes"
-                value={formData.behaviorNotes}
-                onChange={handleChange}
-              />
-            </Grid>
-          </Grid>
-
-          <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
-            <Button
-              variant="outlined"
-              onClick={() => navigate(`/User/pets/${id}`)}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              startIcon={<SaveIcon />}
-              disabled={saving}
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </Button>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <Avatar sx={{ bgcolor: 'primary.main', mr: 2 }}>
+              <PetsIcon />
+            </Avatar>
+            <Typography variant="h5" component="h1">
+              Edit Pet Information
+            </Typography>
           </Box>
+          
+          {success && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Pet information updated successfully!
+            </Alert>
+          )}
+          
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          
+          <form onSubmit={handleSubmit}>
+            <Grid container spacing={3}>
+              {/* Basic Information */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>
+                  Basic Information
+                </Typography>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Pet Name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  required
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={3}>
+                <TextField
+                  fullWidth
+                  label="Age"
+                  name="age"
+                  type="number"
+                  value={formData.age}
+                  onChange={handleInputChange}
+                  InputProps={{ inputProps: { min: 0 } }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={3}>
+                <FormControl fullWidth>
+                  <InputLabel>Age Unit</InputLabel>
+                  <Select
+                    name="ageUnit"
+                    value={formData.ageUnit}
+                    onChange={handleInputChange}
+                    label="Age Unit"
+                  >
+                    <MenuItem value="weeks">Weeks</MenuItem>
+                    <MenuItem value="months">Months</MenuItem>
+                    <MenuItem value="years">Years</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Gender</InputLabel>
+                  <Select
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleInputChange}
+                    label="Gender"
+                  >
+                    <MenuItem value="Male">Male</MenuItem>
+                    <MenuItem value="Female">Female</MenuItem>
+                    <MenuItem value="Unknown">Unknown</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Weight (kg)"
+                  name="weight"
+                  type="number"
+                  value={formData.weight}
+                  onChange={handleInputChange}
+                  InputProps={{ inputProps: { min: 0, step: 0.1 } }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Color"
+                  name="color"
+                  value={formData.color}
+                  onChange={handleInputChange}
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Size</InputLabel>
+                  <Select
+                    name="size"
+                    value={formData.size}
+                    onChange={handleInputChange}
+                    label="Size"
+                  >
+                    <MenuItem value="tiny">Tiny</MenuItem>
+                    <MenuItem value="small">Small</MenuItem>
+                    <MenuItem value="medium">Medium</MenuItem>
+                    <MenuItem value="large">Large</MenuItem>
+                    <MenuItem value="giant">Giant</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              {/* Status Information */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                  Status Information
+                </Typography>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Current Status</InputLabel>
+                  <Select
+                    name="currentStatus"
+                    value={formData.currentStatus}
+                    onChange={handleInputChange}
+                    label="Current Status"
+                  >
+                    <MenuItem value="Available">Available</MenuItem>
+                    <MenuItem value="Adopted">Adopted</MenuItem>
+                    <MenuItem value="Reserved">Reserved</MenuItem>
+                    <MenuItem value="Under Treatment">Under Treatment</MenuItem>
+                    <MenuItem value="Deceased">Deceased</MenuItem>
+                    <MenuItem value="Fostered">Fostered</MenuItem>
+                    <MenuItem value="in_petshop">In Pet Shop</MenuItem>
+                    <MenuItem value="available_for_sale">Available for Sale</MenuItem>
+                    <MenuItem value="sold">Sold</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Health Status</InputLabel>
+                  <Select
+                    name="healthStatus"
+                    value={formData.healthStatus}
+                    onChange={handleInputChange}
+                    label="Health Status"
+                  >
+                    <MenuItem value="Excellent">Excellent</MenuItem>
+                    <MenuItem value="Good">Good</MenuItem>
+                    <MenuItem value="Fair">Fair</MenuItem>
+                    <MenuItem value="Poor">Poor</MenuItem>
+                    <MenuItem value="Critical">Critical</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              {/* Behavioral Information */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                  Behavioral Information
+                </Typography>
+              </Grid>
+              
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Special Needs"
+                  name="specialNeeds"
+                  value={formData.specialNeeds}
+                  onChange={handleInputChange}
+                  helperText="Separate multiple needs with commas"
+                />
+              </Grid>
+              
+              <Grid item xs={12}>
+                <Typography variant="body1" gutterBottom>
+                  Temperament
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {temperamentOptions.map((option) => (
+                    <Chip
+                      key={option}
+                      label={option}
+                      onClick={() => handleTemperamentChange(option)}
+                      color={formData.temperament.includes(option) ? 'primary' : 'default'}
+                      variant={formData.temperament.includes(option) ? 'filled' : 'outlined'}
+                      sx={{ cursor: 'pointer' }}
+                    />
+                  ))}
+                </Box>
+              </Grid>
+              
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Behavior Notes"
+                  name="behaviorNotes"
+                  value={formData.behaviorNotes}
+                  onChange={handleInputChange}
+                  multiline
+                  rows={3}
+                />
+              </Grid>
+              
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Tags"
+                  name="tags"
+                  value={formData.tags}
+                  onChange={handleInputChange}
+                  helperText="Separate multiple tags with commas"
+                />
+              </Grid>
+              
+              {/* Submit Button */}
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 2 }}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => navigate(-1)}
+                    disabled={saving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+                    disabled={saving}
+                  >
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </Box>
+              </Grid>
+            </Grid>
+          </form>
         </CardContent>
       </Card>
     </Container>
-  )
-}
+  );
+};
 
-export default EditPet
+export default EditPet;

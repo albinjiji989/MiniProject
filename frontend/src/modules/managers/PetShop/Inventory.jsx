@@ -146,13 +146,12 @@ const Inventory = () => {
               <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
                 Add new pets to your inventory with multi-step age and gender distribution
               </Typography>
-              <Button
-                variant="contained"
-                size="large"
-                fullWidth
-                onClick={() => navigate('/manager/petshop/add-stock')}
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />}
+                onClick={() => navigate('/manager/petshop/wizard/basic')}
               >
-                Add Stock
+                Add New Stock
               </Button>
             </CardContent>
           </Card>
@@ -181,7 +180,7 @@ const Inventory = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        {/* <Grid item xs={12} md={6}>
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ p: 4 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -196,36 +195,12 @@ const Inventory = () => {
                 size="large"
                 fullWidth
                 color="warning"
-                onClick={() => navigate('/manager/petshop/pricing-rules')}
               >
                 Manage Pricing
               </Button>
             </CardContent>
           </Card>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent sx={{ p: 4 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <AssessmentIcon sx={{ fontSize: 40, color: 'info.main', mr: 2 }} />
-                <Typography variant="h5">Reports & Analytics</Typography>
-              </Box>
-              <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
-                View sales reports, inventory analytics, and performance metrics
-              </Typography>
-              <Button
-                variant="contained"
-                size="large"
-                fullWidth
-                color="info"
-                onClick={() => navigate('/manager/petshop/reports')}
-              >
-                View Reports
-              </Button>
-            </CardContent>
-          </Card>
-        </Grid>
+        </Grid> */}
       </Grid>
 
       {/* Snackbar */}

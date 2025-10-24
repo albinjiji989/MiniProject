@@ -45,7 +45,7 @@ import {
   Help as HelpIcon,
   Pets as PetsIcon
 } from '@mui/icons-material'
-import { userPetsAPI, resolveMediaUrl } from '../../../services/api'
+import { userPetsAPI, petsAPI, resolveMediaUrl, apiClient } from '../../../services/api'
 
 const UserPetDetails = () => {
   const { id } = useParams()
@@ -66,15 +66,67 @@ const UserPetDetails = () => {
   const loadPet = async () => {
     try {
       setLoading(true)
-      const res = await userPetsAPI.get(id)
-      const petData = res.data?.data || res.data?.pet || res.data
-      console.log('Pet data received:', petData)
-      setPet(petData)
+      setError('')
       
-      // Load medical history
-      loadMedicalHistory()
+      console.log(`🔍 Fetching pet with ID: ${id} for user: ${localStorage.getItem('userId') || 'unknown'}`)
+      
+      // First try to load from centralized registry (for pets from petshop/adoption)
+      try {
+        const res = await petsAPI.getPet(id)
+        const petData = res.data?.data?.pet || res.data?.data || res.data
+        console.log('✅ Pet data received from centralized registry:', petData)
+        setPet(petData)
+        
+        // Load medical history
+        loadMedicalHistory()
+        return
+      } catch (centralizedError) {
+        console.log('❌ Failed to load from centralized registry, trying registry by ID:', centralizedError.message)
+        // If that fails, try to get from registry by ID
+        try {
+          const res = await petsAPI.getRegistryPet(id)
+          const petData = res.data?.data?.pet || res.data?.data || res.data
+          console.log('✅ Pet data received from registry by ID:', petData)
+          setPet(petData)
+          
+          // Load medical history
+          loadMedicalHistory()
+          return
+        } catch (registryError) {
+          console.log('❌ Failed to load from registry by ID, trying userPetsAPI:', registryError.message)
+          // If that fails, try userPetsAPI (for user-created pets)
+          try {
+            const res = await userPetsAPI.get(id)
+            const petData = res.data?.data || res.data?.pet || res.data
+            console.log('✅ Pet data received from userPetsAPI:', petData)
+            setPet(petData)
+            
+            // Load medical history
+            loadMedicalHistory()
+            return
+          } catch (userError) {
+            console.log('❌ Failed to load from userPetsAPI:', userError.message)
+            // Last resort: check if this might be a reservation ID
+            try {
+              const reservationRes = await apiClient.get(`/petshop/user/public/reservations/${id}`)
+              const reservation = reservationRes.data?.data?.reservation
+              if (reservation && reservation.itemId) {
+                console.log('💡 Found reservation, redirecting to item ID:', reservation.itemId._id)
+                // Redirect to the actual pet ID
+                navigate(`/User/pets/${reservation.itemId._id}`, { replace: true })
+                return
+              }
+            } catch (reservationError) {
+              console.log('Reservation check failed:', reservationError.message)
+            }
+            
+            console.log('❌ Pet not found for ID:', id)
+            throw new Error('Pet not found in any system. Please check the ID or contact support.')
+          }
+        }
+      }
     } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to load pet')
+      setError(e?.message || 'Failed to load pet. Please try again later.')
     } finally {
       setLoading(false)
     }
@@ -83,8 +135,20 @@ const UserPetDetails = () => {
   const loadMedicalHistory = async () => {
     try {
       setMedicalHistoryLoading(true)
-      const res = await userPetsAPI.getMedicalHistory(id)
-      setMedicalHistory(res.data?.data?.medicalHistory || [])
+      // Try to load medical history from centralized registry first
+      try {
+        const res = await petsAPI.getHistory(id)
+        setMedicalHistory(res.data?.data?.history || res.data?.data?.medicalHistory || [])
+      } catch (centralizedError) {
+        // Fall back to userPetsAPI
+        try {
+          const res = await userPetsAPI.getMedicalHistory(id)
+          setMedicalHistory(res.data?.data?.medicalHistory || [])
+        } catch (userError) {
+          console.log('Failed to load medical history from both APIs:', { centralizedError, userError })
+          setMedicalHistory([])
+        }
+      }
     } catch (e) {
       console.error('Failed to load medical history:', e)
     } finally {
@@ -106,7 +170,14 @@ const UserPetDetails = () => {
 
   const handleEdit = () => {
     handleMenuClose()
-    navigate(`/User/pets/${id}/edit`)
+    // Determine which edit route to use based on pet source
+    if (pet?.source === 'core' || !pet?.source) {
+      // User-created pet
+      navigate(`/User/pets/${id}/edit`)
+    } else {
+      // Pet from petshop or adoption
+      navigate(`/User/pets/${id}/edit-basic`)
+    }
   }
 
   const handleDeleteClick = () => {
@@ -118,8 +189,14 @@ const UserPetDetails = () => {
     try {
       setDeleting(true)
       setDeleteError('')
-      await userPetsAPI.delete(id)
-      navigate('/User/pets', { state: { message: 'Pet deleted successfully' } })
+      
+      // Only user-created pets can be deleted
+      if (pet?.source === 'core' || !pet?.source) {
+        await userPetsAPI.delete(id)
+        navigate('/User/pets', { state: { message: 'Pet deleted successfully' } })
+      } else {
+        setDeleteError('Only manually added pets can be deleted. Pets from pet shop or adoption cannot be deleted.')
+      }
     } catch (e) {
       setDeleteError(e?.response?.data?.message || 'Failed to delete pet')
     } finally {
@@ -134,10 +211,14 @@ const UserPetDetails = () => {
 
   const getPrimaryImageUrl = () => {
     try {
+      console.log('Getting primary image URL for pet:', pet?.name, 'Images:', pet?.images);
       if (pet.images && Array.isArray(pet.images) && pet.images.length > 0) {
         const primaryImage = pet.images.find(img => img?.isPrimary) || pet.images[0];
+        console.log('Selected primary image:', primaryImage);
         if (primaryImage?.url) {
-          return resolveMediaUrl(primaryImage.url);
+          const url = resolveMediaUrl(primaryImage.url);
+          console.log('Resolved image URL:', url);
+          return url;
         }
       }
     } catch (error) {
@@ -381,7 +462,16 @@ const UserPetDetails = () => {
         <Button 
           variant="contained"
           startIcon={<MedicalIcon />}
-          onClick={() => navigate(`/User/pets/${id}/medical-history`)}
+          onClick={() => {
+            // Determine which medical history route to use
+            if (pet?.source === 'core' || !pet?.source) {
+              // User-created pet
+              navigate(`/User/pets/${id}/medical-history`)
+            } else {
+              // Pet from petshop or adoption - use the centralized API
+              navigate(`/User/pets/${id}/medical-history`)
+            }
+          }}
           size="large"
           fullWidth={isMobile}
         >
@@ -390,7 +480,16 @@ const UserPetDetails = () => {
         <Button 
           variant="outlined"
           startIcon={<HistoryIcon />}
-          onClick={() => navigate(`/User/pets/${id}/history`)}
+          onClick={() => {
+            // Determine which history route to use
+            if (pet?.source === 'core' || !pet?.source) {
+              // User-created pet
+              navigate(`/User/pets/${id}/history`)
+            } else {
+              // Pet from petshop or adoption
+              navigate(`/User/pets/${id}/history`)
+            }
+          }}
           size="large"
           fullWidth={isMobile}
         >
