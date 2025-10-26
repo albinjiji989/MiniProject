@@ -254,7 +254,9 @@ const Sidebar = ({ open, onClose, user }) => {
               onClick={() => {
                 // Handle logout
                 localStorage.removeItem('token')
-                navigate('/')
+                setTimeout(() => {
+                  navigate('/')
+                }, 100)
               }}
               sx={{
                 mx: 1,

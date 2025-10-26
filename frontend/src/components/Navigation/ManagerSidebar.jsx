@@ -559,7 +559,9 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
             <ListItemButton
               onClick={() => {
                 localStorage.removeItem('token')
-                navigate('/')
+                setTimeout(() => {
+                  navigate('/')
+                }, 100)
               }}
               sx={{
                 mx: 1,

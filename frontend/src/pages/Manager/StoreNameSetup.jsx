@@ -113,11 +113,11 @@ const StoreNameSetup = () => {
         setSuccessMessage('Store information saved successfully. A clinic has been automatically created for your store.')
         // Wait a bit before redirecting so user can see the message
         setTimeout(() => {
-          window.location.href = '/manager/dashboard'
+          navigate('/manager/dashboard')
         }, 2000)
       } else {
         // Redirect to dashboard immediately for other modules
-        window.location.href = '/manager/dashboard'
+        navigate('/manager/dashboard')
       }
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to save store info')

@@ -29,12 +29,15 @@ const ForcePassword = () => {
     try {
       setBusy(true)
       await api.post('/auth/force-password', { currentPassword, newPassword })
-      setSuccess('Password updated successfully! Redirecting to login...')
+      setSuccess('Password updated successfully! Redirecting...')
       setBusy(false)
       setTimeout(async () => {
         try { await logout() } catch (_) {}
-        navigate('/', { replace: true })
+        setTimeout(() => {
+          navigate('/', { replace: true })
+        }, 100)
       }, 800)
+
     } catch (err) {
       setBusy(false)
       setError(err?.response?.data?.message || 'Could not update password')

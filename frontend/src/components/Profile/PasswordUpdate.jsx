@@ -66,17 +66,20 @@ const PasswordUpdate = ({ profileData, onUpdateSuccess, onUpdateError }) => {
       await api.put('/profile/password', payload);
       
       // Show success message briefly
-      onUpdateSuccess('Password updated successfully! Redirecting to login...');
+      onUpdateSuccess('Password updated successfully! Redirecting...');
       
       // Wait 2 seconds to show the message, then logout and redirect
       setTimeout(() => {
         logout();
-        navigate('/', { 
-          state: { 
-            message: 'Your password has been updated. Please login with your new password.' 
-          }
-        });
+        setTimeout(() => {
+          navigate('/', { 
+            state: { 
+              message: 'Your password has been updated. Please login with your new password.' 
+            }
+          });
+        }, 100)
       }, 2000);
+
     } catch (error) {
       console.error('Error updating password:', error);
       onUpdateError(error.response?.data?.message || 'Failed to update password');

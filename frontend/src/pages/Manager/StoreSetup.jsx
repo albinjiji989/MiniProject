@@ -72,7 +72,8 @@ const StoreSetup = () => {
       // Refresh auth state and force a reload so AuthProvider picks up updated user via /auth/me
       try { await authAPI.getMe() } catch (_) {}
       // Hard reload ensures AuthProvider useEffect runs and sets updated user (with storeId/storeName)
-      window.location.href = '/manager/dashboard'
+      navigate('/manager/dashboard')
+
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to save store info')
     } finally {

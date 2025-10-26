@@ -8,9 +8,9 @@ const ProtectedRoute = ({ children }) => {
   // While verifying token/user, avoid redirects to prevent loops
   if (loading) return null
 
-  // Only rely on in-memory token; if none, redirect to login
+  // Only rely on in-memory token; if none, redirect to landing page
   if (!token) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/" replace />
   }
 
   // If user must change password, redirect to force password page
@@ -22,5 +22,3 @@ const ProtectedRoute = ({ children }) => {
 }
 
 export default ProtectedRoute
-
-

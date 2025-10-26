@@ -59,7 +59,9 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
   
   const handleLogout = () => {
     localStorage.removeItem('token')
-    navigate('/')
+    setTimeout(() => {
+      navigate('/')
+    }, 100)
     handleProfileMenuClose()
   }
 

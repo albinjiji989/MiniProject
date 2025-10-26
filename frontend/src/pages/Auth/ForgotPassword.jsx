@@ -42,11 +42,14 @@ const ForgotPassword = () => {
 		const res = await verifyOTPAndResetPassword({ email, otp, newPassword })
 		setBusy(false)
 		if (res.success) {
-			setSuccess('Password has been reset successfully! Redirecting to login...')
-			// Redirect to login after 2 seconds
+			setSuccess('Password has been reset successfully! Redirecting...')
+			// Redirect to landing page after 2 seconds
 			setTimeout(() => {
-				navigate('/')
+				setTimeout(() => {
+					navigate('/')
+				}, 100)
 			}, 2000)
+
 		} else {
 			setError(res.error || 'Failed to reset password')
 		}

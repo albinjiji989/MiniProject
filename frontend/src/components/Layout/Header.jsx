@@ -36,7 +36,9 @@ const Header = ({ onMenuClick }) => {
 
   const handleLogout = () => {
     logout()
-    navigate('/')
+    setTimeout(() => {
+      navigate('/')
+    }, 100)
     handleMenuClose()
   }
 
