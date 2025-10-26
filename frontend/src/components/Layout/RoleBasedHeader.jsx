@@ -54,7 +54,7 @@ const RoleBasedHeader = ({ onMenuClick }) => {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    navigate('/')
     handleProfileMenuClose()
   }
 

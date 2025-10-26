@@ -71,7 +71,7 @@ const PasswordUpdate = ({ profileData, onUpdateSuccess, onUpdateError }) => {
       // Wait 2 seconds to show the message, then logout and redirect
       setTimeout(() => {
         logout();
-        navigate('/login', { 
+        navigate('/', { 
           state: { 
             message: 'Your password has been updated. Please login with your new password.' 
           }

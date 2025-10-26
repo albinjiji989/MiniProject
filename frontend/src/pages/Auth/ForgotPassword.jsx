@@ -45,7 +45,7 @@ const ForgotPassword = () => {
 			setSuccess('Password has been reset successfully! Redirecting to login...')
 			// Redirect to login after 2 seconds
 			setTimeout(() => {
-				navigate('/login')
+				navigate('/')
 			}, 2000)
 		} else {
 			setError(res.error || 'Failed to reset password')

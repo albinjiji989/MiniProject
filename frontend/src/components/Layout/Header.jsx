@@ -36,7 +36,7 @@ const Header = ({ onMenuClick }) => {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    navigate('/')
     handleMenuClose()
   }
 

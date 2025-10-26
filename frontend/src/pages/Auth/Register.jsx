@@ -37,7 +37,7 @@ const Register = () => {
 		setIsLoading(false)
 		if (result?.success) {
 			alert(result.message || 'Signup successful! Welcome email sent.')
-			navigate('/login')
+			navigate('/')
 		}
 	}
 

@@ -33,7 +33,7 @@ const ForcePassword = () => {
       setBusy(false)
       setTimeout(async () => {
         try { await logout() } catch (_) {}
-        navigate('/login', { replace: true })
+        navigate('/', { replace: true })
       }, 800)
     } catch (err) {
       setBusy(false)

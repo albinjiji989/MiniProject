@@ -256,7 +256,7 @@ const RoleBasedSidebar = ({ onClose }) => {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    navigate('/')
   }
 
   // Get portal title based on role
