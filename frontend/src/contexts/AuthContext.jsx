@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { authAPI } from '../services/api'
 import firebaseAuth from '../services/firebaseAuth'
 
@@ -55,6 +56,7 @@ const authReducer = (state, action) => {
 
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState)
+  const navigate = useNavigate()
 
   const TOKEN_KEYS = ['token', 'authToken', 'accessToken', 'jwt', 'jwtToken', 'access_token']
   const clearAllAuthTokens = () => {
@@ -67,6 +69,19 @@ export const AuthProvider = ({ children }) => {
       sessionStorage.removeItem('user')
     } catch (_) {}
   }
+
+  // Handle custom logout event
+  useEffect(() => {
+    const handleLogout = () => {
+      clearAuthState()
+    }
+
+    window.addEventListener('auth:logout', handleLogout)
+    
+    return () => {
+      window.removeEventListener('auth:logout', handleLogout)
+    }
+  }, [])
 
   // Check if user is a module manager with empty store name
   const needsStoreNameSetup = (user) => {
@@ -313,15 +328,15 @@ export const AuthProvider = ({ children }) => {
       // keep the guard for this navigation tick, it will be removed by listener
       dispatch({ type: 'LOGOUT' })
       
-      // Redirect to login
-      window.location.href = '/login'
+      // Redirect to login using navigate
+      navigate('/login')
     }
   }
 
   const clearAuthState = () => {
     clearAllAuthTokens()
     dispatch({ type: 'LOGOUT' })
-    window.location.href = '/login'
+    navigate('/login')
   }
 
   const updateProfile = async (profileData) => {
