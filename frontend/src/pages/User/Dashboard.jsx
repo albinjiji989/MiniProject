@@ -88,64 +88,46 @@ const UserDashboard = () => {
       setActivityLoading(true)
       setActivityError('')
       
-      // Load all data in parallel
-      const [petsRes, ownedRes, resvRes, activityRes, adoptedRes, vetRes] = await Promise.allSettled([
-        userPetsAPI.list(),
+      // USE EXACT SAME CODE AS PETS LIST PAGE
+      // Fetch from PetNew, Pet, adopted pets, and purchased pets models in parallel
+      const [petNewRes, petRes, adoptedRes, purchasedRes] = await Promise.allSettled([
+        userPetsAPI.list({
+          page: 1,
+          limit: 12,
+        }),
         apiClient.get('/pets/my-pets'),
-        apiClient.get('/petshop/user/public/reservations'),
-        apiClient.get('/user-dashboard/activities'),
         adoptionAPI.getMyAdoptedPets(),
-        apiClient.get('/veterinary/user/appointments') // Get real veterinary appointments
+        apiClient.get('/petshop/user/my-purchased-pets') // Add pet shop purchased pets
       ])
       
-      // Process pets from PetNew model
-      let allPets = []
-      if (petsRes.status === 'fulfilled') {
-        const petNewPets = petsRes.value.data?.data || []
-        allPets = [...allPets, ...petNewPets]
+      // Process PetNew results - EXACT SAME CODE AS PETS LIST PAGE
+      let petNewPets = []
+      let petNewPagination = {}
+      if (petNewRes.status === 'fulfilled') {
+        const data = petNewRes.value.data
+        petNewPets = Array.isArray(data?.data) ? data.data : (data?.data?.pets || [])
+        petNewPagination = data?.pagination || {}
       }
       
-      // Process core owned pets
-      if (ownedRes.status === 'fulfilled') {
-        const corePets = ownedRes.value.data?.data?.pets || []
-        allPets = [...allPets, ...corePets]
+      // Process Pet results - EXACT SAME CODE AS PETS LIST PAGE
+      let corePets = []
+      if (petRes.status === 'fulfilled') {
+        corePets = petRes.value.data?.data?.pets || []
       }
       
-      // Process petshop purchases
-      let purchases = []
-      if (resvRes.status === 'fulfilled') {
-        const all = resvRes.value.data?.data?.reservations || []
-        purchases = all.filter(r => ['paid','ready_pickup','completed','at_owner'].includes(r.status))
-        setPetshopPurchases(purchases)
-      }
-
-      // Process adopted pets
+      // Process adopted pets - EXACT SAME CODE AS PETS LIST PAGE
       let adoptedPets = []
       if (adoptedRes.status === 'fulfilled') {
         adoptedPets = adoptedRes.value.data?.data || []
       }
-
-      // Process veterinary appointments
-      let upcomingAppointments = []
-      if (vetRes.status === 'fulfilled') {
-        upcomingAppointments = vetRes.value.data?.data?.appointments || []
+      
+      // Process purchased pets - EXACT SAME CODE AS PETS LIST PAGE
+      let purchasedPets = []
+      if (purchasedRes.status === 'fulfilled') {
+        purchasedPets = purchasedRes.value.data?.data?.pets || []
       }
-
-      // Map purchased items to pet-like objects
-      const mappedPurchases = purchases.map(r => ({
-        _id: r.itemId?._id || r._id,
-        name: r.itemId?.name || 'Pet',
-        images: r.itemId?.images || [],
-        petCode: r.itemId?.petCode,
-        breedId: r.itemId?.breedId,
-        breed: r.itemId?.breedId?.name,
-        gender: r.itemId?.gender || 'Unknown',
-        status: r.status,
-        currentStatus: r.status,
-        tags: ['petshop'],
-      }))
-
-      // Map adopted pets to pet-like objects
+      
+      // Map adopted pets to pet-like objects - EXACT SAME CODE AS PETS LIST PAGE
       const mappedAdoptedPets = adoptedPets.map(pet => ({
         _id: pet._id,
         name: pet.name || 'Pet',
@@ -157,23 +139,69 @@ const UserDashboard = () => {
         status: 'adopted',
         currentStatus: 'adopted',
         tags: ['adoption'],
-        adoptionDate: pet.adoptionDate
+        adoptionDate: pet.adoptionDate,
+        age: pet.age,
+        ageUnit: pet.ageUnit,
+        color: pet.color,
+        createdAt: pet.adoptionDate
       }))
-
-      // Combine all pets and remove duplicates
-      const combinedPets = [...allPets, ...mappedPurchases, ...mappedAdoptedPets]
+      
+      // Map purchased pets to pet-like objects - EXACT SAME CODE AS PETS LIST PAGE
+      const mappedPurchasedPets = purchasedPets.map(pet => ({
+        _id: pet._id,
+        name: pet.name || 'Pet',
+        images: pet.images || [],
+        petCode: pet.petCode,
+        breed: pet.breed,
+        species: pet.species,
+        gender: pet.gender || 'Unknown',
+        status: 'purchased',
+        currentStatus: 'purchased',
+        tags: ['purchased'],
+        purchaseDate: pet.acquiredDate,
+        age: pet.age,
+        ageUnit: pet.ageUnit,
+        color: pet.color,
+        createdAt: pet.acquiredDate,
+        source: pet.source,
+        sourceLabel: pet.sourceLabel
+      }))
+      
+      // Combine and deduplicate pets - EXACT SAME CODE AS PETS LIST PAGE
+      const combinedPets = [...petNewPets, ...corePets, ...mappedAdoptedPets, ...mappedPurchasedPets]
       const uniquePets = combinedPets.filter((pet, index, self) => 
         index === self.findIndex(p => (p.petCode || p._id) === (pet.petCode || pet._id))
       )
       
-      setMyPets(uniquePets)
+      // Sort pets - EXACT SAME CODE AS PETS LIST PAGE
+      const sortedPets = [...uniquePets].sort((a, b) => {
+        // Default sort by creation date (newest first)
+        const dateA = new Date(a.createdAt || a.adoptionDate || a.purchaseDate || 0)
+        const dateB = new Date(b.createdAt || b.adoptionDate || b.purchaseDate || 0)
+        return dateB - dateA
+      })
       
+      // SET PETS FOR DASHBOARD - EXACT SAME AS PETS LIST PAGE
+      setMyPets(sortedPets)
+      
+      // Load other dashboard data
+      const [activityRes, vetRes] = await Promise.allSettled([
+        apiClient.get('/user-dashboard/activities'),
+        apiClient.get('/veterinary/user/appointments') // Get real veterinary appointments
+      ])
+
+      // Process veterinary appointments
+      let upcomingAppointments = []
+      if (vetRes.status === 'fulfilled') {
+        upcomingAppointments = vetRes.value.data?.data?.appointments || []
+      }
+
       // Update stats with real data
       setStats({
-        totalPets: uniquePets.length,
+        totalPets: sortedPets.length, // Use sorted pets count
         upcomingAppointments: upcomingAppointments.length,
         pendingAdoptions: 0, // Would come from adoption API
-        reservations: purchases.length
+        reservations: 0 // No longer counting reservations as they're not pets
       })
       
       // Set upcoming appointments
@@ -234,17 +262,9 @@ const UserDashboard = () => {
     loadDashboardData()
   }, [])
 
-  // Unified list of pets from all sources
+  // Unified list of pets from all sources - JUST RETURN THE PETS
   const allMyPets = useMemo(() => {
-    const byKey = new Map()
-    const add = (p) => {
-      if (!p) return
-      const key = p.petCode || p._id
-      if (!key) return
-      if (!byKey.has(key)) byKey.set(key, p)
-    }
-    myPets.forEach(add)
-    return Array.from(byKey.values())
+    return myPets || [];
   }, [myPets])
 
   // Service categories for better organization
@@ -507,7 +527,7 @@ const UserDashboard = () => {
           </Card>
         ) : (
           <Box sx={{ display: 'flex', gap: 2, overflowX: 'auto', pb: 1 }}>
-            {allMyPets.slice(0, 4).map((pet) => (
+            {allMyPets.map((pet) => (
               <Card 
                 key={pet._id || pet.petCode} 
                 sx={{ 
@@ -567,7 +587,15 @@ const UserDashboard = () => {
                         )}
                       </Box>
                       <Typography variant="body2" color="text.secondary" noWrap>
-                        {(pet.breedId?.name || pet.breed?.name || pet.breed || 'Breed not specified')} • {(pet.gender || 'Gender not set')}
+                        {/* Handle case where breed might be an object - MATCHING PETS LIST PAGE */}
+                        {(typeof pet.breed === 'object' && pet.breed !== null ? 
+                          (pet.breed.name || pet.breed._id || JSON.stringify(pet.breed)) : 
+                          (pet.breedId?.name || pet.breed?.name || pet.breed || 'Breed not specified'))} 
+                        • 
+                        {/* Handle case where gender might be an object - MATCHING PETS LIST PAGE */}
+                        {(typeof pet.gender === 'object' && pet.gender !== null ? 
+                          (pet.gender.name || pet.gender._id || JSON.stringify(pet.gender)) : 
+                          (pet.gender || 'Gender not set'))}
                       </Typography>
                       <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                         <Chip 
@@ -580,11 +608,15 @@ const UserDashboard = () => {
                           }
                           variant="outlined"
                         />
-                        {pet.tags?.includes('petshop') && (
-                          <Chip label="Pet Shop" size="small" color="info" variant="outlined" />
+                        {/* UPDATED TAG HANDLING - MATCHING PETS LIST PAGE */}
+                        {pet.tags?.includes('purchased') && (
+                          <Chip label="Purchased" size="small" color="info" variant="outlined" />
                         )}
                         {pet.tags?.includes('adoption') && (
                           <Chip label="Adopted" size="small" color="success" variant="outlined" />
+                        )}
+                        {pet.tags?.includes('petshop') && (
+                          <Chip label="Pet Shop" size="small" color="info" variant="outlined" />
                         )}
                       </Box>
                     </Box>

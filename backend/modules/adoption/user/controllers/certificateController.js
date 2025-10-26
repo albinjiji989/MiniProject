@@ -55,6 +55,12 @@ async function streamCertificateFile(req, res) {
 
     console.log('User certificate streaming - File URL:', fileUrl);
 
+    // For Cloudinary URLs, redirect to the direct URL
+    if (fileUrl.includes('cloudinary.com')) {
+      console.log('Redirecting to Cloudinary URL:', fileUrl);
+      return res.redirect(fileUrl);
+    }
+
     // If relative path (served by our server), stream from disk
     if (/^\//.test(fileUrl)) {
       const backendRoot = path.join(__dirname, '..', '..', '..', '..');

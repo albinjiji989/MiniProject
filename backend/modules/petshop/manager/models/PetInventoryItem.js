@@ -131,7 +131,7 @@ const petInventoryItemSchema = new mongoose.Schema({
   // Store Information
   storeId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'PetShopStore',
+    ref: 'PetShop',
     required: true
   },
   storeName: {

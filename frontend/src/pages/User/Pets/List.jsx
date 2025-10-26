@@ -703,21 +703,30 @@ const UserPetsList = () => {
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography variant="body2" color="text.secondary">Species:</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {pet.species?.name || pet.species?.displayName || pet.speciesId?.displayName || pet.speciesId?.name || pet.species || '-'}
+                          {/* Handle case where species might be an object */}
+                          {typeof pet.species === 'object' && pet.species !== null ? 
+                            (pet.species.name || pet.species.displayName || pet.species._id || JSON.stringify(pet.species)) : 
+                            (pet.species?.name || pet.species?.displayName || pet.speciesId?.displayName || pet.speciesId?.name || pet.species || '-')}
                         </Typography>
                       </Box>
                       
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                         <Typography variant="body2" color="text.secondary">Breed:</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {pet.breed?.name || pet.breedId?.name || pet.breed || '-'}
+                          {/* Handle case where breed might be an object */}
+                          {typeof pet.breed === 'object' && pet.breed !== null ? 
+                            (pet.breed.name || pet.breed._id || JSON.stringify(pet.breed)) : 
+                            (pet.breed?.name || pet.breedId?.name || pet.breed || '-')}
                         </Typography>
                       </Box>
                       
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                         <Typography variant="body2" color="text.secondary">Color:</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {pet.color?.name || pet.color || '-'}
+                          {/* Handle case where color might be an object */}
+                          {typeof pet.color === 'object' && pet.color !== null ? 
+                            (pet.color.name || pet.color._id || JSON.stringify(pet.color)) : 
+                            (pet.color?.name || pet.color || '-')}
                         </Typography>
                       </Box>
                     </Box>

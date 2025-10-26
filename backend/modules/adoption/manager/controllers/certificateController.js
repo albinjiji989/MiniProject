@@ -5,6 +5,8 @@ const { sendMail } = require('../../../../core/utils/email');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const crypto = require('crypto');
 
 // POST /adoption/certificates (manager)
 async function generateCertificate(req, res) {
@@ -48,40 +50,24 @@ async function generateCertificate(req, res) {
       });
     }
 
-    const fs = require('fs');
-    const path = require('path');
-    const crypto = require('crypto');
-
-    // Prepare output directory for certificates - FIXED PATH to match static serving
-    const dir = path.join(__dirname, '..', '..', '..', 'uploads', 'adoption', 'manager', 'certificate');
-    console.log('Certificate directory path:', dir);
-    try { 
-      fs.mkdirSync(dir, { recursive: true });
-      console.log('Certificate directory created/verified');
-    } catch (err) {
-      console.error('Failed to create certificate directory:', err);
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Failed to create certificate directory: ' + err.message 
-      });
-    }
-    
     // Generate unique filename with timestamp and hash
     const timestamp = new Date().getTime();
     const randomHash = crypto.randomBytes(8).toString('hex');
     const filename = `${application._id}_${timestamp}_${randomHash}_certificate.pdf`;
-    const filePath = path.join(dir, filename);
-    const fileUrl = `/uploads/adoption/manager/certificate/${filename}`;
     
-    console.log('Certificate file path:', filePath);
-    console.log('Certificate file URL:', fileUrl);
-
-    // Generate a professional PDF certificate
+    // Generate a professional PDF certificate in memory
+    let pdfBuffer;
     await new Promise((resolve, reject) => {
       try {
         const doc = new PDFDocument({ size: 'A4', margin: 50 });
-        const stream = fs.createWriteStream(filePath);
-        doc.pipe(stream);
+        const chunks = [];
+        
+        doc.on('data', chunk => chunks.push(chunk));
+        doc.on('end', () => {
+          pdfBuffer = Buffer.concat(chunks);
+          resolve();
+        });
+        doc.on('error', reject);
 
         // Header
         doc.fontSize(24).text('PET ADOPTION CERTIFICATE', { align: 'center' });
@@ -127,31 +113,27 @@ async function generateCertificate(req, res) {
         doc.text('Contact: info@petwelfare.org | Phone: +91-9876543210', { align: 'center' });
 
         doc.end();
-
-        stream.on('finish', () => {
-          console.log('Certificate PDF generated successfully at:', filePath);
-          resolve();
-        });
-        stream.on('error', (err) => {
-          console.error('Certificate PDF generation error:', err);
-          reject(err);
-        });
       } catch (err) { 
         console.error('Certificate PDF generation exception:', err);
         reject(err); 
       }
     });
 
-    // Verify file was created
-    if (!fs.existsSync(filePath)) {
-      console.error('Certificate file was not created at:', filePath);
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Failed to create certificate file' 
-      });
-    }
+    // Upload PDF to Cloudinary
+    const base64Data = `data:application/pdf;base64,${pdfBuffer.toString('base64')}`;
     
-    console.log('Certificate file confirmed to exist at:', filePath);
+    // Upload to Cloudinary as raw file
+    const cloudinaryResult = await cloudinary.uploader.upload(base64Data, {
+      folder: 'adoption/manager/certificates',
+      public_id: filename.replace('.pdf', ''),
+      overwrite: false,
+      resource_type: 'raw',
+      format: 'pdf'
+    });
+    
+    const fileUrl = cloudinaryResult.secure_url;
+    
+    console.log('Certificate uploaded to Cloudinary:', fileUrl);
 
     // Create or upsert certificate for this application
     let certificate = await AdoptionCertificate.findOne({ applicationId: application._id });
@@ -262,6 +244,12 @@ async function streamCertificateFile(req, res) {
       if (!isOwner && !isPrivileged) {
         return res.status(403).json({ success: false, error: 'Forbidden' });
       }
+    }
+
+    // For Cloudinary URLs, redirect to the direct URL
+    if (fileUrl.includes('cloudinary.com')) {
+      console.log('Redirecting to Cloudinary URL:', fileUrl);
+      return res.redirect(fileUrl);
     }
 
     // If relative path (served by our server), stream from disk
