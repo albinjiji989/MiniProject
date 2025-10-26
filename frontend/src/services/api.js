@@ -85,7 +85,11 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       clearAllAuthTokens()
-      window.location.href = '/login'
+      // Redirect to login page - works for both localhost and Vercel
+      const frontendUrl = import.meta.env.VITE_FRONTEND_URL || window.location.origin
+      // Ensure no trailing slash in frontendUrl and add leading slash to login
+      const cleanFrontendUrl = frontendUrl.endsWith('/') ? frontendUrl.slice(0, -1) : frontendUrl
+      window.location.href = `${cleanFrontendUrl}/login`
     } else if (error.response?.status === 403) {
       // Soft-block: keep user logged in but surface message via event
       const msg = error.response?.data?.message || 'Access to this action is blocked by admin.'
