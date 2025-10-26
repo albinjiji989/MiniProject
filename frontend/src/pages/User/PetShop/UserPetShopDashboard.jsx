@@ -309,7 +309,7 @@ const UserPetShopDashboard = () => {
                   <CardMedia
                     component="img"
                     height="180"
-                    image={pet.images?.[0]?.url ? `/modules/petshop/uploads/${pet.images[0].url}` : '/placeholder-pet.svg'}
+                    image={pet.images?.[0]?.url ? pet.images[0].url : '/placeholder-pet.svg'}
                     alt={pet.name || 'Pet'}
                     sx={{ objectFit: 'cover' }}
                   />
@@ -389,7 +389,7 @@ const UserPetShopDashboard = () => {
                   <CardMedia
                     component="img"
                     height="150"
-                    image={shop.images?.[0]?.url ? `/modules/petshop/uploads/${shop.images[0].url}` : '/placeholder-shop.jpg'}
+                    image={shop.images?.[0]?.url ? shop.images[0].url : '/placeholder-shop.jpg'}
                     alt={shop.name}
                     sx={{ objectFit: 'cover' }}
                   />
@@ -473,7 +473,7 @@ const UserPetShopDashboard = () => {
                   <CardMedia
                     component="img"
                     height="150"
-                    image={reservation.itemId?.images?.[0]?.url ? `/modules/petshop/uploads/${reservation.itemId.images[0].url}` : '/placeholder-pet.svg'}
+                    image={reservation.itemId?.images?.[0]?.url ? reservation.itemId.images[0].url : '/placeholder-pet.svg'}
                     alt={reservation.itemId?.name || 'Pet'}
                     sx={{ objectFit: 'cover' }}
                   />

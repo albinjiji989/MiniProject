@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authAPI, temporaryCareAPI, petShopAPI, veterinaryAPI } from '../../services/api'
-import { useAuth } from '../../contexts/AuthContext'
+import { useAuth } from '../../contexts/AuthContext' // Fix the import
 
 const StoreNameSetup = () => {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const [storeName, setStoreName] = useState('')
   const [storeId, setStoreId] = useState('')
   const [moduleKey, setModuleKey] = useState('')
@@ -20,9 +21,38 @@ const StoreNameSetup = () => {
       try {
         // Get the module information from the user context
         if (!mounted) return
-        setModuleKey(user?.assignedModule || user?.role?.replace('_manager', '') || 'adoption')
+        const moduleKeyVal = user?.assignedModule || user?.role?.replace('_manager', '') || 'adoption'
+        setModuleKey(moduleKeyVal)
         setStoreId(user?.storeId || '')
-        setStoreName(user?.storeName || '')
+        
+        // Fetch the latest store information from the API
+        const moduleKeyLower = (user?.assignedModule || user?.role || '').toLowerCase()
+        let storeData = null
+        
+        try {
+          if (moduleKeyLower.includes('temporary-care')) {
+            const response = await temporaryCareAPI.getMyStore()
+            storeData = response.data?.data
+          } else if (moduleKeyLower.includes('petshop')) {
+            const response = await petShopAPI.getMyStore()
+            storeData = response.data?.data
+          } else if (moduleKeyLower.includes('veterinary')) {
+            const response = await veterinaryAPI.managerGetMyStore()
+            storeData = response.data?.data
+          }
+        } catch (apiError) {
+          // If API call fails, fall back to user context data
+          console.warn('Failed to fetch store data from API, using user context:', apiError)
+        }
+        
+        // Use API data if available, otherwise fall back to user context
+        if (storeData) {
+          setStoreName(storeData.storeName || storeData.name || user?.storeName || '')
+          setStoreId(storeData.storeId || storeData.id || user?.storeId || '')
+        } else {
+          setStoreName(user?.storeName || '')
+          setStoreId(user?.storeId || '')
+        }
       } catch (err) {
         setError(err?.response?.data?.message || 'Failed to load store info')
       } finally {
@@ -54,6 +84,7 @@ const StoreNameSetup = () => {
     try {
       setSaving(true)
       setError('')
+      setSuccessMessage('')
       
       // Prepare data for update
       const updateData = { storeName: storeName.trim() }
@@ -63,20 +94,31 @@ const StoreNameSetup = () => {
       
       // If module is temporary-care, use its dedicated endpoint to generate storeId and save name
       const moduleKeyLower = (user?.assignedModule || user?.role || '').toLowerCase()
+      let response = null;
       if (moduleKeyLower.includes('temporary-care')) {
-        await temporaryCareAPI.updateMyStore(updateData)
+        response = await temporaryCareAPI.updateMyStore(updateData)
       } else if (moduleKeyLower.includes('petshop')) {
-        await petShopAPI.updateMyStore(updateData)
+        response = await petShopAPI.updateMyStore(updateData)
       } else if (moduleKeyLower.includes('veterinary')) {
-        await veterinaryAPI.managerUpdateMyStore(updateData)
+        response = await veterinaryAPI.managerUpdateMyStore(updateData)
       } else {
-        await authAPI.updateProfile(updateData)
+        response = await authAPI.updateProfile(updateData)
       }
       
       // Refresh auth state to get updated user data
-      try { await authAPI.getMe() } catch (_) {}
-      // Redirect to dashboard
-      window.location.href = '/manager/dashboard'
+      try { await refreshUser() } catch (_) {}
+      
+      // Show success message for veterinary managers
+      if (moduleKeyLower.includes('veterinary')) {
+        setSuccessMessage('Store information saved successfully. A clinic has been automatically created for your store.')
+        // Wait a bit before redirecting so user can see the message
+        setTimeout(() => {
+          window.location.href = '/manager/dashboard'
+        }, 2000)
+      } else {
+        // Redirect to dashboard immediately for other modules
+        window.location.href = '/manager/dashboard'
+      }
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to save store info')
     } finally {
@@ -132,6 +174,11 @@ const StoreNameSetup = () => {
         </div>
         {error && (
           <div style={{ color: '#b00020', marginTop: 8 }}>{error}</div>
+        )}
+        {successMessage && (
+          <div style={{ color: '#006400', backgroundColor: '#f0fff0', padding: 12, borderRadius: 8, marginTop: 8 }}>
+            {successMessage}
+          </div>
         )}
         <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
           <button

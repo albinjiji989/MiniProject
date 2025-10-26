@@ -5,28 +5,18 @@ const { body, validationResult } = require('express-validator');
 const User = require('../../../core/models/User');
 const UserDetails = require('../../../core/models/UserDetails');
 const Activity = require('../../../core/models/Activity');
+const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 
-const bcrypt = require('bcryptjs');
-const { generateStoreId } = require('../../../core/utils/storeIdGenerator');
-
-// Configure multer for profile picture uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadPath = path.join(__dirname, '../../../uploads/profile-pictures');
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'profile-' + req.user.id + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
+// Configure multer to store files in memory for Cloudinary upload
+const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage,
   limits: {
@@ -44,6 +34,9 @@ const upload = multer({
     }
   }
 });
+
+const bcrypt = require('bcryptjs');
+const { generateStoreId } = require('../../../core/utils/storeIdGenerator');
 
 // @route   GET /api/profile
 // @desc    Get current user profile
@@ -410,21 +403,24 @@ router.post('/upload-picture', auth, upload.single('profilePicture'), async (req
       });
     }
 
-    // Generate the URL for the uploaded image
-    const imageUrl = `${req.protocol}://${req.get('host')}/uploads/profile-pictures/${req.file.filename}`;
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(req.file.buffer, {
+      folder: 'profile-pictures',
+      public_id: `profile-${user.id}-${Date.now()}-${Math.round(Math.random() * 1E9)}`
+    });
 
     // Add to user's uploaded images array
     if (!user.uploadedProfilePictures) {
       user.uploadedProfilePictures = [];
     }
-    user.uploadedProfilePictures.push(imageUrl);
+    user.uploadedProfilePictures.push(result.secure_url);
     await user.save();
 
     res.json({
       success: true,
       message: 'Profile picture uploaded successfully',
       data: {
-        imageUrl: imageUrl,
+        imageUrl: result.secure_url,
         images: user.uploadedProfilePictures
       }
     });

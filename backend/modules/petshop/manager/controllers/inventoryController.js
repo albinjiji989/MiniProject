@@ -210,6 +210,58 @@ const createInventoryItem = async (req, res) => {
       console.log('🖼️  Updated image documents with entityId:', item._id);
     }
     
+    // Register the pet in the centralized PetRegistry
+    try {
+      const PetRegistryService = require('../../../../core/services/petRegistryService');
+      const Species = require('../../../core/models/Species');
+      const Breed = require('../../../core/models/Breed');
+      
+      // Get species and breed details for registry
+      const speciesDoc = await Species.findById(itemData.speciesId);
+      const breedDoc = await Breed.findById(itemData.breedId);
+      
+      // Populate images to include in registry
+      await item.populate('images');
+      
+      // Pass imageIds (references) instead of full image objects
+      const itemImageIds = item.imageIds || [];
+      
+      console.log('📋 Registering PetInventoryItem in PetRegistry:', {
+        petCode: item.petCode,
+        name: item.name,
+        imageIdsCount: itemImageIds.length,
+        imageIds: itemImageIds
+      });
+      
+      // Create registry entry with source tracking and image references
+      const registryDoc = await PetRegistryService.upsertAndSetState({
+        petCode: item.petCode,
+        name: item.name,
+        species: speciesDoc?._id,
+        breed: breedDoc?._id,
+        images: itemImageIds, // Pass Image model IDs
+        source: 'petshop',
+        petShopItemId: item._id,
+        actorUserId: req.user.id,
+        firstAddedSource: 'pet_shop',
+        firstAddedBy: req.user.id
+      }, {
+        currentLocation: 'at_petshop',
+        currentStatus: item.status === 'available_for_sale' ? 'available' : 'in_petshop',
+        lastTransferAt: new Date()
+      });
+      
+      console.log('✅ PetRegistry registered for PetInventoryItem:', {
+        _id: registryDoc._id,
+        petCode: registryDoc.petCode,
+        imageIds: registryDoc.imageIds,
+        imageIdsCount: registryDoc.imageIds?.length || 0
+      });
+    } catch (regErr) {
+      console.warn('❌ PetRegistry registration failed (pet shop inventory item create):', regErr?.message || regErr);
+      console.error(regErr);
+    }
+    
     // Populate references for response
     await item.populate('speciesId', 'name displayName');
     await item.populate('breedId', 'name');
@@ -421,7 +473,7 @@ const bulkCreateInventoryItems = async (req, res) => {
         ...item,
         ...storeFilter,
         createdBy: req.user.id,
-        name: item.name || '', // Pets in inventory can have names
+        name: item.name || 'Unnamed Pet', // Provide default name if not specified
         categoryId: item.categoryId,
         speciesId: item.speciesId,
         breedId: item.breedId,
@@ -453,7 +505,7 @@ const bulkCreateInventoryItems = async (req, res) => {
     console.log('Items with store:', itemsWithStore);
     console.log('Items with store count:', itemsWithStore.length);
     
-    // Create items one by one to properly handle images
+    // Create items one by one to properly handle images and registry registration
     const createdItems = [];
     for (let i = 0; i < itemsWithStore.length; i++) {
       try {
@@ -469,6 +521,58 @@ const bulkCreateInventoryItems = async (req, res) => {
             { entityId: item._id }
           );
           console.log(`🖼️  Updated image documents for item ${i} with entityId:`, item._id);
+        }
+        
+        // Register the pet in the centralized PetRegistry
+        try {
+          const PetRegistryService = require('../../../../core/services/petRegistryService');
+          const Species = require('../../../core/models/Species');
+          const Breed = require('../../../core/models/Breed');
+          
+          // Get species and breed details for registry
+          const speciesDoc = await Species.findById(itemData.speciesId);
+          const breedDoc = await Breed.findById(itemData.breedId);
+          
+          // Populate images to include in registry
+          await item.populate('images');
+          
+          // Pass imageIds (references) instead of full image objects
+          const itemImageIds = item.imageIds || [];
+          
+          console.log(`📋 Registering PetInventoryItem ${i} in PetRegistry:`, {
+            petCode: item.petCode,
+            name: item.name,
+            imageIdsCount: itemImageIds.length,
+            imageIds: itemImageIds
+          });
+          
+          // Create registry entry with source tracking and image references
+          const registryDoc = await PetRegistryService.upsertAndSetState({
+            petCode: item.petCode,
+            name: item.name,
+            species: speciesDoc?._id,
+            breed: breedDoc?._id,
+            images: itemImageIds, // Pass Image model IDs
+            source: 'petshop',
+            petShopItemId: item._id,
+            actorUserId: req.user.id,
+            firstAddedSource: 'pet_shop',
+            firstAddedBy: req.user.id
+          }, {
+            currentLocation: 'at_petshop',
+            currentStatus: item.status === 'available_for_sale' ? 'available' : 'in_petshop',
+            lastTransferAt: new Date()
+          });
+          
+          console.log(`✅ PetRegistry registered for PetInventoryItem ${i}:`, {
+            _id: registryDoc._id,
+            petCode: registryDoc.petCode,
+            imageIds: registryDoc.imageIds,
+            imageIdsCount: registryDoc.imageIds?.length || 0
+          });
+        } catch (regErr) {
+          console.warn(`❌ PetRegistry registration failed for item ${i} (pet shop inventory item create):`, regErr?.message || regErr);
+          console.error(regErr);
         }
         
         // Populate references
@@ -690,7 +794,28 @@ const uploadInventoryHealthDoc = async (req, res) => {
       message: 'No file uploaded' 
     });
     
-    const url = `/modules/petshop/uploads/${req.file.filename}`;
+    // Upload to Cloudinary instead of local storage
+    const cloudinary = require('cloudinary').v2;
+    
+    // Convert buffer to base64 for Cloudinary upload
+    const base64Data = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    
+    // Generate a unique filename
+    const crypto = require('crypto');
+    const uniqueId = crypto.randomBytes(16).toString('hex');
+    const timestamp = Date.now();
+    const safeName = (req.file.originalname || 'health-document').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${safeName}-${timestamp}-${uniqueId}`;
+    
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(base64Data, {
+      folder: 'petshop/manager/health-docs',
+      public_id: filename,
+      overwrite: false,
+      resource_type: req.file.mimetype.startsWith('image/') ? 'image' : 'raw'
+    });
+    
+    const url = result.secure_url;
     item.healthCertificateUrl = url;
     await item.save();
     

@@ -1,6 +1,14 @@
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const cloudinary = require('cloudinary').v2;
+
+// Configure Cloudinary with environment variables
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 /**
  * Generate a unique filename using crypto for better uniqueness
@@ -26,12 +34,13 @@ const generateUniqueFilename = (originalName, entityId) => {
 };
 
 /**
- * Save base64 image to file system
+ * Upload base64 image to Cloudinary
  * @param {string} base64Data - Base64 encoded image data
- * @param {string} uploadPath - Full path where file should be saved
- * @returns {Promise<void>}
+ * @param {string} folderPath - Cloudinary folder path
+ * @param {string} filename - Filename for the image
+ * @returns {Promise<string>} Cloudinary URL of the uploaded image
  */
-const saveBase64Image = async (base64Data, uploadPath) => {
+const uploadBase64ImageToCloudinary = async (base64Data, folderPath, filename) => {
   try {
     // Extract base64 data and file extension
     const matches = base64Data.match(/^data:image\/([a-zA-Z0-9]+);base64,(.*)$/);
@@ -41,24 +50,20 @@ const saveBase64Image = async (base64Data, uploadPath) => {
     
     const base64Content = matches[2];
     
-    // Convert base64 to buffer and save to file
-    const buffer = Buffer.from(base64Content, 'base64');
-    await fs.writeFile(uploadPath, buffer);
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(
+      `data:image/${matches[1]};base64,${base64Content}`,
+      {
+        folder: folderPath,
+        public_id: filename.replace(/\.[^/.]+$/, ""), // Remove extension for public_id
+        overwrite: false,
+        resource_type: 'image'
+      }
+    );
+    
+    return result.secure_url;
   } catch (error) {
-    throw new Error(`Failed to save image: ${error.message}`);
-  }
-};
-
-/**
- * Create directory if it doesn't exist
- * @param {string} dirPath - Path to directory
- * @returns {Promise<void>}
- */
-const createDirectoryIfNotExists = async (dirPath) => {
-  try {
-    await fs.mkdir(dirPath, { recursive: true });
-  } catch (error) {
-    throw new Error(`Failed to create directory: ${error.message}`);
+    throw new Error(`Failed to upload image to Cloudinary: ${error.message}`);
   }
 };
 
@@ -81,18 +86,6 @@ const processEntityImages = async (images, entityType, entityId, userId, module,
   const savedImages = [];
   
   try {
-    // Create upload directory based on module and role
-    // For petshop, save to uploads/petshop/manager/pets
-    let uploadDir;
-    if (module === 'petshop/manager/pets' || (module === 'petshop' && role === 'manager')) {
-      uploadDir = path.join(__dirname, `../../uploads/petshop/manager/pets`);
-    } else {
-      // Split module path and join with role
-      const moduleParts = module.split('/');
-      uploadDir = path.join(__dirname, `../../uploads`, ...moduleParts, role);
-    }
-    await createDirectoryIfNotExists(uploadDir);
-    
     for (let i = 0; i < images.length; i++) {
       try {
         const img = images[i];
@@ -111,27 +104,19 @@ const processEntityImages = async (images, entityType, entityId, userId, module,
           
           // Generate unique filename
           const filename = generateUniqueFilename(originalName, entityId || 'unknown');
-          const filepath = path.join(uploadDir, filename);
           
-          // Save image to file system
-          await saveBase64Image(imageData, filepath);
+          // Create Cloudinary folder path based on module and role
+          const folderPath = `${module}/${role}`;
           
-          // Store relative path in database - make sure it matches the actual file location
-          let relativePath;
-          if (module === 'petshop/manager/pets' || (module === 'petshop' && role === 'manager')) {
-            relativePath = `/uploads/petshop/manager/pets/${filename}`;
-          } else {
-            // For other modules, use the standard path
-            const moduleParts = module.split('/');
-            relativePath = `/uploads/${moduleParts.join('/')}/${role}/${filename}`;
-          }
+          // Upload image to Cloudinary
+          const cloudinaryUrl = await uploadBase64ImageToCloudinary(imageData, folderPath, filename);
           
           // For petshop images, use a consistent module and role
           const imageModule = module === 'petshop/manager/pets' || (module === 'petshop' && role === 'manager') ? 'petshop' : module;
           const imageRole = module === 'petshop/manager/pets' || (module === 'petshop' && role === 'manager') ? 'manager' : role;
           
           const imageDoc = new Image({
-            url: relativePath,
+            url: cloudinaryUrl,
             caption: caption,
             entityType: entityType,
             entityId: entityId,
@@ -143,9 +128,9 @@ const processEntityImages = async (images, entityType, entityId, userId, module,
           
           const savedImage = await imageDoc.save();
           savedImages.push(savedImage);
-          console.log('🖼️  Saved image:', { relativePath, entityId, filename });
-        } else if (imageData && typeof imageData === 'string' && imageData.startsWith('/')) {
-          // Already a file path, store as-is
+          console.log('☁️  Saved image to Cloudinary:', { cloudinaryUrl, entityId, filename });
+        } else if (imageData && typeof imageData === 'string' && (imageData.startsWith('http') || imageData.startsWith('/'))) {
+          // Already a URL or file path, store as-is
           const imageDoc = new Image({
             url: imageData,
             caption: caption,
@@ -200,8 +185,8 @@ const processEntityDocuments = async (documents, entityType, entityId, userId, m
         const type = doc?.type || 'application/pdf';
         const uploadedAt = doc?.uploadedAt || new Date();
         
-        if (docData && typeof docData === 'string' && docData.startsWith('/')) {
-          // Already a file path, store as-is
+        if (docData && typeof docData === 'string' && (docData.startsWith('http') || docData.startsWith('/'))) {
+          // Already a URL or file path, store as-is
           const docRecord = new Document({
             url: docData,
             name: name,
@@ -232,8 +217,6 @@ const processEntityDocuments = async (documents, entityType, entityId, userId, m
 
 module.exports = {
   generateUniqueFilename,
-  saveBase64Image,
-  createDirectoryIfNotExists,
   processEntityImages,
   processEntityDocuments
 };

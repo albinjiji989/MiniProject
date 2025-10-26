@@ -270,75 +270,106 @@ const managerUpdateReservationStatus = async (req, res) => {
 
 // Helper function to transfer pet ownership when reservation is completed
 const handlePetOwnershipTransfer = async (reservation, userId) => {
+  const session = await mongoose.startSession();
   try {
+    await session.startTransaction();
+    
     // Get the inventory item with proper population
     const inventoryItem = await PetInventoryItem.findById(reservation.itemId)
       .populate('speciesId', 'name displayName')
       .populate('breedId', 'name')
-      .populate('imageIds'); // Populate imageIds to ensure images virtual field can be populated
+      .populate('imageIds')
+      .session(session);
     
     // Manually populate the virtual 'images' field
     if (inventoryItem) {
       await inventoryItem.populate('images');
     }
     
-    console.log('Inventory item found:', inventoryItem?.name, 'ImageIds:', inventoryItem?.imageIds, 'Images:', inventoryItem?.images);
     if (!inventoryItem) {
       throw new Error('Inventory item not found');
     }
+    
+    // Validate required fields
+    if (!inventoryItem.speciesId) {
+      throw new Error('Species is required for pet creation');
+    }
+    
+    if (!inventoryItem.breedId) {
+      throw new Error('Breed is required for pet creation');
+    }
+    
+    if (!inventoryItem.petCode) {
+      throw new Error('Pet code is required for pet creation');
+    }
 
-    // Create a new pet record for the user
+    // Create a new pet record for the user with proper validation
+    const Pet = require('../../../../core/models/Pet');
     const petData = {
-      name: inventoryItem.name,
+      name: inventoryItem.name || 'Pet', // Use default name if empty
       species: inventoryItem.speciesId,
       breed: inventoryItem.breedId,
       age: inventoryItem.age,
       ageUnit: inventoryItem.ageUnit,
-      gender: inventoryItem.gender,
-      color: inventoryItem.color,
+      gender: inventoryItem.gender || 'Unknown',
+      color: inventoryItem.color || 'Unknown', // Use default color if empty
       description: inventoryItem.description,
-      images: inventoryItem.images || [], // Ensure images are properly included
-      ownerId: reservation.userId,
+      imageIds: inventoryItem.imageIds || [], // Ensure imageIds are properly included
+      owner: reservation.userId, // Use 'owner' field (required by Pet model)
+      ownerId: reservation.userId, // Also set ownerId for consistency
       petCode: inventoryItem.petCode,
       source: 'petshop_purchase',
-      currentStatus: 'available',
+      currentStatus: 'sold', // Use correct status from enum
       status: 'available',
       createdBy: userId || reservation.userId // Use the provided userId or default to the reservation user
     };
 
     const newPet = new Pet(petData);
-    await newPet.save();
+    await newPet.save({ session });
 
     // Update inventory item status to sold
     inventoryItem.status = 'sold';
     inventoryItem.soldTo = reservation.userId;
     inventoryItem.soldAt = new Date();
-    await inventoryItem.save();
+    await inventoryItem.save({ session });
 
     // Update reservation with pet reference
     reservation.petId = newPet._id;
-    await reservation.save();
+    await reservation.save({ session });
 
-    // Update PetRegistry to reflect new ownership
+    // Update PetRegistry to reflect new ownership using the ensureRegistered method
     const PetRegistry = require('../../../core/models/PetRegistry');
-    console.log('Updating PetRegistry for petCode:', inventoryItem.petCode, 'ImageIds:', inventoryItem.imageIds, 'Images:', inventoryItem.images);
-    await PetRegistry.findOneAndUpdate(
-      { petCode: inventoryItem.petCode },
+    
+    // Ensure the pet is properly registered and update ownership
+    const registryDoc = await PetRegistry.ensureRegistered({
+      petCode: inventoryItem.petCode,
+      name: inventoryItem.name || 'Pet', // Use default name if empty
+      species: inventoryItem.speciesId,
+      breed: inventoryItem.breedId,
+      imageIds: inventoryItem.imageIds || [], // Ensure imageIds are properly included
+      source: 'petshop',
+      petShopItemId: inventoryItem._id,
+      firstAddedSource: 'pet_shop',
+      firstAddedBy: userId || reservation.userId,
+      corePetId: newPet._id // Link to the newly created pet
+    }, {
+      currentOwnerId: reservation.userId,
+      currentStatus: 'owned',
+      currentLocation: 'at_owner',
+      lastTransferAt: new Date()
+    }, { session }); // Pass session in options object
+    
+    console.log('Registry update result:', {
+      registryId: registryDoc._id,
+      currentOwnerId: registryDoc.currentOwnerId,
+      currentStatus: registryDoc.currentStatus,
+      currentLocation: registryDoc.currentLocation
+    });
+    
+    // Add the ownership history in the same transaction
+    await PetRegistry.findByIdAndUpdate(
+      registryDoc._id,
       {
-        $set: {
-          name: inventoryItem.name,
-          species: inventoryItem.speciesId,
-          breed: inventoryItem.breedId,
-          imageIds: inventoryItem.imageIds || [], // Ensure imageIds are properly included
-          gender: inventoryItem.gender,
-          age: inventoryItem.age,
-          ageUnit: inventoryItem.ageUnit,
-          color: inventoryItem.color,
-          currentOwnerId: reservation.userId,
-          currentStatus: 'owned',
-          currentLocation: 'at_owner',
-          lastTransferAt: new Date()
-        },
         $push: {
           ownershipHistory: {
             previousOwnerId: null,
@@ -352,13 +383,18 @@ const handlePetOwnershipTransfer = async (reservation, userId) => {
           }
         }
       },
-      { new: true, upsert: true }
+      { session }
     );
 
+    await session.commitTransaction();
+    console.log('Ownership transfer completed successfully');
     return newPet;
   } catch (error) {
+    await session.abortTransaction();
     console.error('Error in handlePetOwnershipTransfer:', error);
     throw error;
+  } finally {
+    await session.endSession();
   }
 };
 

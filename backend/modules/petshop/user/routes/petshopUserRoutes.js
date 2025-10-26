@@ -63,4 +63,7 @@ router.post('/payment-methods', auth, [
 // Pet History (for users to view their owned pets' history)
 router.get('/pets/:petId/history', auth, petHistoryController.getPetHistory);
 
+// Get purchased pets
+router.get('/my-purchased-pets', auth, userController.getUserPurchasedPets);
+
 module.exports = router;

@@ -134,43 +134,8 @@ const NewReservationWizard = () => {
         }
         return true
       case 1: // Reservation Type
-        if (reservationType === 'visit') {
-          if (!visitDetails.preferredDate) {
-            setError('Please select a preferred date')
-            return false
-          }
-          if (!visitDetails.preferredTime) {
-            setError('Please select a preferred time')
-            return false
-          }
-          return true
-        } else {
-          if (!deliveryAddress.street) {
-            setError('Please enter your street address')
-            return false
-          }
-          if (!deliveryAddress.city) {
-            setError('Please enter your city')
-            return false
-          }
-          if (!deliveryAddress.state) {
-            setError('Please enter your state')
-            return false
-          }
-          if (!deliveryAddress.zipCode) {
-            setError('Please enter your ZIP code')
-            return false
-          }
-          if (!deliveryAddress.phone) {
-            setError('Please enter a contact phone number for delivery')
-            return false
-          }
-          if (deliveryAddress.phone.length < 10) {
-            setError('Please enter a valid phone number for delivery')
-            return false
-          }
-          return true
-        }
+        // Always valid since we're removing delivery option
+        return true
       case 2: // Communication Preferences
         return true
       case 3: // Review & Confirm
@@ -328,168 +293,74 @@ const NewReservationWizard = () => {
   const renderReservationTypeStep = () => (
     <Card>
       <CardContent>
-        <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>Choose Reservation Type</Typography>
+        <Typography variant="h6" sx={{ mb: 3 }}>
+          Reservation Type
+        </Typography>
         
-        <Alert severity="info" sx={{ mb: 3 }}>
-          You can reserve the pet now and visit the store to check the exact pet before making the final decision to purchase or cancel.
-        </Alert>
+        <Box sx={{ p: 3, bgcolor: 'grey.50', borderRadius: 2, textAlign: 'center', mb: 3 }}>
+          <StoreIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Visit Store
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            You will need to visit the store to complete your purchase and pick up your pet.
+          </Typography>
+          <Chip 
+            label="Default Option" 
+            color="primary" 
+            size="small" 
+            sx={{ mt: 2 }} 
+          />
+        </Box>
         
-        <FormControl component="fieldset" sx={{ width: '100%' }}>
-          <RadioGroup value={reservationType} onChange={(e) => setReservationType(e.target.value)}>
-            <Card 
-              sx={{ 
-                mb: 2, 
-                border: reservationType === 'visit' ? '2px solid #1976d2' : '1px solid #e0e0e0',
-                cursor: 'pointer'
-              }}
-              onClick={() => setReservationType('visit')}
-            >
-              <CardContent>
-                <FormControlLabel 
-                  value="visit" 
-                  control={<Radio />} 
-                  label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <StoreIcon sx={{ color: '#1976d2' }} />
-                      <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                          Visit Store
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Visit the store to check the pet before purchasing
-                        </Typography>
-                      </Box>
-                    </Box>
-                  }
-                  sx={{ width: '100%', mr: 0 }}
-                />
-                
-                {reservationType === 'visit' && (
-                  <Box sx={{ pl: 6, pt: 2 }}>
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="Preferred Date"
-                          type="date"
-                          value={visitDetails.preferredDate}
-                          onChange={handleVisitDetailsChange('preferredDate')}
-                          InputLabelProps={{ shrink: true }}
-                          required
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="Preferred Time"
-                          type="time"
-                          value={visitDetails.preferredTime}
-                          onChange={handleVisitDetailsChange('preferredTime')}
-                          InputLabelProps={{ shrink: true }}
-                          required
-                        />
-                      </Grid>
-                      <Grid item xs={12}>
-                        <TextField
-                          fullWidth
-                          label="Additional Notes (Optional)"
-                          value={visitDetails.notes}
-                          onChange={handleVisitDetailsChange('notes')}
-                          multiline
-                          rows={2}
-                          helperText="Any special requests or information you'd like to share"
-                        />
-                      </Grid>
-                    </Grid>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-            
-            <Card 
-              sx={{ 
-                border: reservationType === 'delivery' ? '2px solid #4caf50' : '1px solid #e0e0e0',
-                cursor: 'pointer'
-              }}
-              onClick={() => setReservationType('delivery')}
-            >
-              <CardContent>
-                <FormControlLabel 
-                  value="delivery" 
-                  control={<Radio />} 
-                  label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <HomeIcon sx={{ color: '#4caf50' }} />
-                      <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                          Home Delivery
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Have your pet delivered to your home
-                        </Typography>
-                      </Box>
-                    </Box>
-                  }
-                  sx={{ width: '100%', mr: 0 }}
-                />
-                
-                {reservationType === 'delivery' && (
-                  <Box sx={{ pl: 6, pt: 2 }}>
-                    <Grid container spacing={2}>
-                      <Grid item xs={12}>
-                        <TextField
-                          fullWidth
-                          label="Street Address"
-                          value={deliveryAddress.street}
-                          onChange={handleDeliveryAddressChange('street')}
-                          required
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="City"
-                          value={deliveryAddress.city}
-                          onChange={handleDeliveryAddressChange('city')}
-                          required
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="State"
-                          value={deliveryAddress.state}
-                          onChange={handleDeliveryAddressChange('state')}
-                          required
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="ZIP Code"
-                          value={deliveryAddress.zipCode}
-                          onChange={handleDeliveryAddressChange('zipCode')}
-                          required
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="Delivery Phone"
-                          type="tel"
-                          value={deliveryAddress.phone}
-                          onChange={handleDeliveryAddressChange('phone')}
-                          required
-                          helperText="Phone number for delivery coordination"
-                        />
-                      </Grid>
-                    </Grid>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-          </RadioGroup>
-        </FormControl>
+        <Box sx={{ p: 2, bgcolor: '#fff3e0', borderRadius: 2, border: '1px solid #ff9800' }}>
+          <Typography variant="h6" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <HomeIcon /> Home Delivery
+          </Typography>
+          <Typography variant="body1">
+            Home delivery is coming soon! For now, please visit the store to pick up your pet.
+          </Typography>
+        </Box>
+        
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Visit Store Details
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Preferred Date"
+                type="date"
+                value={visitDetails.preferredDate}
+                onChange={handleVisitDetailsChange('preferredDate')}
+                InputLabelProps={{ shrink: true }}
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Preferred Time"
+                type="time"
+                value={visitDetails.preferredTime}
+                onChange={handleVisitDetailsChange('preferredTime')}
+                InputLabelProps={{ shrink: true }}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Additional Notes (Optional)"
+                multiline
+                rows={3}
+                value={visitDetails.notes}
+                onChange={handleVisitDetailsChange('notes')}
+              />
+            </Grid>
+          </Grid>
+        </Box>
       </CardContent>
     </Card>
   )
@@ -617,35 +488,18 @@ const NewReservationWizard = () => {
             <Paper sx={{ p: 2, height: '100%' }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 2 }}>Reservation Details</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                {reservationType === 'visit' ? (
-                  <StoreIcon sx={{ mr: 1, color: '#1976d2' }} />
-                ) : (
-                  <HomeIcon sx={{ mr: 1, color: '#4caf50' }} />
-                )}
+                <StoreIcon sx={{ mr: 1, color: '#1976d2' }} />
                 <Typography variant="body1">
-                  {reservationType === 'visit' ? 'Store Visit' : 'Home Delivery'}
+                  Store Visit
                 </Typography>
               </Box>
               
-              {reservationType === 'visit' ? (
-                <>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    <strong>Preferred Date:</strong> {visitDetails.preferredDate ? new Date(visitDetails.preferredDate).toLocaleDateString() : 'Not specified'}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    <strong>Preferred Time:</strong> {visitDetails.preferredTime || 'Not specified'}
-                  </Typography>
-                </>
-              ) : (
-                <>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    <strong>Delivery Address:</strong> {deliveryAddress.street}, {deliveryAddress.city}, {deliveryAddress.state} - {deliveryAddress.zipCode}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Delivery Phone:</strong> {deliveryAddress.phone}
-                  </Typography>
-                </>
-              )}
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>Preferred Date:</strong> {visitDetails.preferredDate ? new Date(visitDetails.preferredDate).toLocaleDateString() : 'Not specified'}
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>Preferred Time:</strong> {visitDetails.preferredTime || 'Not specified'}
+              </Typography>
               
               {visitDetails.notes && (
                 <Typography variant="body2" sx={{ mt: 1 }}>

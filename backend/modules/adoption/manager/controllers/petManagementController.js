@@ -1127,51 +1127,28 @@ const uploadPetPhoto = async (req, res) => {
     if (!allowed.includes(req.file.mimetype)) {
       return res.status(400).json({ success: false, error: 'Only image files (JPG, PNG, WebP, GIF) are allowed' })
     }
-    const extMap = {
-      'image/jpeg': '.jpg',
-      'image/png': '.png',
-      'image/webp': '.webp',
-      'image/gif': '.gif'
+    
+    // Convert buffer to base64 for Cloudinary upload
+    const base64Data = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    
+    // Use the centralized image upload handler with Cloudinary
+    const { processEntityImages } = require('../../../../core/utils/imageUploadHandler');
+    
+    // Process image using Cloudinary
+    const savedImages = await processEntityImages(
+      [{ url: base64Data, isPrimary: false, caption: '' }],
+      'AdoptionPet',
+      null, // entityId will be set later
+      req.user.id,
+      'adoption',
+      'manager'
+    );
+    
+    if (savedImages.length === 0) {
+      return res.status(500).json({ success: false, error: 'Failed to upload image' });
     }
     
-    // Generate unique filename using the standardized approach
-    const originalName = req.file.originalname || 'photo';
-    const ext = extMap[req.file.mimetype] || '.jpg';
-    const uniqueId = crypto.randomBytes(16).toString('hex');
-    const timestamp = Date.now();
-    const safeName = originalName.replace(/[^a-zA-Z0-9]/g, '_');
-    const filename = `${safeName}-${timestamp}-${uniqueId}${ext}`;
-    
-    // Organize by module/role under the standardized uploads directory structure
-    // Create separate image subdirectory
-    const uploadDir = path.join(__dirname, '..', '..', '..', '..', 'uploads', 'adoption', 'manager', 'image');
-    console.log('📁 Upload directory path:', uploadDir);
-    try { 
-      fs.mkdirSync(uploadDir, { recursive: true }) 
-      console.log('✅ Upload directory created or already exists');
-    } catch (err) {
-      console.error('Failed to create upload directory for photos:', err)
-      return res.status(500).json({ success: false, error: 'Failed to create upload directory' })
-    }
-    const filePath = path.join(uploadDir, filename)
-    console.log('💾 File path:', filePath);
-    fs.writeFileSync(filePath, req.file.buffer)
-    console.log('✅ File written successfully');
-    const url = `/uploads/adoption/manager/image/${filename}`
-    console.log('🔗 File URL:', url);
-    
-    // Create Image document in database
-    const imageDoc = new Image({
-      url,
-      caption: '', // Add caption field for consistency
-      isPrimary: false, // Add isPrimary field for consistency
-      entityType: 'AdoptionPet',
-      module: 'adoption',
-      role: 'manager',
-      uploadedBy: req.user.id
-    });
-    await imageDoc.save();
-    console.log('✅ Image document saved to database');
+    const imageDoc = savedImages[0];
     
     // Return consistent data structure with the createPet function
     return res.status(201).json({ 
@@ -1197,52 +1174,71 @@ const uploadPetDocument = async (req, res) => {
     if (!allowed.includes(req.file.mimetype)) {
       return res.status(400).json({ success: false, error: 'Only images (JPG, PNG, WebP) or PDF files are allowed' })
     }
-    const extMap = {
-      'image/jpeg': '.jpg',
-      'image/jpg': '.jpg',
-      'image/png': '.png',
-      'image/webp': '.webp',
-      'application/pdf': '.pdf'
-    }
     
-    // Generate unique filename using the standardized approach
-    const originalName = req.file.originalname || 'document';
-    const ext = extMap[req.file.mimetype] || '.pdf';
+    // For documents, we'll need to handle both images and PDFs appropriately
+    const Document = require('../../../../core/models/Document');
+    const cloudinary = require('cloudinary').v2;
+    
+    let docRecord;
+    
+    // Generate a unique filename
+    const crypto = require('crypto');
     const uniqueId = crypto.randomBytes(16).toString('hex');
     const timestamp = Date.now();
-    const safeName = originalName.replace(/[^a-zA-Z0-9]/g, '_');
-    const filename = `${safeName}-${timestamp}-${uniqueId}${ext}`;
+    const safeName = (req.file.originalname || 'document').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${safeName}-${timestamp}-${uniqueId}`;
     
-    // Organize by module/role under the standardized uploads directory structure
-    // Create separate document subdirectory
-    const uploadDir = path.join(__dirname, '..', '..', '..', '..', 'uploads', 'adoption', 'manager', 'document');
-    console.log('📁 Document upload directory path:', uploadDir);
-    try { 
-      fs.mkdirSync(uploadDir, { recursive: true }) 
-      console.log('✅ Document upload directory created or already exists');
-    } catch (err) {
-      console.error('Failed to create upload directory for documents:', err)
-      return res.status(500).json({ success: false, error: 'Failed to create upload directory' })
+    if (req.file.mimetype.startsWith('image/')) {
+      // Handle image documents with Cloudinary
+      // Convert buffer to base64 for Cloudinary upload
+      const base64Data = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      
+      // Upload image to Cloudinary
+      const result = await cloudinary.uploader.upload(base64Data, {
+        folder: 'adoption/manager/document',
+        public_id: filename,
+        overwrite: false,
+        resource_type: 'image'
+      });
+      
+      // Create document record that references the Cloudinary image
+      docRecord = new Document({
+        name: req.file.originalname || 'document',
+        type: req.file.mimetype,
+        url: result.secure_url,
+        entityType: 'AdoptionPet',
+        module: 'adoption',
+        role: 'manager',
+        uploadedBy: req.user.id
+      });
+    } else {
+      // For PDF documents, we'll upload them to Cloudinary as raw files
+      // Convert buffer to base64 for Cloudinary upload
+      const base64Data = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      
+      // Upload PDF to Cloudinary
+      const result = await cloudinary.uploader.upload(base64Data, {
+        folder: 'adoption/manager/document',
+        public_id: filename,
+        overwrite: false,
+        resource_type: 'raw', // For PDF and other non-image files
+        format: 'pdf',
+        invalidate: true
+      });
+      
+      // Create document record that references the Cloudinary PDF
+      docRecord = new Document({
+        name: req.file.originalname || 'document',
+        type: req.file.mimetype,
+        url: result.secure_url,
+        entityType: 'AdoptionPet',
+        module: 'adoption',
+        role: 'manager',
+        uploadedBy: req.user.id
+      });
     }
-    const filePath = path.join(uploadDir, filename)
-    console.log('💾 Document file path:', filePath);
-    fs.writeFileSync(filePath, req.file.buffer)
-    console.log('✅ Document file written successfully');
-    const url = `/uploads/adoption/manager/document/${filename}`
-    console.log('🔗 Document URL:', url);
     
-    // Create Document record in database
-    const docRecord = new Document({
-      name: req.file.originalname || filename, // Use the original filename as name
-      type: req.file.mimetype, // Use the type field as required by the Document model
-      url,
-      entityType: 'AdoptionPet',
-      module: 'adoption',
-      role: 'manager',
-      uploadedBy: req.user.id
-    });
     await docRecord.save();
-    console.log('✅ Document record saved to database');
     
     // Return consistent data structure
     return res.status(201).json({ 

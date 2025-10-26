@@ -5,10 +5,13 @@
 
 const mongoose = require('mongoose');
 const path = require('path');
-const fs = require('fs').promises;
 
 // Load environment variables
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
+console.log('Environment variables loaded:');
+console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
+console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? '***' : 'Not set');
 
 // Connect to database
 const connectDB = require('../core/db');
@@ -33,6 +36,13 @@ async function runTest() {
     // Connect to database
     await connectDB();
     console.log('✅ Database connected');
+    
+    // Test Cloudinary connection
+    const cloudinary = require('cloudinary').v2;
+    console.log('Cloudinary config check:', {
+      cloud_name: cloudinary.config().cloud_name,
+      api_key: cloudinary.config().api_key ? '***' : 'Not set'
+    });
     
     // Create a test pet
     const pet = new PetNew({
@@ -79,14 +89,12 @@ async function runTest() {
     const updatedPet = await PetNew.findById(pet._id).populate('images');
     console.log('📋 Pet images:', updatedPet.images);
     
-    // Check if files exist
+    // Check if Cloudinary URLs are valid
     for (const image of updatedPet.images) {
-      const fullPath = path.join(__dirname, '../', image.url);
-      try {
-        await fs.access(fullPath);
-        console.log('✅ Image file exists:', image.url);
-      } catch (err) {
-        console.log('❌ Image file missing:', image.url);
+      if (image.url && image.url.startsWith('http')) {
+        console.log('✅ Cloudinary image URL is valid:', image.url);
+      } else {
+        console.log('❌ Invalid image URL:', image.url);
       }
     }
     
@@ -97,13 +105,6 @@ async function runTest() {
     await PetNew.findByIdAndDelete(pet._id);
     for (const image of updatedPet.images) {
       await Image.findByIdAndDelete(image._id);
-      const fullPath = path.join(__dirname, '../', image.url);
-      try {
-        await fs.unlink(fullPath);
-        console.log('🗑️  Deleted image file:', image.url);
-      } catch (err) {
-        console.log('⚠️  Could not delete image file:', image.url);
-      }
     }
     
     console.log('✅ Cleanup completed');

@@ -105,27 +105,13 @@ const Payment = () => {
   }
 
   const validateStep = (step) => {
-    switch (step) {
-      case 0: // Delivery Method
-        if (deliveryMethod === 'delivery') {
-          return deliveryAddress.street && deliveryAddress.city && 
-                 deliveryAddress.state && deliveryAddress.zipCode && deliveryAddress.phone
-        }
-        return true
-      case 1: // Payment Details
-        return true // Payment method is fixed to Razorpay
-      default:
-        return true
-    }
+    // All steps are always valid since we removed user input requirements
+    return true
   }
 
   const handleNext = () => {
-    if (validateStep(activeStep)) {
-      setActiveStep(prev => prev + 1)
-      setError('')
-    } else {
-      setError('Please fill in all required fields')
-    }
+    setActiveStep(prev => prev + 1)
+    setError('')
   }
 
   const handleBack = () => {
@@ -147,6 +133,7 @@ const Payment = () => {
 
   const handlePaymentSuccess = async (response) => {
     try {
+      console.log('Payment success response:', response);
       setProcessing(true)
       
       // Verify payment with backend
@@ -155,9 +142,11 @@ const Payment = () => {
         razorpay_payment_id: response.razorpay_payment_id,
         razorpay_signature: response.razorpay_signature,
         reservationId: reservationId,
-        deliveryMethod: deliveryMethod,
-        deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : null
+        deliveryMethod: 'visit', // Always set to visit
+        deliveryAddress: null // No delivery address
       })
+
+      console.log('Verification response:', verificationResponse);
 
       if (verificationResponse.data.success) {
         setSuccess(true)
@@ -175,7 +164,8 @@ const Payment = () => {
         setError('Payment verification failed')
       }
     } catch (err) {
-      setError(err?.response?.data?.message || 'Payment verification failed')
+      console.error('Payment verification error:', err);
+      setError(err?.response?.data?.message || err.message || 'Payment verification failed')
     } finally {
       setProcessing(false)
     }
@@ -186,20 +176,29 @@ const Payment = () => {
       setProcessing(true)
       setError('')
 
-      // Compute total (price + optional delivery + GST approx 18%)
+      // Compute total (price + GST approx 18%)
       const base = Number(reservation.itemId.price || 0)
-      const deliveryFee = deliveryMethod === 'delivery' ? 500 : 0
       const taxes = Math.round(base * 0.18)
-      const totalAmount = base + deliveryFee + taxes
+      const totalAmount = base + taxes
+
+      console.log('Creating Razorpay order with:', {
+        reservationId,
+        amount: Math.round(totalAmount * 100),
+        currency: 'INR',
+        deliveryMethod: 'visit',
+        deliveryAddress: null
+      });
 
       // Create Razorpay order for total amount (in paise)
       const orderResponse = await petShopAPI.createRazorpayOrder({
         reservationId,
         amount: Math.round(totalAmount * 100),
         currency: 'INR',
-        deliveryMethod,
-        deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : null
+        deliveryMethod: 'visit', // Always set to visit
+        deliveryAddress: null // No delivery address
       })
+
+      console.log('Order response:', orderResponse);
 
       // Support both shapes:
       // 1) { data: { orderId, amount, currency, key } }
@@ -220,6 +219,13 @@ const Payment = () => {
         key = payload.key
       }
       
+      console.log('Processed payload:', { orderId, amount, currency, key });
+      
+      // Validate required fields
+      if (!orderId || !amount || !key) {
+        throw new Error('Missing required payment information from server')
+      }
+      
       // Initialize Razorpay with real test keys
       const razorpayLoaded = await initializeRazorpay()
       if (!razorpayLoaded) {
@@ -238,7 +244,7 @@ const Payment = () => {
         prefill: {
           name: user?.name || reservation.userId?.name || '',
           email: user?.email || reservation.userId?.email || '',
-          contact: (deliveryAddress.phone && deliveryAddress.phone.startsWith('+91')) ? deliveryAddress.phone : (deliveryAddress.phone ? `+91 ${deliveryAddress.phone}` : user?.phone || reservation.userId?.phone || '+91 9999999999')
+          contact: user?.phone || reservation.userId?.phone || '+91 9999999999'
         },
         theme: {
           color: '#1976d2'
@@ -246,6 +252,7 @@ const Payment = () => {
         modal: {
           ondismiss: function() {
             setError('Payment cancelled by user')
+            setProcessing(false)
           }
         },
         // Make UPI visible and first in sequence
@@ -269,11 +276,13 @@ const Payment = () => {
         }
       }
 
+      console.log('Opening Razorpay with options:', options);
       const razorpay = new window.Razorpay(options)
       razorpay.open()
 
     } catch (err) {
-      setError(err.response?.data?.message || 'Payment failed')
+      console.error('Payment error:', err);
+      setError(err.response?.data?.message || err.message || 'Payment failed')
     } finally {
       setProcessing(false)
     }
@@ -283,101 +292,33 @@ const Payment = () => {
     <Card>
       <CardContent>
         <Typography variant="h6" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <DeliveryIcon /> Choose Delivery Method
+          <DeliveryIcon /> Delivery Method
         </Typography>
         
-        <FormControl component="fieldset">
-          <RadioGroup value={deliveryMethod} onChange={handleDeliveryMethodChange}>
-            <FormControlLabel 
-              value="visit" 
-              control={<Radio />} 
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <VisitIcon />
-                  <Box>
-                    <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
-                      Visit Store
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Pick up your pet from the store after payment
-                    </Typography>
-                  </Box>
-                </Box>
-              }
-            />
-            
-            <FormControlLabel 
-              value="delivery" 
-              control={<Radio />} 
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <HomeIcon />
-                  <Box>
-                    <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
-                      Home Delivery
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      We'll deliver your pet to your home (additional charges may apply)
-                    </Typography>
-                  </Box>
-                </Box>
-              }
-            />
-          </RadioGroup>
-        </FormControl>
-
-        {deliveryMethod === 'delivery' && (
-          <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>Delivery Address</Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Street Address"
-                  value={deliveryAddress.street}
-                  onChange={handleAddressChange('street')}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="City"
-                  value={deliveryAddress.city}
-                  onChange={handleAddressChange('city')}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="State"
-                  value={deliveryAddress.state}
-                  onChange={handleAddressChange('state')}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="ZIP Code"
-                  value={deliveryAddress.zipCode}
-                  onChange={handleAddressChange('zipCode')}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Phone Number"
-                  value={deliveryAddress.phone}
-                  onChange={handleAddressChange('phone')}
-                  required
-                />
-              </Grid>
-            </Grid>
-          </Box>
-        )}
+        <Box sx={{ p: 3, bgcolor: 'grey.50', borderRadius: 2, textAlign: 'center' }}>
+          <VisitIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Visit Store
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            You will need to visit the store to pick up your pet after payment.
+          </Typography>
+          <Chip 
+            label="Default Option" 
+            color="primary" 
+            size="small" 
+            sx={{ mt: 2 }} 
+          />
+        </Box>
+        
+        <Box sx={{ mt: 3, p: 2, bgcolor: '#fff3e0', borderRadius: 2, border: '1px solid #ff9800' }}>
+          <Typography variant="h6" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <DeliveryIcon /> Home Delivery
+          </Typography>
+          <Typography variant="body1">
+            Home delivery is coming soon! For now, please visit the store to pick up your pet.
+          </Typography>
+        </Box>
       </CardContent>
     </Card>
   )
@@ -554,13 +495,23 @@ const Payment = () => {
           >
             Back
           </Button>
-          {activeStep < 1 && (
+          {activeStep === 0 && (
             <Button
               variant="contained"
               onClick={handleNext}
               disabled={!validateStep(activeStep)}
             >
               Next
+            </Button>
+          )}
+          {activeStep === 1 && (
+            <Button
+              variant="contained"
+              onClick={handlePayment}
+              disabled={processing}
+              startIcon={processing ? <CircularProgress size={20} /> : <PaymentIcon />}
+            >
+              {processing ? 'Processing Payment...' : 'Pay Now'}
             </Button>
           )}
         </Box>

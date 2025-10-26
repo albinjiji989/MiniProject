@@ -2,6 +2,7 @@ const { validationResult } = require('express-validator');
 const User = require('../../../../core/models/User');
 const UserDetails = require('../../../../core/models/UserDetails');
 const { generateStoreId } = require('../../../../core/utils/storeIdGenerator');
+const Veterinary = require('../../models/Veterinary');
 
 const getMyStoreInfo = async (req, res) => {
   try {
@@ -78,6 +79,52 @@ const updateMyStoreInfo = async (req, res) => {
       console.log('UserDetails created');
     }
     
+    // Automatically create a clinic for veterinary managers
+    if (user.role === 'veterinary_manager' && user.storeId && user.storeName) {
+      console.log('Creating automatic clinic for veterinary manager...');
+      try {
+        // Check if a clinic already exists for this store
+        const existingClinic = await Veterinary.findOne({ storeId: user.storeId });
+        if (!existingClinic) {
+          console.log('No existing clinic found, creating new one...');
+          // Create a clinic with the same information as the store
+          const clinicData = {
+            name: user.storeName,
+            storeId: user.storeId,
+            storeName: user.storeName,
+            createdBy: user._id,
+            address: {
+              street: '',
+              city: '',
+              state: '',
+              zipCode: '',
+              country: ''
+            },
+            location: {
+              type: 'Point',
+              coordinates: [0, 0] // Default coordinates
+            },
+            contact: {
+              phone: '',
+              email: user.email || '',
+              website: ''
+            },
+            services: [],
+            isActive: true
+          };
+          
+          const clinic = new Veterinary(clinicData);
+          await clinic.save();
+          console.log('Automatic clinic created:', clinic._id);
+        } else {
+          console.log('Clinic already exists for this store:', existingClinic._id);
+        }
+      } catch (clinicError) {
+        console.error('Error creating automatic clinic:', clinicError);
+        // Don't fail the store setup if clinic creation fails
+      }
+    }
+    
     console.log('=== SUCCESS ===');
     return res.json({ success: true, message: 'Store info updated', data: { storeId: user.storeId, storeName: user.storeName } });
   } catch (e) {
@@ -90,5 +137,3 @@ const updateMyStoreInfo = async (req, res) => {
 };
 
 module.exports = { getMyStoreInfo, updateMyStoreInfo };
-
-

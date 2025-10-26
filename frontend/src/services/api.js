@@ -157,6 +157,8 @@ export const petsAPI = {
   searchNearby: (params) => api.get('/pets/search/nearby', { params }),
   getChangeLog: (id) => api.get(`/pets/${id}/changelog`),
   getStats: () => api.get('/admin/pets/stats/overview'),
+  // User pets
+  getMyPets: () => api.get('/pets/my-pets'),
 }
 
 // Adoption API
@@ -183,6 +185,9 @@ export const adoptionAPI = {
   getMyAdoptedPet: (id) => api.get(`/adoption/user/my-adopted-pets/${id}`),
   addMedicalHistoryToAdoptedPet: (id, medicalData) => api.put(`/adoption/user/my-adopted-pets/${id}/medical-history`, medicalData),
   getMedicalHistoryOfAdoptedPet: (id) => api.get(`/adoption/user/my-adopted-pets/${id}/medical-history`),
+
+  // User purchased pets
+  getMyPurchasedPets: () => api.get('/petshop/user/my-purchased-pets'),
 
   // New REST alias endpoints (spec compliant)
   // Pets (public/user)
@@ -292,6 +297,8 @@ export const petShopAPI = {
   scheduleHandover: (reservationId, data) => api.post(`/petshop/user/payments/handover/${reservationId}/schedule`, data),
   completeHandover: (reservationId, data) => api.post(`/petshop/user/payments/handover/${reservationId}/complete`, data),
   regenerateHandoverOTP: (reservationId) => api.post(`/petshop/user/payments/handover/${reservationId}/regenerate-otp`),
+  // User purchased pets
+  getMyPurchasedPets: () => api.get('/petshop/user/my-purchased-pets'),
 }
 
 // Rescue API
@@ -441,27 +448,46 @@ export const temporaryCareAPI = {
 
 // Veterinary API
 export const veterinaryAPI = {
+  // Public appointments (for users)
+  getAppointments: (params) => api.get('/veterinary/user/appointments', { params }),
+  getAppointmentById: (id) => api.get(`/veterinary/user/appointments/${id}`),
+  bookAppointment: (payload) => api.post('/veterinary/user/appointments/book', payload),
+  cancelAppointment: (id) => api.post(`/veterinary/user/appointments/${id}/cancel`),
   // Manager store setup
   managerGetMyStore: () => api.get('/veterinary/manager/me/store'),
   managerUpdateMyStore: (payload) => api.put('/veterinary/manager/me/store', payload),
-  // Dashboard
+  // Manager dashboard
   managerGetDashboardStats: () => api.get('/veterinary/manager/dashboard/stats'),
+  // Manager appointments
   managerGetAppointments: (params) => api.get('/veterinary/manager/appointments', { params }),
+  managerGetAppointmentById: (id) => api.get(`/veterinary/manager/appointments/${id}`),
+  managerCreateAppointment: (payload) => api.post('/veterinary/manager/appointments', payload),
+  managerUpdateAppointment: (id, payload) => api.put(`/veterinary/manager/appointments/${id}`, payload),
+  managerDeleteAppointment: (id) => api.delete(`/veterinary/manager/appointments/${id}`),
+  managerGetAvailableTimeSlots: (date) => api.get('/veterinary/manager/appointments/slots/available', { params: { date } }),
+  // Manager medical records
   managerGetMedicalRecords: (params) => api.get('/veterinary/manager/records', { params }),
+  managerCreateMedicalRecord: (payload) => api.post('/veterinary/manager/medical-records', payload),
+  managerGetMedicalRecordsByPet: (petId) => api.get(`/veterinary/manager/medical-records/pet/${petId}`),
+  managerGetMedicalRecordById: (id) => api.get(`/veterinary/manager/medical-records/${id}`),
+  managerUpdateMedicalRecord: (id, payload) => api.put(`/veterinary/manager/medical-records/${id}`, payload),
+  managerDeleteMedicalRecord: (id) => api.delete(`/veterinary/manager/medical-records/${id}`),
+  // Manager services
   managerGetServices: (params) => api.get('/veterinary/manager/services', { params }),
+  managerCreateService: (payload) => api.post('/veterinary/manager/services', payload),
+  managerUpdateService: (id, payload) => api.put(`/veterinary/manager/services/${id}`, payload),
+  managerDeleteService: (id) => api.delete(`/veterinary/manager/services/${id}`),
+  managerToggleService: (id) => api.patch(`/veterinary/manager/services/${id}/toggle`),
   // Manager staff
   managerListStaff: () => api.get('/veterinary/manager/staff'),
   managerCreateStaff: (payload) => api.post('/veterinary/manager/staff', payload),
   managerUpdateStaff: (id, payload) => api.put(`/veterinary/manager/staff/${id}`, payload),
   managerDeleteStaff: (id) => api.delete(`/veterinary/manager/staff/${id}`),
-  // Manager medical records
-  managerCreateMedicalRecord: (petId, payload) => api.post(`/veterinary/manager/pets/${petId}/medical-records`, payload),
-  managerListMedicalRecordsForPet: (petId) => api.get(`/veterinary/manager/pets/${petId}/medical-records`),
+  // Manager patients
+  managerGetPatients: (params) => api.get('/veterinary/manager/patients', { params }),
+  managerGetPatientById: (id) => api.get(`/veterinary/manager/patients/${id}`),
   // User medical records
   userListMedicalRecordsForPet: (petId) => api.get(`/veterinary/user/pets/${petId}/medical-records`),
-  // Admin
-  adminListClinics: () => api.get('/veterinary/admin/clinics'),
-  adminUpdateClinicStatus: (id, isActive) => api.put(`/veterinary/admin/clinics/${id}/status`, { isActive }),
 }
 
 // Pet System APIs

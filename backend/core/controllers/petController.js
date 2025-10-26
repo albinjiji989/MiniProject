@@ -43,16 +43,21 @@ const getOwnedPets = async (req, res) => {
     });
     
     // Convert to plain objects AFTER population
-    const registryPetsPlain = registryPets.map(p => p.toObject({ virtuals: true }));
+    const registryPetsPlain = registryPets.map(p => {
+      const plain = p.toObject({ virtuals: true });
+      // Ensure images are properly included
+      plain.images = plain.images || plain.imageIds || [];
+      return plain;
+    });
     
     // Map registry pets to include source information
     const pets = registryPetsPlain.map(regPet => {
-      console.log('Processing registry pet:', regPet.name, 'ImageIds:', regPet.imageIds, 'Images:', regPet.images);
+      console.log('Processing registry pet:', regPet.name, 'ImageIds:', regPet.imageIds?.length || 0, 'Images:', regPet.images?.length || 0);
       return {
         _id: regPet.corePetId || regPet.petShopItemId || regPet.adoptionPetId || regPet._id,
         name: regPet.name,
         petCode: regPet.petCode,
-        images: regPet.images || [], // Ensure images are properly included
+        images: regPet.images || regPet.imageIds || [], // Ensure images are properly included
         species: regPet.species,
         speciesId: regPet.species,
         breed: regPet.breed,
@@ -138,7 +143,7 @@ const getOwnedPets = async (req, res) => {
             _id: r.itemId._id,
             name: r.itemId.name,
             petCode: r.itemId.petCode,
-            images: r.itemId.images || [], // Ensure images are properly included
+            images: r.itemId.images || r.itemId.imageIds || [], // Ensure images are properly included
             species: r.itemId.speciesId,
             breed: r.itemId.breedId,
             gender: r.itemId.gender,
@@ -186,6 +191,29 @@ const createPet = async (req, res) => {
       return res.status(400).json({ success: false, message: 'name, species and breed are required' });
     }
 
+    // Process images through Cloudinary if they exist
+    let imageIds = [];
+    if (images && Array.isArray(images) && images.length > 0) {
+      try {
+        const { processEntityImages } = require('../utils/imageUploadHandler');
+        
+        // Process images using our new utility
+        const savedImages = await processEntityImages(
+          images, 
+          'PetNew', 
+          null, // Will be set after pet is created
+          req.user.id, 
+          'otherpets',  // Module for user pets
+          'user'        // Role
+        );
+        
+        imageIds = savedImages.map(img => img._id);
+        console.log('🖼️  Successfully processed images, got imageIds:', imageIds);
+      } catch (imgErr) {
+        console.error('❌ Failed to save pet images:', imgErr);
+      }
+    }
+
     // Map incoming fields to Pet schema
     const petPayload = {
       name: String(name).trim(),
@@ -197,16 +225,25 @@ const createPet = async (req, res) => {
       age: typeof age === 'number' ? age : (age ? Number(age) : undefined),
       ageUnit: ageUnit || 'months',
       color: color || undefined,
-      images: Array.isArray(images) ? images.filter(Boolean).map((img) => ({
-        url: typeof img === 'string' ? img : img.url,
-        caption: (typeof img === 'object' && img.caption) ? img.caption : undefined,
-        isPrimary: (typeof img === 'object' && img.isPrimary) ? !!img.isPrimary : false
-      })) : []
+      imageIds: imageIds // Add processed image IDs
     };
 
     // Save to main Pet model
     const pet = new Pet(petPayload);
     await pet.save();
+
+    // Update image documents with the correct entityId
+    if (imageIds.length > 0) {
+      const Image = require('../models/Image');
+      await Image.updateMany(
+        { _id: { $in: imageIds } },
+        { entityId: pet._id }
+      );
+      
+      // Populate images for response
+      await pet.populate('images');
+      console.log('🖼️  Updated image documents with entityId:', pet._id);
+    }
 
     // Also save to PetNew model for user dashboard consistency
     try {
@@ -220,17 +257,22 @@ const createPet = async (req, res) => {
         age: typeof age === 'number' ? age : (age ? Number(age) : undefined),
         ageUnit: ageUnit || 'months',
         color: color || undefined,
-        images: Array.isArray(images) ? images.filter(Boolean).map((img) => ({
-          url: typeof img === 'string' ? img : img.url,
-          alt: (typeof img === 'object' && img.caption) ? img.caption : undefined,
-          isPrimary: (typeof img === 'object' && img.isPrimary) ? !!img.isPrimary : false
-        })) : [],
+        imageIds: imageIds, // Add processed image IDs
         currentStatus: 'Available',
         healthStatus: 'Good'
       };
       
       const petNew = new PetNew(petNewPayload);
       await petNew.save();
+      
+      // Update image documents with the correct entityId for PetNew as well
+      if (imageIds.length > 0) {
+        const Image = require('../models/Image');
+        await Image.updateMany(
+          { _id: { $in: imageIds } },
+          { $set: { entityId: petNew._id } }
+        );
+      }
     } catch (petNewError) {
       console.warn('Failed to save to PetNew model:', petNewError?.message || petNewError);
       // Continue even if PetNew save fails
@@ -241,6 +283,9 @@ const createPet = async (req, res) => {
       { path: 'species', select: 'name displayName' },
       { path: 'breed', select: 'name' }
     ]);
+
+    // Populate images for response
+    await pet.populate('images');
 
     // Upsert centralized registry entry
     try {
@@ -396,8 +441,33 @@ const getPetById = async (req, res) => {
       await pet.populate('images');
     }
 
+    // If pet is found but has no images, check if it's a pet shop purchased pet
+    if (pet && (!pet.images || pet.images.length === 0) && pet.petCode) {
+      // Try to get images from PetRegistry
+      try {
+        const PetRegistry = require('../models/PetRegistry');
+        const registryPet = await PetRegistry.findOne({ petCode: pet.petCode })
+          .populate('imageIds');
+        
+        if (registryPet) {
+          await registryPet.populate('images');
+          
+          // If registry has images, add them to the pet
+          if (registryPet.images && registryPet.images.length > 0) {
+            // Create a plain object to ensure the data is properly structured
+            const petData = pet.toObject ? pet.toObject({ virtuals: true }) : { ...pet };
+            petData.images = registryPet.images;
+            petData.imageIds = registryPet.imageIds;
+            pet = petData;
+          }
+        }
+      } catch (registryError) {
+        console.log('Failed to get images from registry:', registryError.message);
+      }
+    }
+
+    // If pet is still not found, try PetRegistry (pets from petshop/adoption)
     if (!pet) {
-      // If not found in Pet model, try PetRegistry (pets from petshop/adoption)
       const PetRegistry = require('../models/PetRegistry');
       const registryPet = await PetRegistry.findById(req.params.id)
         .populate('species', 'name displayName')
@@ -461,6 +531,7 @@ const getPetById = async (req, res) => {
           firstAddedAt: registryPet.firstAddedAt,
           acquiredDate: registryPet.lastTransferAt || registryPet.updatedAt,
           images: sourcePet?.images || registryPet.images || [],
+          imageIds: sourcePet?.imageIds || registryPet.imageIds || [],
           gender: sourcePet?.gender || 'Unknown',
           age: sourcePet?.age || 0,
           ageUnit: sourcePet?.ageUnit || 'months',
@@ -488,10 +559,27 @@ const getPetById = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
 
+    // Ensure the pet object properly includes images for the response
+    let petResponse;
+    if (typeof pet.toObject === 'function') {
+      // If it's a Mongoose document, convert to object with virtuals
+      petResponse = pet.toObject({ virtuals: true });
+      // Explicitly ensure images are included
+      if (!petResponse.images && pet.images) {
+        petResponse.images = pet.images;
+      }
+      if (!petResponse.imageIds && pet.imageIds) {
+        petResponse.imageIds = pet.imageIds;
+      }
+    } else {
+      // If it's already a plain object, use it as is
+      petResponse = pet;
+    }
+
     res.json({
       success: true,
       data: {
-        pet
+        pet: petResponse
       }
     });
   } catch (error) {
@@ -800,7 +888,7 @@ const addMedicationRecord = async (req, res) => {
 // @access  Private
 const getPetHistory = async (req, res) => {
   try {
-    const pet = await Pet.findById(req.params.id).select('ownershipHistory medicalHistory vaccinationRecords medicationRecords name storeId');
+    const pet = await Pet.findById(req.params.id).select('name storeId');
     if (!pet) {
       return res.status(404).json({ success: false, message: 'Pet not found' });
     }
@@ -809,14 +897,27 @@ const getPetHistory = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
 
+    // Fetch ownership history from OwnershipHistory collection
+    const OwnershipHistory = require('../models/OwnershipHistory');
+    const ownershipHistory = await OwnershipHistory.findByPet(req.params.id);
+
+    // Fetch medical history from MedicalRecord collection
+    const MedicalRecord = require('../models/MedicalRecord');
+    const medicalRecords = await MedicalRecord.findByPet(req.params.id);
+
+    // Separate different types of medical records
+    const medicalHistory = medicalRecords.filter(record => record.recordType === 'Treatment' || record.recordType === 'Checkup' || record.recordType === 'Surgery' || record.recordType === 'Emergency' || record.recordType === 'Dental' || record.recordType === 'Grooming' || record.recordType === 'Other');
+    const vaccinationRecords = medicalRecords.filter(record => record.recordType === 'Vaccination');
+    const medicationRecords = medicalRecords.filter(record => record.medications && record.medications.length > 0);
+
     res.json({
       success: true,
       data: {
         name: pet.name,
-        ownershipHistory: pet.ownershipHistory || [],
-        medicalHistory: pet.medicalHistory || [],
-        vaccinationRecords: pet.vaccinationRecords || [],
-        medicationRecords: pet.medicationRecords || []
+        ownershipHistory: ownershipHistory || [],
+        medicalHistory: medicalHistory || [],
+        vaccinationRecords: vaccinationRecords || [],
+        medicationRecords: medicationRecords || []
       }
     });
   } catch (error) {
@@ -919,28 +1020,65 @@ const getRegistryPetById = async (req, res) => {
     if (registryPet) {
       await registryPet.populate('images');
       
+      // Based on the source, fetch the actual pet data to get complete information
+      let sourcePet = null;
+      if (registryPet.source === 'petshop' && registryPet.petShopItemId) {
+        // Fetch from PetInventoryItem
+        const PetInventoryItem = require('../../modules/petshop/manager/models/PetInventoryItem');
+        sourcePet = await PetInventoryItem.findById(registryPet.petShopItemId)
+          .populate('speciesId', 'name displayName')
+          .populate('breedId', 'name')
+          .populate('imageIds');
+        
+        if (sourcePet) {
+          await sourcePet.populate('images');
+        }
+      } else if (registryPet.source === 'adoption' && registryPet.adoptionPetId) {
+        // Fetch from AdoptionPet
+        const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet');
+        sourcePet = await AdoptionPet.findById(registryPet.adoptionPetId)
+          .populate('species', 'name displayName')
+          .populate('breed', 'name')
+          .populate('imageIds');
+        
+        if (sourcePet) {
+          await sourcePet.populate('images');
+        }
+      } else if (registryPet.source === 'core' && registryPet.corePetId) {
+        // Fetch from PetNew
+        const PetNew = require('../models/PetNew');
+        sourcePet = await PetNew.findById(registryPet.corePetId)
+          .populate('speciesId', 'name displayName')
+          .populate('breedId', 'name')
+          .populate('imageIds');
+        
+        if (sourcePet) {
+          await sourcePet.populate('images');
+        }
+      }
+
       // Convert to the format expected by the frontend
       const pet = {
         _id: registryPet._id,
-        name: registryPet.name,
+        name: sourcePet?.name || registryPet.name,
         petCode: registryPet.petCode,
-        species: registryPet.species,
-        speciesId: registryPet.species,
-        breed: registryPet.breed,
-        breedId: registryPet.breed,
+        species: sourcePet?.species || sourcePet?.speciesId || registryPet.species,
+        speciesId: sourcePet?.species || sourcePet?.speciesId || registryPet.species,
+        breed: sourcePet?.breed || sourcePet?.breedId || registryPet.breed,
+        breedId: sourcePet?.breed || sourcePet?.breedId || registryPet.breed,
         currentStatus: registryPet.currentStatus,
         source: registryPet.source,
         firstAddedSource: registryPet.firstAddedSource,
         firstAddedAt: registryPet.firstAddedAt,
         acquiredDate: registryPet.lastTransferAt || registryPet.updatedAt,
-        images: registryPet.images || [],
-        gender: 'Unknown', // Default values since these might not be in registry
-        age: 0,
-        ageUnit: 'months',
-        color: '',
-        healthStatus: 'Good',
-        size: 'medium',
-        weight: { value: 0, unit: 'kg' },
+        images: sourcePet?.images || registryPet.images || [],
+        gender: sourcePet?.gender || 'Unknown',
+        age: sourcePet?.age || 0,
+        ageUnit: sourcePet?.ageUnit || 'months',
+        color: sourcePet?.color || '',
+        healthStatus: sourcePet?.healthStatus || 'Good',
+        size: sourcePet?.size || 'medium',
+        weight: sourcePet?.weight || { value: 0, unit: 'kg' },
         createdBy: registryPet.currentOwnerId,
         lastUpdatedBy: registryPet.currentOwnerId,
         createdAt: registryPet.createdAt,

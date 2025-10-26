@@ -250,27 +250,55 @@ const ManagerManagement = () => {
     }
   }
 
+  // Get modules that already have active managers
+  const getModulesWithManagers = () => {
+    const modulesWithManagers = new Set();
+    managers.forEach(manager => {
+      if (manager.isActive !== false) {
+        const module = deriveManagerModule(manager);
+        if (module) {
+          modulesWithManagers.add(module);
+        }
+      }
+    });
+    return modulesWithManagers;
+  };
+
+  // Check if a manager already exists for a module
+  const checkExistingManager = (module) => {
+    return managers.some(manager => {
+      const managerModule = deriveManagerModule(manager);
+      return managerModule === module && manager.isActive !== false;
+    });
+  };
+
   const handleSendInvite = async () => {
     try {
       // Validate required fields
       if (!inviteData.name || !inviteData.email || !inviteData.module) {
-        setError('Name, email, and module are required')
-        return
+        setError('Name, email, and module are required');
+        return;
+      }
+
+      // Check if a manager already exists for this module
+      if (checkExistingManager(inviteData.module)) {
+        setError(`A manager already exists for the ${getModuleDisplayName(inviteData.module)} module. The option to add more managers to the same module will be coming soon.`);
+        return;
       }
 
       // Send OTP to candidate email
-      await managersAPI.invite(inviteData)
-      setSuccess('OTP sent to candidate email!')
+      await managersAPI.invite(inviteData);
+      setSuccess('OTP sent to candidate email!');
       
       // Move to step 2 (OTP verification)
       setOtpData({
         email: inviteData.email,
         module: inviteData.module,
         otp: ''
-      })
-      setInviteStep(2)
+      });
+      setInviteStep(2);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send invitation')
+      setError(err.response?.data?.message || 'Failed to send invitation');
     }
   }
 
@@ -755,7 +783,16 @@ const ManagerManagement = () => {
                     ) : (
                       modules.map((m) => (
                         <MenuItem key={m._id} value={m.key || m.name}>
-                          {getModuleDisplayName(m.name)}
+                          <Box display="flex" alignItems="center" width="100%">
+                            <span>{getModuleDisplayName(m.name)}</span>
+                            {checkExistingManager(m.key || m.name) && (
+                              <Chip 
+                                label="Has Manager" 
+                                size="small" 
+                                sx={{ ml: 1, backgroundColor: '#ff9800', color: 'white' }} 
+                              />
+                            )}
+                          </Box>
                         </MenuItem>
                       ))
                     )}

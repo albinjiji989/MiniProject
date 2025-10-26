@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const petReservationSchema = new mongoose.Schema({
   itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'PetInventoryItem', required: true, index: true },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  petId: { type: mongoose.Schema.Types.ObjectId, ref: 'Pet' }, // Add this line to reference the Pet record
   
   // Reservation details
   reservationCode: { 

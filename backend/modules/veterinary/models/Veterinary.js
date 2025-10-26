@@ -19,5 +19,4 @@ const veterinarySchema = new mongoose.Schema({
 
 veterinarySchema.index({ location: '2dsphere' });
 
-module.exports = mongoose.model('Veterinary', veterinarySchema);
-
+module.exports = mongoose.models.Veterinary || mongoose.model('Veterinary', veterinarySchema);

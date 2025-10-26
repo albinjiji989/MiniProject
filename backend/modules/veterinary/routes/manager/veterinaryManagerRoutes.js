@@ -8,6 +8,8 @@ const appointmentController = require('../../manager/controllers/appointmentCont
 const serviceController = require('../../manager/controllers/serviceController');
 const patientController = require('../../manager/controllers/patientController');
 const medicalController = require('../../user/controllers/medicalRecordsController');
+const veterinaryMedicalRecordController = require('../../manager/controllers/veterinaryMedicalRecordController');
+const veterinaryAppointmentController = require('../../manager/controllers/veterinaryAppointmentController');
 const VeterinaryStaffInvite = require('../../manager/models/VeterinaryStaffInvite');
 const { sendMail } = require('../../../../core/utils/email');
 const User = require('../../../../core/models/User');
@@ -47,14 +49,13 @@ router.post('/appointments', requireManager, [
   body('serviceId').notEmpty(),
   body('appointmentDate').isISO8601(),
   body('timeSlot').notEmpty()
-], appointmentController.createAppointment);
-router.get('/appointments/:id', requireManager, appointmentController.getAppointment);
-router.put('/appointments/:id', requireManager, appointmentController.updateAppointment);
-router.post('/appointments/:id/complete', requireManager, [
-  body('diagnosis').notEmpty(),
-  body('treatment').notEmpty()
-], appointmentController.completeAppointment);
-router.post('/appointments/:id/cancel', requireManager, appointmentController.cancelAppointment);
+], veterinaryAppointmentController.createAppointment);
+
+router.get('/appointments', requireManager, veterinaryAppointmentController.getAppointments);
+router.get('/appointments/:id', requireManager, veterinaryAppointmentController.getAppointmentById);
+router.put('/appointments/:id', requireManager, veterinaryAppointmentController.updateAppointment);
+router.delete('/appointments/:id', requireManager, veterinaryAppointmentController.deleteAppointment);
+router.get('/appointments/slots/available', requireManager, veterinaryAppointmentController.getAvailableTimeSlots);
 
 // Services Management
 router.post('/services', requireManager, [
@@ -83,6 +84,19 @@ router.delete('/staff/:id', requireManager, staffController.deleteStaff);
 // Medical records (manager or staff)
 router.post('/pets/:petId/medical-records', requireManagerOrWorker, [ body('visitDate').optional().isISO8601() ], medicalController.createRecord);
 router.get('/pets/:petId/medical-records', requireManagerOrWorker, medicalController.listRecordsForPet);
+
+// Enhanced veterinary medical records
+router.post('/medical-records', requireManagerOrWorker, [
+  body('petId').notEmpty(),
+  body('visitDate').isISO8601(),
+  body('diagnosis').notEmpty(),
+  body('treatment').notEmpty()
+], veterinaryMedicalRecordController.createMedicalRecord);
+
+router.get('/medical-records/pet/:petId', requireManagerOrWorker, veterinaryMedicalRecordController.getMedicalRecordsByPet);
+router.get('/medical-records/:id', requireManagerOrWorker, veterinaryMedicalRecordController.getMedicalRecordById);
+router.put('/medical-records/:id', requireManagerOrWorker, veterinaryMedicalRecordController.updateMedicalRecord);
+router.delete('/medical-records/:id', requireManagerOrWorker, veterinaryMedicalRecordController.deleteMedicalRecord);
 
 // Staff invite (OTP) and verify to create veterinary staff user with temp password
 router.post('/staff/invite', requireManager, [ body('name').notEmpty(), body('email').isEmail(), body('phone').optional() ], async (req, res) => {
@@ -160,5 +174,3 @@ router.post('/staff/verify', requireManager, [ body('email').isEmail(), body('ot
 });
 
 module.exports = router;
-
-

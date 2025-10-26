@@ -197,3 +197,65 @@ All scripts include proper error handling and will:
 - Close database connections properly
 - Provide usage help when needed
 - Handle edge cases gracefully
+
+# Pet Registry Migration Scripts
+
+This directory contains scripts to fix and verify PetRegistry entries for pet shop pets.
+
+## Scripts
+
+### 1. fixPetShopRegistry.js
+Registers all pet shop inventory items in the centralized PetRegistry and updates ownership information for purchased pets.
+
+**Run with:**
+```bash
+npm run migrate:petshop-registry
+```
+
+### 2. verifyPetShopRegistry.js
+Verifies that all pet shop pets are properly registered and can be found in the system.
+
+**Run with:**
+```bash
+npm run verify:petshop-registry
+```
+
+### 3. fixPetShopPetRegistry.js
+Comprehensive migration script that fixes PetRegistry inconsistencies for pet shop pets.
+
+**Run with:**
+```bash
+npm run fix:petshop-pets
+```
+
+## What These Scripts Do
+
+### Registration Fixes
+- Ensures all PetInventoryItems are registered in PetRegistry
+- Sets proper source tracking (petshop)
+- Maintains image references
+- Sets correct status and location
+
+### Ownership Fixes
+- Updates PetRegistry for purchased pets
+- Sets currentOwnerId to the buyer
+- Updates currentStatus to 'owned'
+- Adds ownership history records
+- Sets currentLocation to 'at_owner'
+
+### Verification
+- Checks registry coverage for inventory items
+- Verifies ownership accuracy for purchased pets
+- Reports any inconsistencies
+
+## When to Run
+
+Run these scripts:
+1. After deploying the pet shop fixes
+2. When experiencing "Pet not found" errors
+3. During routine maintenance
+4. After data migrations
+
+## Safety
+
+All scripts are safe to run multiple times. They use upsert operations and won't duplicate data.

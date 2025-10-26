@@ -1,6 +1,7 @@
 const { validationResult } = require('express-validator');
 const Veterinary = require('../models/Veterinary');
 
+module.exports = {};
 const listClinics = async (req, res) => {
   try {
     const { isActive, page = 1, limit = 10 } = req.query;
@@ -40,7 +41,15 @@ const createClinic = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Validation errors', errors: errors.array() });
     }
 
+    // Add store information for veterinary managers
     const clinicData = { ...req.body, createdBy: req.user._id };
+    
+    // If the user is a veterinary manager, associate the clinic with their store
+    if (req.user.role === 'veterinary_manager' && req.user.storeId) {
+      clinicData.storeId = req.user.storeId;
+      clinicData.storeName = req.user.storeName || '';
+    }
+    
     const clinic = new Veterinary(clinicData);
     await clinic.save();
     await clinic.populate('createdBy', 'name email');
@@ -53,5 +62,3 @@ const createClinic = async (req, res) => {
 };
 
 module.exports = { listClinics, createClinic };
-
-

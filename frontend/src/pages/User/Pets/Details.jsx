@@ -54,6 +54,7 @@ const UserPetDetails = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   
   const [pet, setPet] = useState(null)
+  const [petType, setPetType] = useState(null) // 'user' or 'centralized'
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [menuAnchor, setMenuAnchor] = useState(null)
@@ -74,8 +75,15 @@ const UserPetDetails = () => {
       try {
         const res = await petsAPI.getPet(id)
         const petData = res.data?.data?.pet || res.data?.data || res.data
-        console.log('✅ Pet data received from centralized registry:', petData)
+        console.log('✅ Pet data received from centralized registry:', {
+          petData,
+          images: petData?.images,
+          imagesCount: petData?.images?.length || 0,
+          imageIds: petData?.imageIds,
+          imageIdsCount: petData?.imageIds?.length || 0
+        })
         setPet(petData)
+        setPetType('centralized')
         
         // Load medical history
         loadMedicalHistory()
@@ -86,8 +94,15 @@ const UserPetDetails = () => {
         try {
           const res = await petsAPI.getRegistryPet(id)
           const petData = res.data?.data?.pet || res.data?.data || res.data
-          console.log('✅ Pet data received from registry by ID:', petData)
+          console.log('✅ Pet data received from registry by ID:', {
+            petData,
+            images: petData?.images,
+            imagesCount: petData?.images?.length || 0,
+            imageIds: petData?.imageIds,
+            imageIdsCount: petData?.imageIds?.length || 0
+          })
           setPet(petData)
+          setPetType('centralized')
           
           // Load medical history
           loadMedicalHistory()
@@ -98,8 +113,15 @@ const UserPetDetails = () => {
           try {
             const res = await userPetsAPI.get(id)
             const petData = res.data?.data || res.data?.pet || res.data
-            console.log('✅ Pet data received from userPetsAPI:', petData)
+            console.log('✅ Pet data received from userPetsAPI:', {
+              petData,
+              images: petData?.images,
+              imagesCount: petData?.images?.length || 0,
+              imageIds: petData?.imageIds,
+              imageIdsCount: petData?.imageIds?.length || 0
+            })
             setPet(petData)
+            setPetType('user')
             
             // Load medical history
             loadMedicalHistory()
@@ -120,6 +142,30 @@ const UserPetDetails = () => {
               console.log('Reservation check failed:', reservationError.message)
             }
             
+            // Try to get pet by petCode from centralized registry
+            try {
+              // If id looks like a petCode (3 letters + 5 digits), try that
+              if (/^[A-Z]{3}\d{5}$/.test(id)) {
+                const res = await petsAPI.getPet(id)
+                const petData = res.data?.data?.pet || res.data?.data || res.data
+                console.log('✅ Pet data received from centralized registry by petCode:', {
+                  petData,
+                  images: petData?.images,
+                  imagesCount: petData?.images?.length || 0,
+                  imageIds: petData?.imageIds,
+                  imageIdsCount: petData?.imageIds?.length || 0
+                })
+                setPet(petData)
+                setPetType('centralized')
+                
+                // Load medical history
+                loadMedicalHistory()
+                return
+              }
+            } catch (petCodeError) {
+              console.log('Pet code lookup failed:', petCodeError.message)
+            }
+            
             console.log('❌ Pet not found for ID:', id)
             throw new Error('Pet not found in any system. Please check the ID or contact support.')
           }
@@ -135,18 +181,30 @@ const UserPetDetails = () => {
   const loadMedicalHistory = async () => {
     try {
       setMedicalHistoryLoading(true)
-      // Try to load medical history from centralized registry first
-      try {
-        const res = await petsAPI.getHistory(id)
-        setMedicalHistory(res.data?.data?.history || res.data?.data?.medicalHistory || [])
-      } catch (centralizedError) {
-        // Fall back to userPetsAPI
+      // Use the appropriate API based on pet type
+      if (petType === 'user') {
+        // For user pets, directly load medical history from userPetsAPI
         try {
           const res = await userPetsAPI.getMedicalHistory(id)
           setMedicalHistory(res.data?.data?.medicalHistory || [])
-        } catch (userError) {
-          console.log('Failed to load medical history from both APIs:', { centralizedError, userError })
+        } catch (error) {
+          console.log('Failed to load medical history from userPetsAPI:', error)
           setMedicalHistory([])
+        }
+      } else {
+        // For centralized pets, try centralized registry first
+        try {
+          const res = await petsAPI.getHistory(id)
+          setMedicalHistory(res.data?.data?.history || res.data?.data?.medicalHistory || [])
+        } catch (centralizedError) {
+          // Fall back to userPetsAPI
+          try {
+            const res = await userPetsAPI.getMedicalHistory(id)
+            setMedicalHistory(res.data?.data?.medicalHistory || [])
+          } catch (userError) {
+            console.log('Failed to load medical history from both APIs:', { centralizedError, userError })
+            setMedicalHistory([])
+          }
         }
       }
     } catch (e) {
@@ -170,8 +228,8 @@ const UserPetDetails = () => {
 
   const handleEdit = () => {
     handleMenuClose()
-    // Determine which edit route to use based on pet source
-    if (pet?.source === 'core' || !pet?.source) {
+    // Determine which edit route to use based on pet type
+    if (petType === 'user') {
       // User-created pet
       navigate(`/User/pets/${id}/edit`)
     } else {
@@ -211,19 +269,60 @@ const UserPetDetails = () => {
 
   const getPrimaryImageUrl = () => {
     try {
-      console.log('Getting primary image URL for pet:', pet?.name, 'Images:', pet?.images);
+      console.log('🔍 Getting primary image URL for pet:', {
+        name: pet?.name,
+        petCode: pet?.petCode,
+        images: pet?.images,
+        imagesCount: pet?.images?.length || 0,
+        imageIds: pet?.imageIds,
+        imageIdsCount: pet?.imageIds?.length || 0
+      });
+      
+      // First check if we have populated images array
       if (pet.images && Array.isArray(pet.images) && pet.images.length > 0) {
         const primaryImage = pet.images.find(img => img?.isPrimary) || pet.images[0];
-        console.log('Selected primary image:', primaryImage);
+        console.log('🖼️ Selected primary image from images array:', primaryImage);
         if (primaryImage?.url) {
           const url = resolveMediaUrl(primaryImage.url);
-          console.log('Resolved image URL:', url);
+          console.log('✅ Resolved image URL from images array:', url);
           return url;
+        } else {
+          console.log('⚠️ Primary image found but no URL in images array:', primaryImage);
+        }
+      } 
+      // If no images array, check if we have imageIds that contain actual image data
+      else if (pet.imageIds && Array.isArray(pet.imageIds) && pet.imageIds.length > 0) {
+        console.log('🖼️ Checking imageIds for image data...');
+        
+        // Check the first item in imageIds to see what it contains
+        const firstItem = pet.imageIds[0];
+        console.log('First imageIds item:', firstItem);
+        
+        // If imageIds contains full image objects with urls
+        if (firstItem && typeof firstItem === 'object' && firstItem.url) {
+          const primaryImage = pet.imageIds.find(img => img?.isPrimary) || pet.imageIds[0];
+          console.log('🖼️ Selected primary image from imageIds:', primaryImage);
+          if (primaryImage?.url) {
+            const url = resolveMediaUrl(primaryImage.url);
+            console.log('✅ Resolved image URL from imageIds (full objects):', url);
+            return url;
+          }
+        }
+        // If imageIds contains just strings or ObjectIds
+        else if (typeof firstItem === 'string' || (firstItem && firstItem.constructor && firstItem.constructor.name === 'ObjectID')) {
+          console.log('⚠️ imageIds contains ObjectIds or strings, need backend to populate images');
+        } else {
+          console.log('⚠️ imageIds content type unknown:', typeof firstItem, firstItem);
+          // Sometimes imageIds might contain the image data directly in a different format
+          console.log('Full imageIds content:', pet.imageIds);
         }
       }
+      
+      console.log('⚠️ No usable images found in pet object');
     } catch (error) {
-      console.error('Error getting primary image URL:', error);
+      console.error('❌ Error getting primary image URL:', error);
     }
+    console.log('🔄 Returning placeholder image');
     return '/placeholder-pet.svg';
   };
 
@@ -378,14 +477,18 @@ const UserPetDetails = () => {
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Species</Typography>
                   <Typography variant="h6">
-                    {pet.speciesId?.displayName || pet.speciesId?.name || pet.species || '-'}
+                    {pet.species && typeof pet.species === 'object' 
+                      ? (pet.species.displayName || pet.species.name || '-') 
+                      : (pet.species || '-')}
                   </Typography>
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Breed</Typography>
                   <Typography variant="h6">
-                    {pet.breedId?.name || pet.breed || '-'}
+                    {pet.breed && typeof pet.breed === 'object' 
+                      ? (pet.breed.name || '-') 
+                      : (pet.breed || '-')}
                   </Typography>
                 </Grid>
                 
@@ -463,13 +566,13 @@ const UserPetDetails = () => {
           variant="contained"
           startIcon={<MedicalIcon />}
           onClick={() => {
-            // Determine which medical history route to use
-            if (pet?.source === 'core' || !pet?.source) {
+            // Determine which medical history route to use based on pet type
+            if (petType === 'user') {
               // User-created pet
-              navigate(`/User/pets/${id}/medical-history`)
+              navigate(`/User/pets/${id}/medical-history?petType=user`)
             } else {
               // Pet from petshop or adoption - use the centralized API
-              navigate(`/User/pets/${id}/medical-history`)
+              navigate(`/User/pets/${id}/medical-history?petType=centralized`)
             }
           }}
           size="large"
@@ -481,13 +584,13 @@ const UserPetDetails = () => {
           variant="outlined"
           startIcon={<HistoryIcon />}
           onClick={() => {
-            // Determine which history route to use
-            if (pet?.source === 'core' || !pet?.source) {
+            // Determine which history route to use based on pet type
+            if (petType === 'user') {
               // User-created pet
-              navigate(`/User/pets/${id}/history`)
+              navigate(`/User/pets/${id}/history?petType=user`)
             } else {
               // Pet from petshop or adoption
-              navigate(`/User/pets/${id}/history`)
+              navigate(`/User/pets/${id}/history?petType=centralized`)
             }
           }}
           size="large"

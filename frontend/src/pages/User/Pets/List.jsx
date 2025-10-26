@@ -64,8 +64,8 @@ const UserPetsList = () => {
       setLoading(true)
       setError('')
       
-      // Fetch from PetNew, Pet, and adopted pets models in parallel
-      const [petNewRes, petRes, adoptedRes] = await Promise.allSettled([
+      // Fetch from PetNew, Pet, adopted pets, and purchased pets models in parallel
+      const [petNewRes, petRes, adoptedRes, purchasedRes] = await Promise.allSettled([
         userPetsAPI.list({
           page: pageParam,
           limit: 12,
@@ -73,7 +73,8 @@ const UserPetsList = () => {
           status: filters.status || undefined,
         }),
         apiClient.get('/pets/my-pets'),
-        adoptionAPI.getMyAdoptedPets()
+        adoptionAPI.getMyAdoptedPets(),
+        apiClient.get('/petshop/user/my-purchased-pets') // Add pet shop purchased pets
       ])
       
       // Process PetNew results
@@ -97,6 +98,12 @@ const UserPetsList = () => {
         adoptedPets = adoptedRes.value.data?.data || []
       }
       
+      // Process purchased pets
+      let purchasedPets = []
+      if (purchasedRes.status === 'fulfilled') {
+        purchasedPets = purchasedRes.value.data?.data?.pets || []
+      }
+      
       // Map adopted pets to pet-like objects
       const mappedAdoptedPets = adoptedPets.map(pet => ({
         _id: pet._id,
@@ -116,8 +123,29 @@ const UserPetsList = () => {
         createdAt: pet.adoptionDate
       }))
       
+      // Map purchased pets to pet-like objects
+      const mappedPurchasedPets = purchasedPets.map(pet => ({
+        _id: pet._id,
+        name: pet.name || 'Pet',
+        images: pet.images || [],
+        petCode: pet.petCode,
+        breed: pet.breed,
+        species: pet.species,
+        gender: pet.gender || 'Unknown',
+        status: 'purchased',
+        currentStatus: 'purchased',
+        tags: ['purchased'],
+        purchaseDate: pet.acquiredDate,
+        age: pet.age,
+        ageUnit: pet.ageUnit,
+        color: pet.color,
+        createdAt: pet.acquiredDate,
+        source: pet.source,
+        sourceLabel: pet.sourceLabel
+      }))
+      
       // Combine and deduplicate pets
-      const combinedPets = [...petNewPets, ...corePets, ...mappedAdoptedPets]
+      const combinedPets = [...petNewPets, ...corePets, ...mappedAdoptedPets, ...mappedPurchasedPets]
       const uniquePets = combinedPets.filter((pet, index, self) => 
         index === self.findIndex(p => (p.petCode || p._id) === (pet.petCode || pet._id))
       )
@@ -130,8 +158,8 @@ const UserPetsList = () => {
           return (a.age || 0) - (b.age || 0)
         } else {
           // Default sort by creation date (newest first)
-          const dateA = new Date(a.createdAt || a.adoptionDate || 0)
-          const dateB = new Date(b.createdAt || b.adoptionDate || 0)
+          const dateA = new Date(a.createdAt || a.adoptionDate || a.purchaseDate || 0)
+          const dateB = new Date(b.createdAt || b.adoptionDate || b.purchaseDate || 0)
           return dateB - dateA
         }
       })
@@ -186,7 +214,14 @@ const UserPetsList = () => {
     if (selectedPet?.tags?.includes('adoption')) {
       // For adopted pets, navigate to the adoption details page
       navigate(`/User/adoption/my-adopted-pets/${selectedPet._id}`)
-    } else {
+    } 
+    // Check if this is a purchased pet by looking for the 'purchased' tag
+    else if (selectedPet?.tags?.includes('purchased')) {
+      // For purchased pets, navigate using the petCode if available, otherwise use _id
+      const petId = selectedPet.petCode || selectedPet._id;
+      navigate(`/User/pets/${petId}`)
+    }
+    else {
       // For regular user pets, use the existing navigation
       navigate(`/User/pets/${selectedPet._id}`)
     }

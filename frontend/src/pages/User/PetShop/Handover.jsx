@@ -42,10 +42,8 @@ const Handover = () => {
   const { reservationId } = useParams()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
-  const [verifying, setVerifying] = useState(false)
   const [error, setError] = useState('')
   const [reservation, setReservation] = useState(null)
-  const [otp, setOtp] = useState('')
   const [qrDialogOpen, setQrDialogOpen] = useState(false)
 
   const loadReservation = async () => {
@@ -72,33 +70,6 @@ const Handover = () => {
       return `${years} yr${years > 1 ? 's' : ''}${months > 0 ? ` ${months} mo` : ''}`
     }
     return `${age} ${ageUnit || 'yr'}${age > 1 && ageUnit ? (ageUnit.endsWith('s') ? '' : 's') : ''}`
-  }
-
-  const handleVerifyOtp = async () => {
-    try {
-      setVerifying(true)
-      
-      // Call the API to verify the OTP
-      await petShopAPI.completeHandover(reservationId, { otp })
-      
-      alert('OTP verified successfully! You can now pick up your pet.')
-      loadReservation() // Refresh to show updated status
-      setVerifying(false)
-      setOtp('')
-    } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to verify OTP')
-      setVerifying(false)
-    }
-  }
-
-  const handleRegenerateOtp = async () => {
-    try {
-      await petShopAPI.regenerateHandoverOTP(reservationId)
-      alert('New OTP has been sent to your email!')
-      loadReservation() // Refresh to show any updates
-    } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to regenerate OTP')
-    }
   }
 
   const handleShowQrCode = () => {
@@ -274,7 +245,7 @@ const Handover = () => {
               </Typography>
               
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <LocationOnIcon sx={{ mr: 1 }} />
+                <LocationIcon sx={{ mr: 1 }} />
                 <Typography variant="body2">
                   {reservation.store?.address?.street}, {reservation.store?.address?.city}
                 </Typography>
@@ -297,7 +268,7 @@ const Handover = () => {
               <Button 
                 variant="outlined" 
                 fullWidth
-                startIcon={<LocationOnIcon />}
+                startIcon={<LocationIcon />}
               >
                 Get Directions
               </Button>
@@ -356,55 +327,14 @@ const Handover = () => {
         </Grid>
       </Grid>
       
-      {/* OTP Verification */}
-      {reservation.status === 'ready_pickup' && (
-        <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>Verify Pickup</Typography>
-              
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Enter the OTP sent to your email to verify your identity and complete the pickup process.
-                </Typography>
-                
-                <TextField
-                  label="Enter OTP"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  variant="outlined"
-                  fullWidth
-                  disabled={verifying}
-                />
-                
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Button 
-                    variant="contained" 
-                    onClick={handleVerifyOtp}
-                    disabled={verifying || otp.length !== 6}
-                  >
-                    {verifying ? <CircularProgress size={24} /> : 'Verify OTP'}
-                  </Button>
-                  
-                  <Button 
-                    variant="outlined" 
-                    onClick={handleRegenerateOtp}
-                  >
-                    Regenerate OTP
-                  </Button>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      )}
-
+      {/* OTP Verification - Removed for user page */}
+      
       {reservation.status === 'completed' && (
         <Grid item xs={12}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <CheckCircleIcon color="success" />
+                <CheckIcon color="success" />
                 <Typography variant="h6" color="success.main">
                   Pickup Completed
                 </Typography>

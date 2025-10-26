@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "playwright test --config=playwright.config.cjs",
+    "test:ui": "playwright test --config=playwright.config.cjs --ui"
   },
   "dependencies": {
     "@emotion/react": "^11.11.1",
@@ -36,6 +38,7 @@
     "recharts": "^2.8.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
     "@vitejs/plugin-react": "^4.1.1",

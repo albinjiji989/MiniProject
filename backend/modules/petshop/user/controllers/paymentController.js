@@ -165,7 +165,14 @@ const verifyRazorpaySignature = async (req, res) => {
     reservation.status = 'paid';
 
     // Update inventory item status
-    const inventoryItem = await PetInventoryItem.findById(reservation.itemId._id);
+    const inventoryItem = await PetInventoryItem.findById(reservation.itemId._id)
+      .populate('imageIds'); // Populate imageIds to ensure we get the images data
+    
+    // Manually populate the virtual 'images' field
+    if (inventoryItem) {
+      await inventoryItem.populate('images');
+    }
+    
     if (inventoryItem) {
       inventoryItem.status = 'sold';
       inventoryItem.soldAt = new Date();
@@ -281,9 +288,67 @@ const verifyRazorpaySignature = async (req, res) => {
         { path: 'images' } // Populate images virtual property
       ]);
       
-      console.log('User pet created successfully:', newPet._id);
+      console.log('User pet created successfully in PetNew:', newPet._id);
     } catch (petErr) {
-      console.error('Failed to create user pet:', petErr);
+      console.error('Failed to create user pet in PetNew:', petErr);
+      // Don't fail the payment if pet creation fails, but log the error
+    }
+
+    // ALSO create user pet in main Pet collection after successful payment
+    // This is needed for the user dashboard to display pet details correctly
+    try {
+      const Pet = require('../../../../core/models/Pet');
+      const mainPet = new Pet({
+        name: inventoryItem.name || 'Unnamed Pet',
+        species: inventoryItem.speciesId,
+        breed: inventoryItem.breedId,
+        owner: req.user._id,
+        createdBy: req.user._id,
+        currentStatus: 'sold',
+        gender: inventoryItem.gender || 'Unknown',
+        age: inventoryItem.age || 0,
+        ageUnit: inventoryItem.ageUnit || 'months',
+        color: inventoryItem.color || '',
+        petCode: inventoryItem.petCode,
+        imageIds: inventoryItem.imageIds || [],
+        description: `Purchased from ${inventoryItem.storeName || 'Pet Shop'}`,
+        storeId: inventoryItem.storeId,
+        storeName: inventoryItem.storeName,
+        // Set default values for required fields
+        healthStatus: 'Good',
+        adoptionFee: 0,
+        isAdoptionReady: false,
+        tags: ['petshop', 'purchased'],
+        location: {
+          address: '',
+          city: '',
+          state: '',
+          country: ''
+        },
+        weight: {
+          value: inventoryItem.weight || 0,
+          unit: 'kg'
+        },
+        size: 'medium',
+        temperament: [],
+        behaviorNotes: '',
+        specialNeeds: [],
+        adoptionRequirements: []
+      });
+      
+      await mainPet.save();
+      
+      // Populate the pet with related data
+      await mainPet.populate([
+        { path: 'species', select: 'name displayName' },
+        { path: 'breed', select: 'name' },
+        { path: 'owner', select: 'name email' },
+        { path: 'images' } // Populate images virtual property
+      ]);
+      
+      console.log('User pet created successfully in main Pet collection:', mainPet._id);
+    } catch (petErr) {
+      console.error('Failed to create user pet in main Pet collection:', petErr);
       // Don't fail the payment if pet creation fails, but log the error
     }
 
@@ -1147,9 +1212,67 @@ const completeHandover = async (req, res) => {
         { path: 'images' } // Populate images virtual property
       ]);
       
-      console.log('User pet created successfully:', newPet._id);
+      console.log('User pet created successfully in PetNew:', newPet._id);
     } catch (petErr) {
-      console.error('Failed to create user pet:', petErr);
+      console.error('Failed to create user pet in PetNew:', petErr);
+      // Don't fail the handover if pet creation fails, but log the error
+    }
+
+    // ALSO create user pet in main Pet collection after successful handover
+    // This is needed for the user dashboard to display pet details correctly
+    try {
+      const Pet = require('../../../../core/models/Pet');
+      const mainPet = new Pet({
+        name: inventoryItem.name || 'Unnamed Pet',
+        species: inventoryItem.speciesId,
+        breed: inventoryItem.breedId,
+        owner: req.user._id,
+        createdBy: req.user._id,
+        currentStatus: 'sold',
+        gender: inventoryItem.gender || 'Unknown',
+        age: inventoryItem.age || 0,
+        ageUnit: inventoryItem.ageUnit || 'months',
+        color: inventoryItem.color || '',
+        petCode: inventoryItem.petCode,
+        imageIds: inventoryItem.imageIds || [],
+        description: `Purchased from ${inventoryItem.storeName || 'Pet Shop'}`,
+        storeId: inventoryItem.storeId,
+        storeName: inventoryItem.storeName,
+        // Set default values for required fields
+        healthStatus: 'Good',
+        adoptionFee: 0,
+        isAdoptionReady: false,
+        tags: ['petshop', 'purchased'],
+        location: {
+          address: '',
+          city: '',
+          state: '',
+          country: ''
+        },
+        weight: {
+          value: inventoryItem.weight || 0,
+          unit: 'kg'
+        },
+        size: 'medium',
+        temperament: [],
+        behaviorNotes: '',
+        specialNeeds: [],
+        adoptionRequirements: []
+      });
+      
+      await mainPet.save();
+      
+      // Populate the pet with related data
+      await mainPet.populate([
+        { path: 'species', select: 'name displayName' },
+        { path: 'breed', select: 'name' },
+        { path: 'owner', select: 'name email' },
+        { path: 'images' } // Populate images virtual property
+      ]);
+      
+      console.log('User pet created successfully in main Pet collection:', mainPet._id);
+    } catch (petErr) {
+      console.error('Failed to create user pet in main Pet collection:', petErr);
       // Don't fail the handover if pet creation fails, but log the error
     }
     

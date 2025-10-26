@@ -68,6 +68,19 @@ import VeterinaryRecords from './modules/managers/Veterinary/Records'
 import VeterinaryPatients from './modules/managers/Veterinary/Patients'
 import VeterinaryServices from './modules/managers/Veterinary/Services'
 import VeterinaryReports from './modules/managers/Veterinary/Reports'
+import VeterinaryManagerOperations from './pages/Manager/Veterinary/VeterinaryManagerOperations'
+import VeterinaryManagerPatients from './pages/Manager/Veterinary/VeterinaryManagerPatients'
+import VeterinaryManagerPatientDetails from './pages/Manager/Veterinary/VeterinaryManagerPatientDetails'
+import VeterinaryManagerPatientForm from './pages/Manager/Veterinary/VeterinaryManagerPatientForm'
+import VeterinaryManagerStaff from './pages/Manager/Veterinary/VeterinaryManagerStaff'
+import VeterinaryManagerStaffDetails from './pages/Manager/Veterinary/VeterinaryManagerStaffDetails'
+import VeterinaryManagerStaffForm from './pages/Manager/Veterinary/VeterinaryManagerStaffForm'
+import VeterinaryManagerServices from './pages/Manager/Veterinary/VeterinaryManagerServices'
+import VeterinaryManagerServiceDetails from './pages/Manager/Veterinary/VeterinaryManagerServiceDetails'
+import VeterinaryManagerServiceForm from './pages/Manager/Veterinary/VeterinaryManagerServiceForm'
+import VeterinaryManagerAppointmentDetails from './pages/Manager/Veterinary/VeterinaryManagerAppointmentDetails'
+import VeterinaryManagerMedicalRecordForm from './pages/Manager/Veterinary/VeterinaryManagerMedicalRecordForm'
+import VeterinaryManagerMedicalRecords from './pages/Manager/Veterinary/VeterinaryManagerMedicalRecords'
 import VetWizardLayout from './modules/managers/Veterinary/Wizard/WizardLayout'
 import VetStepBasics from './modules/managers/Veterinary/Wizard/StepBasics'
 import VetStepTests from './modules/managers/Veterinary/Wizard/StepTestsInjections'
@@ -150,7 +163,16 @@ import PharmacyDashboard from './pages/User/Pharmacy/PharmacyDashboard'
 import TemporaryCareDashboard from './pages/User/TemporaryCare/TemporaryCareDashboard'
 import TemporaryCareRequestForm from './pages/User/TemporaryCare/RequestForm'
 import VeterinaryDashboard from './pages/User/Veterinary/VeterinaryDashboard'
+import VeterinaryBookAppointment from './pages/User/Veterinary/VeterinaryBookAppointment'
+import VeterinaryVaccinations from './pages/User/Veterinary/VeterinaryVaccinations'
+import VeterinaryMedicalRecords from './pages/User/Veterinary/VeterinaryMedicalRecords'
 import PetMedicalHistory from './pages/User/Veterinary/PetMedicalHistory'
+import VeterinaryPetSelection from './pages/User/Veterinary/VeterinaryPetSelection'
+import VeterinaryPetDashboard from './pages/User/Veterinary/VeterinaryPetDashboard'
+import TestVeterinaryAPI from './pages/User/Veterinary/TestVeterinaryAPI'
+import DebugVeterinaryPets from './pages/User/Veterinary/DebugVeterinaryPets'
+import DebugAPI from './pages/User/Veterinary/DebugAPI'
+import TestAPIs from './pages/User/Veterinary/TestAPIs'
 import RBACManagement from './pages/RBAC/RBACManagement'
 import CoreManagement from './pages/Core/CoreManagement'
 import Profile from './pages/Profile/Profile'
@@ -194,6 +216,8 @@ import ManagePetImages from './modules/managers/PetShop/ManagePetImages'
 import ReservedPets from './modules/managers/PetShop/ReservedPets'
 import PurchasedPets from './modules/managers/PetShop/PurchasedPets'
 import PetShopDeliveryManagement from './pages/Manager/PetShopDeliveryManagement'
+import VeterinaryAdminClinics from './pages/Admin/Veterinary/VeterinaryAdminClinics'
+import VeterinaryAdminClinicDetails from './pages/Admin/Veterinary/VeterinaryAdminClinicDetails'
 
 function App() {
   const { user, loading } = useAuth()
@@ -389,6 +413,8 @@ function App() {
                 <Route path="/adoption-applications" element={<AdoptionApplicationsAdmin />} />
                 <Route path="/pet-system-requests" element={<PetSystemRequests />} />
                 <Route path="/store-name-change-requests" element={<AdminStoreNameChangeRequests />} />
+                <Route path="/veterinary/clinics" element={<VeterinaryAdminClinics />} />
+                <Route path="/veterinary/clinics/:id" element={<VeterinaryAdminClinicDetails />} />
                 <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
               </Routes>
             </AdminLayout>
@@ -454,8 +480,16 @@ function App() {
                 {false && <Route path="/boarding" element={<Boarding />} />}
                 <Route path="/temporary-care" element={<TemporaryCareDashboard />} />
                 <Route path="/temporary-care/request" element={<TemporaryCareRequestForm />} />
-                <Route path="/veterinary" element={<VeterinaryDashboard />} />
+                <Route path="/veterinary" element={<VeterinaryPetSelection />} />
+                <Route path="/veterinary/dashboard" element={<VeterinaryPetDashboard />} />
+                <Route path="/veterinary/book" element={<VeterinaryBookAppointment />} />
+                <Route path="/veterinary/vaccinations" element={<VeterinaryVaccinations />} />
+                <Route path="/veterinary/records" element={<VeterinaryMedicalRecords />} />
                 <Route path="/veterinary/pets/:petId/medical-records" element={<PetMedicalHistory />} />
+                <Route path="/veterinary/test" element={<TestVeterinaryAPI />} />
+                <Route path="/veterinary/debug" element={<DebugVeterinaryPets />} />
+<Route path="/veterinary/debug-api" element={<DebugAPI />} />
+<Route path="/veterinary/test-apis" element={<TestAPIs />} />
                 {false && <Route path="/donation" element={<DonationDashboard />} />}
                 <Route path="/rbac" element={<RBACManagement />} />
                 <Route path="/core" element={<CoreManagement />} />
@@ -649,12 +683,27 @@ function App() {
             <ManagerLayout>
               <Routes>
                 <Route path="/dashboard" element={<VeterinaryManagerDashboard />} />
+                <Route path="/operations" element={<VeterinaryManagerOperations />} />
                 <Route path="/appointments" element={<VeterinaryAppointments />} />
-                <Route path="/records" element={<VeterinaryRecords />} />
+                <Route path="/appointments/:id" element={<VeterinaryManagerAppointmentDetails />} />
+                <Route path="/records" element={<VeterinaryManagerMedicalRecords />} />
+                <Route path="/records/new" element={<VeterinaryManagerMedicalRecordForm />} />
+                <Route path="/records/:id/edit" element={<VeterinaryManagerMedicalRecordForm />} />
                 <Route path="/patients" element={<VeterinaryPatients />} />
+                <Route path="/patients/details" element={<VeterinaryManagerPatients />} />
+                <Route path="/patients/new" element={<VeterinaryManagerPatientForm />} />
+                <Route path="/patients/:id/edit" element={<VeterinaryManagerPatientForm />} />
+                <Route path="/patients/:id" element={<VeterinaryManagerPatientDetails />} />
                 <Route path="/services" element={<VeterinaryServices />} />
+                <Route path="/services/new" element={<VeterinaryManagerServiceForm />} />
+                <Route path="/services/:id/edit" element={<VeterinaryManagerServiceForm />} />
+                <Route path="/services/:id" element={<VeterinaryManagerServiceDetails />} />
                 <Route path="/reports" element={<VeterinaryReports />} />
                 <Route path="/staff" element={<VeterinaryStaff />} />
+                <Route path="/staff/details" element={<VeterinaryManagerStaff />} />
+                <Route path="/staff/new" element={<VeterinaryManagerStaffForm />} />
+                <Route path="/staff/:id/edit" element={<VeterinaryManagerStaffForm />} />
+                <Route path="/staff/:id" element={<VeterinaryManagerStaffDetails />} />
                 <Route path="/staff-dashboard" element={<VeterinaryWorkerDashboard />} />
                 <Route path="/wizard/*" element={<VetWizardLayout />}>
                   <Route path="basic" element={<VetStepBasics />} />

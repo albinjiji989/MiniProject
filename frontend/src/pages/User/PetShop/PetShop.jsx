@@ -159,7 +159,7 @@ const PetShop = () => {
               <CardMedia
                 component="img"
                 height="200"
-                image={shop.images?.[0]?.url ? `/modules/petshop/uploads/${shop.images[0].url}` : '/placeholder-shop.jpg'}
+                image={shop.images?.[0]?.url ? shop.images[0].url : '/placeholder-shop.jpg'}
                 alt={shop.name}
                 sx={{ objectFit: 'cover' }}
               />

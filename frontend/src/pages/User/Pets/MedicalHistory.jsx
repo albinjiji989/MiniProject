@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { 
   Box, 
   Container, 
@@ -32,9 +32,16 @@ import { userPetsAPI, petsAPI } from '../../../services/api'
 const UserPetMedicalHistory = () => {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const [medicalHistory, setMedicalHistory] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  // Get petType from query parameters
+  const getPetTypeFromQuery = () => {
+    const searchParams = new URLSearchParams(location.search)
+    return searchParams.get('petType') || 'centralized' // default to centralized
+  }
 
   useEffect(() => {
     loadMedicalHistory()
@@ -45,22 +52,36 @@ const UserPetMedicalHistory = () => {
       setLoading(true)
       setError('')
       
-      // First try to load from centralized registry (for pets from petshop/adoption)
-      try {
-        const res = await petsAPI.getHistory(id)
-        const historyData = {
-          petName: res.data?.data?.pet?.name || 'Pet',
-          medicalHistory: res.data?.data?.history?.filter(record => record.eventType === 'medical_checkup' || record.eventType === 'treatment') || [],
-          vaccinations: res.data?.data?.history?.filter(record => record.eventType === 'vaccination') || []
-        };
-        setMedicalHistory(historyData)
-      } catch (centralizedError) {
-        // Fall back to userPetsAPI (for user-created pets)
+      // Get pet type from query parameters
+      const petType = getPetTypeFromQuery()
+      
+      // Use the appropriate API based on pet type
+      if (petType === 'user') {
+        // For user pets, directly load from userPetsAPI
         try {
           const res = await userPetsAPI.getMedicalHistory(id)
           setMedicalHistory(res.data?.data || null)
         } catch (userError) {
-          throw new Error('Medical history not found in any system')
+          throw new Error('Medical history not found for user pet')
+        }
+      } else {
+        // For centralized pets, try centralized registry first
+        try {
+          const res = await petsAPI.getHistory(id)
+          const historyData = {
+            petName: res.data?.data?.pet?.name || 'Pet',
+            medicalHistory: res.data?.data?.history?.filter(record => record.eventType === 'medical_checkup' || record.eventType === 'treatment') || [],
+            vaccinations: res.data?.data?.history?.filter(record => record.eventType === 'vaccination') || []
+          };
+          setMedicalHistory(historyData)
+        } catch (centralizedError) {
+          // Fall back to userPetsAPI
+          try {
+            const res = await userPetsAPI.getMedicalHistory(id)
+            setMedicalHistory(res.data?.data || null)
+          } catch (userError) {
+            throw new Error('Medical history not found in any system')
+          }
         }
       }
     } catch (e) {

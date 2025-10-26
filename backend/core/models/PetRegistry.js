@@ -83,6 +83,9 @@ const petRegistrySchema = new mongoose.Schema({
 
 petRegistrySchema.index({ petCode: 1 }, { unique: true })
 petRegistrySchema.index({ currentOwnerId: 1 })
+petRegistrySchema.index({ source: 1 })
+petRegistrySchema.index({ currentStatus: 1 })
+petRegistrySchema.index({ currentLocation: 1 })
 
 // Virtual for populating images
 petRegistrySchema.virtual('images', {
@@ -151,4 +154,73 @@ petRegistrySchema.methods.getOwnershipSummary = function() {
   }
 }
 
-module.exports = mongoose.model('PetRegistry', petRegistrySchema)
+// Static method to ensure a pet is properly registered
+petRegistrySchema.statics.ensureRegistered = async function(petData, state = {}, options = {}) {
+  const {
+    petCode,
+    name,
+    species,
+    breed,
+    imageIds = [],
+    source,
+    petShopItemId,
+    adoptionPetId,
+    corePetId,
+    firstAddedSource,
+    firstAddedBy
+  } = petData;
+
+  if (!petCode) throw new Error('petCode is required for registry registration');
+
+  // Prepare update data
+  const update = {
+    name,
+    species,
+    breed,
+    imageIds: Array.isArray(imageIds) ? imageIds : [],
+    source: source || 'core',
+    updatedBy: firstAddedBy || undefined,
+    lastSeenAt: new Date()
+  };
+
+  // Set the appropriate reference based on source
+  if (corePetId) update.corePetId = corePetId;
+  if (petShopItemId) update.petShopItemId = petShopItemId;
+  if (adoptionPetId) update.adoptionPetId = adoptionPetId;
+
+  // Prepare $setOnInsert data
+  const setOnInsert = {
+    petCode,
+    createdBy: firstAddedBy || undefined
+  };
+  
+  // Set first added info if provided
+  if (firstAddedSource) {
+    update.firstAddedSource = firstAddedSource;
+    setOnInsert.firstAddedAt = new Date();
+  }
+  if (firstAddedBy) {
+    update.firstAddedBy = firstAddedBy;
+    if (!setOnInsert.firstAddedAt) {
+      setOnInsert.firstAddedAt = new Date();
+    }
+  }
+
+  // Apply state if provided
+  if (state) {
+    if (state.currentOwnerId) update.currentOwnerId = state.currentOwnerId;
+    if (state.currentLocation) update.currentLocation = state.currentLocation;
+    if (state.currentStatus) update.currentStatus = state.currentStatus;
+    if (state.lastTransferAt) update.lastTransferAt = state.lastTransferAt;
+  }
+
+  const registryEntry = await this.findOneAndUpdate(
+    { petCode },
+    { $set: update, $setOnInsert: setOnInsert },
+    { new: true, upsert: true, setDefaultsOnInsert: true, session: options.session }
+  );
+
+  return registryEntry;
+}
+
+module.exports = mongoose.models.PetRegistry || mongoose.model('PetRegistry', petRegistrySchema)

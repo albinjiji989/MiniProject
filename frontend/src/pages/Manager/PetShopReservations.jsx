@@ -128,7 +128,7 @@ const PetShopReservations = () => {
                 {rows.map((reservation) => (
                   <TableRow key={reservation._id} hover>
                     <TableCell>
-                      #{reservation.reservationCode || reservation._id?.slice(-6) || 'N/A'}
+                      {reservation.reservationCode || reservation._id?.slice(-6) || 'N/A'}
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -294,7 +294,7 @@ const PetShopReservations = () => {
                         Code: {reservation.itemId?.petCode || 'N/A'}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Reservation: #{reservation.reservationCode || reservation._id?.slice(-6) || 'N/A'}
+                        Reservation: {reservation.reservationCode || reservation._id?.slice(-6) || 'N/A'}
                       </Typography>
                       <Typography variant="body2" fontWeight="medium">
                         ₹{reservation.itemId?.price?.toLocaleString() || 0}

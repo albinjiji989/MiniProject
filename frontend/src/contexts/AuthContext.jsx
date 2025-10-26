@@ -72,9 +72,12 @@ export const AuthProvider = ({ children }) => {
   const needsStoreNameSetup = (user) => {
     if (!user) return false;
     const isModuleManager = typeof user.role === 'string' && user.role.endsWith('_manager');
-    // For adoption and petshop managers, check if storeName is empty
-    const isAdoptionOrPetshopManager = user.role === 'adoption_manager' || user.role === 'petshop_manager';
-    return isModuleManager && isAdoptionOrPetshopManager && (!user.storeName || user.storeName.trim() === '');
+    // For adoption, petshop, and veterinary managers, check if storeName is empty
+    const isAdoptionOrPetshopOrVeterinaryManager = 
+      user.role === 'adoption_manager' || 
+      user.role === 'petshop_manager' || 
+      user.role === 'veterinary_manager';
+    return isModuleManager && isAdoptionOrPetshopOrVeterinaryManager && (!user.storeName || user.storeName.trim() === '');
   }
 
   // Simple initialization - verify token with backend; if cookies enabled, try session-based auth
@@ -85,7 +88,9 @@ export const AuthProvider = ({ children }) => {
       // Verify token with backend
       authAPI.getMe()
         .then(response => {
+          console.log('AuthContext - getMe response:', response);
           const user = response.data.data.user
+          console.log('AuthContext - user data:', user);
           // Check if user needs store name setup
           const shouldRedirectToStoreSetup = needsStoreNameSetup(user)
           dispatch({
@@ -96,7 +101,8 @@ export const AuthProvider = ({ children }) => {
             }
           })
         })
-        .catch(() => {
+        .catch((error) => {
+          console.error('AuthContext - getMe error:', error);
           // Token is invalid, clear it
           localStorage.removeItem('token')
           dispatch({ type: 'AUTH_FAILURE', payload: null })
@@ -105,7 +111,9 @@ export const AuthProvider = ({ children }) => {
       // Try cookie-based session restore
       authAPI.getMe()
         .then(response => {
+          console.log('AuthContext - cookie getMe response:', response);
           const user = response.data?.data?.user
+          console.log('AuthContext - cookie user data:', user);
           if (user) {
             // Check if user needs store name setup
             const shouldRedirectToStoreSetup = needsStoreNameSetup(user)
@@ -120,7 +128,8 @@ export const AuthProvider = ({ children }) => {
             dispatch({ type: 'AUTH_FAILURE', payload: null })
           }
         })
-        .catch(() => {
+        .catch((error) => {
+          console.error('AuthContext - cookie getMe error:', error);
           dispatch({ type: 'AUTH_FAILURE', payload: null })
         })
     } else {
@@ -155,8 +164,11 @@ export const AuthProvider = ({ children }) => {
             provider: 'google'
           }
           
+          console.log('AuthContext - Firebase login attempt:', userData);
           const response = await authAPI.firebaseLogin(userData)
+          console.log('AuthContext - Firebase login response:', response);
           const { user, token } = response.data.data
+          console.log('AuthContext - Firebase user data:', user);
           
           localStorage.setItem('token', token)
           // Check if user needs store name setup
@@ -169,6 +181,7 @@ export const AuthProvider = ({ children }) => {
           sessionStorage.removeItem('auth_google_flow')
         } catch (error) {
           console.error('Firebase auth error:', error)
+          console.error('Firebase auth error response:', error.response);
           // If account is deactivated, clear session and surface a message
           const msg = error?.response?.data?.message || error.message || 'Firebase authentication failed'
           const status = error?.response?.status
@@ -196,6 +209,7 @@ export const AuthProvider = ({ children }) => {
     try {
       dispatch({ type: 'AUTH_START' })
       const response = await authAPI.login(credentials)
+      console.log('Login response:', response);
       const data = response.data?.data || {}
       const cookiesEnabled = import.meta.env.VITE_API_COOKIES === 'true'
       
@@ -204,6 +218,7 @@ export const AuthProvider = ({ children }) => {
         // Check if user needs store name setup
         const shouldRedirectToStoreSetup = needsStoreNameSetup(data.user)
         localStorage.setItem('token', data.token)
+        console.log('Login - user data:', data.user);
         dispatch({ 
           type: 'AUTH_SUCCESS', 
           payload: { 
@@ -214,7 +229,9 @@ export const AuthProvider = ({ children }) => {
       } else if (cookiesEnabled) {
         // Cookie session flow: fetch user via /auth/me
         const me = await authAPI.getMe()
+        console.log('Login - getMe response:', me);
         const user = me.data?.data?.user
+        console.log('Login - getMe user data:', user);
         if (user) {
           // Check if user needs store name setup
           const shouldRedirectToStoreSetup = needsStoreNameSetup(user)
@@ -315,7 +332,10 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Always fetch fresh user data to ensure consistency
+      console.log('Updating profile and fetching fresh user data...');
       const freshUserData = await authAPI.getMe();
+      console.log('Update profile response:', freshUserData);
+      console.log('Update profile user data:', freshUserData.data.data.user);
       dispatch({
         type: 'UPDATE_USER',
         payload: freshUserData.data.data.user
@@ -329,7 +349,10 @@ export const AuthProvider = ({ children }) => {
 
   const refreshUser = async () => {
     try {
+      console.log('Refreshing user data...');
       const freshUserData = await authAPI.getMe();
+      console.log('Refresh user response:', freshUserData);
+      console.log('Refresh user data:', freshUserData.data.data.user);
       dispatch({
         type: 'UPDATE_USER',
         payload: freshUserData.data.data.user
