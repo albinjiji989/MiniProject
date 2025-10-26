@@ -328,15 +328,15 @@ export const AuthProvider = ({ children }) => {
       // keep the guard for this navigation tick, it will be removed by listener
       dispatch({ type: 'LOGOUT' })
       
-      // Redirect to login using navigate
-      navigate('/login')
+      // Redirect to landing page (root path)
+      navigate('/')
     }
   }
 
   const clearAuthState = () => {
     clearAllAuthTokens()
     dispatch({ type: 'LOGOUT' })
-    navigate('/login')
+    navigate('/')
   }
 
   const updateProfile = async (profileData) => {
