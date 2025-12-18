@@ -245,7 +245,7 @@ const RoleBasedSidebar = ({ onClose }) => {
   };
 
   // Get menu items based on user role
-  const menuItems = getMenuItems(user?.role || 'public_user', user?.details)
+  const menuItems = getMenuItems(user?.role || 'public_user', user?.details);
 
   const renderMenuItem = (item, level = 0) => {
     const isExpanded = expandedItems[item.text]

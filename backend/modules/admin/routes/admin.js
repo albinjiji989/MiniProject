@@ -10,11 +10,7 @@ const Module = require('../../../core/models/Module');
 const { sendMail } = require('../../../core/utils/email');
 
 // Mount nested admin routes
-try {
-  router.use('/users', require('./admin/users'));
-} catch (e) {
-  // Optional: sub-router may not exist in some environments
-}
+// Note: ./admin/users route file not found, skipping import
 
 // @route   POST /api/admin/create-module-admin
 // @desc    Create module manager (Admin only)
@@ -545,7 +541,6 @@ router.post('/verify-module-manager', [
   }
 });
 
-module.exports = router;
 // Manager CRUD routes (unified)
 // @route   GET /api/admin/managers
 // @desc    List all managers with module info
@@ -793,3 +788,5 @@ router.delete('/cancel-invite/:id', [auth, authorize('admin')], async (req, res)
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
+
+module.exports = router;

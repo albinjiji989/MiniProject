@@ -26,34 +26,14 @@ import {
   People as UsersIcon,
   Business as ModuleIcon,
   BusinessCenter as BusinessIcon,
-  Shield as SecurityShieldIcon,
   Pets as PetsIcon,
   Add as AddIcon,
-  Edit as EditIcon,
-  Visibility as ViewIcon,
   TrendingUp as TrendingUpIcon,
   TrendingDown as TrendingDownIcon,
-  Assessment as AssessmentIcon,
-  Notifications as NotificationsIcon,
-  Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
-  Schedule as ScheduleIcon,
   Assignment as AssignmentIcon,
-  Email as EmailIcon,
-  Phone as PhoneIcon,
-  LocationOn as LocationIcon,
-  CalendarToday as DateIcon,
   PersonAdd as PersonAddIcon,
   FileUpload as UploadIcon,
   FileDownload as DownloadIcon,
-  Settings as SettingsIcon,
-  AdminPanelSettings as AdminIcon,
-  Group as GroupIcon,
-  Store as StoreIcon,
-  LocalPharmacy as PharmacyIcon,
-  Home as HomeIcon,
-  LocalShipping as ShippingIcon,
-  Healing as HealingIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { userAPI as usersAPI, modulesAPI, managersAPI, apiClient } from '../../services/api'
@@ -85,142 +65,122 @@ const AdminDashboard = () => {
   // Recent activities
   const [recentActivities, setRecentActivities] = useState([])
   const [systemAlerts, setSystemAlerts] = useState([])
-  const [health, setHealth] = useState({ status: 'unknown', message: '', checkedAt: null })
+
 
   useEffect(() => {
     loadDashboardData()
   }, [])
 
-  useEffect(() => {
-    // Real system health (API ping)
-    const loadHealth = async () => {
-      try {
-        const res = await apiClient.get('/health')
-        setHealth({ status: res.data?.status || 'unknown', message: res.data?.message || '', checkedAt: new Date() })
-      } catch (e) {
-        setHealth({ status: 'down', message: e?.response?.data?.message || 'API unreachable', checkedAt: new Date() })
-      }
-    }
-    loadHealth()
-    const id = setInterval(loadHealth, 60000) // refresh every minute
-    return () => clearInterval(id)
-  }, [])
-
   const loadDashboardData = async () => {
     setLoading(true)
     try {
+      // Fetch real statistics from backend APIs with error handling
       const results = await Promise.allSettled([
-        usersAPI.getPublicUsers({ limit: 1000 }),           // 0 - public users only
-        modulesAPI.list(),                                  // 1
-        managersAPI.list(),                                 // 2
-        adminPetsAPI.getAll({ limit: 1000 }),               // 3
-        speciesAPI.list({ limit: 1000 }),                   // 4
-        breedsAPI.list({ limit: 1000 }),                    // 5
-        customBreedRequestsAPI.list({ limit: 1000 }),       // 6
+        usersAPI.getStats(),
+        modulesAPI.list(),
+        managersAPI.list().catch(err => {
+          console.warn('Failed to fetch managers data:', err);
+          return { data: { managers: [], total: 0, active: 0, pending: 0 } };
+        }),
+        adminPetsAPI.getStats(),
+        speciesAPI.getStats(),
+        breedsAPI.getStats(),
+        customBreedRequestsAPI.getStats()
       ])
 
-      const getData = (idx) => {
-        const r = results[idx]
-        if (r.status === 'fulfilled') return r.value?.data
-        console.warn('AdminDashboard data fetch failed for index', idx, r.reason)
-        return null
-      }
-
-      const usersRes = getData(0) || {}
-      const modulesRes = getData(1) || {}
-      const managersRes = getData(2) || {}
-      const petsRes = getData(3) || {}
-      const speciesRes = getData(4) || {}
-      const breedsRes = getData(5) || {}
-      const breedRequestsRes = getData(6) || {}
+      // Extract data with fallbacks for failed requests
+      const usersStats = results[0].status === 'fulfilled' ? results[0].value : { data: {} };
+      const modulesStats = results[1].status === 'fulfilled' ? results[1].value : { data: [] };
+      const managersStats = results[2].status === 'fulfilled' ? results[2].value : { data: { managers: [], total: 0, active: 0, pending: 0 } };
+      const petsStats = results[3].status === 'fulfilled' ? results[3].value : { data: {} };
+      const speciesStats = results[4].status === 'fulfilled' ? results[4].value : { data: {} };
+      const breedsStats = results[5].status === 'fulfilled' ? results[5].value : { data: {} };
+      const breedRequestsStats = results[6].status === 'fulfilled' ? results[6].value : { data: {} };
 
       // Process statistics
-      const usersData = usersRes?.data?.users || usersRes?.data || usersRes || []
-      const managersData = managersRes?.data?.managers || managersRes?.data || managersRes || []
-      const petsData = petsRes?.data || petsRes || []
-      const speciesData = speciesRes?.data || speciesRes || []
-      const breedsData = breedsRes?.data || breedsRes || []
-      const modulesData = modulesRes?.data || modulesRes || []
-      const breedRequestsData = breedRequestsRes?.data || breedRequestsRes || []
+      const usersData = usersStats?.data || {}
+      const managersData = managersStats?.data?.managers || managersStats?.data || { managers: [], total: 0, active: 0, pending: 0 }
+      const petsData = petsStats?.data || {}
+      const speciesData = speciesStats?.data || {}
+      const breedsData = breedsStats?.data || {}
+      const modulesData = modulesStats?.data || []
+      const breedRequestsData = breedRequestsStats?.data || {}
 
       setStats({
         users: {
-          total: usersData.length || 0,
-          active: usersData.filter(u => u.isActive).length || 0,
-          new: usersData.filter(u => new Date(u.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length || 0,
-          growth: null // Real growth calculation would require historical data
+          total: usersData.totalUsers || usersData.total || 0,
+          active: usersData.activeUsers || usersData.active || 0,
+          new: usersData.newUsers || usersData.recent || 0,
+          growth: usersData.growthRate || 0
         },
         managers: {
-          total: managersData.length || 0,
-          active: managersData.filter(m => m.isActive).length || 0,
-          pending: 0, // No pending invites in current data
-          growth: null
+          total: managersData.managers?.length || managersData.total || 0,
+          active: managersData.managers?.filter ? managersData.managers.filter(m => m.isActive).length : managersData.active || 0,
+          pending: managersData.pending || 0,
+          growth: managersData.growthRate || 0
         },
         pets: {
-          total: petsData.length || 0,
-          available: petsData.filter(p => p.currentStatus === 'Available').length || 0,
-          adopted: petsData.filter(p => p.currentStatus === 'Adopted').length || 0,
-          growth: null
+          total: petsData.totalPets || petsData.total || 0,
+          available: petsData.availablePets || petsData.available || 0,
+          adopted: petsData.adoptedPets || petsData.adopted || 0,
+          growth: petsData.growthRate || 0
         },
         species: {
-          total: speciesData.length || 0,
-          active: speciesData.filter(s => s.isActive).length || 0,
-          growth: null
+          total: speciesData.totalSpecies || speciesData.total || 0,
+          active: speciesData.activeSpecies || speciesData.active || 0,
+          growth: speciesData.growthRate || 0
         },
         breeds: {
-          total: breedsData.length || 0,
-          active: breedsData.filter(b => b.isActive).length || 0,
-          growth: null
+          total: breedsData.totalBreeds || breedsData.total || 0,
+          active: breedsData.activeBreeds || breedsData.active || 0,
+          growth: breedsData.growthRate || 0
         },
         modules: {
-          total: modulesData.length || 0,
-          active: modulesData.filter(m => m.isActive).length || 0,
-          growth: null
+          total: modulesData.length || modulesData.total || 0,
+          active: modulesData.filter ? modulesData.filter(m => m.isActive).length : modulesData.active || modulesData.managers?.filter(m => m.isActive).length || 0,
+          growth: modulesData.growthRate || 0
         },
         breedRequests: {
-          total: breedRequestsData.length || 0,
-          pending: breedRequestsData.filter(r => r.status === 'pending').length || 0,
-          approved: breedRequestsData.filter(r => r.status === 'approved').length || 0,
-          growth: null
+          total: breedRequestsData.totalRequests || breedRequestsData.total || 0,
+          pending: breedRequestsData.pendingRequests || breedRequestsData.pending || 0,
+          approved: breedRequestsData.approvedRequests || breedRequestsData.approved || 0,
+          growth: breedRequestsData.growthRate || 0
         },
       })
 
       // Generate real recent activities from actual data
       const realActivities = []
 
-      // Add recent users
-      const recentUsers = usersData
-        .filter(u => new Date(u.createdAt) > new Date(Date.now() - 24 * 60 * 60 * 1000))
+      // Add recent users (if available in stats)
+      const recentUsers = (usersData.recentUsers || [])
         .slice(0, 3)
         .map(user => ({
-          id: `user-${user._id}`,
+          id: `user-${user.id || user._id}`,
           type: 'user_registered',
-          message: `New user registered: ${user.name}`,
-          time: new Date(user.createdAt).toLocaleString(),
+          message: `New user registered: ${user.name || user.username}`,
+          time: user.createdAt ? new Date(user.createdAt).toLocaleString() : 'Just now',
           icon: <PersonAddIcon />
         }))
 
-      // Add recent pets
-      const recentPets = petsData
-        .filter(p => new Date(p.createdAt) > new Date(Date.now() - 24 * 60 * 60 * 1000))
+      // Add recent pets (if available in stats)
+      const recentPets = (petsData.recentPets || [])
         .slice(0, 3)
         .map(pet => ({
-          id: `pet-${pet._id}`,
-          type: 'pet_adopted',
-          message: `Pet "${pet.name}" added to system`,
-          time: new Date(pet.createdAt).toLocaleString(),
+          id: `pet-${pet.id || pet._id}`,
+          type: 'pet_added',
+          message: `Pet "${pet.name || 'Unknown'}" added to system`,
+          time: pet.createdAt ? new Date(pet.createdAt).toLocaleString() : 'Just now',
           icon: <PetsIcon />
         }))
 
-      // Add recent breed requests
-      const recentRequests = breedRequestsData
-        .filter(r => new Date(r.submittedAt || r.createdAt) > new Date(Date.now() - 24 * 60 * 60 * 1000))
+      // Add recent breed requests (if available in stats)
+      const recentRequests = (breedRequestsData.recentRequests || [])
         .slice(0, 3)
         .map(request => ({
-          id: `request-${request._id}`,
+          id: `request-${request.id || request._id}`,
           type: 'breed_request',
-          message: `New breed request: ${request.breedName || request.customBreedName}`,
-          time: new Date(request.submittedAt || request.createdAt).toLocaleString(),
+          message: `New breed request: ${request.breedName || request.customBreedName || 'Unknown breed'}`,
+          time: (request.submittedAt || request.createdAt) ? new Date(request.submittedAt || request.createdAt).toLocaleString() : 'Just now',
           icon: <AssignmentIcon />
         }))
 
@@ -235,7 +195,7 @@ const AdminDashboard = () => {
       const realAlerts = []
 
       // Check for pending breed requests
-      const pendingRequests = breedRequestsData.filter(r => r.status === 'pending').length
+      const pendingRequests = breedRequestsData.pendingRequests || breedRequestsData.pending || 0
       if (pendingRequests > 0) {
         realAlerts.push({
           id: 'pending-requests',
@@ -246,7 +206,7 @@ const AdminDashboard = () => {
       }
 
       // Check for under review requests
-      const underReviewRequests = breedRequestsData.filter(r => r.status === 'under_review').length
+      const underReviewRequests = breedRequestsData.underReview || 0
       if (underReviewRequests > 0) {
         realAlerts.push({
           id: 'under-review-requests',
@@ -257,13 +217,24 @@ const AdminDashboard = () => {
       }
 
       // Check for inactive users
-      const inactiveUsers = usersData.filter(u => !u.isActive).length
+      const inactiveUsers = usersData.inactiveUsers || usersData.inactive || 0
       if (inactiveUsers > 0) {
         realAlerts.push({
           id: 'inactive-users',
           type: 'warning',
           message: `${inactiveUsers} inactive user${inactiveUsers > 1 ? 's' : ''}`,
           action: 'View Users'
+        })
+      }
+
+      // Check for API connection issues
+      const failedApis = results.filter(r => r.status === 'rejected').length;
+      if (failedApis > 0) {
+        realAlerts.push({
+          id: 'api-errors',
+          type: 'error',
+          message: `Failed to load data from ${failedApis} API endpoint${failedApis > 1 ? 's' : ''}. Some statistics may be incomplete.`,
+          action: null
         })
       }
 
@@ -281,7 +252,8 @@ const AdminDashboard = () => {
       setSystemAlerts(realAlerts)
 
     } catch (err) {
-      setError('Failed to load dashboard data')
+      console.error('Failed to load dashboard data:', err)
+      setError('Failed to load dashboard data. Please check your network connection and try again later.')
     } finally {
       setLoading(false)
     }
@@ -485,95 +457,7 @@ const AdminDashboard = () => {
         </Grid>
       </Grid>
 
-      {/* Management Section */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12}>
-          <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
-            Management
-          </Typography>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Public Users"
-            description="Manage public users"
-            icon={<UsersIcon />}
-            color="primary"
-            onClick={() => navigate('/admin/users')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Managers"
-            description="Manage module managers"
-            icon={<BusinessIcon />}
-            color="warning"
-            onClick={() => navigate('/admin/managers')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Modules"
-            description="Manage system modules"
-            icon={<ModuleIcon />}
-            color="info"
-            onClick={() => navigate('/admin/modules')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="All Pets"
-            description="Manage pets"
-            icon={<PetsIcon />}
-            color="success"
-            onClick={() => navigate('/admin/pets')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Species"
-            description="Manage species"
-            icon={<PetsIcon />}
-            color="secondary"
-            onClick={() => navigate('/admin/species')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Breeds"
-            description="Manage breeds"
-            icon={<PetsIcon />}
-            color="secondary"
-            onClick={() => navigate('/admin/breeds')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Breed Requests"
-            description="Review custom requests"
-            icon={<AssignmentIcon />}
-            color="info"
-            onClick={() => navigate('/admin/custom-breed-requests')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="AI/ML Dashboard"
-            description="Machine learning insights"
-            icon={<AssessmentIcon />}
-            color="secondary"
-            onClick={() => navigate('/admin/aiml-dashboard')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Centralized Pets"
-            description="View all pets in registry"
-            icon={<PetsIcon />}
-            color="primary"
-            onClick={() => navigate('/admin/pets/centralized')}
-          />
-        </Grid>
-      </Grid>
+
 
       {/* Quick Actions */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -622,64 +506,11 @@ const AdminDashboard = () => {
         </Grid>
       </Grid>
 
-      {/* Module Management Quick Actions */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12}>
-          <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
-            Module Management
-          </Typography>
-        </Grid>
 
-        <Grid item xs={12} sm={6} md={2}>
-          <QuickActionCard
-            title="Adoption"
-            icon={<HomeIcon />}
-            color="success"
-            description="Manage adoptions"
-            onClick={() => navigate('/adoption')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <QuickActionCard
-            title="Rescue"
-            icon={<ShippingIcon />}
-            color="warning"
-            description="Manage rescues"
-            onClick={() => navigate('/rescue')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <QuickActionCard
-            title="E-commerce"
-            icon={<StoreIcon />}
-            color="primary"
-            description="Manage store"
-            onClick={() => navigate('/ecommerce')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <QuickActionCard
-            title="Pharmacy"
-            icon={<PharmacyIcon />}
-            color="secondary"
-            description="Manage pharmacy"
-            onClick={() => navigate('/pharmacy')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <QuickActionCard
-            title="Veterinary"
-            icon={<HealingIcon />}
-            color="error"
-            description="Manage veterinary"
-            onClick={() => navigate('/veterinary')}
-          />
-        </Grid>
-      </Grid>
 
-      {/* Recent Activities and System Status */}
+      {/* Recent Activities */}
       <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
+        <Grid item xs={12}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
@@ -701,29 +532,6 @@ const AdminDashboard = () => {
                   </React.Fragment>
                 ))}
               </List>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
-                System Status
-              </Typography>
-              <Box mb={2}>
-                <Box display="flex" justifyContent="space-between" mb={1}>
-                  <Typography variant="body2">API Health</Typography>
-                  <Chip
-                    size="small"
-                    label={health.status === 'OK' ? 'Online' : (health.status || 'Unknown')}
-                    color={health.status === 'OK' ? 'success' : (health.status === 'down' ? 'error' : 'default')}
-                  />
-                </Box>
-                <Typography variant="caption" color="text.secondary">
-                  {health.message || 'Health endpoint status'}{health.checkedAt ? ` • Checked at ${health.checkedAt.toLocaleTimeString()}` : ''}
-                </Typography>
-              </Box>
             </CardContent>
           </Card>
         </Grid>

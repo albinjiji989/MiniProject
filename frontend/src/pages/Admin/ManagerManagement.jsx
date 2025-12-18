@@ -169,7 +169,12 @@ const ManagerManagement = () => {
       setTotalPages(1)
       setTotalManagers(items.length || 0)
     } catch (err) {
-      setError('Failed to load managers')
+      console.error('Failed to load managers:', err)
+      setError('Failed to load managers. The backend API endpoint is currently unavailable.')
+      // Set empty defaults to prevent UI crashes
+      setManagers([])
+      setTotalPages(1)
+      setTotalManagers(0)
     } finally {
       setLoading(false)
     }
@@ -181,6 +186,8 @@ const ManagerManagement = () => {
       setInvites(response.data?.data || [])
     } catch (err) {
       console.error('Error loading invites:', err)
+      // Set empty defaults to prevent UI crashes
+      setInvites([])
     }
   }
 
@@ -253,7 +260,8 @@ const ManagerManagement = () => {
       setEditDialog(false);
       loadManagers();
     } catch (err) {
-      setError('Failed to update manager');
+      console.error('Failed to update manager:', err);
+      setError('Failed to update manager. The backend API endpoint is currently unavailable.');
     }
   }
 
@@ -267,7 +275,8 @@ const ManagerManagement = () => {
       setManagerToDelete(null)
       loadManagers()
     } catch (err) {
-      setError('Failed to delete manager')
+      console.error('Failed to delete manager:', err);
+      setError('Failed to delete manager. The backend API endpoint is currently unavailable.');
     }
   }
 
@@ -277,7 +286,8 @@ const ManagerManagement = () => {
       setSuccess(`Manager ${manager.isActive ? 'deactivated' : 'activated'} successfully!`)
       loadManagers()
     } catch (err) {
-      setError('Failed to update manager status')
+      console.error('Failed to update manager status:', err);
+      setError('Failed to update manager status. The backend API endpoint is currently unavailable.');
     }
   }
 
@@ -329,7 +339,8 @@ const ManagerManagement = () => {
       });
       setInviteStep(2);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send invitation');
+      console.error('Failed to send invitation:', err);
+      setError(err.response?.data?.message || 'Failed to send invitation. The backend API endpoint is currently unavailable.');
     }
   }
 
@@ -349,7 +360,8 @@ const ManagerManagement = () => {
       loadManagers()
       loadInvites() // Refresh pending invites
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to verify OTP')
+      console.error('Failed to verify OTP:', err);
+      setError(err.response?.data?.message || 'Failed to verify OTP. The backend API endpoint is currently unavailable.')
     }
   }
 

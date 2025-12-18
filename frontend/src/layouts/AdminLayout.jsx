@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import {
   Box,
   Drawer,
@@ -26,7 +26,7 @@ import RoleBasedSidebar from '../components/Layout/RoleBasedSidebar'
 
 const drawerWidth = 280
 
-const AdminLayout = ({ children }) => {
+const AdminLayout = () => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -173,7 +173,8 @@ const AdminLayout = ({ children }) => {
           background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
           minHeight: 'calc(100vh - 64px)'
         }}>
-          {children}
+          {/* Use Outlet to render nested routes */}
+          <Outlet />
         </Box>
       </Box>
 

@@ -68,6 +68,7 @@ app.use('/api/admin/custom-breed-requests', require('./core/routes/admin/custom-
 app.use('/api/admin/pet-system-requests', require('./core/routes/admin/petSystemRequests'));
 app.use('/api/admin/pets', require('./core/routes/admin/pets'));
 app.use('/api/admin/pet-registry', require('./core/routes/admin/pet-registry'));
+app.use('/api/admin', require('./modules/admin/routes/admin'));
 app.use('/api/user/pets', require('./core/routes/user/user/pets'));
 
 // Removed unused routes
@@ -86,8 +87,15 @@ app.use('/api/rbac', require('./core/routes/rbac/rbac/rbac'));
 app.use('/api/roles', require('./core/routes/rbac/rbac/roles'));
 app.use('/api/permissions', require('./core/routes/rbac/rbac/permissions'));
 
-// Error handler
-app.use(require('./core/utils/errorHandler'));
+// Error handler middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Something went wrong!',
+    error: process.env.NODE_ENV === 'production' ? {} : { message: err.message, stack: err.stack }
+  });
+});
 
 const PORT = process.env.PORT || 5000;
 

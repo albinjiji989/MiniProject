@@ -24,6 +24,8 @@ import PetRegistry from '../pages/Admin/PetManagement/PetRegistry'
 import PetRegistryDetails from '../pages/Admin/PetManagement/PetRegistryDetails'
 import Profile from '../pages/Profile/Profile'
 import TestPage from '../pages/Admin/TestPage'
+import TestDebug from '../pages/Admin/TestDebug'
+import DebugPage from '../pages/Admin/DebugPage'
 
 const AdminRoutes = () => {
   return (
@@ -53,6 +55,10 @@ const AdminRoutes = () => {
         <Route path="pet-registry/:petCode" element={<PetRegistryDetails />} />
         {/* Test route */}
         <Route path="test" element={<TestPage />} />
+        <Route path="test-debug" element={<TestDebug />} />
+        
+        {/* Debug route to test if any route matches */}
+        <Route path="debug" element={<DebugPage />} />
         
         {/* Catch-all route */}
         <Route path="*" element={<Navigate to="dashboard" replace />} />
