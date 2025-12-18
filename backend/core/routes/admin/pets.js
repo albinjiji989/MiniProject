@@ -773,4 +773,66 @@ router.get('/template-csv', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/admin/pets/stats/overview
+// @desc    Get pets statistics overview
+// @access  Private (Admin only)
+router.get('/stats/overview', auth, async (req, res) => {
+  try {
+    const Pet = require('../../models/Pet');
+    
+    // Get total pets count
+    const totalPets = await Pet.countDocuments();
+    
+    // Get active pets count
+    const activePets = await Pet.countDocuments({ isActive: true });
+    
+    // Get available pets count (assuming available means currentStatus is 'available')
+    const availablePets = await Pet.countDocuments({ currentStatus: 'available' });
+    
+    // Get adopted pets count
+    const adoptedPets = await Pet.countDocuments({ currentStatus: 'adopted' });
+    
+    // Calculate growth rate (simplified - comparing with previous month)
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
+    const petsLastMonth = await Pet.countDocuments({ 
+      createdAt: { $lt: oneMonthAgo }
+    });
+    
+    const growthRate = totalPets > 0 ? 
+      Math.round(((totalPets - petsLastMonth) / (petsLastMonth || 1)) * 100) : 0;
+    
+    // Get recent pets (last 7 days)
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    
+    const recentPets = await Pet.find({ 
+      createdAt: { $gte: oneWeekAgo }
+    })
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .select('name createdAt currentStatus')
+    .lean();
+    
+    res.json({
+      success: true,
+      data: {
+        totalPets,
+        activePets,
+        availablePets,
+        adoptedPets,
+        growthRate,
+        recentPets
+      }
+    });
+  } catch (error) {
+    console.error('Get pets stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
 module.exports = router;

@@ -37,7 +37,7 @@ router.post('/create-module-admin', [
   body('assignedModule')
     .notEmpty()
     .withMessage('Assigned module is required')
-    .isIn(['adoption', 'petshop', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary-care', 'veterinary', 'donation'])
+    .isIn(['adoption', 'petshop', 'temporary-care', 'veterinary'])
     .withMessage('Invalid assigned module'),
   body('phone')
     .notEmpty()
@@ -166,7 +166,7 @@ router.post('/create-module-manager', [
   body('assignedModule')
     .notEmpty()
     .withMessage('Assigned module is required')
-    .isIn(['adoption', 'petshop', 'rescue', 'ecommerce', 'pharmacy', 'boarding', 'temporary-care', 'veterinary', 'donation'])
+    .isIn(['adoption', 'petshop', 'temporary-care', 'veterinary'])
     .withMessage('Invalid assigned module'),
   body('phone')
     .notEmpty()
@@ -351,7 +351,7 @@ router.post('/invite-module-admin', [
   body('name').notEmpty(),
   body('email').isEmail(),
   body('phone').optional(),
-  body('module').isIn(['adoption','petshop','rescue','ecommerce','pharmacy','boarding','temporary-care','veterinary','donation'])
+  body('module').isIn(['adoption','petshop','temporary-care','veterinary'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -366,7 +366,7 @@ router.post('/invite-module-admin', [
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     await AdminInvite.updateMany({ email, module, verified: false }, { $set: { verified: true } });
-    await AdminInvite.create({ email, name, phone, module, otp, expiresAt, createdBy: req.user.id });
+    const inviteRecord = await AdminInvite.create({ email, name, phone, module, otp, expiresAt, createdBy: req.user.id });
     const subject = `Verify module manager invitation (${module})`;
     const html = `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;background:#0b0f1a;padding:24px;color:#e6e9ef;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:rgba(255,255,255,0.06);backdrop-filter: blur(10px); border-radius:16px; overflow:hidden;">
@@ -375,6 +375,7 @@ router.post('/invite-module-admin', [
         </td></tr>
         <tr><td style="padding:24px 28px;">Your verification code is <b style="letter-spacing:4px;font-size:18px;">${otp}</b>. It expires in 10 minutes.</td></tr>
       </table></div>`;
+    
     await sendMail({ to: email, subject, html });
     res.json({ success: true, message: 'OTP sent to candidate email' });
   } catch (error) {
@@ -391,7 +392,7 @@ router.post('/invite-module-manager', [
   body('name').notEmpty(),
   body('email').isEmail(),
   body('phone').optional(),
-  body('module').isIn(['adoption','petshop','rescue','ecommerce','pharmacy','boarding','temporary-care','veterinary','donation'])
+  body('module').isIn(['adoption','petshop','temporary-care','veterinary'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -402,7 +403,7 @@ router.post('/invite-module-manager', [
         success: false, 
         message: 'Validation errors', 
         errors: errors.array(),
-        hint: 'Module must be one of: adoption, petshop, rescue, ecommerce, pharmacy, boarding, temporary-care, veterinary, donation'
+        hint: 'Module must be one of: adoption, petshop, temporary-care, veterinary'
       });
     }
     const { name, email, phone, module } = req.body;
@@ -413,7 +414,7 @@ router.post('/invite-module-manager', [
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     await AdminInvite.updateMany({ email, module, verified: false }, { $set: { verified: true } });
-    await AdminInvite.create({ email, name, phone, module, otp, expiresAt, createdBy: req.user.id });
+    const inviteRecord = await AdminInvite.create({ email, name, phone, module, otp, expiresAt, createdBy: req.user.id });
     const subject = `Verify module manager invitation (${module})`;
     const html = `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;background:#0b0f1a;padding:24px;color:#e6e9ef;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:rgba(255,255,255,0.06);backdrop-filter: blur(10px); border-radius:16px; overflow:hidden;">
@@ -422,8 +423,21 @@ router.post('/invite-module-manager', [
         </td></tr>
         <tr><td style="padding:24px 28px;">Your verification code is <b style="letter-spacing:4px;font-size:18px;">${otp}</b>. It expires in 10 minutes.</td></tr>
       </table></div>`;
-    await sendMail({ to: email, subject, html });
-    res.json({ success: true, message: 'OTP sent to candidate email' });
+    
+    // Try to send email, but don't fail the entire request if email fails
+    try {
+      await sendMail({ to: email, subject, html });
+      res.json({ success: true, message: 'OTP sent to candidate email', inviteId: inviteRecord._id });
+    } catch (emailError) {
+      console.error('Failed to send email:', emailError);
+      // Still return success but indicate that email failed
+      res.json({ 
+        success: true, 
+        message: 'Invite created successfully. Email failed to send, please check server logs and share OTP manually with the candidate.',
+        inviteId: inviteRecord._id,
+        emailError: emailError.message 
+      });
+    }
   } catch (error) {
     console.error('Invite module manager error:', error);
     res.status(500).json({ success: false, message: 'Server error during invite' });
@@ -435,7 +449,7 @@ router.post('/verify-module-admin', [
   auth,
   authorize('admin'),
   body('email').isEmail(),
-  body('module').isString(),
+  body('module').isString().isIn(['adoption','petshop','temporary-care','veterinary']),
   body('otp').matches(/^\d{6}$/)
 ], async (req, res) => {
   try {
@@ -492,7 +506,7 @@ router.post('/verify-module-manager', [
   auth,
   authorize('admin'),
   body('email').isEmail(),
-  body('module').isString(),
+  body('module').isString().isIn(['adoption','petshop','temporary-care','veterinary']),
   body('otp').matches(/^\d{6}$/)
 ], async (req, res) => {
   try {
@@ -576,7 +590,7 @@ router.post('/managers', [
   body('name').notEmpty(),
   body('email').isEmail(),
   body('password').isLength({ min: 6 }),
-  body('assignedModule').isString().notEmpty(),
+  body('assignedModule').isString().notEmpty().isIn(['adoption','petshop','temporary-care','veterinary']),
   body('phone').optional()
 ], async (req, res) => {
   try {
@@ -637,7 +651,7 @@ router.post('/managers', [
 router.put('/managers/:id', [
   auth,
   authorize('admin'),
-  body('assignedModule').optional().isString(),
+  body('assignedModule').optional().isString().isIn(['adoption','petshop','temporary-care','veterinary']),
   body('name').optional().isString(),
   body('phone').optional().isString(),
 ], async (req, res) => {
@@ -719,7 +733,7 @@ router.post('/resend-invite', [
   auth,
   authorize('admin'),
   body('email').isEmail(),
-  body('module').isString()
+  body('module').isString().isIn(['adoption','petshop','temporary-care','veterinary'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -760,9 +774,19 @@ router.post('/resend-invite', [
         <tr><td style="padding:24px 28px;">Your verification code is <b style="letter-spacing:4px;font-size:18px;">${otp}</b>. It expires in 10 minutes.</td></tr>
       </table></div>`;
     
-    await sendMail({ to: email, subject, html });
-    
-    res.json({ success: true, message: 'OTP resent successfully' });
+    // Try to send email, but don't fail the entire request if email fails
+    try {
+      await sendMail({ to: email, subject, html });
+      res.json({ success: true, message: 'OTP resent successfully' });
+    } catch (emailError) {
+      console.error('Failed to resend email:', emailError);
+      // Still return success but indicate that email failed
+      res.json({ 
+        success: true, 
+        message: 'OTP regenerated successfully. Email failed to send, please check server logs and share OTP manually with the candidate.',
+        emailError: emailError.message 
+      });
+    }
   } catch (error) {
     console.error('Resend invite error:', error);
     res.status(500).json({ success: false, message: 'Server error during resend' });

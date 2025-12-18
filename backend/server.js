@@ -75,7 +75,9 @@ app.use('/api/user/pets', require('./core/routes/user/user/pets'));
 // app.use('/api/admin/medical-records', require('./core/routes/admin/medical-records'));
 // app.use('/api/admin/ownership-history', require('./core/routes/admin/ownership-history'));
 
+app.use('/api/user-dashboard', require('./core/routes/user/userDashboard'));
 app.use('/api/user/ownership-history', require('./core/routes/user/user/ownership-history'));
+app.use('/api/pets', require('./core/routes/pet/petRoutes'));
 
 // Management System Routes
 app.use('/api/adoption', require('./modules/adoption/routes'));

@@ -20,7 +20,7 @@ const adminInviteSchema = new mongoose.Schema({
   module: { 
     type: String, 
     required: true,
-    enum: ['adoption', 'petshop', 'veterinary', 'temporary-care', 'rescue', 'ecommerce', 'pharmacy'],
+    enum: ['adoption', 'petshop', 'veterinary', 'temporary-care'],
     index: true
   },
   otp: { 

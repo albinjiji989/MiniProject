@@ -3,11 +3,10 @@ const nodemailer = require('nodemailer');
 let transporter = null;
 
 function getTransporter() {
-  if (transporter) return transporter;
   const user = process.env.EMAIL_USER;
 
   // Prefer OAuth2 when configured
-  const useOAuth2 = (process.env.EMAIL_OAUTH2 === 'true') || (!!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_REFRESH_TOKEN);
+  const useOAuth2 = process.env.EMAIL_OAUTH2 === 'true';
   if (useOAuth2) {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -24,7 +23,8 @@ function getTransporter() {
       console.warn('[EMAIL] GOOGLE_CLIENT_SECRET not set, using refresh token only');
     }
 
-    transporter = nodemailer.createTransport({
+    // Create new transporter each time for OAuth2 to allow switching
+    return nodemailer.createTransport({
       service: 'gmail',
       auth: {
         type: 'OAuth2',
@@ -39,7 +39,6 @@ function getTransporter() {
       greetingTimeout: 30000,   // 30 seconds
       socketTimeout: 30000,     // 30 seconds
     });
-    return transporter;
   }
 
   // Fallback to basic SMTP if PASS provided
@@ -52,6 +51,9 @@ function getTransporter() {
     return null;
   }
 
+  // Cache SMTP transporter since it doesn't change
+  if (transporter) return transporter;
+  
   transporter = nodemailer.createTransport({
     host,
     port,
@@ -111,7 +113,41 @@ async function sendMailWithRetry({ to, subject, html }, maxRetries = 3) {
 }
 
 async function sendMail({ to, subject, html }) {
-  return await sendMailWithRetry({ to, subject, html });
+  try {
+    return await sendMailWithRetry({ to, subject, html });
+  } catch (error) {
+    // If OAuth2 failed, try falling back to SMTP
+    if (error.code === 'EAUTH' && process.env.EMAIL_OAUTH2 === 'true') {
+      console.log('[EMAIL] OAuth2 failed, attempting fallback to SMTP...');
+      
+      // Temporarily disable OAuth2
+      const originalOAuth2 = process.env.EMAIL_OAUTH2;
+      process.env.EMAIL_OAUTH2 = 'false';
+      
+      // Clear the cached transporter
+      transporter = null;
+      
+      try {
+        // Try sending with SMTP
+        const result = await sendMailWithRetry({ to, subject, html });
+        
+        // Restore original setting
+        process.env.EMAIL_OAUTH2 = originalOAuth2;
+        transporter = null; // Clear transporter to avoid caching issues
+        return result;
+      } catch (smtpError) {
+        // Restore original setting
+        process.env.EMAIL_OAUTH2 = originalOAuth2;
+        transporter = null; // Clear transporter to avoid caching issues
+        
+        // Throw the SMTP error instead of the OAuth2 error
+        throw smtpError;
+      }
+    }
+    
+    // For all other errors, rethrow
+    throw error;
+  }
 }
 
 module.exports = { sendMail };
