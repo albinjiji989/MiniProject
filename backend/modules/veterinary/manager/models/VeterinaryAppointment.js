@@ -4,30 +4,25 @@ const veterinaryAppointmentSchema = new mongoose.Schema({
   appointmentNumber: {
     type: String,
     required: true,
-    unique: true,
-    index: true
+    unique: true
   },
   petId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Pet',
-    required: true,
-    index: true
+    required: true
   },
   ownerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
-    index: true
+    required: true
   },
   clinicId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'VeterinaryClinic',
-    index: true
+    ref: 'VeterinaryClinic'
   },
   storeId: {
     type: String,
-    required: true,
-    index: true
+    required: true
   },
   serviceId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -39,8 +34,7 @@ const veterinaryAppointmentSchema = new mongoose.Schema({
   },
   appointmentDate: {
     type: Date,
-    required: true,
-    index: true
+    required: true
   },
   timeSlot: {
     type: String,
@@ -49,8 +43,7 @@ const veterinaryAppointmentSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'confirmed', 'completed', 'cancelled', 'no-show'],
-    default: 'pending',
-    index: true
+    default: 'pending'
   },
   veterinarianId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -108,4 +101,15 @@ veterinaryAppointmentSchema.pre('save', async function(next) {
   next();
 });
 
-module.exports = mongoose.model('VeterinaryAppointment', veterinaryAppointmentSchema);
+// Indexes
+veterinaryAppointmentSchema.index({ appointmentNumber: 1 });
+veterinaryAppointmentSchema.index({ petId: 1 });
+veterinaryAppointmentSchema.index({ ownerId: 1 });
+veterinaryAppointmentSchema.index({ clinicId: 1 });
+veterinaryAppointmentSchema.index({ storeId: 1 });
+veterinaryAppointmentSchema.index({ serviceId: 1 });
+veterinaryAppointmentSchema.index({ appointmentDate: 1 });
+veterinaryAppointmentSchema.index({ status: 1 });
+veterinaryAppointmentSchema.index({ veterinarianId: 1 });
+
+module.exports = mongoose.model('ManagerVeterinaryAppointment', veterinaryAppointmentSchema);

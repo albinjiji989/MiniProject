@@ -95,40 +95,45 @@ const processEntityImages = async (images, entityType, entityId, userId, module,
         
         // Check if it's a base64 string
         if (imageData && typeof imageData === 'string' && imageData.startsWith('data:image/')) {
-          // Extract original filename if available
-          let originalName = `image-${i}.jpg`; // Default name
-          const dataMatch = imageData.match(/^data:image\/([a-zA-Z0-9]+);base64,/);
-          if (dataMatch && dataMatch[1]) {
-            originalName = `image-${i}.${dataMatch[1]}`;
+          try {
+            // Extract original filename if available
+            let originalName = `image-${i}.jpg`; // Default name
+            const dataMatch = imageData.match(/^data:image\/([a-zA-Z0-9]+);base64,/);
+            if (dataMatch && dataMatch[1]) {
+              originalName = `image-${i}.${dataMatch[1]}`;
+            }
+            
+            // Generate unique filename
+            const filename = generateUniqueFilename(originalName, entityId || 'unknown');
+            
+            // Create Cloudinary folder path based on module and role
+            const folderPath = `${module}/${role}`;
+            
+            // Upload image to Cloudinary
+            const cloudinaryUrl = await uploadBase64ImageToCloudinary(imageData, folderPath, filename);
+            
+            // For petshop images, use a consistent module and role
+            const imageModule = module === 'petshop/manager/pets' || module === 'petshop/manager/stocks/male' || module === 'petshop/manager/stocks/female' || (module === 'petshop' && role === 'manager') ? 'petshop' : module;
+            const imageRole = module === 'petshop/manager/pets' || module === 'petshop/manager/stocks/male' || module === 'petshop/manager/stocks/female' || (module === 'petshop' && role === 'manager') ? 'manager' : role;
+            
+            const imageDoc = new Image({
+              url: cloudinaryUrl,
+              caption: caption,
+              entityType: entityType,
+              entityId: entityId,
+              isPrimary: isPrimary,
+              module: imageModule,
+              role: imageRole,
+              uploadedBy: userId
+            });
+            
+            const savedImage = await imageDoc.save();
+            savedImages.push(savedImage);
+            console.log('☁️  Saved image to Cloudinary:', { cloudinaryUrl, entityId, filename });
+          } catch (uploadErr) {
+            console.error('Failed to upload image to Cloudinary:', uploadErr);
+            // Continue processing other images
           }
-          
-          // Generate unique filename
-          const filename = generateUniqueFilename(originalName, entityId || 'unknown');
-          
-          // Create Cloudinary folder path based on module and role
-          const folderPath = `${module}/${role}`;
-          
-          // Upload image to Cloudinary
-          const cloudinaryUrl = await uploadBase64ImageToCloudinary(imageData, folderPath, filename);
-          
-          // For petshop images, use a consistent module and role
-          const imageModule = module === 'petshop/manager/pets' || (module === 'petshop' && role === 'manager') ? 'petshop' : module;
-          const imageRole = module === 'petshop/manager/pets' || (module === 'petshop' && role === 'manager') ? 'manager' : role;
-          
-          const imageDoc = new Image({
-            url: cloudinaryUrl,
-            caption: caption,
-            entityType: entityType,
-            entityId: entityId,
-            isPrimary: isPrimary,
-            module: imageModule,
-            role: imageRole,
-            uploadedBy: userId
-          });
-          
-          const savedImage = await imageDoc.save();
-          savedImages.push(savedImage);
-          console.log('☁️  Saved image to Cloudinary:', { cloudinaryUrl, entityId, filename });
         } else if (imageData && typeof imageData === 'string' && (imageData.startsWith('http') || imageData.startsWith('/'))) {
           // Already a URL or file path, store as-is
           const imageDoc = new Image({
@@ -144,6 +149,8 @@ const processEntityImages = async (images, entityType, entityId, userId, module,
           
           const savedImage = await imageDoc.save();
           savedImages.push(savedImage);
+        } else {
+          console.warn('⚠️  Skipping invalid image data:', { imageData, index: i, entityType, entityId });
         }
       } catch (imgProcessErr) {
         console.error(`Error processing image ${i}:`, imgProcessErr);

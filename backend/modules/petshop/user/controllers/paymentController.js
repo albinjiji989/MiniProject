@@ -1,11 +1,13 @@
 const crypto = require('crypto');
 const PetReservation = require('../models/PetReservation');
 const PetInventoryItem = require('../../manager/models/PetInventoryItem');
+const PetStock = require('../../manager/models/PetStock');
 const OwnershipHistory = require('../../../../core/models/OwnershipHistory');
 const PetHistory = require('../../../../core/models/PetHistory');
 const PetRegistryService = require('../../../../core/services/petRegistryService');
 const { sendMail } = require('../../../../core/utils/email');
 const paymentService = require('../../../../core/services/paymentService');
+const UnifiedPetRegistrationService = require('../../../../core/services/unifiedPetRegistrationService');
 
 // ===== Payment Gateway =====
 const createRazorpayOrder = async (req, res) => {
@@ -162,7 +164,7 @@ const verifyRazorpaySignature = async (req, res) => {
       paidAt: new Date(),
       amount: reservation.paymentInfo?.amount || 0
     };
-    reservation.status = 'paid';
+    reservation.status = 'at_owner';
 
     // Update inventory item status
     const inventoryItem = await PetInventoryItem.findById(reservation.itemId._id)
@@ -222,7 +224,7 @@ const verifyRazorpaySignature = async (req, res) => {
         }, {
           currentOwnerId: req.user._id,
           currentLocation: 'at_owner', // Ensure pet is transferred to owner immediately
-          currentStatus: 'sold',
+          currentStatus: 'owned', // Changed from 'sold' to 'owned' to match frontend expectations
           lastTransferAt: new Date()
         });
         
@@ -310,55 +312,82 @@ const verifyRazorpaySignature = async (req, res) => {
       // Only proceed if inventoryItem exists
       if (inventoryItem) {
         const Pet = require('../../../../core/models/Pet');
-        const mainPet = new Pet({
+        // Create user pet records using unified service
+        const { pet: mainPet } = await UnifiedPetRegistrationService.createUserPetRecords({
           name: inventoryItem.name || 'Unnamed Pet',
-          species: inventoryItem.speciesId,
-          breed: inventoryItem.breedId,
-          owner: req.user._id,
-          createdBy: req.user._id,
-          currentStatus: 'sold',
+          speciesId: inventoryItem.speciesId,
+          breedId: inventoryItem.breedId,
+          ownerId: req.user._id,
           gender: inventoryItem.gender || 'Unknown',
           age: inventoryItem.age || 0,
           ageUnit: inventoryItem.ageUnit || 'months',
           color: inventoryItem.color || '',
-          petCode: inventoryItem.petCode,
-          imageIds: inventoryItem.imageIds || [],
-          description: `Purchased from ${inventoryItem.storeName || 'Pet Shop'}`,
-          storeId: inventoryItem.storeId,
-          storeName: inventoryItem.storeName,
-          // Set default values for required fields
-          healthStatus: 'Good',
-          adoptionFee: 0,
-          isAdoptionReady: false,
-          tags: ['petshop', 'purchased'],
-          location: {
-            address: '',
-            city: '',
-            state: '',
-            country: ''
-          },
           weight: {
             value: inventoryItem.weight || 0,
             unit: 'kg'
           },
           size: 'medium',
           temperament: [],
-          behaviorNotes: '',
           specialNeeds: [],
-          adoptionRequirements: []
+          imageIds: inventoryItem.imageIds || [],
+          currentStatus: 'sold',
+          healthStatus: 'Good',
+          createdBy: req.user._id
         });
-        
-        await mainPet.save();
-        
-        // Populate the pet with related data
-        await mainPet.populate([
-          { path: 'species', select: 'name displayName' },
-          { path: 'breed', select: 'name' },
-          { path: 'owner', select: 'name email' },
-          { path: 'images' } // Populate images virtual property
-        ]);
-        
-        console.log('User pet created successfully in main Pet collection:', mainPet._id);
+
+        // Register pet in unified registry
+        await UnifiedPetRegistrationService.registerPet({
+          petCode: inventoryItem.petCode,
+          name: inventoryItem.name || 'Pet',
+          species: inventoryItem.speciesId,
+          breed: inventoryItem.breedId,
+          images: inventoryItem.images || [],
+          source: 'petshop',
+          firstAddedSource: 'petshop',
+          firstAddedBy: inventoryItem.createdBy,
+          currentOwnerId: req.user._id,
+          currentStatus: 'sold',
+          currentLocation: 'at_owner',
+          gender: inventoryItem.gender,
+          age: inventoryItem.age,
+          ageUnit: inventoryItem.ageUnit,
+          color: inventoryItem.color,
+          sourceReferences: {
+            petShopItemId: inventoryItem._id,
+            corePetId: mainPet._id
+          },
+          ownershipTransfer: {
+            previousOwnerId: inventoryItem.createdBy,
+            newOwnerId: req.user._id,
+            transferType: 'purchase',
+            transferPrice: Number(reservation.paymentInfo?.amount || 0),
+            transferReason: 'Pet Purchase',
+            source: 'petshop',
+            notes: 'Purchase completed successfully',
+            performedBy: req.user._id
+          },
+          actorUserId: req.user._id
+        });
+
+        // Create ownership history entry
+        try {
+          await UnifiedPetRegistrationService.createOwnershipHistory({
+            petId: mainPet._id,
+            previousOwner: inventoryItem.createdBy,
+            newOwner: req.user._id,
+            transferType: 'Purchase',
+            reason: 'Pet shop purchase',
+            transferFee: {
+              amount: Number(reservation.paymentInfo?.amount || 0),
+              currency: 'INR',
+              paid: true,
+              paymentMethod: 'Card'
+            },
+            createdBy: req.user._id,
+          });
+        } catch (ohErr) {
+          console.warn('Ownership history (purchase) create failed:', ohErr?.message);
+        }
       }
     } catch (petErr) {
       console.error('Failed to create user pet in main Pet collection:', petErr);
@@ -437,6 +466,316 @@ const verifyRazorpaySignature = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Payment verification failed',
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Server error'
+    });
+  }
+};
+
+// Create Razorpay order for stock-based purchase
+const createRazorpayOrderForStock = async (req, res) => {
+  try {
+    const { stockId, maleCount, femaleCount, deliveryMethod, deliveryAddress } = req.body;
+    
+    console.log('Creating payment order for stock purchase:', {
+      stockId,
+      maleCount,
+      femaleCount,
+      userId: req.user._id,
+      deliveryMethod,
+      hasRazorpayKeys: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)
+    });
+    
+    // Validate request
+    if ((!maleCount && !femaleCount) || maleCount < 0 || femaleCount < 0) {
+      return res.status(400).json({ success: false, message: 'Invalid pet count' });
+    }
+    
+    // Find the stock
+    const stock = await PetStock.findById(stockId);
+    
+    if (!stock) {
+      return res.status(404).json({ success: false, message: 'Stock not found' });
+    }
+    
+    // Check availability
+    if (maleCount > stock.maleCount || femaleCount > stock.femaleCount) {
+      return res.status(400).json({ success: false, message: 'Not enough pets available in stock' });
+    }
+    
+    // Calculate total amount
+    const petCount = maleCount + femaleCount;
+    const petPrice = Number(stock.price || 0);
+    if (!petPrice || Number.isNaN(petPrice) || petPrice <= 0) {
+      return res.status(400).json({ success: false, message: 'Item price not set for this stock' });
+    }
+    
+    const deliveryCharges = deliveryMethod === 'delivery' ? 500 : 0;
+    const taxes = Math.round(petCount * petPrice * 0.18);
+    const totalAmount = (petCount * petPrice) + deliveryCharges + taxes;
+    
+    // Use the shared payment service
+    const orderResult = await paymentService.createOrder(totalAmount, 'INR', {
+      stockId: stockId,
+      maleCount: maleCount,
+      femaleCount: femaleCount,
+      userId: req.user._id,
+      deliveryMethod,
+      deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : null,
+      purchaseType: 'stock'
+    });
+
+    if (!orderResult.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: orderResult.error || 'Failed to create payment order'
+      });
+    }
+
+    // For stock purchases, we'll create a temporary reservation record
+    const tempReservation = {
+      stockId: stockId,
+      maleCount: maleCount,
+      femaleCount: femaleCount,
+      userId: req.user._id,
+      deliveryMethod,
+      deliveryAddress: deliveryMethod === 'delivery' ? deliveryAddress : null,
+      paymentInfo: {
+        orderId: orderResult.order.id,
+        amount: totalAmount,
+        currency: 'INR',
+        paymentStatus: 'pending'
+      },
+      status: 'payment_pending',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    res.json({
+      success: true,
+      data: {
+        orderId: orderResult.order.id,
+        amount: totalAmount * 100,
+        currency: 'INR',
+        key: process.env.RAZORPAY_KEY_ID,
+        tempReservation: tempReservation
+      }
+    });
+  
+  } catch (err) {
+    console.error('Create Razorpay order for stock error:', err);
+    console.error('Error details:', {
+      message: err.message,
+      stack: err.stack,
+      statusCode: err.statusCode,
+      error: err.error
+    });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to create payment order',
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Server error'
+    });
+  }
+};
+
+// Verify Razorpay signature for stock-based purchase
+const verifyRazorpaySignatureForStock = async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      stockId,
+      maleCount,
+      femaleCount,
+      deliveryMethod,
+      deliveryAddress
+    } = req.body;
+    
+    console.log('Verifying stock payment:', {
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      stockId,
+      maleCount,
+      femaleCount
+    });
+    
+    // Use the shared payment service to verify payment
+    const isVerified = paymentService.verifyPayment(razorpay_signature, razorpay_order_id, razorpay_payment_id);
+    
+    if (!isVerified) {
+      return res.status(400).json({ success: false, message: 'Invalid payment signature' });
+    }
+    
+    // Get payment details from Razorpay
+    const paymentDetails = await paymentService.getPaymentDetails(razorpay_payment_id);
+    if (!paymentDetails.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Failed to fetch payment details' 
+      });
+    }
+    
+    // Find the stock
+    const stock = await PetStock.findById(stockId);
+    
+    if (!stock) {
+      return res.status(404).json({ success: false, message: 'Stock not found' });
+    }
+    
+    // Check availability
+    if (maleCount > stock.maleCount || femaleCount > stock.femaleCount) {
+      return res.status(400).json({ success: false, message: 'Not enough pets available in stock' });
+    }
+    
+    // Generate individual pets from stock
+    const generatedPets = [];
+    
+    // Generate male pets
+    for (let i = 0; i < maleCount; i++) {
+      const petCode = await PetCodeGenerator.generateUniquePetCode();
+      
+      const pet = new PetInventoryItem({
+        name: stock.name,
+        petCode,
+        speciesId: stock.speciesId,
+        breedId: stock.breedId,
+        gender: 'Male',
+        age: stock.age,
+        ageUnit: stock.ageUnit,
+        color: stock.color,
+        size: stock.size,
+        price: stock.price,
+        discountPrice: stock.discountPrice,
+        storeId: stock.storeId,
+        storeName: stock.storeName,
+        createdBy: req.user.id,
+        imageIds: stock.maleImageIds,
+        status: 'sold',
+        soldAt: new Date(),
+        buyerId: req.user._id
+      });
+      
+      await pet.save();
+      generatedPets.push(pet);
+      
+      // Register pet in PetRegistry
+      try {
+        await PetRegistryService.upsertAndSetState({
+          petCode: pet.petCode,
+          name: pet.name,
+          species: pet.speciesId,
+          breed: pet.breedId,
+          images: pet.imageIds || [],
+          source: 'petshop',
+          petShopItemId: pet._id,
+          actorUserId: req.user.id,
+          firstAddedSource: 'petshop',
+          firstAddedBy: req.user.id,
+          gender: pet.gender,
+          age: pet.age,
+          ageUnit: pet.ageUnit,
+          color: pet.color
+        }, {
+          currentOwnerId: req.user._id,
+          currentLocation: 'at_owner',
+          currentStatus: 'sold'
+        });
+      } catch (regErr) {
+        console.warn('Failed to register pet in PetRegistry:', regErr.message);
+      }
+    }
+    
+    // Generate female pets
+    for (let i = 0; i < femaleCount; i++) {
+      const petCode = await PetCodeGenerator.generateUniquePetCode();
+      
+      const pet = new PetInventoryItem({
+        name: stock.name,
+        petCode,
+        speciesId: stock.speciesId,
+        breedId: stock.breedId,
+        gender: 'Female',
+        age: stock.age,
+        ageUnit: stock.ageUnit,
+        color: stock.color,
+        size: stock.size,
+        price: stock.price,
+        discountPrice: stock.discountPrice,
+        storeId: stock.storeId,
+        storeName: stock.storeName,
+        createdBy: req.user.id,
+        imageIds: stock.femaleImageIds,
+        status: 'sold',
+        soldAt: new Date(),
+        buyerId: req.user._id
+      });
+      
+      await pet.save();
+      generatedPets.push(pet);
+      
+      // Register pet in PetRegistry
+      try {
+        await PetRegistryService.upsertAndSetState({
+          petCode: pet.petCode,
+          name: pet.name,
+          species: pet.speciesId,
+          breed: pet.breedId,
+          images: pet.imageIds || [],
+          source: 'petshop',
+          petShopItemId: pet._id,
+          actorUserId: req.user.id,
+          firstAddedSource: 'petshop',
+          firstAddedBy: req.user.id,
+          gender: pet.gender,
+          age: pet.age,
+          ageUnit: pet.ageUnit,
+          color: pet.color
+        }, {
+          currentOwnerId: req.user._id,
+          currentLocation: 'at_owner',
+          currentStatus: 'sold'
+        });
+      } catch (regErr) {
+        console.warn('Failed to register pet in PetRegistry:', regErr.message);
+      }
+    }
+    
+    // Update stock counts
+    stock.maleCount -= maleCount;
+    stock.femaleCount -= femaleCount;
+    await stock.save();
+    
+    // Create ownership history for each pet
+    for (const pet of generatedPets) {
+      await OwnershipHistory.create({
+        pet: pet._id,
+        previousOwner: null, // No previous owner for pet shop purchase
+        newOwner: req.user._id,
+        transferDate: new Date(),
+        transferType: 'Sale',
+        reason: 'Pet shop purchase',
+        transferFee: {
+          amount: stock.price || 0,
+          currency: 'INR',
+          paid: true,
+          paymentMethod: 'Card'
+        },
+        notes: `Purchased through Pet Shop - ${deliveryMethod === 'delivery' ? 'Home Delivery' : 'Store Pickup'}`
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        generatedPets,
+        message: `${generatedPets.length} pets generated and purchased successfully`
+      }
+    });
+  } catch (err) {
+    console.error('Verify Razorpay signature for stock error:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to verify payment',
       error: process.env.NODE_ENV === 'development' ? err.message : 'Server error'
     });
   }
@@ -1303,6 +1642,50 @@ const completeHandover = async (req, res) => {
       ]);
       
       console.log('User pet created successfully in main Pet collection:', mainPet._id);
+      
+      // Centralized registry sync: identity + state
+      try {
+        const PetRegistryService = require('../../../../core/services/petRegistryService');
+        
+        // Create/update registry with source tracking
+        await PetRegistryService.upsertAndSetState({
+          petCode: inventoryItem.petCode,
+          name: inventoryItem.name || 'Pet',
+          species: inventoryItem.speciesId,
+          breed: inventoryItem.breedId,
+          images: (inventoryItem.images || []).map(img => ({ url: img.url, caption: img.caption || '', isPrimary: !!img.isPrimary })),
+          source: 'petshop',
+          petShopItemId: inventoryItem._id,
+          corePetId: mainPet._id,
+          actorUserId: req.user._id,
+          firstAddedSource: 'petshop',
+          firstAddedBy: inventoryItem.createdBy, // The pet shop manager who added it
+          gender: inventoryItem.gender,
+          age: inventoryItem.age,
+          ageUnit: inventoryItem.ageUnit,
+          color: inventoryItem.color
+        }, {
+          currentOwnerId: req.user._id,
+          currentLocation: 'at_owner',
+          currentStatus: 'sold',
+          lastTransferAt: new Date()
+        });
+        
+        // Record ownership transfer in registry
+        await PetRegistryService.recordOwnershipTransfer({
+          petCode: inventoryItem.petCode,
+          previousOwnerId: inventoryItem.createdBy,
+          newOwnerId: req.user._id,
+          transferType: 'purchase',
+          transferPrice: Number(reservation.paymentInfo?.amount || 0),
+          transferReason: 'Pet Purchase',
+          source: 'petshop',
+          notes: 'Purchase completed successfully',
+          performedBy: req.user._id
+        });
+      } catch (regErr) {
+        console.warn('PetRegistry sync failed (handover complete):', regErr?.message || regErr);
+      }
     } catch (petErr) {
       console.error('Failed to create user pet in main Pet collection:', petErr);
       // Don't fail the handover if pet creation fails, but log the error
@@ -1397,6 +1780,8 @@ const regenerateHandoverOTP = async (req, res) => {
 module.exports = {
   createRazorpayOrder,
   verifyRazorpaySignature,
+  createRazorpayOrderForStock,
+  verifyRazorpaySignatureForStock,
   confirmPurchaseDecision,
   updateDeliveryStatus,
   scheduleHandover,

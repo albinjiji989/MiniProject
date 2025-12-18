@@ -93,7 +93,7 @@ export default function StepGenderClassification() {
     navigate('/manager/petshop/wizard/review')
   }
 
-  const back = () => navigate('/manager/petshop/wizard/classification')
+  const back = () => navigate('/manager/petshop/wizard/pricing')
 
   return (
     <Box className="space-y-6">

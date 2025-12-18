@@ -25,7 +25,8 @@ export default function WizardLayout() {
           <button
             key={s.key}
             onClick={() => goTo(s.path)}
-            className={`px-3 py-2 rounded border text-sm ${idx === currentIndex ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'}`}
+            className={`px-3 py-2 rounded border text-sm ${idx === currentIndex ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+            disabled={idx > currentIndex}
           >
             {idx + 1}. {s.label}
           </button>

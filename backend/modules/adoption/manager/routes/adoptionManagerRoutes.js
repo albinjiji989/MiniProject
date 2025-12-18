@@ -49,6 +49,7 @@ router.post('/applications/:id/handover/regenerate-otp', auth, authorize('adopti
 // Payment Routes
 router.post('/payments/create-order', auth, authorize('adoption_manager'), paymentController.createPaymentOrder);
 router.post('/payments/verify', auth, authorize('adoption_manager'), paymentController.verifyPayment);
+router.get('/payments/history', auth, authorize('adoption_manager'), paymentController.getPaymentHistory);
 
 // Contracts
 router.get('/contracts/:applicationId', auth, authorize('adoption_manager'), paymentController.getContract);

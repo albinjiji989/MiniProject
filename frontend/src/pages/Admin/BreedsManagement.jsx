@@ -89,6 +89,9 @@ const BreedsManagement = () => {
     name: '',
     speciesId: '',
     description: '',
+    size: '',
+    origin: '',
+    temperament: '',
     isActive: true
   })
   const [speciesCategory, setSpeciesCategory] = useState('')
@@ -185,6 +188,9 @@ const BreedsManagement = () => {
       name: breed.name || '',
       speciesId: breed.species?._id || breed.speciesId || '',
       description: breed.description || '',
+      size: breed.size || '',
+      origin: breed.origin || '',
+      temperament: Array.isArray(breed.temperament) ? breed.temperament.join(', ') : (breed.temperament || ''),
       isActive: breed.isActive !== false
     })
     const spec = species.find(s => s._id === (breed.species?._id || breed.speciesId))
@@ -208,6 +214,9 @@ const BreedsManagement = () => {
           name: formData.name,
           speciesId: formData.speciesId,
           description: formData.description,
+          size: formData.size,
+          origin: formData.origin,
+          temperament: formData.temperament,
           isActive: formData.isActive
         })
         setSuccess('Breed updated successfully!')
@@ -217,6 +226,9 @@ const BreedsManagement = () => {
           name: formData.name,
           speciesId: formData.speciesId,
           description: formData.description,
+          size: formData.size,
+          origin: formData.origin,
+          temperament: formData.temperament,
           isActive: formData.isActive
         })
         setSuccess('Breed created successfully!')
@@ -233,12 +245,12 @@ const BreedsManagement = () => {
     
     try {
       await adminBreedsAPI.delete(breedToDelete._id)
-      setSuccess('Breed deleted successfully!')
+      setSuccess('Breed deactivated successfully!')
       setDeleteDialog(false)
       setBreedToDelete(null)
       loadBreeds()
     } catch (err) {
-      setError('Failed to delete breed')
+      setError('Failed to deactivate breed')
     }
   }
 
@@ -248,7 +260,17 @@ const BreedsManagement = () => {
       setSuccess(`Breed ${breed.isActive ? 'deactivated' : 'activated'} successfully!`)
       loadBreeds()
     } catch (err) {
-      setError('Failed to update breed status')
+      setError(`Failed to ${breed.isActive ? 'deactivate' : 'activate'} breed`)
+    }
+  }
+
+  const handleRestoreBreed = async (breed) => {
+    try {
+      await adminBreedsAPI.restore(breed._id)
+      setSuccess('Breed restored successfully!')
+      loadBreeds()
+    } catch (err) {
+      setError('Failed to restore breed')
     }
   }
 
@@ -518,7 +540,38 @@ const BreedsManagement = () => {
                 disabled
               />
             </Grid>
-            {/* Removed Size, Origin, Temperament fields */}
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Size</InputLabel>
+                <Select
+                  value={formData.size || ''}
+                  onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+                >
+                  <MenuItem value="tiny">Tiny</MenuItem>
+                  <MenuItem value="small">Small</MenuItem>
+                  <MenuItem value="medium">Medium</MenuItem>
+                  <MenuItem value="large">Large</MenuItem>
+                  <MenuItem value="giant">Giant</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Origin"
+                value={formData.origin || ''}
+                onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Temperament"
+                value={formData.temperament || ''}
+                onChange={(e) => setFormData({ ...formData, temperament: e.target.value })}
+              />
+            </Grid>
+            {/* Size, Origin, Temperament fields included for both add and edit forms */}
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -583,7 +636,7 @@ const BreedsManagement = () => {
               <FormControl fullWidth>
                 <InputLabel>Size</InputLabel>
                 <Select
-                  value={formData.size}
+                  value={formData.size || ''}
                   onChange={(e) => setFormData({ ...formData, size: e.target.value })}
                 >
                   <MenuItem value="tiny">Tiny</MenuItem>
@@ -598,7 +651,7 @@ const BreedsManagement = () => {
               <TextField
                 fullWidth
                 label="Origin"
-                value={formData.origin}
+                value={formData.origin || ''}
                 onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
               />
             </Grid>
@@ -606,7 +659,7 @@ const BreedsManagement = () => {
               <TextField
                 fullWidth
                 label="Temperament"
-                value={formData.temperament}
+                value={formData.temperament || ''}
                 onChange={(e) => setFormData({ ...formData, temperament: e.target.value })}
               />
             </Grid>
@@ -661,27 +714,36 @@ const BreedsManagement = () => {
             {selectedBreed?.isActive ? 'Deactivate' : 'Activate'}
           </ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => { setBreedToDelete(selectedBreed); setDeleteDialog(true); handleMenuClose(); }}>
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Delete Breed</ListItemText>
-        </MenuItem>
+        {selectedBreed?.isActive ? (
+          <MenuItem onClick={() => { setBreedToDelete(selectedBreed); setDeleteDialog(true); handleMenuClose(); }}>
+            <ListItemIcon>
+              <DeleteIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Deactivate Breed</ListItemText>
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={() => { handleRestoreBreed(selectedBreed); handleMenuClose(); }}>
+            <ListItemIcon>
+              <CheckCircleIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Restore Breed</ListItemText>
+          </MenuItem>
+        )}
       </Menu>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialog} onClose={() => setDeleteDialog(false)}>
-        <DialogTitle>Delete Breed</DialogTitle>
+        <DialogTitle>Deactivate Breed</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete "{breedToDelete?.name}"? 
-            This action cannot be undone and will affect all associated pets.
+            Are you sure you want to deactivate "{breedToDelete?.name}"? 
+            This breed will no longer be available for new entries, but existing data will remain intact.
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialog(false)}>Cancel</Button>
           <Button onClick={handleDeleteBreed} color="error" variant="contained">
-            Delete
+            Deactivate
           </Button>
         </DialogActions>
       </Dialog>

@@ -37,7 +37,8 @@ import {
   ArrowForward as ArrowIcon,
   Block as BlockIcon,
   Construction as ConstructionIcon,
-  Schedule as ScheduleIcon
+  Schedule as ScheduleIcon,
+  AutoAwesome as AutoAwesomeIcon
 } from '@mui/icons-material'
 import { useAuth } from '../../../contexts/AuthContext'
 import { apiClient, adoptionAPI, resolveMediaUrl } from '../../../services/api'
@@ -96,6 +97,7 @@ const AdoptionDashboard = () => {
   const actions = [
     { label: 'My Applications', onClick: () => navigate('/User/adoption/applications'), color: 'bg-blue-600' },
     { label: 'My Adoptions', onClick: () => navigate('/User/adoption/adopted'), color: 'bg-indigo-600' },
+    { label: 'AI/ML Insights', onClick: () => navigate('/User/adoption/aiml-dashboard'), color: 'bg-purple-600', icon: <AutoAwesomeIcon /> }
   ]
 
   const stats = [

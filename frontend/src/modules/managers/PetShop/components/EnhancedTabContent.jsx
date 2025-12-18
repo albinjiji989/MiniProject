@@ -12,15 +12,16 @@ import {
   TableHead, 
   TableRow, 
   Chip, 
-  Checkbox, 
+  Checkbox,
+  Tooltip,
   IconButton, 
-  Tooltip, 
   Pagination,
   Card,
   CardContent,
   Avatar,
   Divider
 } from '@mui/material'
+import PetAgeDisplay from './PetAgeDisplay'
 import { 
   Edit as EditIcon, 
   Visibility as ViewIcon, 
@@ -34,7 +35,8 @@ import {
   ShoppingCart as ShoppingCartIcon,
   Check as CheckIcon,
   Close as CloseIcon,
-  Info as InfoIcon
+  Info as InfoIcon,
+  Pets as PetsIcon
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { resolveMediaUrl } from '../../../../services/api'
@@ -284,7 +286,7 @@ const EnhancedTabContent = ({
                 <HistoryIcon />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Delete Pet">
+            <Tooltip title="Remove from Sale">
               <IconButton 
                 size="small" 
                 color="error"
@@ -331,7 +333,7 @@ const EnhancedTabContent = ({
                 </IconButton>
               </Tooltip>
             )}
-            <Tooltip title="Delete Pet">
+            <Tooltip title="Remove from Sale">
               <IconButton 
                 size="small" 
                 color="error"
@@ -395,7 +397,7 @@ const EnhancedTabContent = ({
                 <HistoryIcon />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Delete Pet">
+            <Tooltip title="Remove from Sale">
               <IconButton 
                 size="small" 
                 color="error"
@@ -435,7 +437,7 @@ const EnhancedTabContent = ({
                 <HistoryIcon />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Delete Pet">
+            <Tooltip title="Remove from Sale">
               <IconButton 
                 size="small" 
                 color="error"
@@ -542,7 +544,7 @@ const EnhancedTabContent = ({
               <TableCell>
                 <Box>
                   <Typography variant="body2">
-                    {pet.age} {pet.ageUnit} • {pet.gender}
+                    <PetAgeDisplay petCode={pet.petCode} initialAge={pet.age} initialAgeUnit={pet.ageUnit} /> • {pet.gender}
                   </Typography>
                   {pet.ageGroup && (
                     <Chip 
@@ -626,7 +628,7 @@ const EnhancedTabContent = ({
                           <HistoryIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Delete Pet">
+                      <Tooltip title="Remove from Sale">
                         <IconButton 
                           size="small" 
                           color="error"
@@ -696,7 +698,7 @@ const EnhancedTabContent = ({
                           </IconButton>
                         </Tooltip>
                       )}
-                      <Tooltip title="Delete Pet">
+                      <Tooltip title="Remove from Sale">
                         <IconButton 
                           size="small" 
                           color="error"
@@ -764,7 +766,7 @@ const EnhancedTabContent = ({
                           <HistoryIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Delete Pet">
+                      <Tooltip title="Remove from Sale">
                         <IconButton 
                           size="small" 
                           color="error"
@@ -819,7 +821,7 @@ const EnhancedTabContent = ({
                           <HistoryIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Delete Pet">
+                      <Tooltip title="Remove from Sale">
                         <IconButton 
                           size="small" 
                           color="error"

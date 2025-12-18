@@ -1,8 +1,10 @@
 const User = require('../../../../core/models/User');
-const VeterinaryAppointment = require('../models/VeterinaryAppointment');
+const ManagerVeterinaryAppointment = require('../models/VeterinaryAppointment');
+const VeterinaryAppointment = require('../../models/VeterinaryAppointment');
 const VeterinaryService = require('../models/VeterinaryService');
 const VeterinaryStaff = require('../models/VeterinaryStaff');
 const Pet = require('../../../../core/models/Pet');
+const Veterinary = require('../../models/Veterinary');
 
 // Get veterinary manager dashboard stats
 const getDashboardStats = async (req, res) => {
@@ -17,40 +19,85 @@ const getDashboardStats = async (req, res) => {
       });
     }
 
+    // Find the veterinary store for this manager
+    const veterinaryStore = await Veterinary.findOne({ storeId: storeId });
+    if (!veterinaryStore) {
+      return res.status(404).json({
+        success: false,
+        message: 'Veterinary store not found'
+      });
+    }
+
     // Get today's date range
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Real stats from database
-    const [todayAppointments, pendingAppointments, totalPatients, staffCount] = await Promise.all([
-      VeterinaryAppointment.countDocuments({
-        storeId,
+    // Get stats from both collections
+    const [todayManagerAppointments, todayUserAppointments, 
+           pendingManagerAppointments, pendingUserAppointments] = await Promise.all([
+      ManagerVeterinaryAppointment.countDocuments({
+        storeId: veterinaryStore._id,
         appointmentDate: { $gte: today, $lt: tomorrow },
         status: { $ne: 'cancelled' }
       }),
       VeterinaryAppointment.countDocuments({
-        storeId,
+        storeId: veterinaryStore.storeId,
+        appointmentDate: { $gte: today, $lt: tomorrow },
+        status: { $ne: 'cancelled' }
+      }),
+      ManagerVeterinaryAppointment.countDocuments({
+        storeId: veterinaryStore._id,
         status: 'pending'
       }),
-      VeterinaryAppointment.distinct('petId', { storeId }),
-      VeterinaryStaff.countDocuments({ storeId })
+      VeterinaryAppointment.countDocuments({
+        storeId: veterinaryStore.storeId,
+        status: 'pending'
+      })
     ]);
 
-    // Get recent appointments
-    const recentAppointments = await VeterinaryAppointment.find({ storeId })
-      .populate('petId', 'name species breed')
-      .populate('ownerId', 'name email phone')
-      .populate('veterinarianId', 'name')
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .lean();
+    const todayAppointments = todayManagerAppointments + todayUserAppointments;
+    const pendingAppointments = pendingManagerAppointments + pendingUserAppointments;
+
+    // Get unique patients from both collections
+    const [managerPatients, userPatients] = await Promise.all([
+      ManagerVeterinaryAppointment.distinct('petId', { storeId: veterinaryStore._id }),
+      VeterinaryAppointment.distinct('petId', { storeId: veterinaryStore.storeId })
+    ]);
+
+    // Combine and deduplicate patient IDs
+    const allPatientIds = [...new Set([...managerPatients, ...userPatients])];
+    const totalPatients = allPatientIds.length;
+
+    const staffCount = await VeterinaryStaff.countDocuments({ storeId });
+
+    // Get recent appointments from both collections
+    const [recentManagerAppointments, recentUserAppointments] = await Promise.all([
+      ManagerVeterinaryAppointment.find({ storeId: veterinaryStore._id })
+        .populate('petId', 'name species breed')
+        .populate('ownerId', 'name email phone')
+        .populate('veterinarianId', 'name')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
+      VeterinaryAppointment.find({ storeId: veterinaryStore.storeId })
+        .populate('petId', 'name species breed')
+        .populate('ownerId', 'name email phone')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean()
+    ]);
+
+    // Combine and sort recent appointments
+    const recentAppointments = [...recentManagerAppointments, ...recentUserAppointments]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 10);
 
     const stats = {
       todayAppointments,
       pendingAppointments,
-      totalPatients: totalPatients.length,
+      totalPatients,
       staffCount,
       recentAppointments
     };
@@ -68,59 +115,24 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
-// Get appointments list
-const getAppointments = async (req, res) => {
-  try {
-    const storeId = req.user.storeId;
-    const { status, date, page = 1, limit = 20 } = req.query;
-
-    const filter = { storeId };
-    if (status) filter.status = status;
-    if (date) {
-      const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + 1);
-      filter.appointmentDate = { $gte: startDate, $lt: endDate };
-    }
-
-    const appointments = await VeterinaryAppointment.find(filter)
-      .populate('petId', 'name species breed age gender')
-      .populate('ownerId', 'name email phone')
-      .populate('veterinarianId', 'name')
-      .sort({ appointmentDate: -1, createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .lean();
-
-    const total = await VeterinaryAppointment.countDocuments(filter);
-
-    res.json({
-      success: true,
-      data: {
-        appointments,
-        total,
-        page: parseInt(page),
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    console.error('Get appointments error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch appointments'
-    });
-  }
-};
-
 // Get medical records
 const getMedicalRecords = async (req, res) => {
   try {
     const storeId = req.user.storeId;
+
+    // Find the veterinary store for this manager
+    const veterinaryStore = await Veterinary.findOne({ storeId: storeId });
+    if (!veterinaryStore) {
+      return res.status(404).json({
+        success: false,
+        message: 'Veterinary store not found'
+      });
+    }
+
     const { petId, page = 1, limit = 20 } = req.query;
 
     const filter = {
-      storeId,
+      storeId: veterinaryStore._id,
       status: 'completed',
       $or: [
         { diagnosis: { $exists: true, $ne: '' } },
@@ -130,7 +142,7 @@ const getMedicalRecords = async (req, res) => {
     
     if (petId) filter.petId = petId;
 
-    const records = await VeterinaryAppointment.find(filter)
+    const records = await ManagerVeterinaryAppointment.find(filter)
       .populate('petId', 'name species breed age gender')
       .populate('ownerId', 'name email phone')
       .populate('veterinarianId', 'name')
@@ -139,7 +151,7 @@ const getMedicalRecords = async (req, res) => {
       .skip((page - 1) * limit)
       .lean();
 
-    const total = await VeterinaryAppointment.countDocuments(filter);
+    const total = await ManagerVeterinaryAppointment.countDocuments(filter);
 
     res.json({
       success: true,
@@ -163,6 +175,16 @@ const getMedicalRecords = async (req, res) => {
 const getServices = async (req, res) => {
   try {
     const storeId = req.user.storeId;
+
+    // Find the veterinary store for this manager
+    const veterinaryStore = await Veterinary.findOne({ storeId: storeId });
+    if (!veterinaryStore) {
+      return res.status(404).json({
+        success: false,
+        message: 'Veterinary store not found'
+      });
+    }
+
     const { category, isActive } = req.query;
 
     const filter = { storeId };
@@ -192,7 +214,6 @@ const getServices = async (req, res) => {
 
 module.exports = {
   getDashboardStats,
-  getAppointments,
   getMedicalRecords,
   getServices
 };

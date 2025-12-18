@@ -13,5 +13,6 @@ router.get('/analytics', auth, authorize('admin'), analyticsController.getAnalyt
 router.get('/manager-analytics', auth, authorize('admin'), analyticsController.getManagerAnalytics);
 router.get('/user-analytics', auth, authorize('admin'), analyticsController.getUserAnalytics);
 router.get('/pet-analytics', auth, authorize('admin'), analyticsController.getPetAnalytics);
+router.get('/aiml-insights', auth, authorize('admin'), analyticsController.getAIMLInsights);
 
 module.exports = router;

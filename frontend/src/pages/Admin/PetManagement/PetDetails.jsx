@@ -32,10 +32,14 @@ import {
   AttachMoney,
   CalendarToday,
   Scale,
-  Palette
+  Palette,
+  Source as SourceIcon,
+  Person as PersonIcon,
+  Store as StoreIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
-import { petsAPI, medicalRecordsAPI, ownershipHistoryAPI } from '../../../services/petSystemAPI';
+import { petsAPI } from '../../../services/petSystemAPI';
+import { api } from '../../../services/api';
 
 const PetDetails = () => {
   const navigate = useNavigate();
@@ -43,8 +47,7 @@ const PetDetails = () => {
   
   const [loading, setLoading] = useState(true);
   const [pet, setPet] = useState(null);
-  const [medicalRecords, setMedicalRecords] = useState([]);
-  const [ownershipHistory, setOwnershipHistory] = useState([]);
+  const [registry, setRegistry] = useState(null);
   const [error, setError] = useState('');
   const [deleteDialog, setDeleteDialog] = useState(false);
 
@@ -55,15 +58,21 @@ const PetDetails = () => {
   const loadPetData = async () => {
     setLoading(true);
     try {
-      const [petRes, medicalRes, ownershipRes] = await Promise.all([
-        petsAPI.getById(id),
-        medicalRecordsAPI.getByPet(id),
-        ownershipHistoryAPI.getByPet(id)
-      ]);
-
-      setPet(petRes.data?.data || petRes.data);
-      setMedicalRecords(medicalRes.data?.data || medicalRes.data || []);
-      setOwnershipHistory(ownershipRes.data?.data || ownershipRes.data || []);
+      // First get the pet details
+      const petRes = await petsAPI.getById(id);
+      const petData = petRes.data?.data || petRes.data;
+      setPet(petData);
+      
+      // If pet has a petCode, also get registry details
+      if (petData.petCode) {
+        try {
+          const registryRes = await api.get(`/admin/pet-registry/${petData.petCode}`);
+          const registryData = registryRes.data?.data || {};
+          setRegistry(registryData.registry);
+        } catch (registryErr) {
+          console.warn('Could not load registry data:', registryErr);
+        }
+      }
     } catch (err) {
       setError('Failed to load pet data');
     } finally {
@@ -85,11 +94,32 @@ const PetDetails = () => {
     const colors = {
       available: 'success',
       adopted: 'primary',
+      sold: 'info',
       fostered: 'warning',
       medical: 'error',
       deceased: 'default'
     };
     return colors[status] || 'default';
+  };
+
+  const getSourceColor = (source) => {
+    const colors = {
+      petshop: 'primary',
+      adoption: 'secondary',
+      user: 'success'
+    };
+    return colors[source] || 'default';
+  };
+
+  const getLocationColor = (location) => {
+    const colors = {
+      'at_petshop': 'primary',
+      'at_adoption_center': 'secondary',
+      'at_owner': 'success',
+      'in_hospital': 'error',
+      'in_temporary_care': 'warning'
+    };
+    return colors[location] || 'default';
   };
 
   const formatDate = (date) => {
@@ -254,7 +284,7 @@ const PetDetails = () => {
                     Weight
                   </Typography>
                   <Typography variant="body1">
-                    {pet.weightKg ? `${pet.weightKg} kg` : 'N/A'}
+                    {pet.weight?.value ? `${pet.weight.value} ${pet.weight.unit}` : 'N/A'}
                   </Typography>
                 </Grid>
                 <Grid item xs={6}>
@@ -278,6 +308,71 @@ const PetDetails = () => {
             </CardContent>
           </Card>
         </Grid>
+
+        {/* Registry Information (if available) */}
+        {registry && (
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  <SourceIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                  Registry Information
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="textSecondary">
+                      Source
+                    </Typography>
+                    <Chip
+                      label={registry.sourceLabel || registry.source}
+                      color={getSourceColor(registry.source)}
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="textSecondary">
+                      Location
+                    </Typography>
+                    <Chip
+                      label={registry.currentLocation?.replace(/_/g, ' ') || 'N/A'}
+                      color={getLocationColor(registry.currentLocation)}
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="textSecondary">
+                      Status
+                    </Typography>
+                    <Chip
+                      label={registry.currentStatus || 'N/A'}
+                      color={getStatusColor(registry.currentStatus)}
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="textSecondary">
+                      Owner
+                    </Typography>
+                    <Typography variant="body1">
+                      {registry.currentOwnerId?.name || 'N/A'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Button
+                      variant="outlined"
+                      fullWidth
+                      onClick={() => navigate(`/admin/pet-registry/${registry.petCode}`)}
+                    >
+                      View Full Registry Details
+                    </Button>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
 
         {/* Location & Status */}
         <Grid item xs={12} md={6}>
@@ -319,7 +414,7 @@ const PetDetails = () => {
                     Temperament
                   </Typography>
                   <Typography variant="body1">
-                    {pet.temperament || 'N/A'}
+                    {pet.temperament?.join(', ') || 'N/A'}
                   </Typography>
                 </Grid>
                 <Grid item xs={12}>
@@ -327,7 +422,7 @@ const PetDetails = () => {
                     Special Needs
                   </Typography>
                   <Typography variant="body1">
-                    {pet.specialNeeds || 'None'}
+                    {pet.specialNeeds?.join(', ') || 'None'}
                   </Typography>
                 </Grid>
               </Grid>
@@ -354,23 +449,23 @@ const PetDetails = () => {
               </Box>
               <Divider sx={{ mb: 2 }} />
               
-              {medicalRecords.length > 0 ? (
+              {pet.medicalHistory && pet.medicalHistory.length > 0 ? (
                 <List dense>
-                  {medicalRecords.slice(0, 3).map((record) => (
+                  {pet.medicalHistory.slice(0, 3).map((record) => (
                     <ListItem key={record._id}>
                       <ListItemIcon>
                         <LocalHospital color="primary" />
                       </ListItemIcon>
                       <ListItemText
-                        primary={record.recordType}
+                        primary={record.type}
                         secondary={`${formatDate(record.date)} - ${record.description}`}
                       />
                     </ListItem>
                   ))}
-                  {medicalRecords.length > 3 && (
+                  {pet.medicalHistory.length > 3 && (
                     <ListItem>
                       <ListItemText
-                        primary={`+${medicalRecords.length - 3} more records`}
+                        primary={`+${pet.medicalHistory.length - 3} more records`}
                         sx={{ fontStyle: 'italic' }}
                       />
                     </ListItem>
@@ -404,23 +499,23 @@ const PetDetails = () => {
               </Box>
               <Divider sx={{ mb: 2 }} />
               
-              {ownershipHistory.length > 0 ? (
+              {pet.ownershipHistory && pet.ownershipHistory.length > 0 ? (
                 <List dense>
-                  {ownershipHistory.slice(0, 5).map((history) => (
+                  {pet.ownershipHistory.slice(0, 5).map((history) => (
                     <ListItem key={history._id}>
                       <ListItemIcon>
                         <History color="secondary" />
                       </ListItemIcon>
                       <ListItemText
-                        primary={`Transfer on ${formatDate(history.transferDate)}`}
+                        primary={`Transfer on ${formatDate(history.startDate)}`}
                         secondary={`Reason: ${history.reason}`}
                       />
                     </ListItem>
                   ))}
-                  {ownershipHistory.length > 5 && (
+                  {pet.ownershipHistory.length > 5 && (
                     <ListItem>
                       <ListItemText
-                        primary={`+${ownershipHistory.length - 5} more transfers`}
+                        primary={`+${pet.ownershipHistory.length - 5} more transfers`}
                         sx={{ fontStyle: 'italic' }}
                       />
                     </ListItem>

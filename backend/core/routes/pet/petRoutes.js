@@ -59,4 +59,13 @@ router.get('/:id/changelog', auth, petController.getPetChangelog);
 // Registry routes
 router.get('/registry/:petCode/history', auth, petController.getRegistryHistory);
 
+// Pet status routes
+const petStatusController = require('../../controllers/petStatusController');
+router.put('/registry/:petCode/hospital/admit', auth, petStatusController.admitToHospital);
+router.put('/registry/:petCode/hospital/discharge', auth, petStatusController.dischargeFromHospital);
+router.put('/registry/:petCode/temporary-care/start', auth, petStatusController.placeInTemporaryCare);
+router.put('/registry/:petCode/temporary-care/end', auth, petStatusController.endTemporaryCare);
+router.put('/registry/:petCode/deceased', auth, petStatusController.markAsDeceased);
+router.get('/registry/:petCode/status-history', auth, petStatusController.getStatusHistory);
+
 module.exports = router;

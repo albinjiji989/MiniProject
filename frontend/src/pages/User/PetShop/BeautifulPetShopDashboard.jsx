@@ -66,7 +66,8 @@ import {
   LocalShipping as DeliveryIcon,
   SupportAgent as SupportIcon,
   EmojiEvents as AwardIcon,
-  AutoAwesome as MagicIcon
+  AutoAwesome as MagicIcon,
+  Inventory as InventoryIcon
 } from '@mui/icons-material'
 import { useAuth } from '../../../contexts/AuthContext'
 import { petShopAPI, resolveMediaUrl } from '../../../services/api'
@@ -489,7 +490,13 @@ const BeautifulPetShopDashboard = () => {
       icon: <FavoriteIcon />,
       onClick: () => navigate('/User/petshop/wishlist'),
       color: '#4facfe'
-    }
+    },
+    {
+      label: 'AI/ML Insights',
+      icon: <MagicIcon />,
+      onClick: () => navigate('/User/petshop/aiml-dashboard'),
+      color: '#a65eea'
+    },
   ]
 
   // Stat cards for the dashboard
@@ -677,53 +684,36 @@ const BeautifulPetShopDashboard = () => {
           boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
           overflow: 'hidden'
         }}>
-          <Tabs 
-            value={tabValue} 
+          <Tabs
+            value={tabValue}
             onChange={(e, newValue) => setTabValue(newValue)}
             variant="scrollable"
             scrollButtons="auto"
             sx={{
+              mb: 3,
+              '& .MuiTab-root': {
+                fontWeight: 600,
+                textTransform: 'none',
+                fontSize: '1rem',
+                minWidth: 'auto',
+                px: 3,
+                py: 2
+              },
+              '& .Mui-selected': {
+                color: '#667eea'
+              },
               '& .MuiTabs-indicator': {
-                bgcolor: '#667eea'
+                backgroundColor: '#667eea',
+                height: 3,
+                borderRadius: 3
               }
             }}
           >
-            <Tab 
-              label="Featured Pets" 
-              sx={{
-                fontWeight: 'medium',
-                '&.Mui-selected': {
-                  color: '#667eea'
-                }
-              }}
-            />
-            <Tab 
-              label="Browse All Pets" 
-              sx={{
-                fontWeight: 'medium',
-                '&.Mui-selected': {
-                  color: '#667eea'
-                }
-              }}
-            />
-            <Tab 
-              label="Pet Shops" 
-              sx={{
-                fontWeight: 'medium',
-                '&.Mui-selected': {
-                  color: '#667eea'
-                }
-              }}
-            />
-            <Tab 
-              label="My Activity" 
-              sx={{
-                fontWeight: 'medium',
-                '&.Mui-selected': {
-                  color: '#667eea'
-                }
-              }}
-            />
+            <Tab label="Dashboard" icon={<HomeIcon />} iconPosition="start" />
+            <Tab label="Browse Pets" icon={<PetsIcon />} iconPosition="start" />
+            <Tab label="Pet Shops" icon={<PetShopIcon />} iconPosition="start" />
+            <Tab label="Stocks" icon={<InventoryIcon />} iconPosition="start" />
+            <Tab label="My Activity" icon={<ScheduleIcon />} iconPosition="start" />
           </Tabs>
 
           <Box sx={{ p: 3 }}>
@@ -1186,228 +1176,262 @@ const BeautifulPetShopDashboard = () => {
               </Box>
             )}
 
-            {/* My Activity Tab */}
+            {/* Stocks Tab */}
             {tabValue === 3 && (
               <Box>
-                <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold', color: '#333' }}>
-                  My Activity
-                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#333' }}>
+                    Pet Stocks
+                  </Typography>
+                  <Button 
+                    variant="contained" 
+                    startIcon={<SearchIcon />}
+                    onClick={() => navigate('/User/petshop/stocks')}
+                    sx={{ borderRadius: 2, bgcolor: '#667eea', '&:hover': { bgcolor: '#5a67d8' } }}
+                  >
+                    Browse All Stocks
+                  </Button>
+                </Box>
+                
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  <Typography variant="body1">
+                    <strong>New Feature!</strong> Browse pet stocks where similar pets are grouped together. 
+                    Each stock represents multiple pets of the same breed, age, and gender with shared characteristics.
+                  </Typography>
+                </Alert>
+                
                 <Grid container spacing={3}>
                   <Grid item xs={12} md={6}>
-                    <Card sx={{ borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+                    <Card sx={{ height: '100%' }}>
                       <CardContent>
                         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                          <Avatar sx={{ bgcolor: '#ffebee', mr: 2 }}>
-                            <FavoriteIcon sx={{ color: '#f44336' }} />
+                          <Avatar sx={{ bgcolor: '#667eea', mr: 2 }}>
+                            <InventoryIcon />
                           </Avatar>
-                          <Typography variant="h6">
-                            My Wishlist ({wishlistItems.length})
+                          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                            What are Pet Stocks?
                           </Typography>
                         </Box>
-                        {wishlistItems.length === 0 ? (
-                          <Box sx={{ textAlign: 'center', py: 3 }}>
-                            <FavoriteIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                            <Typography variant="body2" color="textSecondary">
-                              Your wishlist is empty. Start adding pets you love!
-                            </Typography>
-                            <Button 
-                              variant="outlined" 
-                              sx={{ mt: 2, borderRadius: 2 }}
-                              onClick={() => setTabValue(1)}
-                            >
-                              Browse Pets
-                            </Button>
-                          </Box>
-                        ) : (
-                          <Box>
-                            {wishlistItems.slice(0, 3).map((wishlistItem, index) => (
-                              <Card key={index} sx={{ display: 'flex', mb: 2, boxShadow: 1, borderRadius: 2 }}>
-                                <CardMedia
-                                  component="img"
-                                  sx={{ width: 100, height: 100, objectFit: 'cover' }}
-                                  image={resolveMediaUrl(wishlistItem.itemId?.images?.[0]?.url) || '/placeholder-pet.svg'}
-                                  alt={wishlistItem.itemId?.name || 'Pet'}
-                                />
-                                <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                                  <CardContent sx={{ flex: '1 0 auto', pb: '8px !important' }}>
-                                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                      {wishlistItem.itemId?.name || 'Pet'}
-                                    </Typography>
-                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                                      {wishlistItem.itemId?.breedId?.name || 'Breed'}
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                      <StarIcon sx={{ color: '#ffd700', fontSize: 16, mr: 0.5 }} />
-                                      <Typography variant="body2">
-                                        {wishlistItem.itemId?.rating ? `${wishlistItem.itemId.rating}/5` : 'No rating'}
-                                      </Typography>
-                                    </Box>
-                                  </CardContent>
-                                  <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 1 }}>
-                                    <Typography variant="body2" color="primary">
-                                      ₹{wishlistItem.itemId?.price?.toLocaleString() || 'N/A'}
-                                    </Typography>
-                                    <Button 
-                                      size="small" 
-                                      variant="outlined" 
-                                      onClick={() => navigate(`/User/petshop/pet/${wishlistItem.itemId?._id}`)}
-                                      sx={{ borderRadius: 2 }}
-                                    >
-                                      View
-                                    </Button>
-                                  </CardActions>
-                                </Box>
-                              </Card>
-                            ))}
-                            {wishlistItems.length > 3 && (
-                              <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                                ...and {wishlistItems.length - 3} more
-                              </Typography>
-                            )}
-                          </Box>
-                        )}
+                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                          Pet stocks are collections of similar pets grouped by breed, age, and gender. 
+                          Instead of browsing individual pets, you can browse stocks and select how many 
+                          pets you want from each stock. Each pet will have a unique pet code when generated.
+                        </Typography>
                         <Button 
                           variant="outlined" 
-                          fullWidth
-                          sx={{ mt: 2, borderRadius: 2 }}
-                          onClick={() => navigate('/User/petshop/wishlist')}
+                          onClick={() => navigate('/User/petshop/stocks')}
+                          sx={{ mt: 1 }}
                         >
-                          View Full Wishlist
+                          Learn More
                         </Button>
                       </CardContent>
                     </Card>
                   </Grid>
+                  
                   <Grid item xs={12} md={6}>
-                    <Card sx={{ borderRadius: 3, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+                    <Card sx={{ height: '100%' }}>
                       <CardContent>
                         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                          <Avatar sx={{ bgcolor: '#e3f2fd', mr: 2 }}>
-                            <ScheduleIcon sx={{ color: '#2196f3' }} />
+                          <Avatar sx={{ bgcolor: '#4caf50', mr: 2 }}>
+                            <MagicIcon />
                           </Avatar>
-                          <Typography variant="h6">
-                            My Reservations ({reservations.length})
+                          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                            Benefits of Stocks
                           </Typography>
                         </Box>
-                        {reservations.length === 0 ? (
-                          <Box sx={{ textAlign: 'center', py: 3 }}>
-                            <ScheduleIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                            <Typography variant="body2" color="textSecondary">
-                              No active reservations. Reserve a pet today!
+                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                          <ul>
+                            <li>Easier browsing of similar pets</li>
+                            <li>Better availability tracking</li>
+                            <li>Faster purchase process</li>
+                            <li>Guaranteed unique pet codes for each pet</li>
+                          </ul>
+                        </Typography>
+                        <Button 
+                          variant="contained" 
+                          onClick={() => navigate('/User/petshop/stocks')}
+                          sx={{ mt: 1, bgcolor: '#4caf50', '&:hover': { bgcolor: '#43a047' } }}
+                        >
+                          Browse Stocks
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                </Grid>
+              </Box>
+            )}
+
+            {/* My Activity Tab */}
+            {tabValue === 4 && (
+              <Box>
+                <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold', color: '#333' }}>
+                  My Activity
+                </Typography>
+                
+                <Grid container spacing={3}>
+                  {/* My Reservations */}
+                  <Grid item xs={12} lg={6}>
+                    <Card sx={{ height: '100%' }}>
+                      <CardContent>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                          <Avatar sx={{ bgcolor: '#667eea', mr: 2 }}>
+                            <ReserveIcon />
+                          </Avatar>
+                          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                            My Reservations ({reservations.filter(r => r.status !== 'cancelled').length})
+                          </Typography>
+                        </Box>
+                        
+                        {reservations.filter(r => r.status !== 'cancelled').length > 0 ? (
+                          <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+                            {reservations
+                              .filter(reservation => reservation.status !== 'cancelled')
+                              .slice(0, 5)
+                              .map((reservation) => (
+                                <Box 
+                                  key={reservation._id} 
+                                  sx={{ 
+                                    p: 2, 
+                                    border: '1px solid #eee', 
+                                    borderRadius: 2, 
+                                    mb: 2,
+                                    '&:last-child': { mb: 0 }
+                                  }}
+                                >
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
+                                      {reservation.pet?.name || 'Pet Reservation'}
+                                    </Typography>
+                                    <Chip 
+                                      label={getStatusLabel(reservation.status)} 
+                                      color={getReservationStatusColor(reservation.status)}
+                                      size="small"
+                                    />
+                                  </Box>
+                                  
+                                  <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                                    Code: {reservation.reservationCode}
+                                  </Typography>
+                                  
+                                  <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                                    Reserved on: {new Date(reservation.createdAt).toLocaleDateString()}
+                                  </Typography>
+                                  
+                                  <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                    <Button 
+                                      size="small" 
+                                      variant="outlined"
+                                      onClick={() => navigate(`/User/petshop/reservation/${reservation._id}`)}
+                                    >
+                                      View Details
+                                    </Button>
+                                    {['pending', 'approved'].includes(reservation.status) && (
+                                      <Button 
+                                        size="small" 
+                                        variant="outlined" 
+                                        color="error"
+                                        onClick={() => handleCancelReservation(reservation)}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    )}
+                                  </Box>
+                                </Box>
+                              ))}
+                          </Box>
+                        ) : (
+                          <Box sx={{ textAlign: 'center', py: 4 }}>
+                            <ReserveIcon sx={{ fontSize: 48, color: '#ccc', mb: 2 }} />
+                            <Typography variant="body1" color="textSecondary">
+                              No active reservations yet
                             </Typography>
                             <Button 
                               variant="outlined" 
-                              sx={{ mt: 2, borderRadius: 2 }}
                               onClick={() => setTabValue(1)}
+                              sx={{ mt: 2 }}
                             >
                               Browse Pets
                             </Button>
                           </Box>
-                        ) : (
-                          <Box>
-                            {reservations.slice(0, 3).map((reservation, index) => (
-                              <Accordion key={index} sx={{ mb: 1, borderRadius: 2, overflow: 'hidden' }}>
-                                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                                      {reservation.itemId?.name || 'Pet'}
-                                    </Typography>
-                                    <Chip 
-                                      label={getStatusLabel(reservation.status)} 
-                                      size="small" 
-                                      color={getReservationStatusColor(reservation.status)}
-                                    />
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  
+                  {/* My Wishlist */}
+                  <Grid item xs={12} lg={6}>
+                    <Card sx={{ height: '100%' }}>
+                      <CardContent>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                          <Avatar sx={{ bgcolor: '#e91e63', mr: 2 }}>
+                            <FavoriteIcon />
+                          </Avatar>
+                          <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                            My Wishlist ({wishlistItems.length})
+                          </Typography>
+                        </Box>
+                        
+                        {wishlistItems.length > 0 ? (
+                          <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+                            {wishlistItems.slice(0, 5).map((item) => (
+                              <Box 
+                                key={item._id} 
+                                sx={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  p: 2, 
+                                  border: '1px solid #eee', 
+                                  borderRadius: 2, 
+                                  mb: 2,
+                                  '&:last-child': { mb: 0 }
+                                }}
+                              >
+                                {item.pet?.images?.length > 0 ? (
+                                  <CardMedia
+                                    component="img"
+                                    sx={{ width: 60, height: 60, borderRadius: 1, mr: 2 }}
+                                    image={resolveMediaUrl(item.pet.images[0])}
+                                    alt={item.pet.name}
+                                  />
+                                ) : (
+                                  <Box sx={{ width: 60, height: 60, bgcolor: '#f0f0f0', borderRadius: 1, mr: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <PetsIcon sx={{ color: '#999' }} />
                                   </Box>
-                                </AccordionSummary>
-                                <AccordionDetails>
-                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                    <Typography variant="caption" color="textSecondary">
-                                      Code: {reservation.reservationCode}
-                                    </Typography>
-                                    <Typography variant="caption" color="textSecondary">
-                                      Price: ₹{reservation.itemId?.price?.toLocaleString() || 'N/A'}
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-                                      <Button 
-                                        size="small"
-                                        variant="outlined"
-                                        onClick={() => navigate(`/User/petshop/reservation/${reservation._id}`)}
-                                        sx={{ borderRadius: 2 }}
-                                      >
-                                        View Details
-                                      </Button>
-                                      
-                                      {/* Show "Make Decision" button when reservation is approved */}
-                                      {reservation.status === 'approved' && (
-                                        <Button 
-                                          size="small"
-                                          variant="contained"
-                                          color="success"
-                                          onClick={() => navigate(`/User/petshop/purchase-decision/${reservation._id}`)}
-                                          sx={{ borderRadius: 2 }}
-                                        >
-                                          Make Decision
-                                        </Button>
-                                      )}
-                                      
-                                      {/* Show "Pay Now" button when user has decided to buy */}
-                                      {(reservation.status === 'going_to_buy' || reservation.status === 'payment_pending') && (
-                                        <Button 
-                                          size="small"
-                                          variant="contained"
-                                          startIcon={<PaymentIcon />}
-                                          onClick={() => navigate(`/User/petshop/payment/${reservation._id}`)}
-                                          sx={{ borderRadius: 2 }}
-                                        >
-                                          Pay Now
-                                        </Button>
-                                      )}
-                                      
-                                      {/* Show "Handover" button when pet is ready for pickup */}
-                                      {reservation.status === 'ready_pickup' && (
-                                        <Button 
-                                          size="small"
-                                          variant="contained"
-                                          startIcon={<QrCodeIcon />}
-                                          onClick={() => navigate(`/User/petshop/handover/${reservation._id}`)}
-                                          sx={{ borderRadius: 2 }}
-                                        >
-                                          Handover
-                                        </Button>
-                                      )}
-                                      
-                                      {/* Show cancel option for pending reservations */}
-                                      {['pending', 'approved', 'going_to_buy', 'payment_pending'].includes(reservation.status) && (
-                                        <Button 
-                                          size="small"
-                                          variant="outlined"
-                                          startIcon={<CancelIcon />}
-                                          onClick={() => handleCancelReservation(reservation)}
-                                          color="error"
-                                          sx={{ borderRadius: 2 }}
-                                        >
-                                          Cancel
-                                        </Button>
-                                      )}
-                                    </Box>
-                                  </Box>
-                                </AccordionDetails>
-                              </Accordion>
+                                )}
+                                
+                                <Box sx={{ flex: 1 }}>
+                                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium' }}>
+                                    {item.pet?.name || 'Unnamed Pet'}
+                                  </Typography>
+                                  <Typography variant="body2" color="textSecondary">
+                                    {item.pet?.breed?.name || 'Breed not specified'}
+                                  </Typography>
+                                </Box>
+                                
+                                <IconButton 
+                                  size="small"
+                                  onClick={() => navigate(`/User/petshop/pet/${item.pet._id}`)}
+                                >
+                                  <ViewIcon />
+                                </IconButton>
+                              </Box>
                             ))}
-                            {reservations.length > 3 && (
-                              <Typography variant="body2" color="textSecondary">
-                                ...and {reservations.length - 3} more
-                              </Typography>
-                            )}
+                          </Box>
+                        ) : (
+                          <Box sx={{ textAlign: 'center', py: 4 }}>
+                            <FavoriteIcon sx={{ fontSize: 48, color: '#ccc', mb: 2 }} />
+                            <Typography variant="body1" color="textSecondary">
+                              Your wishlist is empty
+                            </Typography>
+                            <Button 
+                              variant="outlined" 
+                              onClick={() => setTabValue(1)}
+                              sx={{ mt: 2 }}
+                            >
+                              Browse Pets
+                            </Button>
                           </Box>
                         )}
-                        <Button 
-                          variant="outlined" 
-                          fullWidth
-                          sx={{ mt: 2, borderRadius: 2 }}
-                          onClick={() => navigate('/User/petshop/reservations')}
-                        >
-                          View All Reservations
-                        </Button>
                       </CardContent>
                     </Card>
                   </Grid>
@@ -1418,7 +1442,6 @@ const BeautifulPetShopDashboard = () => {
         </Box>
       </Container>
 
-      {/* Reservation Dialog */}
       <ReservationDialog
         open={reservationDialogOpen}
         onClose={() => setReservationDialogOpen(false)}
@@ -1428,7 +1451,6 @@ const BeautifulPetShopDashboard = () => {
         onSubmit={handleReservationSubmit}
       />
 
-      {/* Payment Dialog */}
       <PaymentDialog
         open={paymentDialogOpen}
         onClose={() => setPaymentDialogOpen(false)}
@@ -1438,8 +1460,6 @@ const BeautifulPetShopDashboard = () => {
         onPayment={() => {}} // Add payment handler
         processingPayment={processingPayment}
       />
-
-      {/* Handover Dialog */}
       <HandoverDialog
         open={handoverDialogOpen}
         onClose={() => setHandoverDialogOpen(false)}
@@ -1450,14 +1470,12 @@ const BeautifulPetShopDashboard = () => {
         onShowQrCode={() => setHandoverData(prev => ({ ...prev, qrDialogOpen: true }))}
       />
 
-      {/* QR Code Dialog */}
       <QrCodeDialog
         open={handoverData.qrDialogOpen}
         onClose={() => setHandoverData(prev => ({ ...prev, qrDialogOpen: false }))}
         selectedReservation={selectedReservation}
       />
 
-      {/* Filters Dialog */}
       <FiltersDialog
         open={filtersDialogOpen}
         onClose={() => setFiltersDialogOpen(false)}
@@ -1465,7 +1483,6 @@ const BeautifulPetShopDashboard = () => {
         setFilters={setFilters}
       />
 
-      {/* Sort Dialog */}
       <SortDialog
         open={sortDialogOpen}
         onClose={() => setSortDialogOpen(false)}
@@ -1473,7 +1490,6 @@ const BeautifulPetShopDashboard = () => {
         setSortOption={setSortOption}
       />
 
-      {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
@@ -1489,9 +1505,5 @@ const BeautifulPetShopDashboard = () => {
     </Box>
   )
 }
-
-// Add missing import for StoreIcon
-// StoreIcon is aliased to PetShopIcon
 const StoreIcon = PetShopIcon
-
 export default BeautifulPetShopDashboard

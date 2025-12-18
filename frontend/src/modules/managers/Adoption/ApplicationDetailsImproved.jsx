@@ -50,7 +50,7 @@ const ApplicationDetailsImproved = () => {
       // 1) Try to fetch existing contract
       let contractURL = ''
       try {
-        const resGet = await apiClient.get(`/adoption/manager/contracts/${id}`)
+        const resGet = await apiClient.get(`/adoption/manager/certificates/${id}`)
         contractURL = resGet?.data?.data?.contractURL || ''
       } catch (e) {
         // 2) If not found, generate it
@@ -128,6 +128,18 @@ const ApplicationDetailsImproved = () => {
       const message = response?.data?.message || 'Handover scheduled successfully'
       alert(message)
       
+      // Automatically switch to the Actions tab to make it easier for managers to complete handover
+      setActiveTab('actions')
+      
+      // Show a more prominent notification about the next step
+      setTimeout(() => {
+        const nextStep = confirm("Handover scheduled successfully! An OTP has been sent to the adopter's email.\n\nClick OK to open the OTP entry form now, or Cancel to do it later.");
+        if (nextStep) {
+          // Automatically show the OTP modal
+          setShowOTPModal(true);
+        }
+      }, 500);
+      
       // If email failed to send, show additional warning
       if (response?.data?.emailError) {
         alert(`Warning: ${response.data.emailError}\n\nPlease inform the adopter about their handover details manually.`)
@@ -160,6 +172,46 @@ const ApplicationDetailsImproved = () => {
       alert(errorMessage)
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Add approve application function
+  const approveApplication = async () => {
+    const notes = prompt('Add any notes for approval (optional):')
+    if (notes !== null) {
+      try {
+        setSaving(true)
+        await adoptionAPI.managerPatchRequest(id, {
+          status: 'approved',
+          notes: notes || ''
+        })
+        await load()
+        alert('Application approved successfully')
+      } catch (e) {
+        alert(e?.response?.data?.error || 'Failed to approve application')
+      } finally {
+        setSaving(false)
+      }
+    }
+  }
+
+  // Add reject application function
+  const rejectApplication = async () => {
+    const reason = prompt('Reason for rejection:')
+    if (reason) {
+      try {
+        setSaving(true)
+        await adoptionAPI.managerPatchRequest(id, {
+          status: 'rejected',
+          reason: reason
+        })
+        await load()
+        alert('Application rejected')
+      } catch (e) {
+        alert(e?.response?.data?.error || 'Failed to reject application')
+      } finally {
+        setSaving(false)
+      }
     }
   }
 
@@ -297,7 +349,7 @@ const ApplicationDetailsImproved = () => {
     // Show OTP modal instead of prompt
     setShowOTPModal(true)
   }
-  
+
   const handleOTPSubmit = async (otp) => {
     setSaving(true)
     try {
@@ -316,7 +368,7 @@ const ApplicationDetailsImproved = () => {
       setSaving(false)
     }
   }
-  
+
   const handleOTPRegenerate = async () => {
     if (!window.confirm('Are you sure you want to regenerate the OTP? The adopter will receive a new OTP via email.')) {
       return
@@ -599,36 +651,47 @@ const ApplicationDetailsImproved = () => {
                   <div className="space-y-4">
                     <div className="flex justify-between">
                       <span className="text-gray-500">Pet Experience</span>
-                      <span className="font-medium capitalize">{app.applicationData?.petExperience?.replace(/_/g, ' ') || 'N/A'}</span>
+                      <span className="font-medium capitalize">
+                        {app.applicationData?.petExperience === 'none' ? 'No experience' : 
+                         app.applicationData?.petExperience === 'some' ? 'Some experience' : 
+                         app.applicationData?.petExperience === 'extensive' ? 'Extensive experience' : 'N/A'}
+                      </span>
                     </div>
-                    {app.applicationData?.previousPets && (
-                      <div>
-                        <span className="text-gray-500">Previous Pets</span>
-                        <p className="mt-1 font-medium">{app.applicationData.previousPets}</p>
-                      </div>
-                    )}
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Previous Pets</span>
+                      <span className="font-medium">{app.applicationData?.previousPets || 'N/A'}</span>
+                    </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Work Schedule</span>
-                      <span className="font-medium capitalize">{app.applicationData?.workSchedule?.replace(/_/g, ' ') || 'N/A'}</span>
+                      <span className="font-medium capitalize">
+                        {app.applicationData?.workSchedule?.replace(/_/g, ' ') || 'N/A'}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Time at Home</span>
-                      <span className="font-medium capitalize">{app.applicationData?.timeAtHome?.replace(/_/g, ' ') || 'N/A'}</span>
+                      <span className="font-medium capitalize">
+                        {app.applicationData?.timeAtHome === 'less_than_4_hours' ? 'Less than 4 hours' :
+                         app.applicationData?.timeAtHome === '4_8_hours' ? '4-8 hours' :
+                         app.applicationData?.timeAtHome === '8_12_hours' ? '8-12 hours' :
+                         app.applicationData?.timeAtHome === 'more_than_12_hours' ? 'More than 12 hours' : 'N/A'}
+                      </span>
                     </div>
                   </div>
                 </div>
                 
                 <div className="bg-gray-50 rounded-lg p-5">
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">Adoption Motivation</h4>
+                  <h4 className="text-lg font-medium text-gray-900 mb-4">Motivation</h4>
                   <div className="space-y-4">
                     <div>
                       <span className="text-gray-500">Reason for Adoption</span>
                       <p className="mt-1 font-medium">{app.applicationData?.adoptionReason || 'N/A'}</p>
                     </div>
-                    <div>
-                      <span className="text-gray-500">Expectations</span>
-                      <p className="mt-1 font-medium">{app.applicationData?.expectations || 'N/A'}</p>
-                    </div>
+                    {app.applicationData?.expectations && (
+                      <div>
+                        <span className="text-gray-500">Expectations</span>
+                        <p className="mt-1 font-medium">{app.applicationData.expectations}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -639,96 +702,88 @@ const ApplicationDetailsImproved = () => {
         {activeTab === 'pet' && (
           <div className="p-6">
             <h3 className="text-xl font-semibold text-gray-900 mb-6">Pet Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-gray-50 rounded-lg p-5">
-                <h4 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h4>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Name</span>
-                    <span className="font-medium">{app.petId?.name || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Species</span>
-                    <span className="font-medium capitalize">{app.petId?.species || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Breed</span>
-                    <span className="font-medium">{app.petId?.breed || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Age</span>
-                    <span className="font-medium">{app.petId?.ageDisplay || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Gender</span>
-                    <span className="font-medium capitalize">
-                      {app.petId?.gender ? app.petId.gender.charAt(0).toUpperCase() + app.petId.gender.slice(1) : 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Color</span>
-                    <span className="font-medium capitalize">{app.petId?.color || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Weight</span>
-                    <span className="font-medium">{app.petId?.weight ? `${app.petId.weight} kg` : 'N/A'}</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
                 <div className="bg-gray-50 rounded-lg p-5">
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">Health Information</h4>
-                  <div className="space-y-4">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Health Status</span>
-                      <span className="font-medium capitalize">
-                        {app.petId?.healthStatus?.replace(/_/g, ' ') || 'N/A'}
-                      </span>
+                  <h4 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-500">Name</p>
+                      <p className="font-medium">{app.petId?.name || 'N/A'}</p>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Vaccination Status</span>
-                      <span className="font-medium capitalize">
-                        {app.petId?.vaccinationStatus?.replace(/_/g, ' ') || 'N/A'}
-                      </span>
+                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-500">Species</p>
+                      <p className="font-medium capitalize">{app.petId?.species || 'N/A'}</p>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Temperament</span>
-                      <span className="font-medium capitalize">
-                        {app.petId?.temperament?.replace(/_/g, ' ') || 'N/A'}
-                      </span>
+                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-500">Breed</p>
+                      <p className="font-medium">{app.petId?.breed || 'N/A'}</p>
                     </div>
-                    <div>
-                      <span className="text-gray-500">Description</span>
-                      <p className="mt-1 font-medium">{app.petId?.description || 'N/A'}</p>
+                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-500">Gender</p>
+                      <p className="font-medium capitalize">{app.petId?.gender || 'N/A'}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-500">Age</p>
+                      <p className="font-medium">{app.petId?.ageDisplay || 'N/A'}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-500">Weight</p>
+                      <p className="font-medium">{app.petId?.weight ? `${app.petId.weight} kg` : 'N/A'}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-500">Color</p>
+                      <p className="font-medium capitalize">{app.petId?.color || 'N/A'}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-500">Temperament</p>
+                      <p className="font-medium capitalize">{app.petId?.temperament?.replace(/_/g, ' ') || 'N/A'}</p>
                     </div>
                   </div>
                 </div>
                 
-                <div className="bg-gray-50 rounded-lg p-5">
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">Adoption Details</h4>
-                  <div className="space-y-4">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Adoption Fee</span>
-                      <span className="font-medium">₹{app.petId?.adoptionFee || 0}</span>
+                <div className="bg-gray-50 rounded-lg p-5 mt-6">
+                  <h4 className="text-lg font-medium text-gray-900 mb-4">Health Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-500">Health Status</p>
+                      <p className="font-medium capitalize">{app.petId?.healthStatus?.replace(/_/g, ' ') || 'N/A'}</p>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Status</span>
-                      <span className="font-medium capitalize">{app.petId?.status || 'N/A'}</span>
+                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-500">Vaccination Status</p>
+                      <p className="font-medium capitalize">{app.petId?.vaccinationStatus?.replace(/_/g, ' ') || 'N/A'}</p>
                     </div>
-                    {app.petId?.specialNeeds && app.petId.specialNeeds.length > 0 && (
-                      <div>
-                        <span className="text-gray-500">Special Needs</span>
-                        <div className="mt-1 flex flex-wrap gap-2">
-                          {app.petId.specialNeeds.map((need, index) => (
-                            <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                              {need}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    <div className="md:col-span-2 bg-white p-4 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-500">Description</p>
+                      <p className="font-medium">{app.petId?.description || 'N/A'}</p>
+                    </div>
                   </div>
+                </div>
+              </div>
+              
+              <div>
+                <div className="bg-gray-50 rounded-lg p-5">
+                  <h4 className="text-lg font-medium text-gray-900 mb-4">Images</h4>
+                  {app.petId?.images && app.petId.images.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {app.petId.images.map((img, index) => (
+                        <div key={index} className="aspect-square rounded-lg overflow-hidden bg-gray-200">
+                          <img 
+                            src={resolveMediaUrl(img.url)} 
+                            alt={img.caption || `Pet image ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <p className="mt-2">No images available</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -747,50 +802,47 @@ const ApplicationDetailsImproved = () => {
                 <p className="mt-1 text-sm text-gray-500">No documents have been uploaded by the applicant.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {getApplicantDocuments().map((doc, index) => {
-                  // Handle different document formats
                   const docObj = typeof doc === 'string' ? { url: doc } : doc;
-                  const url = docObj?.url || '';
-                  const name = docObj?.name || url.split('/').pop() || `Document ${index + 1}`;
-                  const type = docObj?.type || (url.endsWith('.pdf') ? 'application/pdf' : 'image');
+                  const url = resolveMediaUrl(docObj.url);
+                  const type = docObj.type || (url.match(/\.(pdf|doc|docx)$/i) ? 'application/' + (url.match(/\.pdf$/i) ? 'pdf' : url.match(/\.docx$/i) ? 'vnd.openxmlformats-officedocument.wordprocessingml.document' : 'msword') : 'image');
                   
                   return (
-                    <div key={index} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10 bg-gray-100 rounded-md flex items-center justify-center">
-                          <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            {type === 'application/pdf' ? (
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            ) : (
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            )}
+                    <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
+                      {type === 'application/pdf' ? (
+                        <div className="bg-red-50 aspect-video flex items-center justify-center">
+                          <svg className="h-12 w-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                         </div>
-                        <div className="ml-3">
-                          <p className="text-sm font-medium text-gray-900 truncate max-w-xs">{name}</p>
-                          <p className="text-xs text-gray-500 capitalize">{type.split('/')[1] || type}</p>
+                      ) : type.startsWith('image') ? (
+                        <div className="aspect-video bg-gray-200">
+                          <img src={url} alt={docObj.name || `Document ${index + 1}`} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="bg-blue-50 aspect-video flex items-center justify-center">
+                          <svg className="h-12 w-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="p-3">
+                        <h4 className="font-medium text-sm truncate">{docObj.name || `Document ${index + 1}`}</h4>
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-xs text-gray-500">{type.split('/')[1]?.toUpperCase() || 'FILE'}</span>
+                          <a 
+                            href={url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            View
+                          </a>
                         </div>
                       </div>
-                      <div className="flex space-x-2">
-                        <a 
-                          href={resolveMediaUrl(url)} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                        >
-                          View
-                        </a>
-                        <a 
-                          href={resolveMediaUrl(url)} 
-                          download={name}
-                          className="text-green-600 hover:text-green-800 text-sm font-medium"
-                        >
-                          Download
-                        </a>
-                      </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             )}
@@ -813,55 +865,14 @@ const ApplicationDetailsImproved = () => {
                     <div className="flex flex-col sm:flex-row gap-3">
                       <button 
                         className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex-1"
-                        onClick={async () => {
-                          const notes = prompt('Add any notes for approval (optional):')
-                          if (notes !== null) {
-                            try {
-                              setSaving(true)
-                              await apiClient.patch(`/adoption/manager/applications/${id}`, {
-                                status: 'approved',
-                                notes: notes || ''
-                              })
-                              await load()
-                              // Instead of showing an alert, show a more user-friendly message
-                              // and avoid any immediate redirects or reloads that might cause token issues
-                              setTimeout(() => {
-                                alert('Application approved successfully')
-                              }, 100)
-                            } catch (e) {
-                              // Handle error without causing redirects
-                              setTimeout(() => {
-                                alert(e?.response?.data?.error || 'Failed to approve application')
-                              }, 100)
-                            } finally {
-                              setSaving(false)
-                            }
-                          }
-                        }}
+                        onClick={approveApplication}
                         disabled={saving}
                       >
                         {saving ? 'Approving...' : 'Approve Application'}
                       </button>
                       <button 
                         className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex-1"
-                        onClick={async () => {
-                          const reason = prompt('Reason for rejection:')
-                          if (reason) {
-                            try {
-                              setSaving(true)
-                              await apiClient.patch(`/adoption/manager/applications/${id}`, {
-                                status: 'rejected',
-                                reason: reason
-                              })
-                              await load()
-                              alert('Application rejected')
-                            } catch (e) {
-                              alert(e?.response?.data?.error || 'Failed to reject application')
-                            } finally {
-                              setSaving(false)
-                            }
-                          }
-                        }}
+                        onClick={rejectApplication}
                         disabled={saving}
                       >
                         {saving ? 'Rejecting...' : 'Reject Application'}
@@ -1201,66 +1212,48 @@ const ApplicationDetailsImproved = () => {
                         <div className="w-0.5 h-full bg-gray-200 mt-1"></div>
                       </div>
                       <div className="pb-4">
-                        <p className="text-sm font-medium text-gray-900">Application Submitted</p>
-                        <p className="text-xs text-gray-500">{formatDateTime(app.createdAt)}</p>
+                        <p className="text-sm text-gray-500">Application submitted</p>
+                        <p className="text-sm font-medium">{formatDateTime(app.createdAt)}</p>
                       </div>
                     </div>
                     
-                    {app.reviewedAt && (
-                      <div className="flex">
+                    {app.statusHistory && app.statusHistory.map((history, index) => (
+                      <div key={index} className="flex">
                         <div className="flex flex-col items-center mr-4">
-                          <div className={`w-3 h-3 rounded-full ${app.status === 'approved' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                          <div className="w-0.5 h-full bg-gray-200 mt-1"></div>
+                          <div className={`w-3 h-3 rounded-full ${history.status === 'approved' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                          {index < app.statusHistory.length - 1 && <div className="w-0.5 h-full bg-gray-200 mt-1"></div>}
                         </div>
-                        <div className="pb-4">
-                          <p className="text-sm font-medium text-gray-900">
-                            Application {app.status === 'approved' ? 'Approved' : 'Rejected'}
+                        <div className={`pb-4 ${index === app.statusHistory.length - 1 ? '' : 'mb-4'}`}>
+                          <p className="text-sm font-medium">
+                            Application {history.status === 'approved' ? 'Approved' : 'Rejected'}
                           </p>
-                          <p className="text-xs text-gray-500">{formatDateTime(app.reviewedAt)}</p>
-                          {app.reviewedBy && (
-                            <p className="text-xs text-gray-500">By {app.reviewedBy.name}</p>
+                          <p className="text-sm text-gray-500">{formatDateTime(history.changedAt)}</p>
+                          {history.notes && (
+                            <p className="text-sm mt-1 bg-gray-50 p-2 rounded">{history.notes}</p>
+                          )}
+                          {history.changedBy && (
+                            <p className="text-xs text-gray-400 mt-1">By: {history.changedBy.name || 'Manager'}</p>
                           )}
                         </div>
                       </div>
-                    )}
+                    ))}
                     
-                    {app.paymentDetails?.paymentDate && (
-                      <div className="flex">
-                        <div className="flex flex-col items-center mr-4">
-                          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                          <div className="w-0.5 h-full bg-gray-200 mt-1"></div>
-                        </div>
-                        <div className="pb-4">
-                          <p className="text-sm font-medium text-gray-900">Payment Completed</p>
-                          <p className="text-xs text-gray-500">{formatDateTime(app.paymentDetails.paymentDate)}</p>
-                        </div>
+                    <div className="flex">
+                      <div className="flex flex-col items-center mr-4">
+                        <div className={`w-3 h-3 rounded-full ${app.status === 'approved' ? 'bg-green-500' : app.status === 'rejected' ? 'bg-red-500' : 'bg-gray-300'}`}></div>
                       </div>
-                    )}
-                    
-                    {app.handover?.scheduledAt && (
-                      <div className="flex">
-                        <div className="flex flex-col items-center mr-4">
-                          <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                          <div className="w-0.5 h-full bg-gray-200 mt-1"></div>
-                        </div>
-                        <div className="pb-4">
-                          <p className="text-sm font-medium text-gray-900">Handover Scheduled</p>
-                          <p className="text-xs text-gray-500">{formatDateTime(app.handover.scheduledAt)}</p>
-                        </div>
+                      <div>
+                        <p className="text-sm font-medium">
+                          {app.status === 'approved' ? 'Currently Approved' : 
+                           app.status === 'rejected' ? 'Currently Rejected' : 'Pending Review'}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {app.status === 'approved' || app.status === 'rejected' 
+                            ? formatDateTime(app.reviewedAt) 
+                            : 'Awaiting manager review'}
+                        </p>
                       </div>
-                    )}
-                    
-                    {app.handoverCompletedAt && (
-                      <div className="flex">
-                        <div className="flex flex-col items-center mr-4">
-                          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">Handover Completed</p>
-                          <p className="text-xs text-gray-500">{formatDateTime(app.handoverCompletedAt)}</p>
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>

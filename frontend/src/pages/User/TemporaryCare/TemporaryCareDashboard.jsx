@@ -1,155 +1,235 @@
 import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import ModuleDashboardLayout from '../../../components/Module/ModuleDashboardLayout'
+import { useNavigate, Link } from 'react-router-dom'
 import { temporaryCareAPI } from '../../../services/api'
 
-export default function TemporaryCareDashboard() {
-  const [hosts, setHosts] = useState([])
-  const [stays, setStays] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState('overview')
+const TemporaryCareDashboard = () => {
+  const navigate = useNavigate()
+  const [activeCares, setActiveCares] = useState([])
+  const [careHistory, setCareHistory] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    loadData()
+    loadDashboardData()
   }, [])
 
-  const loadData = async () => {
-    setLoading(true)
+  const loadDashboardData = async () => {
     try {
-      // Load hosts
-      const hostsRes = await temporaryCareAPI.listHosts()
-      setHosts(hostsRes.data?.data?.hosts || [])
+      setLoading(true)
+      const [activeResponse, historyResponse] = await Promise.all([
+        temporaryCareAPI.getActiveCare(),
+        temporaryCareAPI.getCareHistory()
+      ])
       
-      // Load stays
-      const staysRes = await temporaryCareAPI.listMyStays()
-      setStays(staysRes.data?.data?.stays || [])
-    } catch (error) {
-      console.error('Error loading temporary care data:', error)
-      setHosts([])
-      setStays([])
+      setActiveCares(activeResponse.data?.data?.items || [])
+      setCareHistory(historyResponse.data?.data?.items || [])
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Failed to load dashboard data')
     } finally {
       setLoading(false)
     }
   }
 
-  const actions = [
-    { label: 'Find Host', onClick: () => setTab('find'), color: 'bg-emerald-600' },
-    { label: 'My Stays', onClick: () => setTab('stays'), color: 'bg-blue-600' },
-  ]
+  const handleVerificationSuccess = (updatedCare) => {
+    // Refresh the dashboard data
+    loadDashboardData()
+    // Show success message or navigate to details page
+    navigate('/User/temporary-care')
+  }
 
-  const stats = [
-    { label: 'Available Hosts', value: hosts.length, icon: '🏠' },
-    { label: 'My Stays', value: stays.length, icon: '🛏️' },
-  ]
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'pending': return '#ff9800'
+      case 'active': return '#4caf50'
+      case 'completed': return '#2196f3'
+      case 'cancelled': return '#f44336'
+      default: return '#9e9e9e'
+    }
+  }
 
-  const tabs = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'find', label: 'Find Host' },
-    { key: 'stays', label: 'My Stays' },
-  ]
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A'
+    return new Date(dateString).toLocaleDateString()
+  }
 
-  const Overview = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="bg-white border rounded p-4">
-        <h3 className="font-semibold mb-2">Featured Hosts</h3>
-        <ul className="text-sm space-y-2">
-          {hosts.slice(0,5).map((h,i)=> (
-            <li key={i} className="flex justify-between"><span>{h.name || 'Host'}</span><span className="text-gray-500">{h.city || '-'}</span></li>
-          ))}
-          {hosts.length===0 && <li className="text-gray-500">No hosts available.</li>}
-        </ul>
-      </div>
-      <div className="bg-white border rounded p-4">
-        <h3 className="font-semibold mb-2">Upcoming Stays</h3>
-        <ul className="text-sm space-y-2">
-          {stays.slice(0,5).map((s,i)=> (
-            <li key={i} className="flex justify-between"><span>{s.petName || 'Pet'}</span><span className="text-gray-500">{s.from} → {s.to}</span></li>
-          ))}
-          {stays.length===0 && <li className="text-gray-500">No stays scheduled.</li>}
-        </ul>
-      </div>
-    </div>
-  )
+  const formatTime = (dateString) => {
+    if (!dateString) return 'N/A'
+    return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
 
-  const Find = () => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {hosts.map((h,i)=> (
-        <div key={i} className="bg-white border rounded p-4">
-          <div className="font-semibold">{h.name || 'Host'}</div>
-          <div className="text-gray-600 text-sm">{h.city || '-'}</div>
-          <div className="text-xs text-gray-500 mt-1">Capacity: {h.capacity || '-'}</div>
-          <div className="mt-2">
-            <button 
-              className="px-3 py-1 bg-emerald-600 text-white rounded text-sm"
-              onClick={() => window.location.href = `/User/temporary-care/hosts/${h._id}`}
-            >
-              View Details
-            </button>
-          </div>
-        </div>
-      ))}
-      {hosts.length===0 && <div className="text-gray-500">No hosts available.</div>}
-    </div>
-  )
-
-  const MyStays = () => (
-    <div className="bg-white border rounded">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="text-left border-b">
-            <th className="py-2 px-3">Pet</th>
-            <th className="py-2 px-3">Host</th>
-            <th className="py-2 px-3">From</th>
-            <th className="py-2 px-3">To</th>
-            <th className="py-2 px-3">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {stays.map((s,i)=> (
-            <tr key={i} className="border-b">
-              <td className="py-2 px-3">{s.petName || 'Pet'}</td>
-              <td className="py-2 px-3">{s.hostName || '-'}</td>
-              <td className="py-2 px-3">{s.from ? new Date(s.from).toLocaleDateString() : '-'}</td>
-              <td className="py-2 px-3">{s.to ? new Date(s.to).toLocaleDateString() : '-'}</td>
-              <td className="py-2 px-3">
-                <span className={`px-2 py-1 rounded text-xs ${
-                  s.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                  s.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                  s.status === 'completed' ? 'bg-blue-100 text-blue-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {s.status || '-'}
-                </span>
-              </td>
-            </tr>
-          ))}
-          {stays.length===0 && <tr><td className="py-3 px-3 text-gray-500" colSpan={5}>No stays found.</td></tr>}
-        </tbody>
-      </table>
-    </div>
-  )
+  if (loading) {
+    return <div style={{ padding: 24 }}>Loading...</div>
+  }
 
   return (
-    <ModuleDashboardLayout
-      title="Temporary Care"
-      description="Find hosts and manage your pet's temporary stays"
-      actions={actions}
-      stats={stats}
-      tabs={tabs}
-      activeTab={tab}
-      onTabChange={setTab}
-    >
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-        </div>
-      ) : (
-        <>
-          {tab === 'overview' && <Overview />}
-          {tab === 'find' && <Find />}
-          {tab === 'stays' && <MyStays />}
-        </>
-      )}
-    </ModuleDashboardLayout>
+    <div style={{ padding: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <h2>Temporary Care Dashboard</h2>
+        <button 
+          onClick={() => navigate('/User/temporary-care/request')}
+          style={{ 
+            padding: '10px 16px', 
+            borderRadius: 8, 
+            background: '#5b8cff', 
+            color: 'white', 
+            border: 'none',
+            cursor: 'pointer'
+          }}
+        >
+          Request Temporary Care
+        </button>
+      </div>
+
+      {error && <div style={{ color: '#b00020', marginBottom: 16 }}>{error}</div>}
+
+      <div style={{ marginBottom: 32 }}>
+        <h3 style={{ marginBottom: 16 }}>Active Care</h3>
+        {activeCares.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', background: '#f5f5f5', borderRadius: 8 }}>
+            No active temporary care records
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 16 }}>
+            {activeCares.map(care => (
+              <div key={care._id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div>
+                    <h4 style={{ margin: 0 }}>{care.pet?.name || 'Unnamed Pet'}</h4>
+                    <p style={{ margin: '4px 0 0 0', color: '#666' }}>
+                      {care.storeName} ({care.storeId})
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ 
+                      padding: '4px 8px', 
+                      borderRadius: 4, 
+                      background: getStatusColor(care.status), 
+                      color: 'white', 
+                      fontSize: 12 
+                    }}>
+                      {care.status.charAt(0).toUpperCase() + care.status.slice(1)}
+                    </span>
+                    <p style={{ margin: '4px 0 0 0', color: '#666', fontSize: 12 }}>
+                      {formatDate(care.startDate)} - {formatDate(care.endDate)}
+                    </p>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                  {care.status === 'pending' && (
+                    <Link 
+                      to={`/User/temporary-care/drop-otp/${care._id}`}
+                      state={{ onVerificationSuccess: handleVerificationSuccess }}
+                      style={{ 
+                        padding: '8px 12px', 
+                        borderRadius: 6, 
+                        background: '#4caf50', 
+                        color: 'white', 
+                        textDecoration: 'none',
+                        fontSize: 14
+                      }}
+                    >
+                      Drop-off OTP
+                    </Link>
+                  )}
+                  
+                  {care.status === 'active' && (
+                    <Link 
+                      to={`/User/temporary-care/pickup-otp/${care._id}`}
+                      state={{ onVerificationSuccess: handleVerificationSuccess }}
+                      style={{ 
+                        padding: '8px 12px', 
+                        borderRadius: 6, 
+                        background: '#2196f3', 
+                        color: 'white', 
+                        textDecoration: 'none',
+                        fontSize: 14
+                      }}
+                    >
+                      Pickup OTP
+                    </Link>
+                  )}
+                  
+                  <Link 
+                    to={`/User/temporary-care/${care._id}`}
+                    style={{ 
+                      padding: '8px 12px', 
+                      borderRadius: 6, 
+                      background: '#eee', 
+                      color: '#333', 
+                      textDecoration: 'none',
+                        fontSize: 14
+                    }}
+                  >
+                    View Details
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 style={{ marginBottom: 16 }}>Care History</h3>
+        {careHistory.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', background: '#f5f5f5', borderRadius: 8 }}>
+            No temporary care history
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 16 }}>
+            {careHistory.map(care => (
+              <div key={care._id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div>
+                    <h4 style={{ margin: 0 }}>{care.pet?.name || 'Unnamed Pet'}</h4>
+                    <p style={{ margin: '4px 0 0 0', color: '#666' }}>
+                      {care.storeName} ({care.storeId})
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ 
+                      padding: '4px 8px', 
+                      borderRadius: 4, 
+                      background: getStatusColor(care.status), 
+                      color: 'white', 
+                      fontSize: 12 
+                    }}>
+                      {care.status.charAt(0).toUpperCase() + care.status.slice(1)}
+                    </span>
+                    <p style={{ margin: '4px 0 0 0', color: '#666', fontSize: 12 }}>
+                      {formatDate(care.startDate)} - {formatDate(care.endDate)}
+                    </p>
+                    {care.handover?.completedAt && (
+                      <p style={{ margin: '4px 0 0 0', color: '#666', fontSize: 12 }}>
+                        Completed: {formatTime(care.handover.completedAt)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                
+                <div style={{ marginTop: 16 }}>
+                  <Link 
+                    to={`/User/temporary-care/${care._id}`}
+                    style={{ 
+                      padding: '8px 12px', 
+                      borderRadius: 6, 
+                      background: '#eee', 
+                      color: '#333', 
+                      textDecoration: 'none',
+                      fontSize: 14
+                    }}
+                  >
+                    View Details
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
+
+export default TemporaryCareDashboard

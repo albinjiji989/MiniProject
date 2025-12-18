@@ -15,7 +15,9 @@ import {
   CircularProgress,
   Alert,
   Paper,
-  useTheme
+  useTheme,
+  Tabs,
+  Tab
 } from '@mui/material'
 import {
   Search as SearchIcon,
@@ -25,11 +27,11 @@ import {
   BookOnline as ReserveIcon,
   TrendingUp as TrendingIcon,
   LocationOn as LocationIcon,
-  Star as StarIcon
+  Star as StarIcon,
+  Insights
 } from '@mui/icons-material'
 import { petShopAPI } from '../../../services/api'
 import { useAuth } from '../../../contexts/AuthContext'
-
 const UserPetShopDashboard = () => {
   const theme = useTheme()
   const navigate = useNavigate()
@@ -87,24 +89,24 @@ const UserPetShopDashboard = () => {
 
   const quickActions = [
     { 
-      label: 'Browse Pets', 
+      title: 'Browse Pets', 
       icon: <PetsIcon />, 
+      color: 'bg-blue-500',
       onClick: () => navigate('/User/petshop/shop'),
-      color: '#667eea'
     },
     { 
-      label: 'My Wishlist', 
-      icon: <FavoriteIcon />, 
-      onClick: () => navigate('/User/petshop/wishlist'),
-      color: '#f093fb'
-    },
-    { 
-      label: 'My Reservations', 
-      icon: <ReserveIcon />, 
+      title: 'My Reservations', 
+      icon: <EventIcon />, 
+      color: 'bg-green-500',
       onClick: () => navigate('/User/petshop/reservations'),
-      color: '#4facfe'
+    },
+    { 
+      title: 'Wishlist', 
+      icon: <FavoriteIcon />, 
+      color: 'bg-red-500',
+      onClick: () => navigate('/User/petshop/wishlist'),
     }
-  ]
+  ];
 
   const statCards = [
     { 
@@ -132,6 +134,8 @@ const UserPetShopDashboard = () => {
       color: '#43e97b'
     }
   ]
+
+  const [activeTab, setActiveTab] = useState(0)
 
   if (loading) {
     return (
@@ -161,358 +165,374 @@ const UserPetShopDashboard = () => {
         </Typography>
       </Box>
 
-      {/* Quick Actions */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {quickActions.map((action, index) => (
-          <Grid item xs={12} sm={4} key={index}>
-            <Card 
-              sx={{ 
-                height: '100%',
-                cursor: 'pointer',
-                background: `linear-gradient(135deg, ${action.color} 0%, ${theme.palette.grey[800]} 100%)`,
-                color: 'white',
-                transition: 'transform 0.3s ease',
-                '&:hover': {
-                  transform: 'translateY(-5px)'
+      {/* Main Tabs */}
+      <Tabs 
+        value={activeTab} 
+        onChange={(e, newValue) => setActiveTab(newValue)} 
+        sx={{ mb: 4 }}
+        variant="scrollable"
+        scrollButtons="auto"
+      >
+        <Tab label="Dashboard" />
+      </Tabs>
+
+      {activeTab === 0 && (
+        <>
+          {/* Quick Actions */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            {quickActions.map((action, index) => (
+              <Grid item xs={12} sm={4} key={index}>
+                <Card 
+                  sx={{ 
+                    height: '100%',
+                    cursor: 'pointer',
+                    background: `linear-gradient(135deg, ${action.color} 0%, ${theme.palette.grey[800]} 100%)`,
+                    color: 'white',
+                    transition: 'transform 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-5px)'
+                    }
+                  }}
+                  onClick={action.onClick}
+                >
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      {action.icon}
+                      <Typography variant="h6" sx={{ ml: 1, fontWeight: 'bold' }}>
+                        {action.label}
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2">
+                      Access your {action.label.toLowerCase()} quickly
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+
+          {/* Stats Overview */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            {statCards.map((stat, index) => (
+              <Grid item xs={12} sm={6} md={3} key={index}>
+                <Card sx={{ height: '100%' }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                      <Box 
+                        sx={{ 
+                          width: 60, 
+                          height: 60, 
+                          borderRadius: '50%', 
+                          backgroundColor: `${stat.color}20`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: stat.color
+                        }}
+                      >
+                        {stat.icon}
+                      </Box>
+                    </Box>
+                    <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+                      {stat.value}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {stat.label}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+
+          {/* Search Section */}
+          <Paper elevation={0} sx={{ p: 3, mb: 4, backgroundColor: theme.palette.grey[100] }}>
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
+              Find Your Perfect Pet
+            </Typography>
+            <TextField
+              fullWidth
+              placeholder="Search for pets by breed, species, or name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  navigate(`/User/petshop/shop?search=${encodeURIComponent(searchTerm)}`)
                 }
               }}
-              onClick={action.onClick}
-            >
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  {action.icon}
-                  <Typography variant="h6" sx={{ ml: 1, fontWeight: 'bold' }}>
-                    {action.label}
-                  </Typography>
-                </Box>
-                <Typography variant="body2">
-                  Access your {action.label.toLowerCase()} quickly
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
+            />
+            <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
+              <Chip 
+                label="Dogs" 
+                onClick={() => navigate('/User/petshop/shop?species=dog')} 
+                sx={{ cursor: 'pointer' }} 
+              />
+              <Chip 
+                label="Cats" 
+                onClick={() => navigate('/User/petshop/shop?species=cat')} 
+                sx={{ cursor: 'pointer' }} 
+              />
+              <Chip 
+                label="Birds" 
+                onClick={() => navigate('/User/petshop/shop?species=bird')} 
+                sx={{ cursor: 'pointer' }} 
+              />
+              <Chip 
+                label="Small Pets" 
+                onClick={() => navigate('/User/petshop/shop?species=small')} 
+                sx={{ cursor: 'pointer' }} 
+              />
+            </Box>
+          </Paper>
 
-      {/* Stats Overview */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {statCards.map((stat, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Box 
-                    sx={{ 
-                      width: 60, 
-                      height: 60, 
-                      borderRadius: '50%', 
-                      backgroundColor: `${stat.color}20`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: stat.color
-                    }}
-                  >
-                    {stat.icon}
-                  </Box>
-                </Box>
-                <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
-                  {stat.value}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {stat.label}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* Search Section */}
-      <Paper elevation={0} sx={{ p: 3, mb: 4, backgroundColor: theme.palette.grey[100] }}>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-          Find Your Perfect Pet
-        </Typography>
-        <TextField
-          fullWidth
-          placeholder="Search for pets by breed, species, or name..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-          onKeyPress={(e) => {
-            if (e.key === 'Enter') {
-              navigate(`/User/petshop/shop?search=${encodeURIComponent(searchTerm)}`)
-            }
-          }}
-        />
-        <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
-          <Chip 
-            label="Dogs" 
-            onClick={() => navigate('/User/petshop/shop?species=dog')} 
-            sx={{ cursor: 'pointer' }} 
-          />
-          <Chip 
-            label="Cats" 
-            onClick={() => navigate('/User/petshop/shop?species=cat')} 
-            sx={{ cursor: 'pointer' }} 
-          />
-          <Chip 
-            label="Birds" 
-            onClick={() => navigate('/User/petshop/shop?species=bird')} 
-            sx={{ cursor: 'pointer' }} 
-          />
-          <Chip 
-            label="Small Pets" 
-            onClick={() => navigate('/User/petshop/shop?species=small')} 
-            sx={{ cursor: 'pointer' }} 
-          />
-        </Box>
-      </Paper>
-
-      {/* Featured Pets */}
-      <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-            Featured Pets
-          </Typography>
-          <Button 
-            variant="outlined" 
-            endIcon={<TrendingIcon />}
-            onClick={() => navigate('/User/petshop/shop')}
-          >
-            View All
-          </Button>
-        </Box>
-        
-        {featuredPets.length > 0 ? (
-          <Grid container spacing={3}>
-            {featuredPets.map((pet) => (
-              <Grid item xs={12} sm={6} md={3} key={pet._id}>
-                <Card 
-                  sx={{ 
-                    height: '100%',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    '&:hover': {
-                      transform: 'translateY(-5px)',
-                      boxShadow: 6
-                    }
-                  }}
-                  onClick={() => navigate(`/User/petshop/pet/${pet._id}`)}
-                >
-                  <CardMedia
-                    component="img"
-                    height="180"
-                    image={pet.images?.[0]?.url ? pet.images[0].url : '/placeholder-pet.svg'}
-                    alt={pet.name || 'Pet'}
-                    sx={{ objectFit: 'cover' }}
-                  />
-                  <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                      <Typography variant="h6" component="div">
-                        {pet.name || 'Unnamed Pet'}
-                      </Typography>
-                      <Chip 
-                        label={`₹${pet.price?.toLocaleString() || 'N/A'}`} 
-                        size="small" 
-                        color="primary" 
-                      />
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <StarIcon sx={{ color: 'gold', fontSize: 16, mr: 0.5 }} />
-                      <Typography variant="body2">4.8 (24 reviews)</Typography>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <PetsIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">
-                        {pet.breedId?.name || 'Breed'}
-                      </Typography>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <LocationIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">
-                        {pet.storeName || 'Pet Shop'}
-                      </Typography>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        ) : (
-          <Alert severity="info">
-            No featured pets available at the moment. Check back later!
-          </Alert>
-        )}
-      </Box>
-
-      {/* Pet Shops */}
-      <Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-            Popular Pet Shops
-          </Typography>
-          <Button 
-            variant="outlined" 
-            endIcon={<StoreIcon />}
-            onClick={() => navigate('/User/petshop')}
-          >
-            View All Shops
-          </Button>
-        </Box>
-        
-        {petShops.length > 0 ? (
-          <Grid container spacing={3}>
-            {petShops.map((shop) => (
-              <Grid item xs={12} sm={6} md={4} key={shop._id}>
-                <Card 
-                  sx={{ 
-                    height: '100%',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    '&:hover': {
-                      transform: 'translateY(-5px)',
-                      boxShadow: 6
-                    }
-                  }}
-                  onClick={() => navigate(`/User/petshop/shop/${shop._id}`)}
-                >
-                  <CardMedia
-                    component="img"
-                    height="150"
-                    image={shop.images?.[0]?.url ? shop.images[0].url : '/placeholder-shop.jpg'}
-                    alt={shop.name}
-                    sx={{ objectFit: 'cover' }}
-                  />
-                  <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                      <Typography variant="h6" component="div">
-                        {shop.name}
-                      </Typography>
-                      <Chip 
-                        label="Verified" 
-                        size="small" 
-                        color="success" 
-                        variant="outlined"
-                      />
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <LocationIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">
-                        {shop.address?.city || 'Location'}
-                      </Typography>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <StarIcon sx={{ color: 'gold', fontSize: 16, mr: 0.5 }} />
-                      <Typography variant="body2">4.6 (128 reviews)</Typography>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Chip 
-                        label={`${shop.stats?.pets || 0} Pets`} 
-                        size="small" 
-                        variant="outlined"
-                      />
-                      <Button size="small" variant="outlined">
-                        Visit Shop
-                      </Button>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        ) : (
-          <Alert severity="info">
-            No pet shops available at the moment.
-          </Alert>
-        )}
-      </Box>
-
-      {/* Purchased Pets */}
-      {purchasedPets.length > 0 && (
-        <Box sx={{ mt: 4 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-              My Purchased Pets
-            </Typography>
-            <Button 
-              variant="outlined" 
-              onClick={() => navigate('/User/petshop/reservations')}
-            >
-              View All Reservations
-            </Button>
-          </Box>
-          
-          <Grid container spacing={3}>
-            {purchasedPets.slice(0, 4).map((reservation) => (
-              <Grid item xs={12} sm={6} md={3} key={reservation._id}>
-                <Card 
-                  sx={{ 
-                    height: '100%',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    '&:hover': {
-                      transform: 'translateY(-5px)',
-                      boxShadow: 6
-                    }
-                  }}
-                  onClick={() => navigate(`/User/petshop/reservation/${reservation._id}`)}
-                >
-                  <CardMedia
-                    component="img"
-                    height="150"
-                    image={reservation.itemId?.images?.[0]?.url ? reservation.itemId.images[0].url : '/placeholder-pet.svg'}
-                    alt={reservation.itemId?.name || 'Pet'}
-                    sx={{ objectFit: 'cover' }}
-                  />
-                  <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                      <Typography variant="h6" component="div">
-                        {reservation.itemId?.name || 'Pet'}
-                      </Typography>
-                      <Chip 
-                        label="Purchased" 
-                        size="small" 
-                        color="success" 
-                      />
-                    </Box>
-                    
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Code: {reservation.reservationCode}
-                    </Typography>
-                    
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Purchased on: {new Date(reservation.updatedAt || reservation.createdAt).toLocaleDateString()}
-                    </Typography>
-                    
-                    <Button 
-                      size="small" 
-                      variant="contained" 
-                      color="primary"
-                      fullWidth
-                      sx={{ mt: 1 }}
+          {/* Featured Pets */}
+          <Box sx={{ mb: 4 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                Featured Pets
+              </Typography>
+              <Button 
+                variant="outlined" 
+                endIcon={<TrendingIcon />}
+                onClick={() => navigate('/User/petshop/shop')}
+              >
+                View All
+              </Button>
+            </Box>
+            
+            {featuredPets.length > 0 ? (
+              <Grid container spacing={3}>
+                {featuredPets.map((pet) => (
+                  <Grid item xs={12} sm={6} md={3} key={pet._id}>
+                    <Card 
+                      sx={{ 
+                        height: '100%',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          transform: 'translateY(-5px)',
+                          boxShadow: 6
+                        }
+                      }}
+                      onClick={() => navigate(`/User/petshop/pet/${pet._id}`)}
                     >
-                      View Details
-                    </Button>
-                  </CardContent>
-                </Card>
+                      <CardMedia
+                        component="img"
+                        height="180"
+                        image={pet.images?.[0]?.url ? pet.images[0].url : '/placeholder-pet.svg'}
+                        alt={pet.name || 'Pet'}
+                        sx={{ objectFit: 'cover' }}
+                      />
+                      <CardContent>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                          <Typography variant="h6" component="div">
+                            {pet.name || 'Unnamed Pet'}
+                          </Typography>
+                          <Chip 
+                            label={`₹${pet.price?.toLocaleString() || 'N/A'}`} 
+                            size="small" 
+                            color="primary" 
+                          />
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <StarIcon sx={{ color: 'gold', fontSize: 16, mr: 0.5 }} />
+                          <Typography variant="body2">4.8 (24 reviews)</Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <PetsIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
+                          <Typography variant="body2" color="text.secondary">
+                            {pet.breedId?.name || 'Breed'}
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <LocationIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
+                          <Typography variant="body2" color="text.secondary">
+                            {pet.storeName || 'Pet Shop'}
+                          </Typography>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
               </Grid>
-            ))}
-          </Grid>
-        </Box>
+            ) : (
+              <Alert severity="info">
+                No featured pets available at the moment. Check back later!
+              </Alert>
+            )}
+          </Box>
+
+          {/* Pet Shops */}
+          <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                Popular Pet Shops
+              </Typography>
+              <Button 
+                variant="outlined" 
+                endIcon={<StoreIcon />}
+                onClick={() => navigate('/User/petshop')}
+              >
+                View All Shops
+              </Button>
+            </Box>
+            
+            {petShops.length > 0 ? (
+              <Grid container spacing={3}>
+                {petShops.map((shop) => (
+                  <Grid item xs={12} sm={6} md={4} key={shop._id}>
+                    <Card 
+                      sx={{ 
+                        height: '100%',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          transform: 'translateY(-5px)',
+                          boxShadow: 6
+                        }
+                      }}
+                      onClick={() => navigate(`/User/petshop/shop/${shop._id}`)}
+                    >
+                      <CardMedia
+                        component="img"
+                        height="150"
+                        image={shop.images?.[0]?.url ? shop.images[0].url : '/placeholder-shop.jpg'}
+                        alt={shop.name}
+                        sx={{ objectFit: 'cover' }}
+                      />
+                      <CardContent>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                          <Typography variant="h6" component="div">
+                            {shop.name}
+                          </Typography>
+                          <Chip 
+                            label="Verified" 
+                            size="small" 
+                            color="success" 
+                            variant="outlined"
+                          />
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <LocationIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
+                          <Typography variant="body2" color="text.secondary">
+                            {shop.address?.city || 'Location'}
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                          <StarIcon sx={{ color: 'gold', fontSize: 16, mr: 0.5 }} />
+                          <Typography variant="body2">4.6 (128 reviews)</Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Chip 
+                            label={`${shop.stats?.pets || 0} Pets`} 
+                            size="small" 
+                            variant="outlined"
+                          />
+                          <Button size="small" variant="outlined">
+                            Visit Shop
+                          </Button>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+            ) : (
+              <Alert severity="info">
+                No pet shops available at the moment.
+              </Alert>
+            )}
+          </Box>
+
+          {/* Purchased Pets */}
+          {purchasedPets.length > 0 && (
+            <Box sx={{ mt: 4 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                  My Purchased Pets
+                </Typography>
+                <Button 
+                  variant="outlined" 
+                  onClick={() => navigate('/User/petshop/reservations')}
+                >
+                  View All Reservations
+                </Button>
+              </Box>
+              
+              <Grid container spacing={3}>
+                {purchasedPets.slice(0, 4).map((reservation) => (
+                  <Grid item xs={12} sm={6} md={3} key={reservation._id}>
+                    <Card 
+                      sx={{ 
+                        height: '100%',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          transform: 'translateY(-5px)',
+                          boxShadow: 6
+                        }
+                      }}
+                      onClick={() => navigate(`/User/petshop/reservation/${reservation._id}`)}
+                    >
+                      <CardMedia
+                        component="img"
+                        height="150"
+                        image={reservation.itemId?.images?.[0]?.url ? reservation.itemId.images[0].url : '/placeholder-pet.svg'}
+                        alt={reservation.itemId?.name || 'Pet'}
+                        sx={{ objectFit: 'cover' }}
+                      />
+                      <CardContent>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                          <Typography variant="h6" component="div">
+                            {reservation.itemId?.name || 'Pet'}
+                          </Typography>
+                          <Chip 
+                            label="Purchased" 
+                            size="small" 
+                            color="success" 
+                          />
+                        </Box>
+                        
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          Code: {reservation.reservationCode}
+                        </Typography>
+                        
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          Purchased on: {new Date(reservation.updatedAt || reservation.createdAt).toLocaleDateString()}
+                        </Typography>
+                        
+                        <Button 
+                          size="small" 
+                          variant="contained" 
+                          color="primary"
+                          fullWidth
+                          sx={{ mt: 1 }}
+                        >
+                          View Details
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+            </Box>
+          )}
+        </>
       )}
+
     </Container>
   )
 }

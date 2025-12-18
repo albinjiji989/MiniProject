@@ -330,7 +330,21 @@ export const AuthProvider = ({ children }) => {
       
       // Add a small delay before redirecting to ensure proper routing
       setTimeout(() => {
-        navigate('/')
+        // For hosted environments, we need to ensure we go to the root
+        // Check if we're already at the root path
+        if (window.location.pathname !== '/') {
+          // Try to navigate using react-router first
+          try {
+            navigate('/', { replace: true })
+          } catch (navError) {
+            // If navigation fails, fallback to direct URL manipulation
+            const frontendUrl = import.meta.env.VITE_FRONTEND_URL || window.location.origin || ''
+            window.location.href = frontendUrl || '/'
+          }
+        } else {
+          // If we're already at root, force a refresh to ensure clean state
+          window.location.reload()
+        }
       }, 100)
     }
   }
@@ -340,7 +354,13 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: 'LOGOUT' })
     // Add a small delay before redirecting to ensure proper routing
     setTimeout(() => {
-      navigate('/')
+      // For hosted environments, we need to ensure we go to the root
+      if (window.location.pathname !== '/') {
+        navigate('/', { replace: true })
+      } else {
+        // If we're already at root, force a refresh
+        window.location.reload()
+      }
     }, 100)
   }
 

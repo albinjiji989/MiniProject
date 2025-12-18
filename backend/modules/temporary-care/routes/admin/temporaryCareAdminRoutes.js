@@ -2,6 +2,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const { auth, authorize } = require('../../../../core/middleware/auth');
 const TemporaryCareCenter = require('../../manager/models/TemporaryCareCenter');
+const analyticsController = require('../../admin/controllers/analyticsController');
 
 const router = express.Router();
 
@@ -27,6 +28,11 @@ router.put('/centers/:id/status', auth, authorize('admin'), [ body('isActive').i
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
+
+// Analytics and monitoring
+router.get('/stats', auth, authorize('admin'), analyticsController.getStats);
+router.get('/reports/revenue', auth, authorize('admin'), analyticsController.getRevenueReport);
+router.get('/reports/care-types', auth, authorize('admin'), analyticsController.getCareTypeDistribution);
 
 module.exports = router;
 

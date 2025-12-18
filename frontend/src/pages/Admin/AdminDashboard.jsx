@@ -38,8 +38,6 @@ import {
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
   Schedule as ScheduleIcon,
-  LocalHospital as MedicalIcon,
-  History as HistoryIcon,
   Assignment as AssignmentIcon,
   Email as EmailIcon,
   Phone as PhoneIcon,
@@ -58,23 +56,21 @@ import {
   Healing as HealingIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import { usersAPI, modulesAPI, managersAPI, apiClient } from '../../services/api'
-import { 
-  speciesAPI, 
-  breedsAPI, 
+import { userAPI as usersAPI, modulesAPI, managersAPI, apiClient } from '../../services/api'
+import {
+  speciesAPI,
+  breedsAPI,
   petsAPI as adminPetsAPI,
   customBreedRequestsAPI,
-  medicalRecordsAPI,
-  ownershipHistoryAPI
 } from '../../services/petSystemAPI'
 
 const AdminDashboard = () => {
   const navigate = useNavigate()
-  
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  
+
   // Statistics data
   const [stats, setStats] = useState({
     users: { total: 0, active: 0, new: 0, growth: 0 },
@@ -84,10 +80,8 @@ const AdminDashboard = () => {
     breeds: { total: 0, active: 0, growth: 0 },
     modules: { total: 0, active: 0, growth: 0 },
     breedRequests: { total: 0, pending: 0, approved: 0, growth: 0 },
-    medicalRecords: { total: 0, recent: 0, growth: 0 },
-    ownershipHistory: { total: 0, recent: 0, growth: 0 }
   })
-  
+
   // Recent activities
   const [recentActivities, setRecentActivities] = useState([])
   const [systemAlerts, setSystemAlerts] = useState([])
@@ -123,8 +117,6 @@ const AdminDashboard = () => {
         speciesAPI.list({ limit: 1000 }),                   // 4
         breedsAPI.list({ limit: 1000 }),                    // 5
         customBreedRequestsAPI.list({ limit: 1000 }),       // 6
-        medicalRecordsAPI.list({ limit: 1000 }),            // 7
-        ownershipHistoryAPI.list({ limit: 1000 })           // 8
       ])
 
       const getData = (idx) => {
@@ -141,8 +133,6 @@ const AdminDashboard = () => {
       const speciesRes = getData(4) || {}
       const breedsRes = getData(5) || {}
       const breedRequestsRes = getData(6) || {}
-      const medicalRes = getData(7) || {}
-      const ownershipRes = getData(8) || {}
 
       // Process statistics
       const usersData = usersRes?.data?.users || usersRes?.data || usersRes || []
@@ -152,9 +142,7 @@ const AdminDashboard = () => {
       const breedsData = breedsRes?.data || breedsRes || []
       const modulesData = modulesRes?.data || modulesRes || []
       const breedRequestsData = breedRequestsRes?.data || breedRequestsRes || []
-      const medicalData = medicalRes?.data || medicalRes || []
-      const ownershipData = ownershipRes?.data || ownershipRes || []
-      
+
       setStats({
         users: {
           total: usersData.length || 0,
@@ -195,21 +183,11 @@ const AdminDashboard = () => {
           approved: breedRequestsData.filter(r => r.status === 'approved').length || 0,
           growth: null
         },
-        medicalRecords: {
-          total: medicalData.length || 0,
-          recent: medicalData.filter(m => new Date(m.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length || 0,
-          growth: null
-        },
-        ownershipHistory: {
-          total: ownershipData.length || 0,
-          recent: ownershipData.filter(o => new Date(o.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length || 0,
-          growth: null
-        }
       })
 
       // Generate real recent activities from actual data
       const realActivities = []
-      
+
       // Add recent users
       const recentUsers = usersData
         .filter(u => new Date(u.createdAt) > new Date(Date.now() - 24 * 60 * 60 * 1000))
@@ -221,7 +199,7 @@ const AdminDashboard = () => {
           time: new Date(user.createdAt).toLocaleString(),
           icon: <PersonAddIcon />
         }))
-      
+
       // Add recent pets
       const recentPets = petsData
         .filter(p => new Date(p.createdAt) > new Date(Date.now() - 24 * 60 * 60 * 1000))
@@ -233,7 +211,7 @@ const AdminDashboard = () => {
           time: new Date(pet.createdAt).toLocaleString(),
           icon: <PetsIcon />
         }))
-      
+
       // Add recent breed requests
       const recentRequests = breedRequestsData
         .filter(r => new Date(r.submittedAt || r.createdAt) > new Date(Date.now() - 24 * 60 * 60 * 1000))
@@ -245,17 +223,17 @@ const AdminDashboard = () => {
           time: new Date(request.submittedAt || request.createdAt).toLocaleString(),
           icon: <AssignmentIcon />
         }))
-      
+
       // Combine and sort by time
       const allActivities = [...recentUsers, ...recentPets, ...recentRequests]
         .sort((a, b) => new Date(b.time) - new Date(a.time))
         .slice(0, 5)
-      
+
       setRecentActivities(allActivities)
 
       // Generate real system alerts based on actual data
       const realAlerts = []
-      
+
       // Check for pending breed requests
       const pendingRequests = breedRequestsData.filter(r => r.status === 'pending').length
       if (pendingRequests > 0) {
@@ -266,7 +244,7 @@ const AdminDashboard = () => {
           action: 'Review Requests'
         })
       }
-      
+
       // Check for under review requests
       const underReviewRequests = breedRequestsData.filter(r => r.status === 'under_review').length
       if (underReviewRequests > 0) {
@@ -277,7 +255,7 @@ const AdminDashboard = () => {
           action: 'View Requests'
         })
       }
-      
+
       // Check for inactive users
       const inactiveUsers = usersData.filter(u => !u.isActive).length
       if (inactiveUsers > 0) {
@@ -288,7 +266,7 @@ const AdminDashboard = () => {
           action: 'View Users'
         })
       }
-      
+
       // Check for recent system activity
       const recentActivityCount = allActivities.length
       if (recentActivityCount > 0) {
@@ -299,7 +277,7 @@ const AdminDashboard = () => {
           action: null
         })
       }
-      
+
       setSystemAlerts(realAlerts)
 
     } catch (err) {
@@ -310,8 +288,8 @@ const AdminDashboard = () => {
   }
 
   const StatCard = ({ title, value, subtitle, icon, color, growth, onClick }) => (
-    <Card 
-      sx={{ 
+    <Card
+      sx={{
         cursor: onClick ? 'pointer' : 'default',
         transition: 'all 0.3s ease',
         '&:hover': onClick ? { transform: 'translateY(-4px)', boxShadow: 4 } : {}
@@ -337,8 +315,8 @@ const AdminDashboard = () => {
                 ) : (
                   <TrendingDownIcon color="error" fontSize="small" />
                 )}
-                <Typography 
-                  variant="body2" 
+                <Typography
+                  variant="body2"
                   color={growth >= 0 ? 'success.main' : 'error.main'}
                   sx={{ ml: 0.5 }}
                 >
@@ -356,8 +334,8 @@ const AdminDashboard = () => {
   )
 
   const QuickActionCard = ({ title, description, icon, color, onClick }) => (
-    <Card 
-      sx={{ 
+    <Card
+      sx={{
         cursor: 'pointer',
         transition: 'all 0.3s ease',
         '&:hover': { transform: 'translateY(-2px)', boxShadow: 3 }
@@ -393,19 +371,19 @@ const AdminDashboard = () => {
       <Box mb={4}>
         <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
           Admin Dashboard
-          </Typography>
+        </Typography>
         <Typography variant="subtitle1" color="text.secondary">
           Welcome back! Here's what's happening in your system.
-            </Typography>
-          </Box>
+        </Typography>
+      </Box>
 
       {/* System Alerts */}
       {systemAlerts.length > 0 && (
         <Box mb={3}>
           {systemAlerts.map((alert) => (
-            <Alert 
+            <Alert
               key={alert.id}
-              severity={alert.type} 
+              severity={alert.type}
               action={alert.action && (
                 <Button color="inherit" size="small" onClick={() => {
                   if (alert.action === 'View Invites') navigate('/admin/managers')
@@ -423,31 +401,31 @@ const AdminDashboard = () => {
       )}
 
       {/* Main Statistics */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Public Users"
+          <StatCard
+            title="Public Users"
             value={stats.users.total}
             subtitle={`${stats.users.active} active, ${stats.users.new} new this week`}
             icon={<UsersIcon />}
             color="primary"
             growth={stats.users.growth}
             onClick={() => navigate('/admin/users')}
-            />
-          </Grid>
+          />
+        </Grid>
         <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Managers"
+          <StatCard
+            title="Managers"
             value={stats.managers.total}
             subtitle={`${stats.managers.active} active, ${stats.managers.pending} pending`}
             icon={<BusinessIcon />}
             color="warning"
             growth={stats.managers.growth}
             onClick={() => navigate('/admin/managers')}
-            />
-          </Grid>
+          />
+        </Grid>
         <Grid item xs={12} sm={6} md={3}>
-            <StatCard
+          <StatCard
             title="Total Pets"
             value={stats.pets.total}
             subtitle={`${stats.pets.available} available, ${stats.pets.adopted} adopted`}
@@ -455,10 +433,10 @@ const AdminDashboard = () => {
             color="success"
             growth={stats.pets.growth}
             onClick={() => navigate('/admin/pets')}
-            />
-          </Grid>
+          />
+        </Grid>
         <Grid item xs={12} sm={6} md={3}>
-            <StatCard
+          <StatCard
             title="Breed Requests"
             value={stats.breedRequests.total}
             subtitle={`${stats.breedRequests.pending} pending, ${stats.breedRequests.approved} approved`}
@@ -466,36 +444,36 @@ const AdminDashboard = () => {
             color="info"
             growth={stats.breedRequests.growth}
             onClick={() => navigate('/admin/custom-breed-requests')}
-            />
-          </Grid>
+          />
         </Grid>
+      </Grid>
 
       {/* Secondary Statistics */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Species"
+          <StatCard
+            title="Species"
             value={stats.species.total}
             subtitle={`${stats.species.active} active`}
             icon={<PetsIcon />}
             color="secondary"
             growth={stats.species.growth}
             onClick={() => navigate('/admin/species')}
-            />
-          </Grid>
+          />
+        </Grid>
         <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              title="Breeds"
+          <StatCard
+            title="Breeds"
             value={stats.breeds.total}
             subtitle={`${stats.breeds.active} active`}
             icon={<PetsIcon />}
             color="secondary"
             growth={stats.breeds.growth}
             onClick={() => navigate('/admin/breeds')}
-            />
-          </Grid>
+          />
+        </Grid>
         <Grid item xs={12} sm={6} md={3}>
-            <StatCard
+          <StatCard
             title="Modules"
             value={stats.modules.total}
             subtitle={`${stats.modules.active} active`}
@@ -503,56 +481,45 @@ const AdminDashboard = () => {
             color="primary"
             growth={stats.modules.growth}
             onClick={() => navigate('/admin/modules')}
-            />
-          </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-            title="Medical Records"
-            value={stats.medicalRecords.total}
-            subtitle={`${stats.medicalRecords.recent} recent`}
-            icon={<MedicalIcon />}
-            color="error"
-            growth={stats.medicalRecords.growth}
-            onClick={() => navigate('/admin/medical-records')}
-            />
-          </Grid>
+          />
         </Grid>
+      </Grid>
 
       {/* Management Section */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12}>
           <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
             Management
-            </Typography>
+          </Typography>
         </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={3}>
           <QuickActionCard
             title="Public Users"
             description="Manage public users"
             icon={<UsersIcon />}
             color="primary"
-                  onClick={() => navigate('/admin/users')}
+            onClick={() => navigate('/admin/users')}
           />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
           <QuickActionCard
             title="Managers"
             description="Manage module managers"
             icon={<BusinessIcon />}
             color="warning"
-                  onClick={() => navigate('/admin/managers')}
+            onClick={() => navigate('/admin/managers')}
           />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
           <QuickActionCard
             title="Modules"
             description="Manage system modules"
             icon={<ModuleIcon />}
             color="info"
-                  onClick={() => navigate('/admin/modules')}
+            onClick={() => navigate('/admin/modules')}
           />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
           <QuickActionCard
             title="All Pets"
             description="Manage pets"
@@ -560,32 +527,14 @@ const AdminDashboard = () => {
             color="success"
             onClick={() => navigate('/admin/pets')}
           />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Medical Records"
-            description="Manage medical records"
-            icon={<MedicalIcon />}
-            color="error"
-            onClick={() => navigate('/admin/medical-records')}
-          />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Ownership History"
-            description="Manage ownership transfers"
-            icon={<HistoryIcon />}
-            color="secondary"
-            onClick={() => navigate('/admin/ownership-history')}
-          />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
           <QuickActionCard
             title="Species"
             description="Manage species"
             icon={<PetsIcon />}
             color="secondary"
-                  onClick={() => navigate('/admin/species')}
+            onClick={() => navigate('/admin/species')}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
@@ -608,6 +557,15 @@ const AdminDashboard = () => {
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <QuickActionCard
+            title="AI/ML Dashboard"
+            description="Machine learning insights"
+            icon={<AssessmentIcon />}
+            color="secondary"
+            onClick={() => navigate('/admin/aiml-dashboard')}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <QuickActionCard
             title="Centralized Pets"
             description="View all pets in registry"
             icon={<PetsIcon />}
@@ -615,18 +573,18 @@ const AdminDashboard = () => {
             onClick={() => navigate('/admin/pets/centralized')}
           />
         </Grid>
-              </Grid>
-              
+      </Grid>
+
       {/* Quick Actions */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12}>
           <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
             Quick Actions
-            </Typography>
-              </Grid>
-              
+          </Typography>
+        </Grid>
+
         {/* Pet Management */}
-              <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={3}>
           <QuickActionCard
             title="Add Pet"
             description="Add a new pet to the system"
@@ -634,8 +592,8 @@ const AdminDashboard = () => {
             color="success"
             onClick={() => navigate('/admin/pets/add')}
           />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
           <QuickActionCard
             title="Import Pets"
             description="Import pets from CSV file"
@@ -643,17 +601,17 @@ const AdminDashboard = () => {
             color="info"
             onClick={() => navigate('/admin/pets/import')}
           />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
           <QuickActionCard
             title="Export Data"
             description="Export system data to CSV"
             icon={<DownloadIcon />}
             color="primary"
-            onClick={() => {/* Export functionality */}}
+            onClick={() => {/* Export functionality */ }}
           />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
           <QuickActionCard
             title="Invite Manager"
             description="Send invitation to new manager"
@@ -661,17 +619,17 @@ const AdminDashboard = () => {
             color="warning"
             onClick={() => navigate('/admin/managers')}
           />
-              </Grid>
-            </Grid>
+        </Grid>
+      </Grid>
 
       {/* Module Management Quick Actions */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12}>
           <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
             Module Management
-                </Typography>
-              </Grid>
-              
+          </Typography>
+        </Grid>
+
         <Grid item xs={12} sm={6} md={2}>
           <QuickActionCard
             title="Adoption"
@@ -679,15 +637,6 @@ const AdminDashboard = () => {
             color="success"
             description="Manage adoptions"
             onClick={() => navigate('/adoption')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <QuickActionCard
-            title="Pet Shop"
-            icon={<StoreIcon />}
-            color="info"
-            description="Manage pet shops"
-            onClick={() => navigate('/petshop')}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={2}>
@@ -707,7 +656,7 @@ const AdminDashboard = () => {
             description="Manage store"
             onClick={() => navigate('/ecommerce')}
           />
-              </Grid>
+        </Grid>
         <Grid item xs={12} sm={6} md={2}>
           <QuickActionCard
             title="Pharmacy"
@@ -716,7 +665,7 @@ const AdminDashboard = () => {
             description="Manage pharmacy"
             onClick={() => navigate('/pharmacy')}
           />
-              </Grid>
+        </Grid>
         <Grid item xs={12} sm={6} md={2}>
           <QuickActionCard
             title="Veterinary"
@@ -725,35 +674,35 @@ const AdminDashboard = () => {
             description="Manage veterinary"
             onClick={() => navigate('/veterinary')}
           />
-              </Grid>
-          </Grid>
+        </Grid>
+      </Grid>
 
       {/* Recent Activities and System Status */}
       <Grid container spacing={3}>
-          <Grid item xs={12} md={8}>
+        <Grid item xs={12} md={8}>
           <Card>
-              <CardContent>
+            <CardContent>
               <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
-                  Recent Activities
-                </Typography>
+                Recent Activities
+              </Typography>
               <List>
                 {recentActivities.map((activity, index) => (
-                    <React.Fragment key={activity.id}>
+                  <React.Fragment key={activity.id}>
                     <ListItem>
                       <ListItemIcon>
-                            {activity.icon}
-                        </ListItemIcon>
-                        <ListItemText
+                        {activity.icon}
+                      </ListItemIcon>
+                      <ListItemText
                         primary={activity.message}
                         secondary={activity.time}
-                        />
-                      </ListItem>
+                      />
+                    </ListItem>
                     {index < recentActivities.length - 1 && <Divider />}
-                    </React.Fragment>
-                  ))}
-                </List>
-              </CardContent>
-            </Card>
+                  </React.Fragment>
+                ))}
+              </List>
+            </CardContent>
+          </Card>
         </Grid>
 
         <Grid item xs={12} md={4}>
@@ -765,7 +714,7 @@ const AdminDashboard = () => {
               <Box mb={2}>
                 <Box display="flex" justifyContent="space-between" mb={1}>
                   <Typography variant="body2">API Health</Typography>
-                  <Chip 
+                  <Chip
                     size="small"
                     label={health.status === 'OK' ? 'Online' : (health.status || 'Unknown')}
                     color={health.status === 'OK' ? 'success' : (health.status === 'down' ? 'error' : 'default')}
@@ -778,7 +727,7 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
         </Grid>
-            </Grid>
+      </Grid>
 
       {/* Error/Success Messages */}
       {error && (
@@ -795,9 +744,9 @@ const AdminDashboard = () => {
       )}
 
       {success && (
-      <Snackbar
+        <Snackbar
           open={!!success}
-        autoHideDuration={6000}
+          autoHideDuration={6000}
           onClose={() => setSuccess('')}
           anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
         >

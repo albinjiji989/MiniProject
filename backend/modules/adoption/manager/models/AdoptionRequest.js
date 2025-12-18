@@ -256,8 +256,12 @@ adoptionRequestSchema.methods.completeAdoption = function(contractURL) {
 // Method to update handover status quickly
 adoptionRequestSchema.methods.setHandoverStatus = function(newStatus, notes = '') {
   if (!this.handover) this.handover = {}
-  if (newStatus === 'scheduled') this.handover.status = 'scheduled'
-  if (newStatus === 'completed') this.handover.status = 'completed'
+  if (newStatus === 'scheduled') {
+    this.handover.status = 'scheduled'
+  }
+  if (newStatus === 'completed') {
+    this.handover.status = 'completed'
+  }
   return this.updateStatus(newStatus === 'scheduled' ? 'handover_scheduled' : (newStatus === 'completed' ? 'handed_over' : this.status), null, notes)
 }
 

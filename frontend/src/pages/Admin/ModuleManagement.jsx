@@ -7,13 +7,6 @@ import {
   Card,
   CardContent,
   Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Chip,
   IconButton,
   Dialog,
@@ -92,16 +85,17 @@ const ModuleManagement = () => {
       setLoading(false)
     }
   }
+  
   const handleAddModule = () => {
     setEditingModule(null)
     setFormData({
-        key: '',
-        name: '',
-        description: '',
-        icon: 'Business',
-        color: '#64748b',
-        status: 'coming_soon',
-        hasManagerDashboard: false,
+      key: '',
+      name: '',
+      description: '',
+      icon: 'Business',
+      color: '#64748b',
+      status: 'coming_soon',
+      hasManagerDashboard: false,
       maintenanceMessage: '',
       blockReason: '',
       displayOrder: 0
@@ -132,13 +126,15 @@ const ModuleManagement = () => {
         await modulesAPI.update(editingModule._id, formData)
         setSuccess('Module updated successfully!')
       } else {
-        await modulesAPI.create(formData)
-        setSuccess('Module created successfully!')
+        // Creation is disabled per backend
+        setError('Creating new modules is disabled')
+        return
       }
       setDialogOpen(false)
       loadModules()
     } catch (err) {
-      setError('Failed to save module')
+      const errorMessage = err?.response?.data?.message || err?.response?.data?.errors?.join(', ') || 'Failed to save module'
+      setError(errorMessage)
     }
   }
 
@@ -168,9 +164,10 @@ const ModuleManagement = () => {
     try {
       await modulesAPI.updateStatus(moduleId, { status: newStatus, message })
       setSuccess(`Module status updated to ${newStatus}`)
+      handleMenuClose() // Close menu after action
       loadModules()
     } catch (err) {
-      setError('Failed to update module status')
+      setError(err?.response?.data?.message || 'Failed to update module status')
     }
   }
 
@@ -244,7 +241,7 @@ const ModuleManagement = () => {
           </Typography>
           <Typography variant="subtitle1" color="text.secondary">
             Configure and manage system modules
-            </Typography>
+          </Typography>
         </Box>
         {/* Add Module disabled by requirement */}
       </Box>
@@ -256,11 +253,11 @@ const ModuleManagement = () => {
             <Card 
               sx={{ 
                 height: '100%',
-                      transition: 'transform 0.2s ease-in-out',
-                      '&:hover': { transform: 'translateY(-4px)' }
+                transition: 'transform 0.2s ease-in-out',
+                '&:hover': { transform: 'translateY(-4px)' }
               }}
             >
-                      <CardContent>
+              <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
                   <Avatar 
                     sx={{ 
@@ -277,15 +274,15 @@ const ModuleManagement = () => {
                   >
                     <MoreVertIcon />
                   </IconButton>
-                            </Box>
+                </Box>
                 
                 <Typography variant="h6" component="h3" gutterBottom sx={{ fontWeight: 'bold' }}>
-                                {module.name}
-                              </Typography>
+                  {module.name}
+                </Typography>
                 
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   {module.description || 'No description available'}
-                              </Typography>
+                </Typography>
                 
                 <Box display="flex" justifyContent="space-between" alignItems="center">
                   <Chip 
@@ -307,100 +304,14 @@ const ModuleManagement = () => {
         ))}
       </Grid>
 
-      {/* Module Details Table */}
-      <Card>
-        <CardContent>
-          <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
-            Module Details
-          </Typography>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Key</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Dashboard</TableCell>
-                  <TableCell>Order</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {modules.map((module) => (
-                  <TableRow key={module._id}>
-                    <TableCell>
-                      <Box display="flex" alignItems="center" gap={1}>
-                        <Avatar sx={{ bgcolor: module.color, width: 32, height: 32 }}>
-                          <ModuleIcon fontSize="small" />
-                        </Avatar>
-                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                          {module.name}
-                        </Typography>
-            </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" fontFamily="monospace">
-                        {module.key}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        icon={getStatusIcon(module.status)}
-                        label={module.status.replace('_', ' ').toUpperCase()}
-                        color={getStatusColor(module.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={module.hasManagerDashboard ? 'Yes' : 'No'}
-                        color={module.hasManagerDashboard ? 'success' : 'default'}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {module.displayOrder}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEditModule(module)}
-                        color="primary"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      {/* Soft Hide / Restore */}
-                      {!module.hidden ? (
-                        <IconButton
-                          size="small"
-                          onClick={() => handleHideModule(module._id)}
-                          color="error"
-                          title="Hide from users"
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      ) : (
-                        <Button size="small" onClick={() => handleRestoreModule(module._id)}>Restore</Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </CardContent>
-      </Card>
-
       {/* Module Form Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
-          Edit Module
+          {editingModule ? 'Edit Module' : 'Add Module'}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-                <Grid item xs={12} sm={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="Module Key"
@@ -408,29 +319,29 @@ const ModuleManagement = () => {
                 disabled
                 helperText="Unique identifier"
               />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-            <TextField 
-              fullWidth 
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField 
+                fullWidth 
                 label="Module Name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            />
+              />
             </Grid>
             <Grid item xs={12}>
-            <TextField 
+              <TextField 
                 fullWidth
-              label="Description" 
+                label="Description" 
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              multiline 
-              rows={3} 
-            />
+                multiline 
+                rows={3} 
+              />
             </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Icon</InputLabel>
-                  <Select 
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Icon</InputLabel>
+                <Select 
                   value={formData.icon}
                   onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
                 >
@@ -439,10 +350,10 @@ const ModuleManagement = () => {
                       {icon}
                     </MenuItem>
                   ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
                 <InputLabel>Color</InputLabel>
                 <Select
@@ -466,20 +377,20 @@ const ModuleManagement = () => {
                   ))}
                 </Select>
               </FormControl>
-              </Grid>
+            </Grid>
             <Grid item xs={12} sm={6}>
-            <FormControl fullWidth>
-              <InputLabel>Status</InputLabel>
-              <Select 
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select 
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              >
+                >
                   <MenuItem value="coming_soon">Coming Soon</MenuItem>
-                <MenuItem value="active">Active</MenuItem>
+                  <MenuItem value="active">Active</MenuItem>
                   <MenuItem value="maintenance">Maintenance</MenuItem>
-                <MenuItem value="blocked">Blocked</MenuItem>
-              </Select>
-            </FormControl>
+                  <MenuItem value="blocked">Blocked</MenuItem>
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
@@ -491,15 +402,15 @@ const ModuleManagement = () => {
               />
             </Grid>
             <Grid item xs={12}>
-            <FormControlLabel
-              control={
-                <Switch 
+              <FormControlLabel
+                control={
+                  <Switch 
                     checked={formData.hasManagerDashboard}
                     onChange={(e) => setFormData({ ...formData, hasManagerDashboard: e.target.checked })}
-                />
-              }
-              label="Has Manager Dashboard"
-            />
+                  />
+                }
+                label="Has Manager Dashboard"
+              />
             </Grid>
             {formData.status === 'maintenance' && (
               <Grid item xs={12}>
@@ -515,21 +426,21 @@ const ModuleManagement = () => {
             )}
             {formData.status === 'blocked' && (
               <Grid item xs={12}>
-              <TextField 
-                fullWidth 
+                <TextField 
+                  fullWidth 
                   label="Block Reason"
                   value={formData.blockReason}
                   onChange={(e) => setFormData({ ...formData, blockReason: e.target.value })}
-                multiline 
+                  multiline 
                   rows={2}
-              />
+                />
               </Grid>
             )}
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained">Update</Button>
+          <Button onClick={handleSubmit} variant="contained">Save</Button>
         </DialogActions>
       </Dialog>
 
@@ -545,19 +456,19 @@ const ModuleManagement = () => {
           </ListItemIcon>
           <ListItemText>Edit Module</ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => { handleStatusChange(selectedModule?._id, 'active'); handleMenuClose(); }}>
+        <MenuItem onClick={() => { handleStatusChange(selectedModule?._id, 'active'); }}>
           <ListItemIcon>
             <PlayIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText>Activate</ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => { handleStatusChange(selectedModule?._id, 'maintenance', 'Under maintenance'); handleMenuClose(); }}>
+        <MenuItem onClick={() => { handleStatusChange(selectedModule?._id, 'maintenance', 'Under maintenance'); }}>
           <ListItemIcon>
             <PauseIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText>Set Maintenance</ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => { handleStatusChange(selectedModule?._id, 'blocked', 'Module blocked'); handleMenuClose(); }}>
+        <MenuItem onClick={() => { handleStatusChange(selectedModule?._id, 'blocked', 'Module blocked'); }}>
           <ListItemIcon>
             <BlockIcon fontSize="small" />
           </ListItemIcon>
@@ -595,9 +506,9 @@ const ModuleManagement = () => {
       )}
 
       {success && (
-      <Snackbar
+        <Snackbar
           open={!!success}
-        autoHideDuration={6000}
+          autoHideDuration={6000}
           onClose={() => setSuccess('')}
           anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
         >

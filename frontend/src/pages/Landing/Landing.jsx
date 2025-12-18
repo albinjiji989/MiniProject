@@ -28,7 +28,7 @@ import {
   Report as RescueIcon,
   ShoppingCart as EcommerceIcon,
   LocalPharmacy as PharmacyIcon,
-  
+
   Support as TemporaryCareIcon,
   LocalHospital as VeterinaryIcon,
   Login as LoginIcon,
@@ -47,7 +47,7 @@ const Landing = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isNavigating, setIsNavigating] = useState(false)
-  
+
   const handleMobileMenuToggle = () => {
     setMobileMenuOpen(!mobileMenuOpen)
   }
@@ -95,7 +95,7 @@ const Landing = () => {
       title: 'Pharmacy Management',
       description: 'Manage veterinary medications, prescriptions, and inventory with automated alerts.'
     },
-    
+
     {
       icon: <TemporaryCareIcon sx={{ fontSize: 40, color: '#607d8b' }} />,
       title: 'Temporary Care',
@@ -122,10 +122,10 @@ const Landing = () => {
   return (
     <Box>
       {/* Navigation Bar */}
-      <AppBar 
-        position="sticky" 
-        elevation={0} 
-        sx={{ 
+      <AppBar
+        position="sticky"
+        elevation={0}
+        sx={{
           backgroundColor: 'rgba(255, 255, 255, 0.95)',
           backdropFilter: 'blur(10px)',
           boxShadow: '0 2px 20px rgba(0,0,0,0.1)',
@@ -159,7 +159,7 @@ const Landing = () => {
               >
                 About
               </Button>
-              
+
               <Button
                 color="inherit"
                 startIcon={<ContactIcon />}
@@ -180,7 +180,7 @@ const Landing = () => {
                 variant="contained"
                 onClick={handleRegisterClick}
                 disabled={isNavigating}
-                sx={{ 
+                sx={{
                   background: 'linear-gradient(135deg, #6a11cb 0%, #2575fc 100%)',
                   boxShadow: '0 8px 24px rgba(37, 117, 252, 0.35)',
                   '&:hover': { background: 'linear-gradient(135deg, #5c0fc0 0%, #1e6ae6 100%)' }
@@ -214,7 +214,7 @@ const Landing = () => {
               <CloseIcon />
             </IconButton>
           </Box>
-          
+
           <List>
             <ListItem disablePadding>
               <ListItemButton onClick={handleMobileMenuToggle}>
@@ -267,16 +267,16 @@ const Landing = () => {
                     </Typography>
                   </Box>
                 </Box>
-                
+
                 <Typography variant="h2" sx={{ fontWeight: 800, mb: 3, fontSize: { xs: '2.6rem', md: '3.8rem' }, lineHeight: 1.1 }}>
                   One Platform for Every Pet's Journey
                 </Typography>
-                
+
                 <Typography variant="h6" sx={{ mb: 4, opacity: 0.9, lineHeight: 1.7 }}>
                   From adoption to veterinary care, rescues to pharmacy, pet shops to temporary care —
                   manage it all with a modern, centralized system built for pet welfare organizations.
                 </Typography>
-                
+
                 <Box sx={{ display: 'flex', gap: 2, justifyContent: { xs: 'center', md: 'flex-start' }, flexWrap: 'wrap' }}>
                   <Button
                     variant="contained"
@@ -313,7 +313,7 @@ const Landing = () => {
                 </Box>
               </Box>
             </Grid>
-            
+
             <Grid item xs={12} md={6}>
               <Box sx={{ textAlign: 'center' }}>
                 <Card
@@ -331,6 +331,7 @@ const Landing = () => {
                     height="400"
                     image="/images/hero-pet.avif"
                     alt="Pet welfare management system"
+                    loading="lazy"
                     sx={{
                       objectFit: 'cover',
                       '&::after': {
@@ -385,12 +386,12 @@ const Landing = () => {
               Premium, modern tools for adoption, rescue, veterinary, pharmacy, shelters and more
             </Typography>
           </Box>
-          
+
           <Grid container spacing={4}>
             {features.slice(0, 3).map((feature, index) => (
               <Grid item xs={12} md={4} key={index}>
-                <Card 
-                  sx={{ 
+                <Card
+                  sx={{
                     height: '100%',
                     textAlign: 'center',
                     p: 3,

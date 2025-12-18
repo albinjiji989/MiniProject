@@ -1,31 +1,11 @@
 const mongoose = require('mongoose');
-const geocoder = require('../../../../core/utils/geocoder');
-
 const addressSchema = new mongoose.Schema({
   street: { type: String, required: true },
   city: { type: String, required: true },
   state: { type: String, required: true },
   country: { type: String, required: true, default: 'India' },
-  pincode: { type: String, required: true },
-  location: {
-    type: {
-      type: String,
-      enum: ['Point'],
-      default: 'Point'
-    },
-    coordinates: {
-      type: [Number],
-      index: '2dsphere'
-    },
-    formattedAddress: String,
-    street: String,
-    city: String,
-    state: String,
-    zipcode: String,
-    country: String
-  }
+  pincode: { type: String, required: true }
 });
-
 const operatingHoursSchema = new mongoose.Schema({
   monday: { open: String, close: String },
   tuesday: { open: String, close: String },
@@ -263,26 +243,6 @@ const petShopSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Geocode & create location field
-petShopSchema.pre('save', async function(next) {
-  if (this.isModified('address')) {
-    const loc = await geocoder.geocode(this.address);
-    this.location = {
-      type: 'Point',
-      coordinates: [loc[0].longitude, loc[0].latitude],
-      formattedAddress: loc[0].formattedAddress,
-      street: loc[0].streetName,
-      city: loc[0].city,
-      state: loc[0].state,
-      zipcode: loc[0].zipcode,
-      country: loc[0].countryCode
-    };
-    
-    // Do not save address in DB
-    this.address = undefined;
-  }
-  next();
-});
 
 // Cascade delete services when a pet shop is deleted
 petShopSchema.pre('remove', async function(next) {
@@ -365,9 +325,6 @@ petShopSchema.index({
   'address.state': 'text',
   tags: 'text'
 });
-
-// Create geospatial index
-petShopSchema.index({ location: '2dsphere' });
 
 // Instance method for managing images
 petShopSchema.methods.addImage = async function(imageData) {

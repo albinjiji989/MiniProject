@@ -17,7 +17,7 @@ const documentSchema = new mongoose.Schema({
   entityType: {
     type: String,
     required: true,
-    enum: ['Pet', 'AdoptionPet', 'PetInventoryItem', 'PetNew', 'PetShop', 'Product', 'InventoryItem']
+    enum: ['Pet', 'AdoptionPet', 'PetInventoryItem', 'PetNew', 'PetShop', 'Product', 'InventoryItem', 'VeterinaryMedicalRecord']
   },
   entityId: {
     type: mongoose.Schema.Types.ObjectId,

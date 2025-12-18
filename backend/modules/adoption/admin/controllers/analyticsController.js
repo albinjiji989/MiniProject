@@ -280,9 +280,52 @@ const getPetAnalytics = async (req, res) => {
   }
 };
 
+// AI/ML Insights
+const getAIMLInsights = async (req, res) => {
+  try {
+    // Adoption Success Predictions (simulated)
+    const adoptionPredictions = [
+      { breed: 'Golden Retriever', successRate: 92, factors: ['High energy', 'Friendly'] },
+      { breed: 'Persian Cat', successRate: 87, factors: ['Calm temperament', 'Indoor'] },
+      { breed: 'Labrador', successRate: 85, factors: ['Trainable', 'Family-friendly'] },
+      { breed: 'Siamese Cat', successRate: 78, factors: ['Vocal', 'Social'] },
+      { breed: 'German Shepherd', successRate: 88, factors: ['Loyal', 'Protective'] },
+    ];
+
+    // Customer Segments (simulated)
+    const customerSegments = [
+      { segment: 'First-time Pet Owners', size: 35, characteristics: ['Need guidance', 'Budget conscious'] },
+      { segment: 'Experienced Pet Lovers', size: 25, characteristics: ['Specific preferences', 'Higher budget'] },
+      { segment: 'Families with Children', size: 20, characteristics: ['Safety focused', 'Activity level'] },
+      { segment: 'Seniors', size: 15, characteristics: ['Low maintenance', 'Companionship'] },
+      { segment: 'Young Professionals', size: 5, characteristics: ['Tech-savvy', 'Urban lifestyle'] },
+    ];
+
+    // Performance Insights (simulated)
+    const performanceInsights = [
+      { metric: 'Application Approval Rate', current: '78%', trend: 'increasing', recommendation: 'Improve documentation process' },
+      { metric: 'Average Adoption Time', current: '14 days', trend: 'decreasing', recommendation: 'Streamline vetting process' },
+      { metric: 'Post-Adoption Success', current: '85%', trend: 'stable', recommendation: 'Maintain follow-up program' },
+      { metric: 'Customer Satisfaction', current: '4.2/5', trend: 'increasing', recommendation: 'Enhance communication' },
+    ];
+
+    res.json({
+      success: true,
+      data: {
+        adoptionPredictions,
+        customerSegments,
+        performanceInsights
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 module.exports = {
   getAnalytics,
   getManagerAnalytics,
   getUserAnalytics,
-  getPetAnalytics
+  getPetAnalytics,
+  getAIMLInsights
 };

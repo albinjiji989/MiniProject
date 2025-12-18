@@ -39,7 +39,7 @@ import {
   Help as HelpIcon
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import { userPetsAPI, apiClient, adoptionAPI, resolveMediaUrl } from '../../../services/api'
+import { userPetsAPI, apiClient, adoptionAPI, resolveMediaUrl, temporaryCareAPI } from '../../../services/api'
 
 const UserPetsList = () => {
   const navigate = useNavigate()
@@ -64,8 +64,8 @@ const UserPetsList = () => {
       setLoading(true)
       setError('')
       
-      // Fetch from PetNew, Pet, adopted pets, and purchased pets models in parallel
-      const [petNewRes, petRes, adoptedRes, purchasedRes] = await Promise.allSettled([
+      // Fetch from PetNew, Pet, adopted pets, purchased pets, and temporary care pets models in parallel
+      const [petNewRes, petRes, adoptedRes, purchasedRes, temporaryCareRes] = await Promise.allSettled([
         userPetsAPI.list({
           page: pageParam,
           limit: 12,
@@ -74,7 +74,8 @@ const UserPetsList = () => {
         }),
         apiClient.get('/pets/my-pets'),
         adoptionAPI.getMyAdoptedPets(),
-        apiClient.get('/petshop/user/my-purchased-pets') // Add pet shop purchased pets
+        apiClient.get('/petshop/user/my-purchased-pets'), // Add pet shop purchased pets
+        temporaryCareAPI.getPetsInCare() // Add pets in temporary care
       ])
       
       // Process PetNew results
@@ -102,6 +103,12 @@ const UserPetsList = () => {
       let purchasedPets = []
       if (purchasedRes.status === 'fulfilled') {
         purchasedPets = purchasedRes.value.data?.data?.pets || []
+      }
+      
+      // Process pets in temporary care
+      let temporaryCarePets = []
+      if (temporaryCareRes.status === 'fulfilled') {
+        temporaryCarePets = temporaryCareRes.value.data?.data?.pets || []
       }
       
       // Map adopted pets to pet-like objects
@@ -144,8 +151,30 @@ const UserPetsList = () => {
         sourceLabel: pet.sourceLabel
       }))
       
+      // Map temporary care pets to pet-like objects
+      const mappedTemporaryCarePets = temporaryCarePets.map(pet => ({
+        _id: pet._id,
+        name: pet.name || 'Pet',
+        images: pet.images || [],
+        petCode: pet.petCode,
+        breed: pet.breed,
+        species: pet.species,
+        gender: pet.gender || 'Unknown',
+        status: 'in_care',
+        currentStatus: 'in_care',
+        tags: ['temporary-care'],
+        careStartDate: pet.careStartDate,
+        careEndDate: pet.careEndDate,
+        careCenter: pet.careCenter,
+        age: pet.age,
+        ageUnit: pet.ageUnit,
+        color: pet.color,
+        createdAt: pet.careStartDate,
+        temporaryCareId: pet.temporaryCareId
+      }))
+      
       // Combine and deduplicate pets
-      const combinedPets = [...petNewPets, ...corePets, ...mappedAdoptedPets, ...mappedPurchasedPets]
+      const combinedPets = [...petNewPets, ...corePets, ...mappedAdoptedPets, ...mappedPurchasedPets, ...mappedTemporaryCarePets]
       const uniquePets = combinedPets.filter((pet, index, self) => 
         index === self.findIndex(p => (p.petCode || p._id) === (pet.petCode || pet._id))
       )
@@ -158,8 +187,8 @@ const UserPetsList = () => {
           return (a.age || 0) - (b.age || 0)
         } else {
           // Default sort by creation date (newest first)
-          const dateA = new Date(a.createdAt || a.adoptionDate || a.purchaseDate || 0)
-          const dateB = new Date(b.createdAt || b.adoptionDate || b.purchaseDate || 0)
+          const dateA = new Date(a.createdAt || a.adoptionDate || a.purchaseDate || a.careStartDate || 0)
+          const dateB = new Date(b.createdAt || b.adoptionDate || b.purchaseDate || b.careStartDate || 0)
           return dateB - dateA
         }
       })
@@ -169,6 +198,7 @@ const UserPetsList = () => {
       setPages(petNewPagination?.pages || 1)
       setTotal(petNewPagination?.total || (sortedPets?.length || 0))
     } catch (err) {
+      console.error('Error loading pets:', err)
       setError(err?.response?.data?.message || 'Failed to load pets')
       setPets([])
     } finally {
@@ -221,6 +251,11 @@ const UserPetsList = () => {
       const petId = selectedPet.petCode || selectedPet._id;
       navigate(`/User/pets/${petId}`)
     }
+    // Check if this is a pet in temporary care
+    else if (selectedPet?.tags?.includes('temporary-care')) {
+      // For pets in temporary care, navigate to the temporary care details page
+      navigate(`/User/temporary-care/${selectedPet.temporaryCareId}`)
+    }
     else {
       // For regular user pets, use the existing navigation
       navigate(`/User/pets/${selectedPet._id}`)
@@ -233,7 +268,13 @@ const UserPetsList = () => {
     if (selectedPet?.tags?.includes('adoption')) {
       // For adopted pets, show a message that they can't be edited
       alert('Adopted pets cannot be edited. Please contact the adoption center if you need to make changes.')
-    } else {
+    } 
+    // Check if this is a pet in temporary care
+    else if (selectedPet?.tags?.includes('temporary-care')) {
+      // For pets in temporary care, show a message that they can't be edited
+      alert('Pets in temporary care cannot be edited. Please contact the care center if you need to make changes.')
+    }
+    else {
       // For regular user pets, use the existing navigation
       navigate(`/User/pets/${selectedPet._id}/edit`)
     }
@@ -252,6 +293,13 @@ const UserPetsList = () => {
       // Check if this is an adopted pet
       if (selectedPet?.tags?.includes('adoption')) {
         alert('Adopted pets cannot be deleted. Please contact the adoption center if you need to make changes.');
+        handleMenuClose();
+        return;
+      }
+      
+      // Check if this is a pet in temporary care
+      if (selectedPet?.tags?.includes('temporary-care')) {
+        alert('Pets in temporary care cannot be deleted. Please contact the care center if you need to make changes.');
         handleMenuClose();
         return;
       }
@@ -327,6 +375,12 @@ const UserPetsList = () => {
   const getPetType = (pet) => {
     if (pet?.tags?.includes('adoption')) {
       return 'Adopted'
+    }
+    if (pet?.tags?.includes('purchased')) {
+      return 'Purchased'
+    }
+    if (pet?.tags?.includes('temporary-care')) {
+      return 'In Temporary Care'
     }
     return 'My Pet'
   }
@@ -556,6 +610,24 @@ const UserPetsList = () => {
               >
                 Apply
               </Button>
+              <Button 
+                variant="outlined" 
+                onClick={() => navigate('/User/pets/my-pets')}
+              >
+                My Pets
+              </Button>
+              <Button 
+                variant="outlined" 
+                onClick={() => navigate('/User/adoption/adopted')}
+              >
+                Adopted Pets
+              </Button>
+              <Button 
+                variant="outlined" 
+                onClick={() => navigate('/User/petshop/purchased')}
+              >
+                Purchased Pets
+              </Button>
             </Box>
           </Box>
         </CardContent>
@@ -598,7 +670,7 @@ const UserPetsList = () => {
           {/* Pets Grid */}
           <Grid container spacing={3}>
             {pets.map((pet) => (
-              <Grid item xs={12} sm={6} md={4} key={pet._id}>
+              <Grid item xs={12} sm={6} md={4} key={pet._id || pet.petCode}>
                 <Card 
                   sx={{ 
                     height: '100%', 
@@ -615,7 +687,18 @@ const UserPetsList = () => {
                     if (pet?.tags?.includes('adoption')) {
                       // For adopted pets, navigate to the adoption details page
                       navigate(`/User/adoption/my-adopted-pets/${pet._id}`)
-                    } else {
+                    } 
+                    // Check if this is a purchased pet by looking for the 'purchased' tag
+                    else if (pet?.tags?.includes('purchased')) {
+                      // For purchased pets, navigate to the purchased pet details page
+                      navigate(`/User/petshop/my-purchased-pets/${pet._id || pet.petCode}`)
+                    }
+                    // Check if this is a pet in temporary care
+                    else if (pet?.tags?.includes('temporary-care')) {
+                      // For pets in temporary care, navigate to the temporary care details page
+                      navigate(`/User/temporary-care/${pet.temporaryCareId}`)
+                    }
+                    else {
                       // For regular user pets, use the existing navigation
                       navigate(`/User/pets/${pet._id}`)
                     }
@@ -630,7 +713,9 @@ const UserPetsList = () => {
                       top: 12,
                       right: 12,
                       zIndex: 1,
-                      bgcolor: pet.tags?.includes('adoption') ? 'secondary.main' : 'primary.main',
+                      bgcolor: pet.tags?.includes('adoption') ? 'secondary.main' : 
+                               pet.tags?.includes('purchased') ? 'success.main' :
+                               pet.tags?.includes('temporary-care') ? 'info.main' : 'primary.main',
                       color: 'white',
                       fontWeight: 600
                     }}
@@ -746,6 +831,42 @@ const UserPetsList = () => {
                         <Typography variant="caption" sx={{ color: 'secondary.main' }}>
                           Adopted: {formatDate(pet.adoptionDate)}
                         </Typography>
+                      </Box>
+                    )}
+                    
+                    {/* Care dates for pets in temporary care */}
+                    {pet.tags?.includes('temporary-care') && pet.careStartDate && (
+                      <Box sx={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        gap: 0.5,
+                        mt: 1,
+                        p: 1,
+                        bgcolor: alpha(theme.palette.info.main, 0.1),
+                        borderRadius: 1
+                      }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <CalendarIcon sx={{ fontSize: 16, color: 'info.main' }} />
+                          <Typography variant="caption" sx={{ color: 'info.main' }}>
+                            Care Start: {formatDate(pet.careStartDate)}
+                          </Typography>
+                        </Box>
+                        {pet.careEndDate && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <CalendarIcon sx={{ fontSize: 16, color: 'info.main' }} />
+                            <Typography variant="caption" sx={{ color: 'info.main' }}>
+                              Care End: {formatDate(pet.careEndDate)}
+                            </Typography>
+                          </Box>
+                        )}
+                        {pet.careCenter && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <PetsIcon sx={{ fontSize: 16, color: 'info.main' }} />
+                            <Typography variant="caption" sx={{ color: 'info.main' }}>
+                              {pet.careCenter}
+                            </Typography>
+                          </Box>
+                        )}
                       </Box>
                     )}
                   </CardContent>

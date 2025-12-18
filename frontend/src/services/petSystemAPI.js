@@ -87,34 +87,6 @@ const petsAPI = {
   getStats: () => api.get('/admin/pets/stats/overview')
 };
 
-// Medical Records API
-const medicalRecordsAPI = {
-  list: (params = {}) => api.get('/admin/medical-records', { params }),
-  getById: (id) => api.get(`/admin/medical-records/${id}`),
-  getByPet: (petId) => api.get(`/admin/medical-records/pet/${petId}`),
-  getUpcoming: () => api.get('/admin/medical-records/upcoming'),
-  getOverdue: () => api.get('/admin/medical-records/overdue'),
-  create: (data) => api.post('/admin/medical-records', data),
-  update: (id, data) => api.put(`/admin/medical-records/${id}`, data),
-  delete: (id) => api.delete(`/admin/medical-records/${id}`),
-  restore: (id) => api.patch(`/admin/medical-records/${id}/restore`),
-  getStats: () => api.get('/admin/medical-records/stats/overview')
-};
-
-// Ownership History API
-const ownershipHistoryAPI = {
-  list: (params = {}) => api.get('/admin/ownership-history', { params }),
-  getById: (id) => api.get(`/admin/ownership-history/${id}`),
-  getByPet: (petId) => api.get(`/admin/ownership-history/pet/${petId}`),
-  getByOwner: (ownerId) => api.get(`/admin/ownership-history/owner/${ownerId}`),
-  getPending: () => api.get('/admin/ownership-history/pending'),
-  create: (data) => api.post('/admin/ownership-history', data),
-  update: (id, data) => api.put(`/admin/ownership-history/${id}`, data),
-  delete: (id) => api.delete(`/admin/ownership-history/${id}`),
-  restore: (id) => api.patch(`/admin/ownership-history/${id}/restore`),
-  getStats: () => api.get('/admin/ownership-history/stats/overview')
-};
-
 // User Pets API
 const userPetsAPI = {
   list: (params = {}) => api.get('/user/pets', { params }),
@@ -142,7 +114,5 @@ export {
   petDetailsAPI,
   customBreedRequestsAPI,
   petsAPI,
-  medicalRecordsAPI,
-  ownershipHistoryAPI,
   userPetsAPI
 };

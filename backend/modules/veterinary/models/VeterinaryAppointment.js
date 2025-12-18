@@ -1,58 +1,139 @@
 const mongoose = require('mongoose');
 
 const veterinaryAppointmentSchema = new mongoose.Schema({
-  pet: { type: mongoose.Schema.Types.ObjectId, ref: 'Pet', required: true },
-  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  veterinary: { type: mongoose.Schema.Types.ObjectId, ref: 'Veterinary', required: true },
-  staff: { type: mongoose.Schema.Types.ObjectId, ref: 'VeterinaryStaff' },
-  service: { type: mongoose.Schema.Types.ObjectId, ref: 'VeterinaryService' },
-  appointmentDate: { type: Date },
-  timeSlot: { type: String }, // e.g., "09:00-09:30"
-  reason: { type: String, required: true },
-  bookingType: { 
+  // Basic appointment information
+  petId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Pet', 
+    required: true,
+    index: true
+  },
+  ownerId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: true,
+    index: true
+  },
+  storeId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Veterinary', 
+    required: true,
+    index: true
+  },
+  serviceId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'VeterinaryService', 
+    required: true,
+    index: true
+  },
+  
+  // Appointment number (unique identifier for the appointment)
+  appointmentNumber: {
+    type: String,
+    unique: true,
+    sparse: true // Allow null values but still enforce uniqueness when not null
+  },
+  
+  // Appointment details
+  appointmentDate: { 
+    type: Date,
+    index: true
+  },
+  timeSlot: {
+    type: String
+  },
+  reason: { 
     type: String, 
+    required: true 
+  },
+  bookingType: {
+    type: String,
     enum: ['routine', 'emergency', 'walkin'],
-    default: 'routine'
+    required: true,
+    index: true
   },
-  visitType: { 
-    type: String, 
-    enum: ['routine_checkup', 'vaccination', 'follow_up', 'consultation', 'other'],
-    default: 'routine_checkup'
+  visitType: {
+    type: String,
+    enum: ['routine_checkup', 'vaccination', 'follow_up', 'consultation', 'other']
   },
-  emergencyReason: { type: String }, // For emergency bookings, detailed reason
-  emergencyApproved: { type: Boolean, default: false }, // Manager approval for emergency bookings
-  emergencyDeclined: { type: Boolean, default: false }, // Manager can decline emergency bookings
-  emergencyDeclineReason: { type: String }, // Reason for declining emergency booking
-  symptoms: { type: String }, // Symptoms for all booking types
-  isExistingCondition: { type: Boolean, default: false }, // Existing medical condition
-  existingConditionDetails: { type: String }, // Details of existing condition
+  symptoms: { 
+    type: String 
+  },
+  isExistingCondition: {
+    type: Boolean,
+    default: false
+  },
+  existingConditionDetails: {
+    type: String
+  },
+  notes: { 
+    type: String 
+  },
   status: { 
     type: String, 
-    enum: ['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show', 'pending_approval', 'declined'],
-    default: 'scheduled'
+    enum: ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show', 'pending_approval'],
+    default: 'scheduled',
+    index: true
   },
-  notes: { type: String },
-  diagnosis: { type: String },
-  treatment: { type: String },
-  followUpDate: { type: Date },
-  cost: { type: Number, min: 0 },
+  
+  // Payment information
   paymentStatus: { 
     type: String, 
-    enum: ['pending', 'paid', 'partial', 'cancelled'],
+    enum: ['pending', 'paid', 'failed', 'refunded'],
     default: 'pending'
   },
-  storeId: { type: String, index: true },
-  storeName: { type: String },
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
-}, { timestamps: true });
+  amount: { 
+    type: Number, 
+    required: true,
+    min: 0
+  },
+  
+  // Store information
+  storeName: { 
+    type: String
+  },
+  
+  // Audit fields
+  createdBy: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User' 
+  },
+  updatedBy: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User' 
+  },
+  cancelledAt: {
+    type: Date
+  }
+}, { 
+  timestamps: true 
+});
 
-// Indexes
-veterinaryAppointmentSchema.index({ appointmentDate: 1, timeSlot: 1 });
-veterinaryAppointmentSchema.index({ pet: 1 });
-veterinaryAppointmentSchema.index({ owner: 1 });
-veterinaryAppointmentSchema.index({ veterinary: 1 });
-veterinaryAppointmentSchema.index({ staff: 1 });
-veterinaryAppointmentSchema.index({ status: 1 });
-veterinaryAppointmentSchema.index({ bookingType: 1 });
+// Generate appointment number before saving
+veterinaryAppointmentSchema.pre('save', async function(next) {
+  if (!this.appointmentNumber) {
+    // Generate a unique appointment number
+    const date = new Date();
+    const year = date.getFullYear().toString().substr(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    
+    // Generate a random 4-digit number
+    const random = Math.floor(1000 + Math.random() * 9000);
+    
+    this.appointmentNumber = `APT-${year}${month}${day}-${random}`;
+    
+    // Ensure uniqueness by checking if this number already exists
+    let existing = await this.constructor.findOne({ appointmentNumber: this.appointmentNumber });
+    let attempts = 0;
+    while (existing && attempts < 10) {
+      const newRandom = Math.floor(1000 + Math.random() * 9000);
+      this.appointmentNumber = `APT-${year}${month}${day}-${newRandom}`;
+      existing = await this.constructor.findOne({ appointmentNumber: this.appointmentNumber });
+      attempts++;
+    }
+  }
+  next();
+});
 
-module.exports = mongoose.models.VeterinaryAppointment || mongoose.model('VeterinaryAppointment', veterinaryAppointmentSchema);
+module.exports = mongoose.model('VeterinaryAppointment', veterinaryAppointmentSchema);

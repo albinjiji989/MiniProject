@@ -1,5 +1,6 @@
 const { validationResult } = require('express-validator');
 const MedicalRecord = require('../../../../core/models/MedicalRecord');
+const Pet = require('../../../../core/models/Pet');
 
 const createRecord = async (req, res) => {
   try {
@@ -22,7 +23,13 @@ const createRecord = async (req, res) => {
 
 const listRecordsForPet = async (req, res) => {
   try {
-    const records = await MedicalRecord.find({ petId: req.params.petId }).sort({ visitDate: -1 });
+    const records = await MedicalRecord.find({ petId: req.params.petId })
+      .populate({
+        path: 'petId',
+        select: 'name species breed imageIds',
+        populate: { path: 'images', select: 'url caption isPrimary' }
+      })
+      .sort({ visitDate: -1 });
     res.json({ success: true, data: { records } });
   } catch (e) {
     console.error('List medical records error:', e);
@@ -31,5 +38,3 @@ const listRecordsForPet = async (req, res) => {
 };
 
 module.exports = { createRecord, listRecordsForPet };
-
-

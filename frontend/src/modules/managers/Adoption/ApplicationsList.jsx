@@ -381,9 +381,12 @@ const ApplicationsList = () => {
                     <Grid item xs={12} sm={6} md={3}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <DescriptionIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                        <Typography variant="body2">
-                          <strong>Payment:</strong> {getPaymentStatusChip(app.paymentStatus)}
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Typography variant="body2" component="span">
+                            <strong>Payment:</strong>
+                          </Typography>
+                          {getPaymentStatusChip(app.paymentStatus)}
+                        </Box>
                       </Box>
                     </Grid>
                   </Grid>
@@ -498,26 +501,29 @@ const ApplicationsList = () => {
       {/* Application Details Dialog */}
       <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
-          Application Details
-          {selectedApplication && (
-            <Chip 
-              label={
-                selectedApplication.status === 'pending' ? 'Pending Review' :
-                selectedApplication.status === 'approved' ? 'Approved' :
-                selectedApplication.status === 'rejected' ? 'Rejected' :
-                selectedApplication.status === 'completed' ? 'Completed' :
-                selectedApplication.status
-              } 
-              color={
-                selectedApplication.status === 'pending' ? 'warning' :
-                selectedApplication.status === 'approved' ? 'info' :
-                selectedApplication.status === 'rejected' ? 'error' :
-                selectedApplication.status === 'completed' ? 'success' : 'default'
-              } 
-              size="small" 
-              sx={{ ml: 2 }}
-            />
-          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="h6" component="div">
+              Application Details
+            </Typography>
+            {selectedApplication && (
+              <Chip 
+                label={
+                  selectedApplication.status === 'pending' ? 'Pending Review' :
+                  selectedApplication.status === 'approved' ? 'Approved' :
+                  selectedApplication.status === 'rejected' ? 'Rejected' :
+                  selectedApplication.status === 'completed' ? 'Completed' :
+                  selectedApplication.status
+                } 
+                color={
+                  selectedApplication.status === 'pending' ? 'warning' :
+                  selectedApplication.status === 'approved' ? 'info' :
+                  selectedApplication.status === 'rejected' ? 'error' :
+                  selectedApplication.status === 'completed' ? 'success' : 'default'
+                } 
+                size="small"
+              />
+            )}
+          </Box>
         </DialogTitle>
         <DialogContent>
           {selectedApplication && (
@@ -593,13 +599,13 @@ const ApplicationsList = () => {
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                        <Typography variant="body2" color="text.secondary">Application Status:</Typography>
+                        <Typography variant="body2" color="text.secondary" component="span">Application Status:</Typography>
                         <StatusChip value={selectedApplication.status} />
                       </Box>
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                        <Typography variant="body2" color="text.secondary">Payment Status:</Typography>
+                        <Typography variant="body2" color="text.secondary" component="span">Payment Status:</Typography>
                         {getPaymentStatusChip(selectedApplication.paymentStatus)}
                       </Box>
                     </Grid>

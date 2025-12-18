@@ -236,6 +236,7 @@ const scheduleHandover = async (req, res) => {
     app.handover.scheduledAt = scheduleDate
     app.handover.location = adoptionCenterLocation
     app.handover.notes = notes || ''
+    app.handover.status = 'scheduled' // Add this line to properly set the status
     const newOTP = Math.floor(100000 + Math.random() * 900000).toString() // 6-digit OTP
     app.handover.otp = newOTP
     
@@ -408,6 +409,117 @@ const completeHandover = async (req, res) => {
         pet.adopterUserId = app.userId
         pet.adoptionDate = new Date()
         await pet.save()
+        
+        // Create core Pet for the adopter preserving petCode
+        try {
+          const User = require('../../../../core/models/User');
+          const Pet = require('../../../../core/models/Pet');
+          const PetDetails = require('../../../../core/models/PetDetails');
+          const Species = require('../../../../core/models/Species');
+          const Breed = require('../../../../core/models/Breed');
+          const OwnershipHistory = require('../../../../core/models/OwnershipHistory');
+          
+          // Resolve species and breed IDs
+          let speciesDoc = await Species.findOne({ $or: [ { displayName: pet.species }, { name: pet.species?.toLowerCase() } ] })
+          if (!speciesDoc) {
+            // fallback: create minimal species? Better: skip to avoid bad data
+            throw new Error('Species not found for adopted pet')
+          }
+          const breedDoc = await Breed.findOne({ name: pet.breed, speciesId: speciesDoc._id })
+          if (!breedDoc) {
+            throw new Error('Breed not found for adopted pet')
+          }
+
+          const pd = await PetDetails.create({
+            speciesId: speciesDoc._id,
+            breedId: breedDoc._id,
+            name: pet.name || 'Pet',
+            description: pet.description || '',
+            color: pet.color || 'Unknown',
+            ageRange: { min: 0, max: 0 },
+            weightRange: { min: 0, max: 0, unit: 'kg' },
+            typicalLifespan: { min: 0, max: 0, unit: 'years' },
+            vaccinationRequirements: [],
+            careInstructions: {},
+            temperament: Array.isArray(pet.temperament) ? pet.temperament : (pet.temperament ? [pet.temperament] : []),
+            specialNeeds: Array.isArray(pet.specialNeeds) ? pet.specialNeeds : [],
+            createdBy: app.userId,
+          })
+
+          const corePet = new Pet({
+            name: pet.name || 'Pet',
+            species: speciesDoc._id,
+            breed: breedDoc._id,
+            petDetails: pd._id,
+            owner: app.userId,
+            gender: (pet.gender || 'Unknown').toLowerCase() === 'male' ? 'Male' : (pet.gender || 'Unknown').toLowerCase() === 'female' ? 'Female' : 'Unknown',
+            color: pet.color || 'Unknown',
+            images: (pet.images || []).map(img => ({ url: img.url, caption: img.caption || '', isPrimary: !!img.isPrimary })),
+            tags: ['adoption'],
+            description: pet.description || '',
+            createdBy: app.userId,
+            // Preserve code from adoption pet
+            petCode: pet.petCode,
+            currentStatus: 'Adopted',
+          })
+          await corePet.save()
+
+          // Centralized registry sync: identity + state
+          try {
+            const PetRegistryService = require('../../../../../core/services/petRegistryService')
+            
+            // Create/update registry with source tracking
+            await PetRegistryService.upsertAndSetState({
+              petCode: pet.petCode,
+              name: pet.name || 'Pet',
+              species: speciesDoc._id,
+              breed: breedDoc._id,
+              images: (pet.images || []).map(img => ({ url: img.url, caption: img.caption || '', isPrimary: !!img.isPrimary })),
+              source: 'adoption',
+              adoptionPetId: pet._id,
+              actorUserId: app.userId,
+              firstAddedSource: 'adoption_center',
+              firstAddedBy: pet.createdBy // The adoption center manager who added it
+            }, {
+              currentOwnerId: app.userId,
+              currentLocation: 'at_owner',
+              currentStatus: 'adopted',
+              lastTransferAt: new Date()
+            })
+            
+            // Record ownership transfer in registry
+            await PetRegistryService.recordOwnershipTransfer({
+              petCode: pet.petCode,
+              previousOwnerId: pet.createdBy,
+              newOwnerId: app.userId,
+              transferType: 'adoption',
+              transferPrice: Number(app.paymentDetails?.amount || 0),
+              transferReason: 'Pet Adoption',
+              source: 'adoption',
+              notes: 'Adoption completed successfully',
+              performedBy: app.userId
+            })
+          } catch (regErr) {
+            console.warn('PetRegistry sync failed (adoption complete):', regErr?.message || regErr)
+          }
+
+          // Ownership history entry
+          try {
+            await OwnershipHistory.create({
+              pet: corePet._id,
+              previousOwner: pet.createdBy || app.userId,
+              newOwner: app.userId,
+              transferType: 'Adoption',
+              reason: 'Adopted via site',
+              transferFee: { amount: Number(app.paymentDetails?.amount || 0), currency: app.paymentDetails?.currency || 'INR', paid: true, paymentMethod: 'Card' },
+              createdBy: app.userId,
+            })
+          } catch (ohErr) {
+            console.warn('Ownership history (adoption) create failed:', ohErr?.message)
+          }
+        } catch (x) {
+          console.error('Create core Pet after adoption failed:', x?.message)
+        }
       }
       // Update centralized registry if available
       try {

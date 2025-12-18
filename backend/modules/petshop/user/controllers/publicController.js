@@ -4,6 +4,7 @@ const PetReservation = require('../models/PetReservation');
 const Wishlist = require('../models/Wishlist');
 const Review = require('../models/Review');
 const ShopOrder = require('../models/ShopOrder');
+const PetStock = require('../../manager/models/PetStock');
 
 // Public listings (no auth)
 const listPublicListings = async (req, res) => {

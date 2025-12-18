@@ -19,17 +19,24 @@ import {
   Alert,
   Chip,
   Divider,
-  CircularProgress
+  CircularProgress,
+  ImageList,
+  ImageListItem,
+  ImageListItemBar,
+  IconButton
 } from '@mui/material'
 import {
   ArrowBack as ArrowBackIcon,
   Save as SaveIcon,
   NavigateNext as NextIcon,
   NavigateBefore as BackIcon,
-  Check as CheckIcon
+  Check as CheckIcon,
+  AddAPhoto as AddPhotoIcon,
+  Delete as DeleteIcon
 } from '@mui/icons-material'
-import { apiClient } from '../../../services/api'
+import { petShopStockAPI } from '../../../services/api'
 import RequestModal from '../../../components/Common/RequestModal'
+import { apiClient } from '../../../services/api'
 
 const AddStock = () => {
   const navigate = useNavigate()
@@ -46,7 +53,9 @@ const AddStock = () => {
     basePrice: 0,
     source: 'Other',
     arrivalDate: new Date().toISOString().split('T')[0],
-    notes: ''
+    notes: '',
+    color: '',
+    size: 'medium'
   })
 
   // Age groups
@@ -61,6 +70,10 @@ const AddStock = () => {
   const [genderDistribution, setGenderDistribution] = useState([])
   const [totalStockCount, setTotalStockCount] = useState(0)
 
+  // Images
+  const [maleImages, setMaleImages] = useState([])
+  const [femaleImages, setFemaleImages] = useState([])
+
   // Dropdown data
   const [categories, setCategories] = useState([])
   const [allSpecies, setAllSpecies] = useState([]) // All species
@@ -69,7 +82,7 @@ const AddStock = () => {
   const [filteredBreeds, setFilteredBreeds] = useState([]) // Breeds filtered by species
   const [showRequestModal, setShowRequestModal] = useState(false)
 
-  const steps = ['Basic Information', 'Age Group Distribution', 'Gender Distribution', 'Review & Confirm']
+  const steps = ['Basic Information', 'Age Group Distribution', 'Images', 'Review & Confirm']
 
   useEffect(() => {
     fetchDropdownData()
@@ -188,6 +201,7 @@ const AddStock = () => {
       setGenderDistribution(genderDist)
       setCurrentStep(2)
     } else if (currentStep === 2) {
+      // Optionally validate images
       setCurrentStep(3)
     } else if (currentStep === 3) {
       handleCreateStock()
@@ -198,84 +212,112 @@ const AddStock = () => {
     setCurrentStep(currentStep - 1)
   }
 
+  // Handle image upload
+  const handleImageUpload = (event, gender) => {
+    const files = Array.from(event.target.files)
+    if (files.length === 0) {
+      showSnackbar('No files selected', 'warning');
+      return;
+    }
+    
+    const newImages = files.map(file => {
+      // Validate file type
+      if (!file.type.match('image.*')) {
+        showSnackbar(`File ${file.name} is not an image`, 'error');
+        return null;
+      }
+      
+      // Validate file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        showSnackbar(`File ${file.name} is too large (max 5MB)`, 'error');
+        return null;
+      }
+      
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve({
+          file,
+          preview: reader.result,
+          name: file.name
+        })
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+    }).filter(Boolean); // Remove null values
+
+    if (newImages.length === 0) {
+      showSnackbar('No valid images to upload', 'warning');
+      return;
+    }
+
+    Promise.all(newImages).then(images => {
+      if (gender === 'male') {
+        setMaleImages(prev => [...prev, ...images])
+      } else {
+        setFemaleImages(prev => [...prev, ...images])
+      }
+      showSnackbar(`${images.length} ${gender} image(s) added successfully`, 'success');
+    }).catch(err => {
+      console.error('Error processing images:', err);
+      showSnackbar('Failed to process images', 'error');
+    })
+  }
+
+  // Remove image
+  const removeImage = (index, gender) => {
+    if (gender === 'male') {
+      setMaleImages(prev => prev.filter((_, i) => i !== index))
+    } else {
+      setFemaleImages(prev => prev.filter((_, i) => i !== index))
+    }
+  }
+
   const handleCreateStock = async () => {
     try {
-      setLoading(true);
-      const items = [];
+      setLoading(true)
       
-      console.log('Gender distribution:', genderDistribution);
+      // Prepare stock data
+      const stockData = {
+        name: `${getBreedName(basicForm.breedId)} ${getSpeciesName(basicForm.speciesId)}`,
+        speciesId: basicForm.speciesId,
+        breedId: basicForm.breedId,
+        age: ageGroups.find(g => g.count > 0)?.ageRange[0] || 0,
+        ageUnit: ageGroups.find(g => g.count > 0)?.ageUnit || 'months',
+        color: basicForm.color || '',
+        size: basicForm.size || 'medium',
+        price: parseFloat(basicForm.basePrice) || 0,
+        unitCost: parseFloat(basicForm.unitCost) || 0,
+        maleCount: genderDistribution.reduce((sum, group) => sum + (parseInt(group.maleCount) || 0), 0),
+        femaleCount: genderDistribution.reduce((sum, group) => sum + (parseInt(group.femaleCount) || 0), 0),
+        // Convert images to base64 strings for backend processing
+        maleImages: maleImages
+          .filter(img => img.preview && typeof img.preview === 'string' && img.preview.startsWith('data:image/'))
+          .map(img => img.preview)
+          .filter((value, index, self) => self.indexOf(value) === index), // Remove duplicates
+        femaleImages: femaleImages
+          .filter(img => img.preview && typeof img.preview === 'string' && img.preview.startsWith('data:image/'))
+          .map(img => img.preview)
+          .filter((value, index, self) => self.indexOf(value) === index), // Remove duplicates
+        tags: [getCategoryName(basicForm.categoryId)],
+        notes: basicForm.notes
+      };
+
+      console.log('🚀 Sending stock creation request:', { stockData });
       
-      // Always use the age group/gender distribution approach
-      // Individual pet names are not assigned during inventory creation
-      genderDistribution.forEach((ageGroup, index) => {
-        console.log(`Processing age group ${index}:`, ageGroup);
-        
-        // Validate ageGroup structure
-        if (!ageGroup || !Array.isArray(ageGroup.ageRange) || ageGroup.ageRange.length < 1) {
-          console.error(`Invalid age group data at index ${index}:`, ageGroup);
-          throw new Error(`Invalid age group data at index ${index}`);
-        }
-        
-        // Create male pets
-        const maleCount = parseInt(ageGroup.maleCount) || 0;
-        for (let i = 0; i < maleCount; i++) {
-          const item = {
-            categoryId: basicForm.categoryId,
-            speciesId: basicForm.speciesId,
-            breedId: basicForm.breedId,
-            gender: 'Male',
-            age: ageGroup.ageRange[0],
-            ageUnit: ageGroup.ageUnit,
-            quantity: 1,
-            price: parseFloat(basicForm.basePrice) || 0,
-            unitCost: parseFloat(basicForm.unitCost) || 0,
-            source: basicForm.source,
-            arrivalDate: basicForm.arrivalDate ? new Date(basicForm.arrivalDate) : new Date(),
-            notes: basicForm.notes
-          };
-          console.log(`Creating male pet ${i} for age group ${index}:`, item);
-          items.push(item);
-        }
-        
-        // Create female pets
-        const femaleCount = parseInt(ageGroup.femaleCount) || 0;
-        for (let i = 0; i < femaleCount; i++) {
-          const item = {
-            categoryId: basicForm.categoryId,
-            speciesId: basicForm.speciesId,
-            breedId: basicForm.breedId,
-            gender: 'Female',
-            age: ageGroup.ageRange[0],
-            ageUnit: ageGroup.ageUnit,
-            quantity: 1,
-            price: parseFloat(basicForm.basePrice) || 0,
-            unitCost: parseFloat(basicForm.unitCost) || 0,
-            source: basicForm.source,
-            arrivalDate: basicForm.arrivalDate ? new Date(basicForm.arrivalDate) : new Date(),
-            notes: basicForm.notes
-          };
-          console.log(`Creating female pet ${i} for age group ${index}:`, item);
-          items.push(item);
-        }
-      });
+      // Create the stock record
+      const response = await petShopStockAPI.createStock(stockData);
+      console.log('✅ Stock creation response:', response);
       
-      console.log('🚀 Sending bulk inventory request:', { items });
-      if (items.length > 0) {
-        console.log('📝 Sample item structure:', items[0]);
-      }
+      // Provide feedback about images if any were uploaded
+      const totalImages = maleImages.length + femaleImages.length;
+      const message = totalImages > 0 
+        ? `Successfully created stock with ${stockData.maleCount + stockData.femaleCount} pets and uploaded ${totalImages} images!`
+        : `Successfully created stock with ${stockData.maleCount + stockData.femaleCount} pets!`;
       
-      // Validate that we have items to send
-      if (items.length === 0) {
-        throw new Error('No items to create. Please add pets to age groups.');
-      }
-      
-      const response = await apiClient.post('/petshop/manager/inventory/bulk', { items });
-      console.log('✅ Bulk inventory response:', response);
-      
-      showSnackbar(`Successfully added ${items.length} pets to stock!`);
+      showSnackbar(message);
       
       // Navigate to Manage Inventory after success
-      navigate('/manager/petshop/manage-inventory', { state: { message: `Added ${items.length} pets to stock`, refresh: true } });
+      navigate('/manager/petshop/manage-inventory', { state: { message, refresh: true } });
 
     } catch (err) {
       console.error('Create stock error:', err);
@@ -564,55 +606,99 @@ const AddStock = () => {
             </Box>
           )}
 
-          {/* Step 3: Gender Distribution */}
+          {/* Step 3: Images */}
           {currentStep === 2 && (
             <Box>
               <Typography variant="h6" gutterBottom>
-                Gender Distribution
+                Images
               </Typography>
               <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-                Distribute {totalStockCount} pets by gender for each age group
+                Upload images for male and female pets
               </Typography>
 
-              {genderDistribution.map((group, index) => (
-                <Card key={group.id} sx={{ mb: 2, p: 2 }}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    {group.label}
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                    Total: {group.count} pets
-                  </Typography>
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Male Images ({maleImages.length})
+                </Typography>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={<AddPhotoIcon />}
+                  disabled={loading}
+                >
+                  Upload Images
+                  <input
+                    type="file"
+                    hidden
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => handleImageUpload(e, 'male')}
+                  />
+                </Button>
+                {maleImages.length > 0 && (
+                  <ImageList cols={4} gap={8} sx={{ mt: 2 }}>
+                    {maleImages.map((img, index) => (
+                      <ImageListItem key={img.name}>
+                        <img src={img.preview} alt={img.name} loading="lazy" />
+                        <ImageListItemBar
+                          title={img.name}
+                          position="below"
+                          actionIcon={
+                            <IconButton
+                              onClick={() => removeImage(index, 'male')}
+                              disabled={loading}
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          }
+                        />
+                      </ImageListItem>
+                    ))}
+                  </ImageList>
+                )}
+              </Box>
 
-                  <Grid container spacing={2}>
-                    <Grid item xs={6}>
-                      <TextField
-                        fullWidth
-                        label="Male Count"
-                        type="number"
-                        inputProps={{ min: 0, max: group.count }}
-                        value={group.maleCount}
-                        onChange={(e) => updateGenderCount(index, 'maleCount', e.target.value)}
-                        disabled={loading}
-                      />
-                    </Grid>
-                    <Grid item xs={6}>
-                      <TextField
-                        fullWidth
-                        label="Female Count"
-                        type="number"
-                        inputProps={{ min: 0, max: group.count }}
-                        value={group.femaleCount}
-                        onChange={(e) => updateGenderCount(index, 'femaleCount', e.target.value)}
-                        disabled={loading}
-                      />
-                    </Grid>
-                  </Grid>
-
-                  <Typography variant="body2" sx={{ mt: 1 }}>
-                    Remaining: {group.count - group.maleCount - group.femaleCount}
-                  </Typography>
-                </Card>
-              ))}
+              <Box>
+                <Typography variant="subtitle1" gutterBottom>
+                  Female Images ({femaleImages.length})
+                </Typography>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={<AddPhotoIcon />}
+                  disabled={loading}
+                >
+                  Upload Images
+                  <input
+                    type="file"
+                    hidden
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => handleImageUpload(e, 'female')}
+                  />
+                </Button>
+                {femaleImages.length > 0 && (
+                  <ImageList cols={4} gap={8} sx={{ mt: 2 }}>
+                    {femaleImages.map((img, index) => (
+                      <ImageListItem key={img.name}>
+                        <img src={img.preview} alt={img.name} loading="lazy" />
+                        <ImageListItemBar
+                          title={img.name}
+                          position="below"
+                          actionIcon={
+                            <IconButton
+                              onClick={() => removeImage(index, 'female')}
+                              disabled={loading}
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          }
+                        />
+                      </ImageListItem>
+                    ))}
+                  </ImageList>
+                )}
+              </Box>
             </Box>
           )}
 
@@ -674,12 +760,21 @@ const AddStock = () => {
                 ))}
               </Card>
 
-              <Alert severity="warning">
+              <Alert severity="warning" sx={{ mb: 2 }}>
                 <Typography variant="body1">
                   <strong>Important:</strong> This action will create {totalStockCount} individual pet records in your inventory. 
                   Each pet will receive a unique pet code and can be managed individually.
                 </Typography>
               </Alert>
+              
+              {(maleImages.length > 0 || femaleImages.length > 0) && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body1">
+                    <strong>Images:</strong> You have selected {maleImages.length} male image(s) and {femaleImages.length} female image(s) 
+                    that will be associated with the respective pets when they are generated from this stock.
+                  </Typography>
+                </Alert>
+              )}
             </Box>
           )}
 

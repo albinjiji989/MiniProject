@@ -17,6 +17,7 @@ const storeController = require('../controllers/storeController') // Added missi
 const storeNameChangeController = require('../controllers/storeNameChangeController') // Added missing import
 const inventoryManagementController = require('../controllers/inventoryManagementController') // Added missing import
 const handoverController = require('../controllers/handoverController') // Added handover controller
+const stockController = require('../controllers/stockController') // Added stock controller
 // const pricingController = require('../controllers/pricingController') // Removed pricing controller
 
 // Manager routes - require manager role
@@ -102,6 +103,9 @@ router.put('/inventory/:id', auth, authorizeModule('petshop'), inventoryControll
 router.delete('/inventory/:id', auth, authorizeModule('petshop'), inventoryController.deleteInventoryItem);
 router.post('/inventory/bulk', auth, authorizeModule('petshop'), inventoryController.bulkCreateInventoryItems);
 
+// ML Data Endpoint
+router.get('/inventory/ml/data', auth, authorizeModule('petshop'), inventoryController.getInventoryForML);
+
 // Inventory Image Upload
 router.post('/inventory/:id/images', auth, authorizeModule('petshop'), upload.single('file'), inventoryController.uploadInventoryImage);
 // Inventory Image Removal
@@ -109,6 +113,9 @@ router.delete('/inventory/:id/images/:imageId', auth, authorizeModule('petshop')
 
 // Bulk Publish Inventory Items
 router.post('/inventory/publish-bulk', auth, authorizeModule('petshop'), inventoryManagementController.bulkPublishInventoryItems);
+
+// Bulk Create Stock Items
+router.post('/stocks/bulk', auth, authorizeModule('petshop'), inventoryController.bulkCreateStockItems);
 
 // Reserved Pets Management
 router.get('/inventory/reserved', auth, authorizeModule('petshop'), inventoryController.listReservedPets);
@@ -152,5 +159,16 @@ router.get('/reservations/:id', auth, authorizeModule('petshop'), enhancedReserv
 // Manager approves payment for reservation
 router.post('/reservations/:id/approve-payment', auth, authorizeModule('petshop'), enhancedReservationController.approvePayment);
 
-module.exports = router;
+// Stock Management Routes
+router.get('/stocks', auth, authorizeModule('petshop'), stockController.listStocks);
+router.post('/stocks', auth, authorizeModule('petshop'), stockController.createStock);
+router.get('/stocks/:id', auth, authorizeModule('petshop'), stockController.getStockById);
+router.put('/stocks/:id', auth, authorizeModule('petshop'), stockController.updateStock);
+router.delete('/stocks/:id', auth, authorizeModule('petshop'), stockController.deleteStock);
+router.post('/stocks/generate-pets', auth, authorizeModule('petshop'), stockController.generatePetsFromStock);
 
+// Stock Image Management Routes
+router.post('/stocks/:id/images', auth, authorizeModule('petshop'), upload.single('file'), stockController.uploadStockImages);
+router.delete('/stocks/:stockId/images/:imageId', auth, authorizeModule('petshop'), stockController.removeStockImage);
+
+module.exports = router;

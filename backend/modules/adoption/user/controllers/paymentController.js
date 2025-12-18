@@ -9,6 +9,7 @@ const PetDetails = require('../../../../core/models/PetDetails');
 const Species = require('../../../../core/models/Species');
 const Breed = require('../../../../core/models/Breed');
 const OwnershipHistory = require('../../../../core/models/OwnershipHistory');
+const UnifiedPetRegistrationService = require('../../../../core/services/unifiedPetRegistrationService');
 
 const createUserPaymentOrder = async (req, res) => {
   try {
@@ -156,50 +157,47 @@ const verifyUserPayment = async (req, res) => {
           createdBy: req.user.id,
         })
 
-        const corePet = new Pet({
+        // Create user pet records using unified service
+        const { pet: corePet } = await UnifiedPetRegistrationService.createUserPetRecords({
+          name: pet.name || 'Pet',
+          speciesId: speciesDoc._id,
+          breedId: breedDoc._id,
+          ownerId: req.user.id,
+          gender: (pet.gender || 'Unknown').toLowerCase() === 'male' ? 'Male' : (pet.gender || 'Unknown').toLowerCase() === 'female' ? 'Female' : 'Unknown',
+          age: pet.age || 0,
+          ageUnit: pet.ageUnit || 'months',
+          color: pet.color || 'Unknown',
+          weight: { value: pet.weight || 0, unit: 'kg' },
+          size: 'medium',
+          temperament: Array.isArray(pet.temperament) ? pet.temperament : (pet.temperament ? [pet.temperament] : []),
+          specialNeeds: Array.isArray(pet.specialNeeds) ? pet.specialNeeds : (pet.specialNeeds ? [pet.specialNeeds] : []),
+          imageIds: (pet.images || []).map(img => img._id || img.id),
+          currentStatus: 'Adopted',
+          healthStatus: 'Good',
+          createdBy: req.user.id
+        });
+
+        // Register pet in unified registry
+        await UnifiedPetRegistrationService.registerPet({
+          petCode: pet.petCode,
           name: pet.name || 'Pet',
           species: speciesDoc._id,
           breed: breedDoc._id,
-          petDetails: pd._id,
-          owner: req.user.id,
+          images: pet.images || [],
+          source: 'adoption',
+          firstAddedSource: 'adoption_center',
+          firstAddedBy: pet.createdBy,
+          currentOwnerId: req.user.id,
+          currentStatus: 'adopted',
+          currentLocation: 'at_owner',
           gender: (pet.gender || 'Unknown').toLowerCase() === 'male' ? 'Male' : (pet.gender || 'Unknown').toLowerCase() === 'female' ? 'Female' : 'Unknown',
+          age: pet.age || 0,
+          ageUnit: pet.ageUnit || 'months',
           color: pet.color || 'Unknown',
-          images: (pet.images || []).map(img => ({ url: img.url, caption: img.caption || '', isPrimary: !!img.isPrimary })),
-          tags: ['adoption'],
-          description: pet.description || '',
-          createdBy: req.user.id,
-          // Preserve code from adoption pet
-          petCode: pet.petCode,
-          currentStatus: 'Adopted',
-        })
-        await corePet.save()
-
-        // Centralized registry sync: identity + state
-        try {
-          const PetRegistryService = require('../../../../../core/services/petRegistryService')
-          
-          // Create/update registry with source tracking
-          await PetRegistryService.upsertAndSetState({
-            petCode: pet.petCode,
-            name: pet.name || 'Pet',
-            species: speciesDoc._id,
-            breed: breedDoc._id,
-            images: (pet.images || []).map(img => ({ url: img.url, caption: img.caption || '', isPrimary: !!img.isPrimary })),
-            source: 'adoption',
-            adoptionPetId: pet._id,
-            actorUserId: req.user.id,
-            firstAddedSource: 'adoption_center',
-            firstAddedBy: pet.createdBy // The adoption center manager who added it
-          }, {
-            currentOwnerId: req.user.id,
-            currentLocation: 'at_owner',
-            currentStatus: 'adopted',
-            lastTransferAt: new Date()
-          })
-          
-          // Record ownership transfer in registry
-          await PetRegistryService.recordOwnershipTransfer({
-            petCode: pet.petCode,
+          sourceReferences: {
+            adoptionPetId: pet._id
+          },
+          ownershipTransfer: {
             previousOwnerId: pet.createdBy,
             newOwnerId: req.user.id,
             transferType: 'adoption',
@@ -208,24 +206,23 @@ const verifyUserPayment = async (req, res) => {
             source: 'adoption',
             notes: 'Adoption completed successfully',
             performedBy: req.user.id
-          })
-        } catch (regErr) {
-          console.warn('PetRegistry sync failed (adoption complete):', regErr?.message || regErr)
-        }
+          },
+          actorUserId: req.user.id
+        });
 
-        // Ownership history entry
+        // Create ownership history entry
         try {
-          await OwnershipHistory.create({
-            pet: corePet._id,
+          await UnifiedPetRegistrationService.createOwnershipHistory({
+            petId: corePet._id,
             previousOwner: pet.createdBy || req.user.id,
             newOwner: req.user.id,
             transferType: 'Adoption',
             reason: 'Adopted via site',
             transferFee: { amount: Number(application.paymentDetails?.amount || 0), currency: application.paymentDetails?.currency || 'INR', paid: true, paymentMethod: 'Card' },
             createdBy: req.user.id,
-          })
+          });
         } catch (ohErr) {
-          console.warn('Ownership history (adoption) create failed:', ohErr?.message)
+          console.warn('Ownership history (adoption) create failed:', ohErr?.message);
         }
       } catch (x) {
         console.error('Create core Pet after adoption failed:', x?.message)

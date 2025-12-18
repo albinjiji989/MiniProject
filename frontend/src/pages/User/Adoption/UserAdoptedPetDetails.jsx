@@ -28,6 +28,7 @@ import {
   MenuItem,
   Avatar,
   useTheme,
+  useMediaQuery,
   alpha
 } from '@mui/material'
 import {
@@ -52,6 +53,7 @@ const UserAdoptedPetDetails = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   
   const [pet, setPet] = useState(null)
   const [loading, setLoading] = useState(true)

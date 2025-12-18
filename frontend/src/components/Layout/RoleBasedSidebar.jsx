@@ -92,15 +92,10 @@ const getMenuItems = (userRole, userDetails) => {
     const baseWithoutDashboard = baseItems.filter(i => i.text !== 'Dashboard')
     return [
       ...baseWithoutDashboard,
-      {
-        text: 'Dashboard & Analytics',
-        icon: <DashboardIcon />,
-        children: [
-          { text: 'Admin Dashboard', icon: <DashboardIcon />, path: '/admin/dashboard', roles: ['admin'] },
-          { text: 'Data Tracking', icon: <StatsIcon />, path: '/admin/tracking', roles: ['admin'] },
-          { text: 'Pet Shop Analytics', icon: <AnalyticsIcon />, path: '/admin/petshop-analytics', roles: ['admin'] },
-        ]
-      },
+      { text: 'Admin Dashboard', icon: <DashboardIcon />, path: '/admin/dashboard', roles: ['admin'] },
+      { text: 'Public User Management', icon: <PeopleIcon />, path: '/admin/users', roles: ['admin'] },
+      { text: 'Module Management', icon: <ModuleIcon />, path: '/admin/modules', roles: ['admin'] },
+      { text: 'Manager Management', icon: <BusinessIcon />, path: '/admin/managers', roles: ['admin'] },
       {
         text: 'Pet Management',
         icon: <PetsIcon />,
@@ -110,29 +105,6 @@ const getMenuItems = (userRole, userDetails) => {
           { text: 'Species', icon: <PetsIcon />, path: '/admin/species', roles: ['admin'] },
           { text: 'Breed', icon: <PetsIcon />, path: '/admin/breeds', roles: ['admin'] },
           { text: 'Breed Request', icon: <AssignmentIcon />, path: '/admin/custom-breed-requests', roles: ['admin'] },
-          { text: 'Ownership History', icon: <HistoryIcon />, path: '/admin/ownership-history', roles: ['admin'] },
-          { text: 'Ownership by User', icon: <PeopleIcon />, path: '/admin/ownership-by-user', roles: ['admin'] },
-          { text: 'Medical Records', icon: <LocalHospitalIcon />, path: '/admin/medical-records', roles: ['admin'] },
-        ]
-      },
-      { text: 'Public User Management', icon: <PeopleIcon />, path: '/admin/users', roles: ['admin'] },
-      { text: 'Module Management', icon: <ModuleIcon />, path: '/admin/modules', roles: ['admin'] },
-      { text: 'Manager Management', icon: <BusinessIcon />, path: '/admin/managers', roles: ['admin'] },
-      {
-        text: 'Adoption Module',
-        icon: <AdoptionIcon />,
-        children: [
-          { text: 'Adoption Dashboard', icon: <DashboardIcon />, path: '/admin/adoption-dashboard', roles: ['admin'] },
-          { text: 'Adoption Management', icon: <SettingsIcon />, path: '/admin/adoption-management', roles: ['admin'] },
-          { text: 'Adoption Analytics', icon: <AnalyticsIcon />, path: '/admin/adoption-analytics', roles: ['admin'] },
-        ]
-      },
-      {
-        text: 'System Management',
-        icon: <SettingsIcon />,
-        children: [
-          { text: 'RBAC Management', icon: <SecurityIcon />, path: '/rbac', roles: ['admin'] },
-          { text: 'Core System', icon: <SettingsIcon />, path: '/core', roles: ['admin'] },
         ]
       },
     ]

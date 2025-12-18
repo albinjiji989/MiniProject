@@ -60,6 +60,7 @@ import {
   Cancel as CancelIcon,
   Assignment as ModuleIcon,
   LocationOn as LocationIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { managersAPI, modulesAPI, usersAPI } from '../../services/api'
@@ -100,9 +101,18 @@ const ManagerManagement = () => {
     phone: '',
     module: '',
     address: '',
+    storeName: '',
+    storeLocation: {
+      addressLine1: '',
+      addressLine2: '',
+      city: '',
+      state: '',
+      country: '',
+      zipCode: ''
+    },
     isActive: true
   })
-
+  
   const [inviteData, setInviteData] = useState({
     name: '',
     email: '',
@@ -164,10 +174,11 @@ const ManagerManagement = () => {
       setLoading(false)
     }
   }
-
+  
   const loadInvites = async () => {
     try {
-      setInvites([])
+      const response = await managersAPI.getPendingInvites()
+      setInvites(response.data?.data || [])
     } catch (err) {
       console.error('Error loading invites:', err)
     }
@@ -210,6 +221,15 @@ const ManagerManagement = () => {
       phone: manager.phone || '',
       module: deriveManagerModule(manager) || '',
       address: manager.address || '',
+      storeName: manager.storeName || '',
+      storeLocation: {
+        addressLine1: manager.storeLocation?.addressLine1 || '',
+        addressLine2: manager.storeLocation?.addressLine2 || '',
+        city: manager.storeLocation?.city || '',
+        state: manager.storeLocation?.state || '',
+        country: manager.storeLocation?.country || '',
+        zipCode: manager.storeLocation?.zipCode || ''
+      },
       isActive: manager.isActive !== false
     })
     setEditDialog(true)
@@ -217,12 +237,23 @@ const ManagerManagement = () => {
 
   const handleUpdateManager = async () => {
     try {
-      await managersAPI.update(editManager._id, formData)
-      setSuccess('Manager updated successfully!')
-      setEditDialog(false)
-      loadManagers()
+      // Prepare the data to send
+      const updateData = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        assignedModule: formData.module,
+        storeName: formData.storeName,
+        storeLocation: formData.storeLocation,
+        isActive: formData.isActive
+      };
+
+      await managersAPI.update(editManager._id, updateData);
+      setSuccess('Manager updated successfully!');
+      setEditDialog(false);
+      loadManagers();
     } catch (err) {
-      setError('Failed to update manager')
+      setError('Failed to update manager');
     }
   }
 
@@ -316,6 +347,7 @@ const ManagerManagement = () => {
       setInviteData({ name: '', email: '', phone: '', module: '' })
       setOtpData({ email: '', module: '', otp: '' })
       loadManagers()
+      loadInvites() // Refresh pending invites
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to verify OTP')
     }
@@ -324,10 +356,44 @@ const ManagerManagement = () => {
   const handleCancelInvite = () => {
     setInviteDialog(false)
     setInviteStep(1)
+    // Don't clear the invite data here - user might want to continue later
+  }
+  
+  const handleCompleteCancelInvite = () => {
+    // Clear all data when user explicitly cancels
     setInviteData({ name: '', email: '', phone: '', module: '' })
     setOtpData({ email: '', module: '', otp: '' })
   }
-
+  
+  const handleResendOtp = async (email, module) => {
+    try {
+      await managersAPI.resendInvite({ email, module })
+      setSuccess('OTP resent successfully!')
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to resend OTP')
+    }
+  }
+  
+  const handleCancelPendingInvite = async (inviteId) => {
+    try {
+      await managersAPI.cancelInvite(inviteId)
+      setSuccess('Invitation cancelled successfully!')
+      loadInvites() // Refresh pending invites
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to cancel invitation')
+    }
+  }
+  
+  const handleContinueInvite = (invite) => {
+    // Pre-fill the OTP form with the invite details
+    setOtpData({
+      email: invite.email,
+      module: invite.module,
+      otp: ''
+    })
+    setInviteStep(2)
+    setInviteDialog(true)
+  }
 
   const getModuleColor = (module) => {
     const colors = {
@@ -427,20 +493,37 @@ const ManagerManagement = () => {
                   <ListItemText
                     primary={invite.email}
                     secondary={
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">
+                      <>
+                        <Typography variant="body2" color="text.secondary" component="span">
                           Module: {getModuleDisplayName(invite.module)}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
+                        <br />
+                        <Typography variant="caption" color="text.secondary" component="span">
                           Sent: {new Date(invite.createdAt).toLocaleDateString()}
                         </Typography>
-                      </Box>
+                      </>
                     }
                   />
                   <ListItemSecondaryAction>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => handleContinueInvite(invite)}
+                      sx={{ mr: 1 }}
+                    >
+                      Enter OTP
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => handleResendOtp(invite.email, invite.module)}
+                      sx={{ mr: 1 }}
+                    >
+                      Resend
+                    </Button>
                     <IconButton
                       edge="end"
-                      onClick={() => handleCancelInvite(invite._id)}
+                      onClick={() => handleCancelPendingInvite(invite._id)}
                       color="error"
                     >
                       <CancelIcon />
@@ -495,12 +578,12 @@ const ManagerManagement = () => {
                   value={statusFilter}
                   onChange={(e) => handleFilterChange('status', e.target.value)}
                 >
-                  <MenuItem value="">All Status</MenuItem>
+                  <MenuItem value="">All Statuses</MenuItem>
                   <MenuItem value="active">Active</MenuItem>
                   <MenuItem value="inactive">Inactive</MenuItem>
                 </Select>
               </FormControl>
-          </Grid>
+            </Grid>
             <Grid item xs={12} md={2}>
               <FormControlLabel
                 control={
@@ -510,13 +593,13 @@ const ManagerManagement = () => {
                   />
                 }
                 label="Show Inactive"
-            />
+              />
+            </Grid>
           </Grid>
-        </Grid>
         </CardContent>
       </Card>
 
-        {/* Managers Table */}
+      {/* Managers Table */}
       <Card>
           <CardContent>
               <TableContainer>
@@ -539,86 +622,72 @@ const ManagerManagement = () => {
                       <Box display="flex" alignItems="center" gap={2}>
                         <Avatar sx={{ bgcolor: 'primary.main' }}>
                           <ManagerIcon />
-                            </Avatar>
-                            <Box>
+                        </Avatar>
+                        <Box>
                           <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
                             {manager.name}
-                              </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            ID: {manager._id.slice(-8)}
-                              </Typography>
-                            </Box>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          {(() => {
-                            const mod = deriveManagerModule(manager)
-                            return (
-                              <Chip 
-                                icon={<ModuleIcon />}
-                                label={getModuleDisplayName(mod)}
-                                color={getModuleColor(mod)}
-                                size="small" 
-                              />
-                            )
-                          })()}
-                        </TableCell>
-                    <TableCell>
-                      <Box>
-                        <Box display="flex" alignItems="center" gap={1} mb={0.5}>
-                          <EmailIcon fontSize="small" color="action" />
-                          <Typography variant="body2">
-                            {manager.email}
                           </Typography>
-                        </Box>
-                        {manager.phone && (
-                          <Box display="flex" alignItems="center" gap={1}>
-                            <PhoneIcon fontSize="small" color="action" />
-                            <Typography variant="body2">
-                              {manager.phone}
+                          {manager.email && (
+                            <Typography variant="caption" color="text.secondary">
+                              {manager.email}
                             </Typography>
-                          </Box>
-                        )}
+                          )}
+                        </Box>
                       </Box>
                         </TableCell>
                         <TableCell>
-                          <Chip 
-                        label={manager.isActive ? 'Active' : 'Inactive'}
-                        color={manager.isActive ? 'success' : 'error'}
-                            size="small" 
+                          <Chip
+                            label={getModuleDisplayName(deriveManagerModule(manager))}
+                            color={getModuleColor(deriveManagerModule(manager))}
+                            size="small"
                           />
                         </TableCell>
                         <TableCell>
-                      <Typography variant="body2">
-                        {manager.lastLogin ? new Date(manager.lastLogin).toLocaleDateString() : 'Never'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {new Date(manager.createdAt).toLocaleDateString()}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Box display="flex" gap={1}>
-                        <Tooltip title="Edit Manager">
-                            <IconButton 
-                              size="small" 
-                              onClick={() => handleEditManager(manager)}
-                            color="primary"
-                            >
-                              <EditIcon />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title={manager.isActive ? 'Deactivate' : 'Activate'}>
-                          <IconButton
+                          <Box display="flex" flexDirection="column" gap={0.5}>
+                            {manager.email && (
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <EmailIcon fontSize="small" color="action" />
+                                <Typography variant="body2">{manager.email}</Typography>
+                              </Box>
+                            )}
+                            {manager.phone && (
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <PhoneIcon fontSize="small" color="action" />
+                                <Typography variant="body2">{manager.phone}</Typography>
+                              </Box>
+                            )}
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            icon={manager.isActive !== false ? <CheckCircleIcon /> : <BlockIcon />}
+                            label={manager.isActive !== false ? 'Active' : 'Inactive'}
+                            color={manager.isActive !== false ? 'success' : 'default'}
                             size="small"
-                            onClick={() => handleToggleStatus(manager)}
-                            color={manager.isActive ? 'warning' : 'success'}
-                          >
-                            {manager.isActive ? <BlockIcon /> : <CheckCircleIcon />}
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="More Actions">
+                            variant={manager.isActive !== false ? 'filled' : 'outlined'}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {manager.lastLoginAt ? new Date(manager.lastLoginAt).toLocaleDateString() : 'Never'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {new Date(manager.createdAt).toLocaleDateString()}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" gap={1}>
+                            <Tooltip title="Edit Manager">
+                              <IconButton 
+                                size="small" 
+                                onClick={() => handleEditManager(manager)}
+                              >
+                                <EditIcon />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="More Actions">
                             <IconButton 
                               size="small" 
                             onClick={(e) => handleMenuOpen(e, manager)}
@@ -697,7 +766,7 @@ const ManagerManagement = () => {
                   onChange={(e) => setFormData({ ...formData, module: e.target.value })}
                 >
                   {modules.map((m) => (
-                    <MenuItem key={m._id} value={m.name}>
+                    <MenuItem key={m._id} value={m.key || m.name}>
                       {getModuleDisplayName(m.name)}
                     </MenuItem>
                   ))}
@@ -707,11 +776,78 @@ const ManagerManagement = () => {
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Address"
-                multiline
-                rows={2}
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                label="Store Name"
+                value={formData.storeName}
+                onChange={(e) => setFormData({ ...formData, storeName: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Store Location</Typography>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Address Line 1"
+                value={formData.storeLocation.addressLine1}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  storeLocation: { ...formData.storeLocation, addressLine1: e.target.value } 
+                })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Address Line 2"
+                value={formData.storeLocation.addressLine2}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  storeLocation: { ...formData.storeLocation, addressLine2: e.target.value } 
+                })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="City"
+                value={formData.storeLocation.city}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  storeLocation: { ...formData.storeLocation, city: e.target.value } 
+                })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="State"
+                value={formData.storeLocation.state}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  storeLocation: { ...formData.storeLocation, state: e.target.value } 
+                })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Country"
+                value={formData.storeLocation.country}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  storeLocation: { ...formData.storeLocation, country: e.target.value } 
+                })}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Zip Code"
+                value={formData.storeLocation.zipCode}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  storeLocation: { ...formData.storeLocation, zipCode: e.target.value } 
+                })}
               />
             </Grid>
             <Grid item xs={12}>
@@ -731,7 +867,7 @@ const ManagerManagement = () => {
           <Button onClick={() => setEditDialog(false)}>Cancel</Button>
           <Button onClick={handleUpdateManager} variant="contained">
             Update Manager
-              </Button>
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -823,15 +959,24 @@ const ManagerManagement = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelInvite}>Cancel</Button>
+          <Button onClick={() => { handleCancelInvite(); handleCompleteCancelInvite(); }}>Cancel</Button>
           {inviteStep === 1 ? (
             <Button onClick={handleSendInvite} variant="contained" startIcon={<SendIcon />}>
               Send OTP
             </Button>
           ) : (
-            <Button onClick={handleVerifyOtp} variant="contained" startIcon={<CheckCircleIcon />}>
-              Verify & Create Manager
-            </Button>
+            <>
+              <Button 
+                onClick={() => handleResendOtp(otpData.email, otpData.module)} 
+                variant="outlined"
+                startIcon={<RefreshIcon />}
+              >
+                Resend OTP
+              </Button>
+              <Button onClick={handleVerifyOtp} variant="contained" startIcon={<CheckCircleIcon />}>
+                Verify & Create Manager
+              </Button>
+            </>
           )}
         </DialogActions>
       </Dialog>
@@ -911,4 +1056,3 @@ const ManagerManagement = () => {
 }
 
 export default ManagerManagement
-

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   AppBar,
   Toolbar,
@@ -16,7 +16,8 @@ import {
   ListItemIcon,
   ListItemText,
   useTheme,
-  alpha
+  alpha,
+  CircularProgress
 } from '@mui/material'
 import {
   Menu as MenuIcon,
@@ -29,9 +30,16 @@ import {
   DarkMode as DarkModeIcon,
   LightMode as LightModeIcon,
   Person as PersonIcon,
-  Help as HelpIcon
+  Help as HelpIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+  Payment as PaymentIcon,
+  ShoppingCart as ShoppingCartIcon,
+  Assignment as AdoptionIcon,
+  MedicalInformation as MedicalIcon
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
+import { dashboardAPI } from '../../services/api'
 
 const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
   const theme = useTheme()
@@ -39,7 +47,9 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
   
   const [anchorEl, setAnchorEl] = useState(null)
   const [notificationAnchor, setNotificationAnchor] = useState(null)
-  const [notifications, setNotifications] = useState([]) // real data to be wired; empty by default
+  const [notifications, setNotifications] = useState([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [loadingNotifications, setLoadingNotifications] = useState(false)
   
   const handleProfileMenuOpen = (event) => {
     setAnchorEl(event.currentTarget)
@@ -49,12 +59,31 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
     setAnchorEl(null)
   }
   
-  const handleNotificationOpen = (event) => {
+  const handleNotificationOpen = async (event) => {
     setNotificationAnchor(event.currentTarget)
+    await loadNotifications()
   }
   
   const handleNotificationClose = () => {
     setNotificationAnchor(null)
+  }
+  
+  const loadNotifications = async () => {
+    if (loadingNotifications) return
+    
+    setLoadingNotifications(true)
+    try {
+      const response = await dashboardAPI.getNotifications()
+      const notificationData = response.data?.data?.notifications || []
+      setNotifications(notificationData)
+      setUnreadCount(notificationData.filter(n => n.unread).length)
+    } catch (error) {
+      console.error('Failed to load notifications:', error)
+      setNotifications([])
+      setUnreadCount(0)
+    } finally {
+      setLoadingNotifications(false)
+    }
   }
   
   const handleLogout = () => {
@@ -64,8 +93,20 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
     }, 100)
     handleProfileMenuClose()
   }
+  
+  const handleNotificationClick = (notification) => {
+    if (notification.path) {
+      navigate(notification.path)
+      handleNotificationClose()
+    }
+  }
 
-  const unreadCount = notifications.filter(n => n.unread).length
+  // Load notifications when component mounts
+  useEffect(() => {
+    if (user) {
+      loadNotifications()
+    }
+  }, [user])
 
   return (
     <>
@@ -275,7 +316,11 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
           )}
         </Box>
         
-        {notifications.length === 0 ? (
+        {loadingNotifications ? (
+          <Box sx={{ px: 2, py: 2, display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : notifications.length === 0 ? (
           <Box sx={{ px: 2, py: 2 }}>
             <Typography variant="body2" color="textSecondary">
               No notifications yet
@@ -285,24 +330,51 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
           notifications.map((notification) => (
             <MenuItem 
               key={notification.id}
-              onClick={handleNotificationClose}
+              onClick={() => handleNotificationClick(notification)}
               sx={{ 
                 py: 1.5,
                 borderLeft: notification.unread ? 3 : 0,
                 borderColor: 'primary.main',
-                bgcolor: notification.unread ? alpha(theme.palette.primary.main, 0.05) : 'transparent'
+                bgcolor: notification.unread ? alpha(theme.palette.primary.main, 0.05) : 'transparent',
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.1)
+                }
               }}
             >
               <Box sx={{ width: '100%' }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                  {notification.title}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', flex: 1 }}>
+                    {notification.title}
+                  </Typography>
+                  {notification.type === 'adoption' && (
+                    <AdoptionIcon sx={{ color: 'primary.main', fontSize: 16 }} />
+                  )}
+                  {notification.type === 'reservation' && (
+                    <ShoppingCartIcon sx={{ color: 'secondary.main', fontSize: 16 }} />
+                  )}
+                  {notification.type === 'payment' && (
+                    <PaymentIcon sx={{ color: 'success.main', fontSize: 16 }} />
+                  )}
+                  {notification.type === 'vet' && (
+                    <MedicalIcon sx={{ color: 'error.main', fontSize: 16 }} />
+                  )}
+                </Box>
                 <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
                   {notification.message}
                 </Typography>
-                <Typography variant="caption" color="textSecondary">
-                  {notification.time}
-                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="caption" color="textSecondary">
+                    {new Date(notification.time).toLocaleString()}
+                  </Typography>
+                  {notification.action && (
+                    <Chip 
+                      label={notification.action} 
+                      size="small" 
+                      variant="outlined" 
+                      sx={{ height: 20 }}
+                    />
+                  )}
+                </Box>
               </Box>
             </MenuItem>
           ))
@@ -310,7 +382,13 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
         
         <Divider />
         
-        <MenuItem onClick={handleNotificationClose} sx={{ justifyContent: 'center', py: 1 }}>
+        <MenuItem 
+          onClick={() => {
+            navigate('/user/notifications')
+            handleNotificationClose()
+          }} 
+          sx={{ justifyContent: 'center', py: 1 }}
+        >
           <Typography variant="body2" color="primary" sx={{ fontWeight: 'medium' }}>
             View All Notifications
           </Typography>

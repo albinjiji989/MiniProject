@@ -27,6 +27,7 @@ import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 const AdoptionManagerDashboard = () => {
   const navigate = useNavigate();
@@ -151,6 +152,9 @@ const AdoptionManagerDashboard = () => {
           <Typography variant="body2" color="text.secondary">Overview of pets, applications, and operations</Typography>
         </Box>
         <Stack direction="row" spacing={1}>
+          <Button variant="outlined" startIcon={<AutoAwesomeIcon />} onClick={() => navigate('/manager/adoption/aiml-dashboard')}>
+            AI/ML Insights
+          </Button>
           <Button variant="outlined" startIcon={<RefreshIcon />} onClick={fetchData}>Refresh</Button>
           <Button variant="contained" onClick={() => navigate('/manager/adoption/wizard/start')}>Add New Pet</Button>
         </Stack>
@@ -207,192 +211,195 @@ const AdoptionManagerDashboard = () => {
             <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <MonetizationOnIcon color="success" />
               <Box>
-                <Typography variant="caption" color="text.secondary">Total Revenue</Typography>
-                <Typography variant="h5" fontWeight={700}>₹{kpis.revenue}</Typography>
+                <Typography variant="caption" color="text.secondary">Revenue</Typography>
+                <Typography variant="h5" fontWeight={700}>₹{kpis.revenue.toLocaleString()}</Typography>
               </Box>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Quick Actions */}
+      {/* Recent Pets */}
       <Card>
         <CardContent>
-          <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>Quick Actions</Typography>
-          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-            <Button variant="outlined" onClick={() => navigate('/manager/adoption/pets')}>Manage Pets</Button>
-            <Button variant="outlined" onClick={() => navigate('/manager/adoption/applications')}>View Applications</Button>
-            <Button variant="outlined" onClick={() => navigate('/manager/adoption/reports')}>Reports</Button>
-            <Button variant="outlined" onClick={() => navigate('/manager/adoption/import')}>Import CSV</Button>
-          </Stack>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="h6" fontWeight={600}>Recent Pets</Typography>
+            <Button 
+              size="small" 
+              endIcon={<VisibilityIcon />} 
+              onClick={() => navigate('/manager/adoption/pets')}
+            >
+              View All
+            </Button>
+          </Box>
+          {pets.length > 0 ? (
+            <Grid container spacing={2}>
+              {pets.slice(0, 4).map((pet) => (
+                <Grid item xs={12} sm={6} md={3} key={pet._id}>
+                  <Card 
+                    variant="outlined" 
+                    sx={{ 
+                      height: '100%', 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      cursor: 'pointer',
+                      '&:hover': { boxShadow: 3 }
+                    }}
+                    onClick={() => navigate(`/manager/adoption/pets/${pet._id}`)}
+                  >
+                    {pet.images?.length > 0 && (
+                      <Box 
+                        component="img"
+                        src={resolveMediaUrl(pet.images[0]?.url || pet.images[0])}
+                        alt={pet.name}
+                        sx={{ 
+                          height: 120, 
+                          objectFit: 'cover',
+                          borderTopLeftRadius: 4,
+                          borderTopRightRadius: 4
+                        }}
+                        onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }}
+                      />
+                    )}
+                    <CardContent sx={{ flexGrow: 1, pb: 1 }}>
+                      <Typography variant="subtitle1" fontWeight={600} noWrap>
+                        {pet.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        {pet.breed} • {pet.species}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {pet.ageDisplay}
+                      </Typography>
+                      <Box sx={{ mt: 1 }}>
+                        <StatusChip status={pet.status} />
+                      </Box>
+                    </CardContent>
+                    <Divider />
+                    <Box sx={{ p: 1, display: 'flex', justifyContent: 'center' }}>
+                      <IconButton size="small" onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/manager/adoption/pets/${pet._id}/edit`);
+                      }}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+              No pets added yet
+            </Typography>
+          )}
         </CardContent>
       </Card>
 
-      {/* Recent Pets - Grid View with Images */}
-      <Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" fontWeight={700}>Recent Pets</Typography>
-          <Button size="small" onClick={() => navigate('/manager/adoption/pets')}>View all pets</Button>
-        </Box>
-        <Grid container spacing={2}>
-          {pets.slice(0, 6).map(p => {
-            const getFirstImageUrl = (pet) => {
-              const images = pet?.images || [];
-              if (!images || images.length === 0) return '';
-              
-              // Handle different image object structures
-              const firstImage = images[0];
-              let url = '';
-              
-              if (typeof firstImage === 'string') {
-                url = firstImage;
-              } else if (firstImage && typeof firstImage === 'object') {
-                // Handle populated image object from backend
-                if (firstImage.url) {
-                  url = firstImage.url;
-                } else if (firstImage._id && firstImage.entityType) {
-                  // This is a full Image model object
-                  url = firstImage.url || '';
-                }
-              }
-              
-              if (!url) return '';
-              
-              // Handle different URL types
-              if (String(url).startsWith('data:')) return url; // render data URL directly
-              if (String(url).startsWith('blob:')) return ''; // skip blob URLs
-              
-              return url; // Return raw URL, will be resolved by resolveMediaUrl below
-            };
-            
-            const imageUrl = getFirstImageUrl(p);
-            const resolvedImageUrl = imageUrl ? resolveMediaUrl(imageUrl) : null;
-            
-            return (
-              <Grid item xs={12} sm={6} md={4} lg={2} key={p._id}>
-                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', cursor: 'pointer', transition: 'transform 0.2s, box-shadow 0.2s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 } }}>
-                  <Box sx={{ position: 'relative', width: '100%', height: 140, bgcolor: 'grey.100', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {resolvedImageUrl ? (
-                      <img loading="lazy" src={resolvedImageUrl} alt={p.name || 'Pet'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { 
-                        console.log('Dashboard image load error for:', resolvedImageUrl);
-                        e.currentTarget.src = '/placeholder-pet.svg' 
-                      }} />
-                    ) : (
-                      <Typography variant="caption" color="text.secondary">No image</Typography>
-                    )}
-                  </Box>
-                  <CardContent sx={{ flex: 1, pb: 1 }}>
-                    <Typography variant="subtitle2" fontWeight={700} noWrap>{p.name || 'No name'}</Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{p.breed}</Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{p.species}</Typography>
-                    <StatusChip status={p.status} />
-                  </CardContent>
-                  <Stack direction="row" spacing={0.5} sx={{ p: 1 }}>
-                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); navigate(`/manager/adoption/pets/${p._id}`); }} title="View">
-                      <VisibilityIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); navigate(`/manager/adoption/pets/${p._id}/edit`); }} title="Edit">
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Stack>
-                </Card>
-              </Grid>
-            );
-          })}
-          {pets.length === 0 && (
-            <Grid item xs={12}>
-              <Typography variant="body2" color="text.secondary">No pets yet. <Button size="small" onClick={() => navigate('/manager/adoption/wizard/start')}>Add a new pet</Button></Typography>
-            </Grid>
-          )}
-        </Grid>
-      </Box>
-
       {/* Recent Applications */}
-      <Grid container spacing={2}>
-        <Grid item xs={12} md={12}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="subtitle1" fontWeight={700}>Recent Applications</Typography>
-                <Button size="small" onClick={() => navigate('/manager/adoption/applications')}>View all</Button>
-              </Box>
-              <Divider sx={{ mb: 1 }} />
-              <Stack spacing={1}>
-                {(applications.slice(0, 5)).map(a => (
-                  <Box key={a._id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Box>
-                      <Typography variant="body2" fontWeight={600}>{a.userId?.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">{a.petId?.name} • {a.petId?.breed}</Typography>
-                    </Box>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <StatusChip status={a.status} />
-                      <Button size="small" onClick={() => navigate(`/manager/adoption/applications/${a._id}`)}>Open</Button>
-                    </Stack>
+      <Card>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="h6" fontWeight={600}>Recent Applications</Typography>
+            <Button 
+              size="small" 
+              endIcon={<VisibilityIcon />} 
+              onClick={() => navigate('/manager/adoption/applications')}
+            >
+              View All
+            </Button>
+          </Box>
+          {applications.length > 0 ? (
+            <Box sx={{ overflowX: 'auto' }}>
+              <Box component="table" sx={{ minWidth: 600, width: '100%' }}>
+                <Box component="thead">
+                  <Box component="tr">
+                    <Box component="th" sx={{ textAlign: 'left', pb: 1, pr: 2 }}>Applicant</Box>
+                    <Box component="th" sx={{ textAlign: 'left', pb: 1, pr: 2 }}>Pet</Box>
+                    <Box component="th" sx={{ textAlign: 'left', pb: 1, pr: 2 }}>Status</Box>
                   </Box>
-                ))}
-                {applications.length === 0 && (
-                  <Typography variant="body2" color="text.secondary">No applications yet.</Typography>
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+                </Box>
+                <Box component="tbody">
+                  {applications.slice(0, 5).map((app) => (
+                    <Box 
+                      component="tr" 
+                      key={app._id} 
+                      sx={{ 
+                        '&:hover': { backgroundColor: 'action.hover' },
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => navigate(`/manager/adoption/applications/${app._id}`)}
+                    >
+                      <Box component="td" sx={{ py: 1, pr: 2 }}>
+                        <Typography variant="body2">{app.userId?.name || 'Unknown'}</Typography>
+                      </Box>
+                      <Box component="td" sx={{ py: 1, pr: 2 }}>
+                        <Typography variant="body2">{app.petId?.name || 'Unknown'}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {app.petId?.breed}
+                        </Typography>
+                      </Box>
+                      <Box component="td" sx={{ py: 1, pr: 2 }}>
+                        <StatusChip status={app.status} />
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            </Box>
+          ) : (
+            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+              No applications yet
+            </Typography>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Set Store Name Dialog */}
-      <Dialog open={storeDialogOpen} onClose={() => setStoreDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Set Your Store Name</DialogTitle>
+      {/* Store Setup Dialog */}
+      <Dialog open={storeDialogOpen} onClose={() => setStoreDialogOpen(false)}>
+        <DialogTitle>Set Store Identity</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-            Store ID: <strong>{user?.storeId || 'Pending assignment'}</strong>
-          </Typography>
           <TextField
             autoFocus
-            fullWidth
+            margin="dense"
             label="Store Name"
-            placeholder="e.g., Happy Paws Adoption Center"
+            fullWidth
             value={storeNameInput}
             onChange={(e) => setStoreNameInput(e.target.value)}
-            sx={{ mb: 2 }}
+            helperText="Enter a name for your adoption center"
           />
           <TextField
+            margin="dense"
+            label="Pincode"
             fullWidth
-            label="Pincode (Optional)"
-            placeholder="e.g., 123456"
             value={pincodeInput}
-            onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            inputProps={{ maxLength: 6 }}
+            onChange={(e) => setPincodeInput(e.target.value)}
+            helperText="Enter your store's pincode"
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setStoreDialogOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
+          <Button 
             onClick={async () => {
-              const name = storeNameInput.trim()
-              if (!name) return
-              // Prepare data for update
-              const updateData = { storeName: name }
-              if (pincodeInput && pincodeInput.length === 6) {
-                updateData.pincode = pincodeInput
-              }
-              // Use the authAPI to update user profile directly
               try {
-                await authAPI.updateProfile(updateData)
-                // Refresh the user data from the backend to get updated store info
-                const res = await authAPI.getMe()
-                if (res?.data?.data?.user) {
-                  // Update the AuthContext with fresh user data
-                  dispatch({
-                    type: 'UPDATE_USER',
-                    payload: res.data.data.user
-                  })
-                }
-                setStoreDialogOpen(false)
+                await authAPI.updateProfile({
+                  storeName: storeNameInput,
+                  pincode: pincodeInput
+                });
+                dispatch({
+                  type: 'UPDATE_USER',
+                  payload: {
+                    ...user,
+                    storeName: storeNameInput,
+                    pincode: pincodeInput
+                  }
+                });
+                setStoreDialogOpen(false);
               } catch (error) {
-                console.error('Error updating store info:', error)
+                console.error('Error updating store info:', error);
               }
             }}
+            variant="contained"
           >
             Save
           </Button>

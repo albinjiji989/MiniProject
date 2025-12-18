@@ -12,6 +12,7 @@ const userAddressController = require('../controllers/userAddressController');
 const storeController = require('../../manager/controllers/storeController');
 const enhancedReservationController = require('../../manager/controllers/enhancedReservationController');
 const petHistoryController = require('../controllers/petHistoryController');
+const stockController = require('../controllers/stockController'); // Added stock controller
 
 // User dashboard stats (auth required but no module permission)
 router.get('/stats', auth, storeController.getUserPetShopStats);
@@ -65,5 +66,14 @@ router.get('/pets/:petId/history', auth, petHistoryController.getPetHistory);
 
 // Get purchased pets
 router.get('/my-purchased-pets', auth, userController.getUserPurchasedPets);
+
+// Stock routes
+router.get('/public/stocks', stockController.listPublicStocks);
+router.get('/public/stocks/:id', stockController.getPublicStockById);
+router.post('/public/stocks/reserve', auth, stockController.reservePetsFromStock);
+
+// Stock payment routes
+router.post('/payments/razorpay/order/stock', auth, paymentController.createRazorpayOrderForStock);
+router.post('/payments/razorpay/verify/stock', auth, paymentController.verifyRazorpaySignatureForStock);
 
 module.exports = router;

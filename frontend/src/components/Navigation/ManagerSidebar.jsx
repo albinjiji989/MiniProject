@@ -123,6 +123,12 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
           active: location.pathname.includes('/import')
         },
         {
+          title: 'AI/ML Insights',
+          icon: <AnalyticsIcon />,
+          path: `/manager/${type}/aiml-dashboard`,
+          active: location.pathname.includes('/aiml-dashboard')
+        },
+        {
           title: 'Reports',
           icon: <ReportsIcon />,
           path: `/manager/${type}/reports`,
@@ -137,8 +143,8 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
         {
           title: 'Dashboard',
           icon: <DashboardIcon />,
-          path: '/manager/dashboard',
-          active: location.pathname === '/manager/dashboard'
+          path: '/manager/veterinary/dashboard',
+          active: location.pathname === '/manager/veterinary/dashboard'
         },
         {
           title: 'Appointments',
@@ -425,7 +431,7 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
               let path = `/manager/${moduleType}/dashboard`
               if (moduleType === 'petshop') path = `/manager/${moduleType}/wizard/basic`
               if (moduleType === 'adoption') path = `/manager/${moduleType}/wizard/start`
-              if (moduleType === 'veterinary') path = `/manager/veterinary/appointments`
+              if (moduleType === 'veterinary') path = `/manager/veterinary/appointments/new`
               if (moduleType === 'temporary-care') path = `/manager/temporary-care/bookings`
               handleNavigation(path)
             }}

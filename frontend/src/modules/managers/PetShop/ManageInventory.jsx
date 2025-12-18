@@ -375,21 +375,21 @@ const RefactoredManageInventory = () => {
   };
 
   const handleDeletePet = async (petId) => {
-    if (!window.confirm('Are you sure you want to delete this pet?')) return;
+    if (!window.confirm('Are you sure you want to remove this pet from sale? This will mark the pet as removed from sale rather than permanently deleting it. The pet record will still be available for historical purposes.')) return;
     
     try {
       await apiClient.delete(`/petshop/inventory/${petId}`);
-      showSnackbar('Pet deleted successfully!');
+      showSnackbar('Pet removed from sale successfully!');
       fetchInventory(pagination.current);
     } catch (err) {
-      console.error('Delete pet error:', err);
-      showSnackbar(err.response?.data?.message || 'Failed to delete pet', 'error');
+      console.error('Remove pet from sale error:', err);
+      showSnackbar(err.response?.data?.message || 'Failed to remove pet from sale', 'error');
     }
   };
 
   const handleOpenImageDialog = (item) => {
-    // Navigate to the new dedicated image management page
-    navigate(`/manager/petshop/manage-images/${item._id}`);
+    // Navigate to the new dedicated stock image management page
+    navigate(`/manager/petshop/manage-stock-images/${item._id}`);
   };
 
   const handleUploadImage = async () => {

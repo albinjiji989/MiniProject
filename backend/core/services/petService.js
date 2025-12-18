@@ -1,5 +1,4 @@
 const Pet = require('../models/Pet');
-const PetNew = require('../models/PetNew');
 const PetRegistryService = require('./centralizedPetService');
 
 class PetService {
@@ -41,33 +40,7 @@ class PetService {
       const pet = new Pet(petPayload);
       await pet.save();
 
-      // Also save to PetNew model for user dashboard consistency
-      try {
-        const petNewPayload = {
-          name: String(name).trim(),
-          speciesId: species || speciesId,
-          breedId: breed || breedId,
-          ownerId: userId,
-          createdBy: userId,
-          gender: gender || 'Unknown',
-          age: typeof age === 'number' ? age : (age ? Number(age) : undefined),
-          ageUnit: ageUnit || 'months',
-          color: color || undefined,
-          images: Array.isArray(images) ? images.filter(Boolean).map((img) => ({
-            url: typeof img === 'string' ? img : img.url,
-            alt: (typeof img === 'object' && img.caption) ? img.caption : undefined,
-            isPrimary: (typeof img === 'object' && img.isPrimary) ? !!img.isPrimary : false
-          })) : [],
-          currentStatus: 'Available',
-          healthStatus: 'Good'
-        };
-        
-        const petNew = new PetNew(petNewPayload);
-        await petNew.save();
-      } catch (petNewError) {
-        console.warn('Failed to save to PetNew model:', petNewError?.message || petNewError);
-        // Continue even if PetNew save fails
-      }
+      // Removed PetNew model creation as it doesn't exist
 
       // Populate minimal refs for client display
       await pet.populate([

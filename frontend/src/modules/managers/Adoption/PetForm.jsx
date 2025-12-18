@@ -101,6 +101,26 @@ const PetForm = () => {
           petCode: p.petCode || ''
         }
         setForm(updated)
+        
+        // Set images and documents if they exist
+        if (p.images && Array.isArray(p.images)) {
+          const formattedImages = p.images.map(img => ({
+            url: img.url || '',
+            caption: img.caption || '',
+            isPrimary: !!img.isPrimary
+          })).filter(img => img.url)
+          setImages(formattedImages)
+        }
+        
+        if (p.documents && Array.isArray(p.documents)) {
+          const formattedDocuments = p.documents.map(doc => ({
+            url: doc.url || '',
+            name: doc.name || doc.url?.split('/').pop() || 'document',
+            type: doc.type || 'application/pdf'
+          })).filter(doc => doc.url)
+          setDocuments(formattedDocuments)
+        }
+        
         // Try to map species name to id and load breeds for it
         // Delay until species list is loaded
         setTimeout(async () => {
@@ -334,7 +354,7 @@ const PetForm = () => {
         adoptionFee: Number(form.adoptionFee) || 0,
         // include uploaded media URLs
         images: images.map(x => ({ url: x.url, isPrimary: !!x.isPrimary, caption: x.caption || '' })),
-        documents: documents.map(x => ({ url: x.url })),
+        documents: documents.map(x => ({ url: x.url, name: x.name || x.url?.split('/').pop() || 'document', type: x.type || 'application/pdf' })),
       }
 
       // Only allow editing petCode in edit mode (typically read-only anyway)
@@ -411,311 +431,427 @@ const PetForm = () => {
   }, [selectedSpeciesId])
 
   return (
-    <div className="max-w-3xl">
-      <h2 className="text-xl font-semibold mb-2">{isEdit ? 'Edit Pet' : 'Add New Pet'}</h2>
-      <p className="text-sm text-gray-600 mb-4">You can do a quick intake now and complete details later. Species is required; other fields can be added later.</p>
-      {error && <div className="mb-3 text-red-600">{error}</div>}
-      
-      {/* Image Preview Section */}
-      {images.length > 0 && (
-        <div className="mb-4">
-          <h3 className="text-md font-medium mb-2">Pet Images</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {images.map((img, index) => (
-              <div key={index} className="relative group">
-                <img 
-                  src={img.url} 
-                  alt={`Preview ${index + 1}`} 
-                  className="w-full h-24 object-cover rounded border"
-                />
-                {img.isPrimary && (
-                  <span className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">Primary</span>
-                )}
-                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center gap-1">
-                  {!img.isPrimary && (
-                    <button
-                      type="button"
-                      onClick={() => setPrimaryImage(index)}
-                      className="opacity-0 group-hover:opacity-100 bg-blue-500 text-white p-1 rounded text-xs transition-opacity"
-                    >
-                      Set Primary
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeImage(index)}
-                    className="opacity-0 group-hover:opacity-100 bg-red-500 text-white p-1 rounded text-xs transition-opacity"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      
-      <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-          <input name="name" placeholder="e.g., Bruno" className="px-3 py-2 border rounded w-full" value={form.name} onChange={onChange} required />
-        </div>
-        <div>
-          <label className="text-sm text-gray-700 mb-1">Age</label>
-          <div className="flex gap-2">
-            <input name="age" type="number" min="0" className="px-3 py-2 border rounded w-full" value={form.age} onChange={onChange} />
-            <select name="ageUnit" className="px-3 py-2 border rounded" value={form.ageUnit} onChange={onChange}>
-              <option value="years">years</option>
-              <option value="months">months</option>
-              <option value="weeks">weeks</option>
-              <option value="days">days</option>
-            </select>
-          </div>
-        </div>
-        {isEdit && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Pet Code</label>
-            <div className="flex gap-2">
-              <input value={form.petCode || ''} readOnly className="px-3 py-2 border rounded w-full bg-gray-50 font-mono" />
-            </div>
-            <p className="text-xs text-gray-500 mt-1">Auto-generated unique code displayed after creation.</p>
-          </div>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-          <select name="category" className="px-3 py-2 border rounded w-full" value={form.category}
-                  onChange={onChange} disabled={fetchingMeta} required>
-            <option value="">Select category</option>
-            {categories.map(cName => (
-              <option key={cName} value={cName}>{cName}</option>
-            ))}
-          </select>
-          <p className="text-xs text-gray-500 mt-1">{categories.length ? 'Select a category to filter species.' : 'No categories available. Ensure admin has configured species categories.'}</p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
-            <span>Species</span>
-            {form.category && (
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200">Category: {form.category}</span>
-            )}
-          </label>
-          <select name="species" className="px-3 py-2 border rounded w-full" value={selectedSpeciesId}
-                  onChange={onChange} disabled={fetchingMeta} required>
-            <option value="">Select species</option>
-            {species
-              .filter(s => !form.category || ((s.category?.displayName || s.category?.name || s.category || '').toString() === form.category))
-              .map(s => (
-                <option key={s._id || s.id} value={s._id || s.id}>{s.displayName || s.name || s.title}</option>
-              ))}
-          </select>
-          {!fetchingMeta && species.length===0 && (
-            <p className="text-xs text-amber-700 mt-1">No species available. Please ensure admin has created species or try refreshing.</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Breed</label>
-          <select
-            name="breed"
-            className="px-3 py-2 border rounded w-full"
-            value={form.breed}
-            onChange={onChange}
-            required
-            disabled={breeds.length === 0}
-          >
-            <option value="">{breeds.length ? 'Select breed' : 'No breeds available (ask Admin to add)'}
-            </option>
-            {breeds.map(b => (
-              <option key={b._id || b.id} value={(b.name || b.title || '').toString()}>{b.name || b.title}</option>
-            ))}
-          </select>
-          {!fetchingMeta && selectedSpeciesId && breeds.length===0 && (
-            <p className="text-xs text-amber-700 mt-1">No breeds configured for this species. Please contact Admin to add breeds.</p>
-          )}
-          {(form.species || form.category) && (
-            <p className="text-xs text-gray-500 mt-1">Selected: {form.species ? `Species: ${form.species}` : ''}{form.species && form.category ? ' • ' : ''}{form.category ? `Category: ${form.category}` : ''}</p>
-          )}
-        </div>
-
-        {isEdit && (
-          <>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-          <select name="gender" className="px-3 py-2 border rounded w-full" value={form.gender} onChange={onChange}>
-            <option value="male">male</option>
-            <option value="female">female</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
-          <input name="color" placeholder="e.g., Brown & White" className="px-3 py-2 border rounded w-full" value={form.color} onChange={onChange} />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Weight (kg)</label>
-          <input name="weight" type="number" placeholder="e.g., 12" className="px-3 py-2 border rounded w-full" value={form.weight} onChange={onChange} />
-        </div>
-        <select name="healthStatus" className="px-3 py-2 border rounded" value={form.healthStatus} onChange={onChange}>
-          <option value="excellent">excellent</option>
-          <option value="good">good</option>
-          <option value="fair">fair</option>
-          <option value="needs_attention">needs_attention</option>
-        </select>
-        <select name="vaccinationStatus" className="px-3 py-2 border rounded" value={form.vaccinationStatus} onChange={onChange}>
-          <option value="up_to_date">up_to_date</option>
-          <option value="partial">partial</option>
-          <option value="not_vaccinated">not_vaccinated</option>
-        </select>
-        <select name="temperament" className="px-3 py-2 border rounded" value={form.temperament} onChange={onChange}>
-          <option value="calm">calm</option>
-          <option value="energetic">energetic</option>
-          <option value="playful">playful</option>
-          <option value="shy">shy</option>
-          <option value="aggressive">aggressive</option>
-          <option value="friendly">friendly</option>
-        </select>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Adoption Fee (₹)</label>
-              <input name="adoptionFee" type="number" placeholder="e.g., 500" className="px-3 py-2 border rounded w-full" value={form.adoptionFee} onChange={onChange} />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea name="description" placeholder="Temperament, special needs, etc." className="px-3 py-2 border rounded w-full" rows={4} value={form.description} onChange={onChange} />
-            </div>
-          </>
-        )}
+    <div className="max-w-4xl mx-auto p-4">
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">{isEdit ? 'Edit Pet' : 'Add New Pet'}</h2>
+        <p className="text-sm text-gray-600 mb-6">You can do a quick intake now and complete details later. Species is required; other fields can be added later.</p>
         
-        {/* Image Upload Section */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Pet Images</label>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onChooseImage}
-              className="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm"
-            >
-              Upload Image
-            </button>
-            <input
-              type="file"
-              ref={imgInputRef}
-              onChange={onImageSelected}
-              accept="image/*"
-              className="hidden"
-            />
-            <p className="text-xs text-gray-500 self-center">
-              Upload clear photos of the pet (optional but recommended)
-            </p>
-          </div>
-          
-          {/* Image Preview */}
-          {images.length > 0 && (
-            <div className="mt-3">
-              <h4 className="text-sm font-medium mb-2">Uploaded Images:</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {images.map((img, index) => (
-                  <div key={index} className="relative group">
-                    <img 
-                      src={img.url} 
-                      alt={`Preview ${index + 1}`} 
-                      className="w-full h-24 object-cover rounded border"
-                      onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }}
-                    />
-                    {img.isPrimary && (
-                      <span className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">Primary</span>
-                    )}
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center gap-1">
-                      {!img.isPrimary && (
-                        <button
-                          type="button"
-                          onClick={() => setPrimaryImage(index)}
-                          className="opacity-0 group-hover:opacity-100 bg-blue-500 text-white p-1 rounded text-xs transition-opacity"
-                        >
-                          Set Primary
-                        </button>
-                      )}
+        {apiErrors.submit && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded">{apiErrors.submit}</div>}
+        
+        {/* Image Preview Section */}
+        {images.length > 0 && (
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <h3 className="text-lg font-medium text-gray-800 mb-3">Pet Images</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {images.map((img, index) => (
+                <div key={index} className="relative group">
+                  <img 
+                    src={img.url} 
+                    alt={`Preview ${index + 1}`} 
+                    className="w-full h-32 object-cover rounded border"
+                  />
+                  {img.isPrimary && (
+                    <span className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">Primary</span>
+                  )}
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center gap-2">
+                    {!img.isPrimary && (
                       <button
                         type="button"
-                        onClick={() => removeImage(index)}
-                        className="opacity-0 group-hover:opacity-100 bg-red-500 text-white p-1 rounded text-xs transition-opacity"
+                        onClick={() => setPrimaryImage(index)}
+                        className="opacity-0 group-hover:opacity-100 bg-blue-500 text-white p-2 rounded text-sm transition-opacity"
                       >
-                        Remove
+                        Set Primary
                       </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        
-        {/* Document Upload Section */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Documents</label>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onChooseDocument}
-              className="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm"
-            >
-              Upload Document
-            </button>
-            <input
-              type="file"
-              ref={docInputRef}
-              onChange={onDocumentSelected}
-              accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
-              className="hidden"
-            />
-            <p className="text-xs text-gray-500 self-center">
-              Upload medical records, certificates, or other documents (PDF, DOC, DOCX, TXT, JPG, PNG)
-            </p>
-          </div>
-          
-          {/* Document Preview */}
-          {documents.length > 0 && (
-            <div className="mt-3">
-              <h4 className="text-sm font-medium mb-2">Uploaded Documents:</h4>
-              <div className="space-y-2">
-                {documents.map((doc, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 border rounded-lg bg-gray-50">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-xs">
-                        {doc.type?.includes('pdf') ? '📄' : doc.type?.startsWith('image/') ? '🖼️' : '📝'}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium truncate max-w-32">
-                          {doc.name || (typeof doc === 'string' ? doc.split('/').pop() : 'Document')}
-                        </p>
-                        {doc.size && (
-                          <p className="text-xs text-gray-500">
-                            {(doc.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                    )}
                     <button
                       type="button"
-                      onClick={() => removeDocument(index)}
-                      className="text-red-600 hover:text-red-800 text-sm"
+                      onClick={() => removeImage(index)}
+                      className="opacity-0 group-hover:opacity-100 bg-red-500 text-white p-2 rounded text-sm transition-opacity"
                     >
                       Remove
                     </button>
                   </div>
-                ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+            <input 
+              name="name" 
+              placeholder="e.g., Bruno" 
+              className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+              value={form.name} 
+              onChange={onChange} 
+              required 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Age</label>
+            <div className="flex gap-3">
+              <input 
+                name="age" 
+                type="number" 
+                min="0" 
+                className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                value={form.age} 
+                onChange={onChange} 
+              />
+              <select 
+                name="ageUnit" 
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                value={form.ageUnit} 
+                onChange={onChange}
+              >
+                <option value="years">Years</option>
+                <option value="months">Months</option>
+                <option value="weeks">Weeks</option>
+                <option value="days">Days</option>
+              </select>
+            </div>
+          </div>
+          {isEdit && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Pet Code</label>
+              <div className="flex gap-3">
+                <input 
+                  value={form.petCode || ''} 
+                  readOnly 
+                  className="px-4 py-2 border border-gray-300 rounded-lg w-full bg-gray-50 font-mono" 
+                />
               </div>
+              <p className="text-xs text-gray-500 mt-1">Auto-generated unique code displayed after creation.</p>
             </div>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+            <input 
+              value={form.category || ''} 
+              readOnly 
+              className="px-4 py-2 border border-gray-300 rounded-lg w-full bg-gray-50" 
+              disabled 
+            />
+            <p className="text-xs text-gray-500 mt-1">Category is derived from the selected species.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <span>Species</span>
+              {form.category && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">Category: {form.category}</span>
+              )}
+            </label>
+            <select 
+              name="species" 
+              className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+              value={selectedSpeciesId}
+              onChange={onChange} 
+              disabled={fetchingMeta} 
+              required
+            >
+              <option value="">Select species</option>
+              {species
+                .filter(s => !form.category || ((s.category?.displayName || s.category?.name || s.category || '').toString() === form.category))
+                .map(s => (
+                  <option key={s._id || s.id} value={s._id || s.id}>{s.displayName || s.name || s.title}</option>
+                ))}
+            </select>
+            {!fetchingMeta && species.length===0 && (
+              <p className="text-xs text-amber-700 mt-1">No species available. Please ensure admin has created species or try refreshing.</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Breed</label>
+            <select
+              name="breed"
+              className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={form.breed}
+              onChange={onChange}
+              required
+              disabled={breeds.length === 0}
+            >
+              <option value="">{breeds.length ? 'Select breed' : 'No breeds available (ask Admin to add)'}</option>
+              {breeds.map(b => (
+                <option key={b._id || b.id} value={(b.name || b.title || '').toString()}>{b.name || b.title}</option>
+              ))}
+            </select>
+            {!fetchingMeta && selectedSpeciesId && breeds.length===0 && (
+              <p className="text-xs text-amber-700 mt-1">No breeds configured for this species. Please contact Admin to add breeds.</p>
+            )}
+            {(form.species || form.category) && (
+              <p className="text-xs text-gray-500 mt-1">Selected: {form.species ? `Species: ${form.species}` : ''}{form.species && form.category ? ' • ' : ''}{form.category ? `Category: ${form.category}` : ''}</p>
+            )}
+          </div>
+
+          {isEdit && (
+            <>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+          <select 
+            name="gender" 
+            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+            value={form.gender} 
+            onChange={onChange}
+          >
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
+          <input 
+            name="color" 
+            placeholder="e.g., Brown & White" 
+            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+            value={form.color} 
+            onChange={onChange} 
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Weight (kg)</label>
+          <input 
+            name="weight" 
+            type="number" 
+            placeholder="e.g., 12" 
+            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+            value={form.weight} 
+            onChange={onChange} 
+          />
         </div>
         
-        <div className="md:col-span-2 flex flex-wrap gap-2">
-          <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded" disabled={loading}>{isEdit ? 'Update' : 'Add Pet'}</button>
-          <button type="button" className="px-4 py-2 bg-gray-600 text-white rounded" onClick={()=>navigate('..')} disabled={loading}>Cancel</button>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Health Status</label>
+          <select 
+            name="healthStatus" 
+            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+            value={form.healthStatus} 
+            onChange={onChange}
+          >
+            <option value="excellent">Excellent</option>
+            <option value="good">Good</option>
+            <option value="fair">Fair</option>
+            <option value="needs_attention">Needs Attention</option>
+          </select>
         </div>
-      </form>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Vaccination Status</label>
+          <select 
+            name="vaccinationStatus" 
+            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+            value={form.vaccinationStatus} 
+            onChange={onChange}
+          >
+            <option value="up_to_date">Up to Date</option>
+            <option value="partial">Partial</option>
+            <option value="not_vaccinated">Not Vaccinated</option>
+          </select>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Temperament</label>
+          <select 
+            name="temperament" 
+            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+            value={form.temperament} 
+            onChange={onChange}
+          >
+            <option value="calm">Calm</option>
+            <option value="energetic">Energetic</option>
+            <option value="playful">Playful</option>
+            <option value="shy">Shy</option>
+            <option value="aggressive">Aggressive</option>
+            <option value="friendly">Friendly</option>
+          </select>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Adoption Fee (₹)</label>
+          <input 
+            name="adoptionFee" 
+            type="number" 
+            placeholder="e.g., 500" 
+            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+            value={form.adoptionFee} 
+            onChange={onChange} 
+          />
+        </div>
+        
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+          <textarea 
+            name="description" 
+            placeholder="Temperament, special needs, etc." 
+            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+            rows={4} 
+            value={form.description} 
+            onChange={onChange} 
+          />
+        </div>
+          </>
+        )}
+          
+          {/* Image Upload Section */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Pet Images</label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onChooseImage}
+                className="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+              >
+                Upload Image
+              </button>
+              <input
+                type="file"
+                ref={imgInputRef}
+                onChange={onImageSelected}
+                accept="image/*"
+                multiple
+                className="hidden"
+              />
+              <p className="text-xs text-gray-500 self-center">
+                Upload clear photos of the pet (optional but recommended)
+              </p>
+            </div>
+            
+            {/* Image Preview */}
+            {images.length > 0 && (
+              <div className="mt-3">
+                <h4 className="text-sm font-medium mb-2">Uploaded Images:</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {images.map((img, index) => (
+                    <div key={index} className="relative group">
+                      <img 
+                        src={img.url} 
+                        alt={`Preview ${index + 1}`} 
+                        className="w-full h-24 object-cover rounded border"
+                        onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }}
+                      />
+                      {img.isPrimary && (
+                        <span className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">Primary</span>
+                      )}
+                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center gap-1">
+                        {!img.isPrimary && (
+                          <button
+                            type="button"
+                            onClick={() => setPrimaryImage(index)}
+                            className="opacity-0 group-hover:opacity-100 bg-blue-500 text-white p-1 rounded text-xs transition-opacity"
+                          >
+                            Set Primary
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          className="opacity-0 group-hover:opacity-100 bg-red-500 text-white p-1 rounded text-xs transition-opacity"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Document Upload Section */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Documents</label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onChooseDocument}
+                className="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+              >
+                Upload Document
+              </button>
+              <input
+                type="file"
+                ref={docInputRef}
+                onChange={onDocumentSelected}
+                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                multiple
+                className="hidden"
+              />
+              <p className="text-xs text-gray-500 self-center">
+                Upload medical records, certificates, or other documents (PDF, DOC, DOCX, TXT, JPG, PNG)
+              </p>
+            </div>
+            
+            {/* Document Preview */}
+            {documents.length > 0 && (
+              <div className="mt-3">
+                <h4 className="text-sm font-medium mb-2">Uploaded Documents:</h4>
+                <div className="space-y-2">
+                  {documents.map((doc, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 border rounded-lg bg-gray-50">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-xs">
+                          {doc.type?.includes('pdf') ? '📄' : doc.type?.startsWith('image/') ? '🖼️' : '📝'}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium truncate max-w-32">
+                            {doc.name || (typeof doc === 'string' ? doc.split('/').pop() : 'Document')}
+                          </p>
+                          {doc.size && (
+                            <p className="text-xs text-gray-500">
+                              {(doc.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeDocument(index)}
+                        className="text-red-600 hover:text-red-800 text-sm"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <div className="md:col-span-2 flex flex-wrap gap-3 mt-6 pt-6 border-t border-gray-200">
+            <button 
+              type="submit" 
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              disabled={loading}
+            >
+              {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
+              {loading ? 'Saving...' : isEdit ? 'Update Pet' : 'Add Pet'}
+            </button>
+            <button 
+              type="button" 
+              className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={()=>navigate('..')} 
+              disabled={loading}
+            >
+              Cancel
+            </button>
+          </div>
+        
+          {error && <div className="md:col-span-2 mt-4 p-3 bg-red-50 text-red-700 rounded-lg">{error}</div>}
+        </form>
+      
+        {/* Debug Info (only shown in development) */}
+        {debugInfo && process.env.NODE_ENV === 'development' && (
+          <div className="mt-6 p-3 bg-yellow-50 text-yellow-800 text-xs rounded">
+            <strong>Debug:</strong> {debugInfo}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

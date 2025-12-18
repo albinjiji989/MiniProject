@@ -168,19 +168,23 @@ const getUserPurchasedPets = async (req, res) => {
     const PetReservation = require('../models/PetReservation');
     const Pet = require('../../../../core/models/Pet');
     const PetRegistry = require('../../../../core/models/PetRegistry');
-    const PetNew = require('../../../../core/models/PetNew');
     
-    // Get completed reservations (purchased pets)
+    console.log('Fetching purchased pets for user:', req.user._id);
+    
+    // Get completed reservations (purchased pets) for the current user only
+    // Updated to include more statuses that indicate a completed purchase
     const reservations = await PetReservation.find({
       userId: req.user._id,
-      status: { $in: ['completed', 'at_owner', 'paid'] }
+      status: { $in: ['completed', 'at_owner', 'paid', 'delivered'] }
     })
     .populate({
       path: 'itemId',
-      select: 'name petCode price images speciesId breedId storeId storeName gender age ageUnit color weight',
+      select: 'name petCode price images speciesId breedId storeId storeName gender age ageUnit color weight status',
     })
     .populate('petId')
     .sort({ createdAt: -1 });
+    
+    console.log('Found reservations:', reservations.length);
     
     // Manually populate images for inventory items if needed
     for (const reservation of reservations) {
@@ -199,19 +203,28 @@ const getUserPurchasedPets = async (req, res) => {
       }
     }
     
-    // Also get pets directly from PetRegistry that belong to this user
+    // Get pets directly from PetRegistry that belong to this user only
     // Include pets that are paid for but not yet transferred (in case registry update failed)
     const registryPets = await PetRegistry.find({
-      $or: [
+      $and: [
         {
-          currentOwnerId: req.user._id,
-          currentLocation: 'at_owner'
+          $or: [
+            {
+              currentOwnerId: req.user._id,
+              currentLocation: 'at_owner'
+            },
+            {
+              petCode: { $in: reservations.filter(r => r.itemId).map(r => r.itemId.petCode) }
+            }
+          ]
         },
         {
-          petCode: { $in: reservations.filter(r => r.itemId).map(r => r.itemId.petCode) }
+          currentOwnerId: req.user._id
         }
       ]
     });
+
+    console.log('Found registry pets:', registryPets.length);
 
     // Manually populate images for registry pets
     for (const registryPet of registryPets) {
@@ -230,6 +243,8 @@ const getUserPurchasedPets = async (req, res) => {
     
     // Add pets from reservations
     for (const r of reservations.filter(r => r.itemId)) {
+      console.log('Processing reservation:', r._id, 'with item:', r.itemId?.petCode, 'status:', r.status);
+      
       // Try to get the actual pet from the Pet model first
       let actualPet = null;
       if (r.petId) {
@@ -264,7 +279,10 @@ const getUserPurchasedPets = async (req, res) => {
         try {
           registryEntry = registryPets.find(p => p.petCode === r.itemId.petCode);
           if (!registryEntry) {
-            registryEntry = await PetRegistry.findOne({ petCode: r.itemId.petCode });
+            registryEntry = await PetRegistry.findOne({ 
+              petCode: r.itemId.petCode,
+              currentOwnerId: req.user._id
+            });
             if (registryEntry) {
               await registryEntry.populate('imageIds');
               await registryEntry.populate('images');
@@ -325,11 +343,13 @@ const getUserPurchasedPets = async (req, res) => {
         ageUnit: r.itemId.ageUnit,
         color: r.itemId.color || 'Unknown', // Use default color if empty
         weight: r.itemId.weight || { value: 0, unit: 'kg' },
-        currentStatus: 'purchased',
+        currentStatus: r.itemId.status || 'purchased', // Use actual inventory item status
         source: 'petshop',
         sourceLabel: 'Purchased from Pet Shop',
         acquiredDate: r.updatedAt
       };
+      
+      console.log('Adding pet to map:', petData.petCode, 'with status:', petData.currentStatus);
       
       // Add to map to avoid duplicates
       allPetsMap.set(r.itemId.petCode || r.itemId._id.toString(), petData);
@@ -339,6 +359,8 @@ const getUserPurchasedPets = async (req, res) => {
     for (const registryPet of registryPets) {
       // Skip if already added from reservations
       if (allPetsMap.has(registryPet.petCode)) continue;
+      
+      console.log('Adding registry pet:', registryPet.petCode, 'with status:', registryPet.currentStatus);
       
       const petData = {
         _id: registryPet._id,
@@ -359,7 +381,7 @@ const getUserPurchasedPets = async (req, res) => {
         ageUnit: registryPet.ageUnit,
         color: registryPet.color || 'Unknown', // Use default color if empty
         weight: registryPet.weight || { value: 0, unit: 'kg' },
-        currentStatus: 'purchased',
+        currentStatus: registryPet.currentStatus || 'purchased', // Use actual registry status
         source: 'petshop',
         sourceLabel: 'Purchased from Pet Shop',
         acquiredDate: registryPet.lastTransferAt
@@ -370,6 +392,8 @@ const getUserPurchasedPets = async (req, res) => {
     
     // Convert map to array
     const purchasedPets = Array.from(allPetsMap.values());
+    
+    console.log('Returning purchased pets:', purchasedPets.length);
     
     res.json({ success: true, data: { pets: purchasedPets } });
   } catch (e) {

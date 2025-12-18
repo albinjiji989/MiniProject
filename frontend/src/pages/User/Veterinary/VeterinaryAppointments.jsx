@@ -40,18 +40,67 @@ export default function VeterinaryAppointments() {
     navigate(`/user/veterinary/appointments/${appointmentId}`);
   };
 
+  // Function to get the primary image URL or first image URL
+  const getPetImageUrl = (pet) => {
+    if (!pet || !pet.images || pet.images.length === 0) {
+      return '/placeholder-pet.svg';
+    }
+    
+    // Find primary image first
+    const primaryImage = pet.images.find(img => img.isPrimary);
+    if (primaryImage && primaryImage.url) {
+      // Handle relative URLs
+      if (primaryImage.url.startsWith('http') || primaryImage.url.startsWith('/')) {
+        return primaryImage.url;
+      }
+      // For relative paths, prepend the API origin
+      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      return `${apiOrigin}${primaryImage.url.startsWith('/') ? '' : '/'}${primaryImage.url}`;
+    }
+    
+    // Fallback to first image
+    const firstImage = pet.images[0];
+    if (firstImage && firstImage.url) {
+      // Handle relative URLs
+      if (firstImage.url.startsWith('http') || firstImage.url.startsWith('/')) {
+        return firstImage.url;
+      }
+      // For relative paths, prepend the API origin
+      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      return `${apiOrigin}${firstImage.url.startsWith('/') ? '' : '/'}${firstImage.url}`;
+    }
+    
+    return '/placeholder-pet.svg';
+  };
+
   const getStatusBadge = (status) => {
     const statusClasses = {
       scheduled: 'bg-blue-100 text-blue-800',
       confirmed: 'bg-green-100 text-green-800',
+      in_progress: 'bg-yellow-100 text-yellow-800',
       completed: 'bg-purple-100 text-purple-800',
       cancelled: 'bg-red-100 text-red-800',
-      no_show: 'bg-yellow-100 text-yellow-800'
+      no_show: 'bg-yellow-100 text-yellow-800',
+      pending_approval: 'bg-orange-100 text-orange-800'
     };
     
     return (
       <span className={`px-2 py-1 rounded text-xs font-medium ${statusClasses[status] || 'bg-gray-100 text-gray-800'}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
+        {status?.charAt(0).toUpperCase() + status?.slice(1).replace('_', ' ') || 'Unknown'}
+      </span>
+    );
+  };
+
+  const getBookingTypeBadge = (bookingType) => {
+    const typeClasses = {
+      emergency: 'bg-red-100 text-red-800',
+      walkin: 'bg-yellow-100 text-yellow-800',
+      routine: 'bg-blue-100 text-blue-800'
+    };
+    
+    return (
+      <span className={`px-2 py-1 rounded text-xs font-medium ${typeClasses[bookingType] || 'bg-gray-100 text-gray-800'}`}>
+        {bookingType?.charAt(0).toUpperCase() + bookingType?.slice(1).replace('_', ' ') || 'Unknown'}
       </span>
     );
   };
@@ -167,18 +216,32 @@ export default function VeterinaryAppointments() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-                        <span className="text-lg">📅</span>
+                        {/* Display pet image or default icon */}
+                        {appointment.pet?.images && appointment.pet.images.length > 0 ? (
+                          <img 
+                            src={getPetImageUrl(appointment.pet)} 
+                            alt={appointment.pet.name}
+                            className="h-12 w-12 rounded-full object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = '/placeholder-pet.svg';
+                            }}
+                          />
+                        ) : (
+                          <span className="text-lg">📅</span>
+                        )}
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">
                           {appointment.pet?.name || 'Unknown Pet'}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {appointment.veterinary?.name || 'Unknown Clinic'}
+                          {appointment.storeName || 'Unknown Clinic'}
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      {getBookingTypeBadge(appointment.bookingType)}
                       {getStatusBadge(appointment.status)}
                       <button
                         onClick={() => handleViewAppointment(appointment._id)}
@@ -192,7 +255,8 @@ export default function VeterinaryAppointments() {
                     <div>
                       <div className="text-sm text-gray-500">Date & Time</div>
                       <div className="mt-1 text-sm text-gray-900">
-                        {new Date(appointment.appointmentDate).toLocaleDateString()} at {appointment.timeSlot}
+                        {appointment.appointmentDate ? new Date(appointment.appointmentDate).toLocaleDateString() : 'Anytime'}
+                        {appointment.timeSlot ? ` at ${appointment.timeSlot}` : ''}
                       </div>
                     </div>
                     <div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiClient, resolveMediaUrl, API_ORIGIN } from '../../../../services/api'
+import { apiClient, resolveMediaUrl } from '../../../../services/api'
 
 const KEY = 'adopt_wizard'
 

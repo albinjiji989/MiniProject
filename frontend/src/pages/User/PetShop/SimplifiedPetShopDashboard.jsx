@@ -54,7 +54,8 @@ import {
   Clear as ClearIcon,
   ExpandMore as ExpandMoreIcon,
   Male as MaleIcon,
-  Female as FemaleIcon
+  Female as FemaleIcon,
+  Insights as InsightsIcon
 } from '@mui/icons-material'
 import ModuleDashboardLayout from '../../../components/Module/ModuleDashboardLayout'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -407,25 +408,25 @@ const SimplifiedPetShopDashboard = () => {
 
   // Quick actions for the dashboard
   const quickActions = [
-    {
-      label: 'Browse Pets',
-      icon: <PetsIcon />,
-      onClick: () => setTabValue(1),
-      color: 'primary'
+    { 
+      title: 'Browse Pets', 
+      icon: <PetsIcon sx={{ fontSize: 32 }} />, 
+      color: 'bg-blue-500',
+      onClick: () => navigate('/User/petshop/shop'),
     },
-    {
-      label: 'My Reservations',
-      icon: <ScheduleIcon />,
-      onClick: () => setTabValue(3),
-      color: 'secondary'
+    { 
+      title: 'My Reservations', 
+      icon: <EventIcon sx={{ fontSize: 32 }} />, 
+      color: 'bg-green-500',
+      onClick: () => navigate('/User/petshop/reservations'),
     },
-    {
-      label: 'Wishlist',
-      icon: <FavoriteIcon />,
+    { 
+      title: 'Wishlist', 
+      icon: <FavoriteIcon sx={{ fontSize: 32 }} />, 
+      color: 'bg-red-500',
       onClick: () => navigate('/User/petshop/wishlist'),
-      color: 'error'
     }
-  ]
+  ];
 
   // Stat cards for the dashboard
   const statCards = [

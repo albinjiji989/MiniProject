@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import ManagerModuleLayout from '../../../components/Manager/ManagerModuleLayout';
 import { veterinaryAPI } from '../../../services/api';
+import MedicalRecordAttachments from '../../../components/Veterinary/MedicalRecordAttachments';
 
 export default function VeterinaryManagerMedicalRecordForm() {
   const navigate = useNavigate();
@@ -263,13 +264,18 @@ export default function VeterinaryManagerMedicalRecordForm() {
         respiratoryRate: formData.respiratoryRate ? parseInt(formData.respiratoryRate) : undefined
       };
       
+      let response;
       if (isEdit) {
         // Update existing medical record
-        await veterinaryAPI.updateMedicalRecord(id, recordData);
+        response = await veterinaryAPI.managerUpdateMedicalRecord(id, recordData);
       } else {
         // Create new medical record
-        await veterinaryAPI.createMedicalRecord(recordData);
+        response = await veterinaryAPI.managerCreateMedicalRecord(recordData);
       }
+      
+      // If we have attachments to upload, do that now
+      // Note: In a real implementation, you might want to handle this differently
+      // For now, we'll navigate to the record detail page where attachments can be added
       
       navigate('/manager/veterinary/records');
     } catch (error) {
@@ -1067,6 +1073,15 @@ export default function VeterinaryManagerMedicalRecordForm() {
           </form>
         </div>
       </div>
+      
+      {/* Attachments section - only show for existing records */}
+      {isEdit && (
+        <div className="mt-6 bg-white shadow sm:rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <MedicalRecordAttachments recordId={id} />
+          </div>
+        </div>
+      )}
     </ManagerModuleLayout>
   );
 }

@@ -39,6 +39,13 @@ const petInventoryItemSchema = new mongoose.Schema({
     enum: ['Male', 'Female', 'Unknown'],
     default: 'Unknown'
   },
+  dateOfBirth: {
+    type: Date
+  },
+  dateAdded: {
+    type: Date,
+    default: Date.now
+  },
   age: {
     type: Number,
     min: [0, 'Age cannot be negative']
@@ -159,12 +166,135 @@ const petInventoryItemSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  
+  // Relationship to stock if generated from stock
+  stockId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'PetStock',
+    index: true,
+    sparse: true
+  },
+  generatedFromStock: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 })
+
+// Calculate age from dateOfBirth before saving
+petInventoryItemSchema.pre('save', function(next) {
+  if (this.dateOfBirth) {
+    const now = new Date();
+    const diffTime = Math.abs(now - this.dateOfBirth);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    // Calculate age based on the unit
+    switch (this.ageUnit) {
+      case 'days':
+        this.age = diffDays;
+        break;
+      case 'weeks':
+        this.age = Math.floor(diffDays / 7);
+        break;
+      case 'months':
+        this.age = Math.floor(diffDays / 30.44); // Average days in a month
+        break;
+      case 'years':
+        this.age = Math.floor(diffDays / 365.25); // Account for leap years
+        break;
+      default:
+        this.age = Math.floor(diffDays / 30.44); // Default to months
+    }
+  }
+  next();
+});
+
+// Static: generate unique pet code using centralized generator
+petInventoryItemSchema.statics.generatePetCode = async function() {
+  const PetCodeGenerator = require('../../../../core/utils/petCodeGenerator')
+  return await PetCodeGenerator.generateUniquePetCode()
+}
+
+// Pre-save: assign petCode if missing
+petInventoryItemSchema.pre('save', async function(next) {
+  try {
+    if (!this.petCode) {
+      const Model = this.constructor
+      this.petCode = await Model.generatePetCode()
+    }
+    next()
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Post-save: register in centralized PetRegistry
+petInventoryItemSchema.post('save', async function(doc) {
+  try {
+    // Only register if petCode exists and this is a new document or has a relevant status
+    if (doc.petCode && (doc.isNew || ['available_for_sale', 'in_petshop', 'sold'].includes(doc.status))) {
+      const PetRegistry = require('../../../../core/models/PetRegistry');
+      
+      // Register the pet in the centralized registry
+      await PetRegistry.ensureRegistered({
+        petCode: doc.petCode,
+        name: doc.name,
+        species: doc.speciesId,
+        breed: doc.breedId,
+        images: doc.imageIds || [],
+        source: 'petshop',
+        petShopItemId: doc._id,
+        actorUserId: doc.createdBy,
+        firstAddedSource: 'pet_shop',
+        firstAddedBy: doc.createdBy,
+        gender: doc.gender,
+        age: doc.age,
+        ageUnit: doc.ageUnit,
+        color: doc.color
+      }, {
+        currentOwnerId: doc.createdBy, // Pet shop manager who added it
+        currentLocation: doc.status === 'sold' ? 'at_owner' : 'at_petshop',
+        currentStatus: doc.status === 'available_for_sale' ? 'available' : doc.status
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to register petshop item in PetRegistry:', err.message);
+  }
+});
+
+// Pre-insertMany: assign codes for bulk inserts (e.g., CSV import)
+petInventoryItemSchema.pre('insertMany', async function(docs) {
+  const Model = this.model ? this.model : this.constructor
+  for (const doc of docs) {
+    if (!doc.petCode) {
+      // eslint-disable-next-line no-await-in-loop
+      doc.petCode = await Model.generatePetCode()
+    }
+  }
+})
+
+// Virtuals for populating images and documents
+petInventoryItemSchema.virtual('images', {
+  ref: 'Image',
+  localField: 'imageIds',
+  foreignField: '_id',
+  justOne: false
+});
+
+petInventoryItemSchema.virtual('documents', {
+  ref: 'Document',
+  localField: 'documentIds',
+  foreignField: '_id',
+  justOne: false
+});
+
+// Include virtuals in JSON/Object outputs
+petInventoryItemSchema.set('toJSON', { virtuals: true })
+petInventoryItemSchema.set('toObject', { virtuals: true })
 
 // Indexes
 petInventoryItemSchema.index({ name: 1 })
@@ -175,136 +305,6 @@ petInventoryItemSchema.index({ price: 1 })
 petInventoryItemSchema.index({ storeId: 1 })
 petInventoryItemSchema.index({ petCode: 1 }, { unique: true, sparse: true })
 petInventoryItemSchema.index({ isActive: 1 })
+petInventoryItemSchema.index({ dateOfBirth: 1 })
 
-// Virtual populate images
-petInventoryItemSchema.virtual('images', {
-  ref: 'Image',
-  localField: 'imageIds',
-  foreignField: '_id',
-  justOne: false
-})
-
-// Virtual populate documents
-petInventoryItemSchema.virtual('documents', {
-  ref: 'Document',
-  localField: 'documentIds',
-  foreignField: '_id',
-  justOne: false
-})
-
-// Generate unique petCode before saving
-petInventoryItemSchema.pre('save', async function(next) {
-  // Generate unique petCode if not provided
-  if (!this.petCode) {
-    try {
-      this.petCode = await PetCodeGenerator.generateUniquePetCode();
-    } catch (err) {
-      console.error('Error generating petCode for PetInventoryItem:', err);
-      return next(err);
-    }
-  }
-  
-  // Ensure name is trimmed and not empty
-  if (this.isModified('name')) {
-    this.name = (this.name || '').trim();
-    if (!this.name) {
-      this.name = 'Unnamed Pet';
-    }
-  }
-  
-  // Ensure color is trimmed
-  if (this.isModified('color')) {
-    this.color = (this.color || '').trim();
-  }
-  
-  // Ensure description is trimmed
-  if (this.isModified('description')) {
-    this.description = (this.description || '').trim();
-  }
-  
-  next();
-})
-
-// Validate required fields before saving
-petInventoryItemSchema.pre('validate', function(next) {
-  // Validate required fields
-  if (!this.speciesId) {
-    return next(new Error('Species is required'));
-  }
-  
-  if (!this.breedId) {
-    return next(new Error('Breed is required'));
-  }
-  
-  if (this.price === undefined || this.price === null) {
-    return next(new Error('Price is required'));
-  }
-  
-  if (this.price < 0) {
-    return next(new Error('Price cannot be negative'));
-  }
-  
-  if (this.storeId === undefined || this.storeId === null) {
-    return next(new Error('Store is required'));
-  }
-  
-  next();
-})
-
-// Post-save hook to register in PetRegistry
-petInventoryItemSchema.post('save', async function(doc) {
-  try {
-    // Register the pet in the centralized PetRegistry
-    const PetRegistry = require('../../../../core/models/PetRegistry');
-    const Species = require('../../../../core/models/Species');
-    const Breed = require('../../../../core/models/Breed');
-    
-    // Get species and breed details
-    const speciesDoc = await Species.findById(doc.speciesId);
-    const breedDoc = await Breed.findById(doc.breedId);
-    
-    // Validate required data before registration
-    if (!doc.petCode) {
-      console.error(`❌ PetInventoryItem ${doc._id} missing petCode`);
-      return;
-    }
-    
-    if (!doc.speciesId || !speciesDoc) {
-      console.error(`❌ PetInventoryItem ${doc._id} missing valid species`);
-      return;
-    }
-    
-    if (!doc.breedId || !breedDoc) {
-      console.error(`❌ PetInventoryItem ${doc._id} missing valid breed`);
-      return;
-    }
-    
-    // Create registry entry with source tracking
-    await PetRegistry.ensureRegistered({
-      petCode: doc.petCode,
-      name: doc.name || 'Unnamed Pet',
-      species: speciesDoc?._id,
-      breed: breedDoc?._id,
-      imageIds: doc.imageIds || [],
-      source: 'petshop',
-      petShopItemId: doc._id,
-      firstAddedSource: 'pet_shop',
-      firstAddedBy: doc.createdBy
-    }, {
-      currentLocation: 'at_petshop',
-      currentStatus: doc.status === 'available_for_sale' ? 'available' : 'in_petshop',
-      lastTransferAt: new Date()
-    });
-    
-    console.log(`✅ PetRegistry registered for PetInventoryItem: ${doc.petCode}`);
-  } catch (error) {
-    console.error(`❌ PetRegistry registration failed for PetInventoryItem ${doc.petCode}:`, error.message);
-  }
-});
-
-// Static method to generate unique petCode
-petInventoryItemSchema.statics.generatePetCode = async function() {
-  return await PetCodeGenerator.generateUniquePetCode();
-}
-
-module.exports = mongoose.models.PetInventoryItem || mongoose.model('PetInventoryItem', petInventoryItemSchema)
+module.exports = mongoose.model('PetInventoryItem', petInventoryItemSchema);

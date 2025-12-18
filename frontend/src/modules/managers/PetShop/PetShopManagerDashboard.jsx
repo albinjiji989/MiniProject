@@ -32,7 +32,8 @@ import {
   Settings as SettingsIcon,
   Favorite as FavoriteIcon,
   Inventory as InventoryIcon,
-  AttachMoney as AttachMoneyIcon
+  AttachMoney as AttachMoneyIcon,
+  TrendingUp as AnalyticsIcon
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, authAPI } from '../../../services/api'
@@ -460,7 +461,7 @@ const PetShopManagerDashboard = () => {
           <Typography variant="h5" sx={{ mb: 2, fontWeight: 'bold' }}>Essential Management</Typography>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/manage-inventory')}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -474,7 +475,7 @@ const PetShopManagerDashboard = () => {
           </Card>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/reservations')}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -488,7 +489,7 @@ const PetShopManagerDashboard = () => {
           </Card>
         </Grid>
         
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/orders')}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -497,6 +498,55 @@ const PetShopManagerDashboard = () => {
                   <Typography variant="body2" color="textSecondary">View orders and invoices</Typography>
                 </Box>
                 <ReceiptIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/aiml-dashboard')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>AI/ML Dashboard</Typography>
+                  <Typography variant="body2" color="textSecondary">Machine learning insights</Typography>
+                </Box>
+                <AnalyticsIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Stock Management Section */}
+      <Grid container spacing={3} sx={{ mt: 2 }}>
+        <Grid item xs={12}>
+          <Typography variant="h5" sx={{ mb: 2, fontWeight: 'bold' }}>Stock Management</Typography>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/wizard/basic')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Add New Stock</Typography>
+                  <Typography variant="body2" color="textSecondary">Create new pet stocks in bulk</Typography>
+                </Box>
+                <PetsIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/stocks')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Manage Stocks</Typography>
+                  <Typography variant="body2" color="textSecondary">View and manage existing pet stocks</Typography>
+                </Box>
+                <InventoryIcon color="primary" />
               </Box>
             </CardContent>
           </Card>
@@ -572,6 +622,43 @@ const PetShopManagerDashboard = () => {
                   <Typography variant="h5" sx={{ fontWeight: 'bold' }}>{stats.pendingOrders || 0}</Typography>
                 </Box>
               </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={3} sx={{ mt: 2 }}>
+        {/* Quick Stats Summary */}
+        <Grid item xs={12} md={4}>
+          <Card 
+            sx={{ 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column',
+              cursor: 'pointer',
+              '&:hover': { 
+                transform: 'translateY(-2px)', 
+                transition: 'transform 0.2s',
+                boxShadow: 3
+              }
+            }}
+            onClick={() => navigate('/manager/petshop/analytics')}
+          >
+            <CardContent sx={{ flex: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <AssessmentIcon sx={{ fontSize: 32, color: 'primary.main', mr: 1 }} />
+                <Typography variant="h6">Analytics</Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                View detailed analytics and reports for your pet shop
+              </Typography>
+              <Button 
+                size="small" 
+                variant="outlined"
+                sx={{ mt: 'auto' }}
+              >
+                View Analytics
+              </Button>
             </CardContent>
           </Card>
         </Grid>

@@ -696,3 +696,100 @@ router.delete('/managers/:id', [auth, authorize('admin')], async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
+
+// @route   GET /api/admin/pending-invites
+// @desc    Get all pending manager invitations
+// @access  Private (Admin)
+router.get('/pending-invites', [auth, authorize('admin')], async (req, res) => {
+  try {
+    const pendingInvites = await AdminInvite.find({ 
+      verified: false,
+      expiresAt: { $gt: new Date() }
+    }).sort({ createdAt: -1 });
+    
+    res.json({ 
+      success: true, 
+      data: pendingInvites 
+    });
+  } catch (err) {
+    console.error('Get pending invites error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// @route   POST /api/admin/resend-invite
+// @desc    Resend invitation OTP
+// @access  Private (Admin)
+router.post('/resend-invite', [
+  auth,
+  authorize('admin'),
+  body('email').isEmail(),
+  body('module').isString()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: 'Validation errors', errors: errors.array() });
+    }
+    
+    const { email, module } = req.body;
+    
+    // Find the pending invite
+    const invite = await AdminInvite.findOne({ 
+      email, 
+      module, 
+      verified: false,
+      expiresAt: { $gt: new Date() }
+    }).sort({ createdAt: -1 });
+    
+    if (!invite) {
+      return res.status(404).json({ success: false, message: 'Pending invitation not found' });
+    }
+    
+    // Generate new OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    
+    // Update the invite with new OTP
+    invite.otp = otp;
+    invite.expiresAt = expiresAt;
+    await invite.save();
+    
+    // Send email with new OTP
+    const subject = `Verify module manager invitation (${module})`;
+    const html = `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;background:#0b0f1a;padding:24px;color:#e6e9ef;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:rgba(255,255,255,0.06);backdrop-filter: blur(10px); border-radius:16px; overflow:hidden;">
+        <tr><td style="padding:28px;background:linear-gradient(135deg,#6a11cb,#2575fc);color:#fff;">
+          <h1 style="margin:0;font-size:20px;">Module manager verification</h1>
+        </td></tr>
+        <tr><td style="padding:24px 28px;">Your verification code is <b style="letter-spacing:4px;font-size:18px;">${otp}</b>. It expires in 10 minutes.</td></tr>
+      </table></div>`;
+    
+    await sendMail({ to: email, subject, html });
+    
+    res.json({ success: true, message: 'OTP resent successfully' });
+  } catch (error) {
+    console.error('Resend invite error:', error);
+    res.status(500).json({ success: false, message: 'Server error during resend' });
+  }
+});
+
+// @route   DELETE /api/admin/cancel-invite
+// @desc    Cancel a pending invitation
+// @access  Private (Admin)
+router.delete('/cancel-invite/:id', [auth, authorize('admin')], async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const invite = await AdminInvite.findByIdAndDelete(id);
+    
+    if (!invite) {
+      return res.status(404).json({ success: false, message: 'Invitation not found' });
+    }
+    
+    res.json({ success: true, message: 'Invitation cancelled successfully' });
+  } catch (err) {
+    console.error('Cancel invite error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});

@@ -182,12 +182,50 @@ const PetRegistryService = {
     if (transferType === 'purchase' || transferType === 'adoption') {
       registry.currentLocation = 'at_owner'
       registry.currentStatus = transferType === 'purchase' ? 'sold' : 'adopted'
+    } else if (transferType === 'hospital_admission') {
+      registry.currentLocation = 'in_hospital'
+      registry.currentStatus = 'in_hospital'
+    } else if (transferType === 'hospital_discharge') {
+      registry.currentLocation = 'at_owner'
+      registry.currentStatus = 'owned'
+    } else if (transferType === 'temporary_care_start') {
+      registry.currentLocation = 'in_temporary_care'
+      registry.currentStatus = 'in_temporary_care'
+    } else if (transferType === 'temporary_care_end') {
+      registry.currentLocation = 'at_owner'
+      registry.currentStatus = 'owned'
     }
 
     await registry.save()
     return registry
   },
 
+  /**
+   * Update pet location and status
+   */
+  async updateLocationAndStatus({
+    petCode,
+    currentLocation,
+    currentStatus,
+    actorUserId
+  }) {
+    if (!petCode) throw new Error('petCode required for location/status update')
+    
+    const update = {
+      currentLocation,
+      currentStatus,
+      updatedBy: actorUserId || undefined,
+      lastSeenAt: new Date()
+    }
+  
+    const doc = await PetRegistry.findOneAndUpdate(
+      { petCode },
+      { $set: update },
+      { new: true }
+    )
+    return doc
+  },
+  
   /**
    * Get complete ownership history for a pet
    */

@@ -20,7 +20,13 @@ const PetCategories = () => {
   const load = async () => {
     setLoading(true)
     try {
-      const res = await petCategoriesAPI.list({ page, limit: 10, search, status: status === 'all' ? undefined : status })
+      // Convert status filter for backend API
+      let isActiveParam
+      if (status === 'active') isActiveParam = true
+      else if (status === 'disabled') isActiveParam = false
+      // For 'all', leave undefined to get both active and inactive
+
+      const res = await petCategoriesAPI.list({ page, limit: 10, search, isActive: isActiveParam })
       const data = res.data?.data || []
       const pagination = res.data?.pagination || {}
       setCategories(Array.isArray(data) ? data : (data.categories || []))

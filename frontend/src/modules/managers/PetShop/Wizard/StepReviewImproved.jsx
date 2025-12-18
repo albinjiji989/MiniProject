@@ -40,7 +40,7 @@ export default function StepReviewImproved() {
     }
   }, [])
 
-  // Fetch display names for category, species, and breed
+  // Fetch display names for category, species and breed
   const fetchDisplayNames = async (data) => {
     if (!data.classification) return;
 
@@ -142,111 +142,96 @@ export default function StepReviewImproved() {
   }
 
   const handleSubmit = async () => {
-    setLoading(true);
-    setError('');
-    setSuccess(false);
-    
     try {
-      const totalStock = formData.pricing?.quantity ? parseInt(formData.pricing.quantity) : 1;
-      const genderData = formData.genderClassification || {};
-      const maleCount = genderData.maleQuantity || 0;
-      const femaleCount = genderData.femaleQuantity || 0;
+      setIsSubmitting(true);
+      setError('');
       
-      // Validate that we have the required data
-      if (!formData.classification?.categoryId) {
-        throw new Error('Category is required but missing');
-      }
-      if (!formData.classification?.speciesId) {
-        throw new Error('Species is required but missing');
-      }
-      if (!formData.classification?.breedId) {
-        throw new Error('Breed is required but missing');
+      // Validation
+      if (!formData.basic?.name?.trim()) {
+        throw new Error('Pet name is required');
       }
       
-      // Create array of pets with proper gender distribution
-      const pets = [];
-      
-      // Add male pets
-      for (let i = 0; i < maleCount; i++) {
-        pets.push({
-          name: '', // No name from media step
-          images: [], // No images from media step
-          gender: 'Male'
-        });
+      if (!formData.classification?.categoryId || !formData.classification?.speciesId || !formData.classification?.breedId) {
+        throw new Error('Category, species, and breed are required');
       }
       
-      // Add female pets
-      for (let i = 0; i < femaleCount; i++) {
-        pets.push({
-          name: '', // No name from media step
-          images: [], // No images from media step
-          gender: 'Female'
-        });
+      if (!formData.pricing?.unitCost || !formData.pricing?.price) {
+        throw new Error('Cost price and selling price are required');
       }
       
-      // Create inventory items for each pet
-      const items = pets.map((pet, index) => ({
+      // Calculate totals
+      const maleCount = parseInt(formData.gender?.maleCount) || 0;
+      const femaleCount = parseInt(formData.gender?.femaleCount) || 0;
+      const totalStock = maleCount + femaleCount;
+      
+      if (totalStock <= 0) {
+        throw new Error('At least one pet must be added to stock');
+      }
+      
+      // Create a single stock record with gender distribution
+      // This matches the requirement: one stock entry with male/female counts
+      const stockData = {
         // Basic info
-        name: pet.name || '',
+        name: formData.basic?.name || `Pet Stock - ${breedName}`,
         age: formData.basic?.age ? Number(formData.basic.age) : 0,
         ageUnit: formData.basic?.ageUnit || 'months',
         color: formData.basic?.color || '',
         coatType: formData.basic?.coatType || '',
-        gender: pet.gender, // Use the gender from our distribution
         
         // Classification
         categoryId: formData.classification?.categoryId,
         speciesId: formData.classification?.speciesId,
         breedId: formData.classification?.breedId,
         
-        // Pricing & Stock (same for all pets in this batch)
+        // Pricing & Stock
         unitCost: formData.pricing?.unitCost ? Number(formData.pricing.unitCost) : 0,
         price: formData.pricing?.price ? Number(formData.pricing.price) : 0,
-        quantity: 1, // Each pet is a single item
+        quantity: totalStock,
+        maleCount: maleCount,
+        femaleCount: femaleCount,
         source: formData.pricing?.source || 'Other',
-        arrivalDate: formData.pricing?.arrivalDate || new Date(),
+        arrivalDate: formData.pricing?.arrivalDate || new Date().toISOString().split('T')[0],
         
         // Notes
         notes: formData.basic?.notes || '',
         
-        // No images for this specific pet
-        images: pet.images || []
-      }));
+        // No images at this stage - will be added in separate step
+        maleImageIds: [],
+        femaleImageIds: []
+      };
       
-      // Submit all pets as a bulk operation
-      try {
-        const res = await apiClient.post('/petshop/manager/inventory/bulk', { items });
-        setSuccess(true);
-      } catch (err) {
-        console.error('Error creating inventory items:', err);
-        const errorMessage = err.response?.data?.message || err.message || 'Unknown error';
+      console.log('🚀 Creating stock with data:', stockData);
+      
+      // Submit to API
+      const response = await petShopStockAPI.createStock(stockData);
+      console.log('✅ Stock creation response:', response);
+      
+      if (response?.data?.success) {
+        const createdStock = response.data.data.stock;
         
-        // Provide more specific error messages based on status code
-        if (err.response?.status === 403) {
-          throw new Error('Access denied when creating pets. Please check your permissions.');
-        } else if (err.response?.status === 400) {
-          throw new Error(`Invalid data: ${errorMessage}`);
-        } else if (err.response?.status === 500) {
-          throw new Error('Server error when creating pets. Please try again later.');
-        } else {
-          throw new Error(`Failed to create pets: ${errorMessage}`);
-        }
+        // Show success message
+        showSnackbar(
+          `Successfully created stock "${createdStock.name}" with ${totalStock} pets (${maleCount} male, ${femaleCount} female)!`,
+          'success'
+        );
+        
+        // Clear form data
+        localStorage.removeItem('petShopWizardData');
+        
+        // Navigate to stock images management page
+        setTimeout(() => {
+          navigate(`/manager/petshop/manage-stock-images/${createdStock._id}`);
+        }, 2000);
+      } else {
+        throw new Error(response?.data?.message || 'Failed to create stock');
       }
-      
-      setSuccess(true);
-      
-      // Clear the wizard data from localStorage
-      localStorage.removeItem(KEY);
-      
-      // Navigate to success page or inventory list
-      setTimeout(() => {
-        navigate('/manager/petshop/inventory');
-      }, 2000);
     } catch (err) {
-      console.error('Error creating inventory items:', err);
-      setError(err.message || 'Failed to add pets to inventory. Please check your inputs and try again.');
+      console.error('❌ Stock creation error:', err);
+      const errorMsg = err.response?.data?.message || err.message || 'An unexpected error occurred';
+      setError(errorMsg);
+      showSnackbar(`Error: ${errorMsg}`, 'error');
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -271,21 +256,46 @@ export default function StepReviewImproved() {
   };
 
   const totalStock = formData.pricing?.quantity ? parseInt(formData.pricing.quantity) : 1
+  const genderData = formData.genderClassification || {}
+  const maleCount = genderData.maleQuantity || 0
+  const femaleCount = genderData.femaleQuantity || 0
 
   return (
-    <Box className="space-y-6">
-      <Typography variant="h6" sx={{ mb: 2 }}>Review & Submit</Typography>
-      
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          <strong>Success!</strong> Pets have been added to your inventory.
-        </Alert>
-      )}
-      
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
-      )}
-      
+    <Box sx={{ p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <IconButton 
+            onClick={onBack} 
+            disabled={isSubmitting}
+            sx={{ mr: 2 }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+          <Typography variant="h4" component="h1">
+            Review & Confirm Stock
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* Info Alert */}
+      <Alert severity="info" sx={{ mb: 3 }}>
+        <AlertTitle>Stock-Based Workflow</AlertTitle>
+        <Typography variant="body2">
+          You're creating a stock record for similar pets. After creation, you'll be able to:
+        </Typography>
+        <ul>
+          <li>Add one image for all male pets in this stock</li>
+          <li>Add one image for all female pets in this stock</li>
+          <li>Generate individual pets with unique codes when purchased</li>
+        </ul>
+        <Typography variant="body2">
+          <strong>Note:</strong> Only 2 images are needed for this stock (one male, one female). 
+          Individual pets will be generated with these images when purchased.
+        </Typography>
+      </Alert>
+
+      {/* Classification */}
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>Classification</Typography>
@@ -320,6 +330,7 @@ export default function StepReviewImproved() {
         </CardContent>
       </Card>
       
+      {/* Basic Information */}
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>Basic Information</Typography>
@@ -348,6 +359,7 @@ export default function StepReviewImproved() {
         </CardContent>
       </Card>
       
+      {/* Pricing & Stock */}
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>Pricing & Stock</Typography>
@@ -394,22 +406,23 @@ export default function StepReviewImproved() {
         </CardContent>
       </Card>
       
+      {/* Gender Distribution */}
       <Card>
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Gender Classification</Typography>
+          <Typography variant="h6" sx={{ mb: 2 }}>Gender Distribution</Typography>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
               <List dense>
                 <ListItem>
                   <ListItemText 
                     primary="Male" 
-                    secondary={formData.genderClassification?.maleQuantity || 0} 
+                    secondary={maleCount} 
                   />
                 </ListItem>
                 <ListItem>
                   <ListItemText 
                     primary="Female" 
-                    secondary={formData.genderClassification?.femaleQuantity || 0} 
+                    secondary={femaleCount} 
                   />
                 </ListItem>
               </List>
@@ -428,28 +441,20 @@ export default function StepReviewImproved() {
         </CardContent>
       </Card>
       
+      {/* Stock Information */}
       <Card>
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Pets Information</Typography>
-          <Grid container spacing={2}>
-            {Array.from({ length: totalStock }).map((_, index) => (
-              <Grid item xs={12} sm={6} md={4} key={index}>
-                <Card variant="outlined">
-                  <CardContent>
-                    <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                      Pet {index + 1}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Images: 0 (can be added later)
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+          <Typography variant="h6" sx={{ mb: 2 }}>Stock Information</Typography>
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+            This stock will be added to your inventory. Individual pets will be generated with unique pet codes when customers purchase from this stock.
+          </Typography>
+          <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+            Note: Only 2 images are needed for this stock (one male, one female). Individual pets will be generated with these images when purchased.
+          </Typography>
         </CardContent>
       </Card>
       
+      {/* Actions */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
         <Button 
           variant="outlined" 
@@ -466,7 +471,7 @@ export default function StepReviewImproved() {
           disabled={loading}
           startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
         >
-          {loading ? 'Submitting...' : 'Submit All Pets'}
+          {loading ? 'Submitting...' : 'Submit Stock'}
         </Button>
       </Box>
     </Box>

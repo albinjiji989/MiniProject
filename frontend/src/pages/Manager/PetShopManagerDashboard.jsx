@@ -42,12 +42,12 @@ import {
   Edit as EditIcon,
   Print as PrintIcon,
   Download as DownloadIcon,
-  Assignment as AssignmentIcon
+  Assignment as AssignmentIcon,
+  Insights
 } from '@mui/icons-material'
 import { petShopManagerAPI, apiClient } from '../../services/api'
 import InvoiceTemplate from '../../components/PetShop/InvoiceTemplate'
 import { resolveMediaUrl } from '../../services/api'
-
 const PetShopManagerDashboard = () => {
   const [activeTab, setActiveTab] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -589,13 +589,14 @@ const PetShopManagerDashboard = () => {
           <Tab icon={<ReservationsIcon />} label="Reservations" />
           <Tab icon={<OrdersIcon />} label="Orders & Sales" />
           <Tab icon={<DeliveryIcon />} label="Delivery Management" />
+          <Tab icon={<Insights />} label="ML Analytics" />
           <Tab icon={<InvoiceIcon />} label="Invoices & Reports" />
         </Tabs>
 
         {activeTab === 0 && renderReservationsTab()}
         {activeTab === 1 && renderOrdersTab()}
         {activeTab === 2 && renderDeliveryTab()}
-        {activeTab === 3 && (
+        {activeTab === 4 && (
           <Paper sx={{ mt: 2, p: 3 }}>
             <Typography variant="h6" gutterBottom>Invoices & Reports</Typography>
             <Grid container spacing={3}>

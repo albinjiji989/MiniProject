@@ -1,6 +1,6 @@
 const { validationResult } = require('express-validator');
 const TemporaryCareRequest = require('../../user/models/TemporaryCareRequest');
-const TemporaryCare = require('../models/TemporaryCare');
+const TemporaryCare = require('../../models/TemporaryCare');
 const Caregiver = require('../models/Caregiver');
 
 // List requests for manager's store

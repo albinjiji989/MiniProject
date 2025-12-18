@@ -1,6 +1,5 @@
 const PetRegistry = require('../models/PetRegistry');
 const Pet = require('../models/Pet');
-const PetNew = require('../models/PetNew');
 const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet');
 const PetInventoryItem = require('../../modules/petshop/manager/models/PetInventoryItem');
 
@@ -131,9 +130,8 @@ const CentralizedPetService = {
     let sourceData = null;
     switch (registryEntry.source) {
       case 'core':
-        // Try to find in PetNew first, then in Pet
-        sourceData = await PetNew.findById(registryEntry.corePetId) ||
-                     await Pet.findById(registryEntry.corePetId);
+        // Find in Pet
+        sourceData = await Pet.findById(registryEntry.corePetId);
         break;
       case 'petshop':
         sourceData = await PetInventoryItem.findById(registryEntry.petShopItemId);

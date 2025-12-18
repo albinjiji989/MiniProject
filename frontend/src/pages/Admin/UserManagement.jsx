@@ -58,7 +58,7 @@ import {
   Phone as PhoneIcon,
   LocationOn as LocationIcon,
 } from '@mui/icons-material'
-import { usersAPI, rolesAPI } from '../../services/api'
+import { userAPI as usersAPI, rolesAPI } from '../../services/api'
 
 const ALL_MODULES = [
   'adoption',

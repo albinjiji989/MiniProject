@@ -152,6 +152,10 @@ export default function VeterinaryBookAppointment() {
       console.log('DEBUG: Selected pet:', selectedPet);
       console.log('DEBUG: Pet ID from formData:', formData.petId);
       
+      // Additional debugging
+      console.log('DEBUG: Pet ID type:', typeof formData.petId);
+      console.log('DEBUG: Pet ID length:', formData.petId ? formData.petId.length : 'undefined');
+      
       const response = await veterinaryAPI.bookAppointment(bookingData);
       
       // Show appropriate message based on booking type
@@ -173,6 +177,96 @@ export default function VeterinaryBookAppointment() {
       setLoading(false);
     }
   };
+
+  // Function to get the primary image URL or first image URL
+  const getPetImageUrl = (pet) => {
+    if (!pet || !pet.images || pet.images.length === 0) {
+      return '/placeholder-pet.svg';
+    }
+    
+    // Find primary image first
+    const primaryImage = pet.images.find(img => img.isPrimary);
+    if (primaryImage && primaryImage.url) {
+      // Handle relative URLs
+      if (primaryImage.url.startsWith('http') || primaryImage.url.startsWith('/')) {
+        return primaryImage.url;
+      }
+      // For relative paths, prepend the API origin
+      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      return `${apiOrigin}${primaryImage.url.startsWith('/') ? '' : '/'}${primaryImage.url}`;
+    }
+    
+    // Fallback to first image
+    const firstImage = pet.images[0];
+    if (firstImage && firstImage.url) {
+      // Handle relative URLs
+      if (firstImage.url.startsWith('http') || firstImage.url.startsWith('/')) {
+        return firstImage.url;
+      }
+      // For relative paths, prepend the API origin
+      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      return `${apiOrigin}${firstImage.url.startsWith('/') ? '' : '/'}${firstImage.url}`;
+    }
+    
+    return '/placeholder-pet.svg';
+  };
+
+  // Function to check if a date is valid for booking based on booking type
+  const isValidBookingDate = (date, type) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+    
+    switch (type) {
+      case 'emergency':
+        // Emergency bookings are available 24/7
+        return true;
+      case 'routine':
+        // Routine bookings need to be 1 day to 1 week in advance
+        const diffTime = selectedDate.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays >= 1 && diffDays <= 7;
+      case 'walkin':
+        // Walk-in bookings should be for today or yesterday
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return selectedDate.getTime() === today.getTime() || selectedDate.getTime() === yesterday.getTime();
+      default:
+        return true;
+    }
+  };
+
+  // Function to get min and max dates based on booking type
+  const getDateConstraints = (type) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    switch (type) {
+      case 'routine':
+        // Routine bookings: 1-7 days in advance
+        const minRoutine = new Date(today);
+        minRoutine.setDate(minRoutine.getDate() + 1);
+        const maxRoutine = new Date(today);
+        maxRoutine.setDate(maxRoutine.getDate() + 7);
+        return { 
+          min: minRoutine.toISOString().split('T')[0],
+          max: maxRoutine.toISOString().split('T')[0]
+        };
+      case 'walkin':
+        // Walk-in bookings: today or tomorrow
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return { 
+          min: today.toISOString().split('T')[0],
+          max: tomorrow.toISOString().split('T')[0]
+        };
+      default:
+        return { min: null, max: null };
+    }
+  };
+
+  const { min, max } = getDateConstraints(bookingType);
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -206,7 +300,7 @@ export default function VeterinaryBookAppointment() {
             }`}
           >
             <div className="font-medium">Routine Appointment</div>
-            <div className="text-sm text-gray-500 mt-1">Scheduled visit for regular checkups, vaccinations, etc.</div>
+            <div className="text-sm text-gray-500 mt-1">Scheduled visit for regular checkups, vaccinations, etc. (Book 1-7 days in advance)</div>
           </button>
           <button
             type="button"
@@ -218,7 +312,7 @@ export default function VeterinaryBookAppointment() {
             }`}
           >
             <div className="font-medium">Emergency</div>
-            <div className="text-sm text-gray-500 mt-1">Urgent care for accidents, sudden illness, etc.</div>
+            <div className="text-sm text-gray-500 mt-1">Urgent care for accidents, sudden illness, etc. (24/7 availability)</div>
           </button>
           <button
             type="button"
@@ -230,7 +324,7 @@ export default function VeterinaryBookAppointment() {
             }`}
           >
             <div className="font-medium">Walk-in</div>
-            <div className="text-sm text-gray-500 mt-1">Visit without prior booking</div>
+            <div className="text-sm text-gray-500 mt-1">Visit without prior booking (Today or yesterday only)</div>
           </button>
         </div>
       </div>
@@ -241,9 +335,22 @@ export default function VeterinaryBookAppointment() {
           <h2 className="text-lg font-medium text-gray-900 mb-4">Selected Pet for Appointment</h2>
           <div className="flex items-center">
             <div className="flex-shrink-0 h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
-              <svg className="h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              {/* Display pet image or default icon */}
+              {selectedPet.images && selectedPet.images.length > 0 ? (
+                <img 
+                  src={getPetImageUrl(selectedPet)} 
+                  alt={selectedPet.name}
+                  className="h-12 w-12 rounded-full object-cover"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = '/placeholder-pet.svg';
+                  }}
+                />
+              ) : (
+                <svg className="h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
             </div>
             <div className="ml-4">
               <div className="text-lg font-medium text-gray-900">{selectedPet.name}</div>
@@ -256,27 +363,29 @@ export default function VeterinaryBookAppointment() {
       {/* Booking Form */}
       <form onSubmit={handleSubmit} className="bg-white shadow sm:rounded-lg p-6">
         <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-          {/* Visit Type */}
-          <div className="sm:col-span-3">
-            <label htmlFor="visitType" className="block text-sm font-medium text-gray-700">
-              Visit Type
-            </label>
-            <div className="mt-1">
-              <select
-                id="visitType"
-                name="visitType"
-                value={formData.visitType}
-                onChange={handleInputChange}
-                className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              >
-                <option value="routine_checkup">Routine Checkup</option>
-                <option value="vaccination">Vaccination</option>
-                <option value="follow_up">Follow-up</option>
-                <option value="consultation">Consultation</option>
-                <option value="other">Other</option>
-              </select>
+          {/* Visit Type - only for routine and walk-in bookings */}
+          {(bookingType === 'routine' || bookingType === 'walkin') && (
+            <div className="sm:col-span-3">
+              <label htmlFor="visitType" className="block text-sm font-medium text-gray-700">
+                Visit Type
+              </label>
+              <div className="mt-1">
+                <select
+                  id="visitType"
+                  name="visitType"
+                  value={formData.visitType}
+                  onChange={handleInputChange}
+                  className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                >
+                  <option value="routine_checkup">Routine Checkup</option>
+                  <option value="vaccination">Vaccination</option>
+                  <option value="follow_up">Follow-up</option>
+                  <option value="consultation">Consultation</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Date and Time (only for routine and walk-in bookings) */}
           {(bookingType === 'routine' || bookingType === 'walkin') && (
@@ -292,10 +401,16 @@ export default function VeterinaryBookAppointment() {
                     id="appointmentDate"
                     value={formData.appointmentDate}
                     onChange={handleDateChange}
-                    min={new Date().toISOString().split('T')[0]}
+                    min={min}
+                    max={max}
                     className={`block w-full border ${errors.appointmentDate ? 'border-red-300' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
                   />
                   {errors.appointmentDate && <p className="mt-1 text-sm text-red-600">{errors.appointmentDate}</p>}
+                  <p className="mt-1 text-sm text-gray-500">
+                    {bookingType === 'routine' 
+                      ? 'Book 1-7 days in advance' 
+                      : 'Today or tomorrow only'}
+                  </p>
                 </div>
               </div>
 

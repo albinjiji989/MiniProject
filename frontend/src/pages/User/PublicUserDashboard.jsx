@@ -49,6 +49,7 @@ const PublicUserDashboard = () => {
   const [modules, setModules] = useState([])
   const [myPets, setMyPets] = useState([])
   const [ownedPets, setOwnedPets] = useState([])
+  const [myPetsError, setMyPetsError] = useState('')
   const [recentActivity, setRecentActivity] = useState([])
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityError, setActivityError] = useState('')
@@ -60,11 +61,12 @@ const PublicUserDashboard = () => {
       setActivityError('')
       
       // Load all data in parallel to reduce loading time
-      const [petsRes, ownedRes, activityRes, adoptedRes] = await Promise.allSettled([
+      const [petsRes, ownedRes, activityRes, adoptedRes, purchasedRes] = await Promise.allSettled([
         userPetsAPI.list(),
         apiClient.get('/pets/my-pets'),
         apiClient.get('/user-dashboard/activities'),
-        adoptionAPI.getMyAdoptedPets()
+        adoptionAPI.getMyAdoptedPets(),
+        apiClient.get('/petshop/user/my-purchased-pets') // Add pet shop purchased pets
       ])
       
       // Process pets from PetNew model
@@ -85,8 +87,14 @@ const PublicUserDashboard = () => {
       if (adoptedRes.status === 'fulfilled') {
         adoptedPets = adoptedRes.value.data?.data || []
       }
+      
+      // Process purchased pets - EXACT SAME CODE AS PETS LIST PAGE
+      let purchasedPets = []
+      if (purchasedRes.status === 'fulfilled') {
+        purchasedPets = purchasedRes.value.data?.data?.pets || []
+      }
 
-      // Map adopted pets to pet-like objects
+      // Map adopted pets to pet-like objects - EXACT SAME CODE AS PETS LIST PAGE
       const mappedAdoptedPets = adoptedPets.map(pet => ({
         _id: pet._id,
         name: pet.name || 'Pet',
@@ -98,11 +106,36 @@ const PublicUserDashboard = () => {
         status: 'adopted',
         currentStatus: 'adopted',
         tags: ['adoption'],
-        adoptionDate: pet.adoptionDate
+        adoptionDate: pet.adoptionDate,
+        age: pet.age,
+        ageUnit: pet.ageUnit,
+        color: pet.color,
+        createdAt: pet.adoptionDate
+      }))
+      
+      // Map purchased pets to pet-like objects - EXACT SAME CODE AS PETS LIST PAGE
+      const mappedPurchasedPets = purchasedPets.map(pet => ({
+        _id: pet._id,
+        name: pet.name || 'Pet',
+        images: pet.images || [],
+        petCode: pet.petCode,
+        breed: pet.breed,
+        species: pet.species,
+        gender: pet.gender || 'Unknown',
+        status: 'purchased',
+        currentStatus: 'purchased',
+        tags: ['purchased'],
+        purchaseDate: pet.acquiredDate,
+        age: pet.age,
+        ageUnit: pet.ageUnit,
+        color: pet.color,
+        createdAt: pet.acquiredDate,
+        source: pet.source,
+        sourceLabel: pet.sourceLabel
       }))
 
-      // Combine all pets and remove duplicates
-      const combinedPets = [...allPets, ...mappedAdoptedPets]
+      // Combine all pets and remove duplicates - EXACT SAME CODE AS PETS LIST PAGE
+      const combinedPets = [...allPets, ...mappedAdoptedPets, ...mappedPurchasedPets]
       const uniquePets = combinedPets.filter((pet, index, self) => 
         index === self.findIndex(p => (p.petCode || p._id) === (pet.petCode || pet._id))
       )
@@ -312,7 +345,18 @@ const PublicUserDashboard = () => {
                         if (pet?.tags?.includes('adoption')) {
                           // For adopted pets, navigate to the adoption details page
                           navigate(`/User/adoption/my-adopted-pets/${pet._id}`)
-                        } else {
+                        } 
+                        // Check if this is a purchased pet by looking for the 'purchased' tag
+                        else if (pet?.tags?.includes('purchased')) {
+                          // For purchased pets, navigate to the centralized pet details page using petCode
+                          if (pet.petCode) {
+                            navigate(`/pets/centralized/${pet.petCode}`)
+                          } else {
+                            // Fallback to regular pet details if no petCode
+                            navigate(`/User/pets/${pet._id}`)
+                          }
+                        }
+                        else {
                           // For regular user pets, use the existing navigation
                           navigate(`/User/pets/${pet._id}`)
                         }
@@ -360,6 +404,9 @@ const PublicUserDashboard = () => {
                               />
                               {pet.tags?.includes('adoption') && (
                                 <Chip label="Adopted" size="small" color="success" variant="outlined" />
+                              )}
+                              {pet.tags?.includes('purchased') && (
+                                <Chip label="Purchased" size="small" color="info" variant="outlined" />
                               )}
                             </Box>
                           </Box>

@@ -6,6 +6,110 @@ import { useAuth } from '../../contexts/AuthContext'
 
 import BrandMark from '../../components/BrandMark'
 
+// Email validation function - accepts famous domains and educational institutions with subdomains
+const validateEmail = (email) => {
+  // Basic format validation
+  const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+  if (!emailRegex.test(email)) {
+    return 'Invalid email address format';
+  }
+  
+  const [localPart, domain] = email.split('@');
+  
+  // Local part validations
+  if (localPart.length < 3) {
+    return 'Email address is too short';
+  }
+  
+  if (localPart.length > 64) {
+    return 'Email local part is too long';
+  }
+  
+  // Domain validations
+  if (domain.length < 4) {
+    return 'Invalid domain';
+  }
+  
+  // List of famous, reputable email domains
+  const famousDomains = [
+    // International domains
+    'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 
+    'icloud.com', 'aol.com', 'protonmail.com', 'mail.com',
+    'live.com', 'yahoo.co.in', 'yahoo.in', 'rediffmail.com',
+    'hotmail.co.uk', 'outlook.co.uk', 'gmail.co.uk',
+    'msn.com', 'comcast.net', 'verizon.net', 'att.net',
+    'rocketmail.com', 'ymail.com', 'sbcglobal.net',
+    'yahoo.co.uk', 'btinternet.com', 'virginmedia.com',
+    'gmail.fr', 'yahoo.fr', 'hotmail.fr', 
+    'gmail.de', 'yahoo.de', 'hotmail.de',
+    'gmail.it', 'yahoo.it', 'hotmail.it',
+    'gmail.es', 'yahoo.es', 'hotmail.es',
+    
+    // Indian domains
+    'gmail.co.in', 'yahoo.co.in', 'hotmail.co.in', 'outlook.co.in',
+    'rediffmail.com', 'rediff.com', 'sify.com', 'bol.net.in',
+    'in.com', 'indiatimes.com', 'hotmail.co.in', 'live.in',
+    'yahoo.co.in', 'gmail.co.in', 'outlook.in', 'hotmail.in'
+  ];
+  
+  // Convert domain to lowercase for comparison
+  const domainLower = domain.toLowerCase();
+  
+  // Check if domain is in our list of famous domains
+  if (famousDomains.includes(domainLower)) {
+    return true;
+  }
+  
+  // Special handling for AJCE institution domains
+  // Check if it's from AJCE (Amal Jyothi College of Engineering) with various subdomains
+  const ajceDomains = [
+    'ajce.in',
+    'btech.ajce.in',
+    'bca.ajce.in',
+    'bba.ajce.in',
+    'intmca.ajce.in',
+    'mca.ajce.in',
+    'mtech.ajce.in',
+    'mba.ajce.in'
+  ];
+  
+  if (ajceDomains.includes(domainLower)) {
+    // Additional check to ensure it's not a disposable pattern
+    const disposablePatterns = [
+      /^test/i,
+      /^dummy/i,
+      /^example/i
+    ];
+    
+    for (const pattern of disposablePatterns) {
+      if (pattern.test(localPart)) {
+        return 'Please use a valid real-world email address';
+      }
+    }
+    return true;
+  }
+  
+  // General handling for educational institutions (.ac.in, .edu.in)
+  if (domainLower.endsWith('.ac.in') || domainLower.endsWith('.edu.in')) {
+    // Additional check to ensure it's not a disposable pattern
+    const disposablePatterns = [
+      /^test/i,
+      /^dummy/i,
+      /^example/i
+    ];
+    
+    for (const pattern of disposablePatterns) {
+      if (pattern.test(localPart)) {
+        return 'Please use a valid real-world email address';
+      }
+    }
+    return true;
+  }
+  
+  // If we get here, it's not an accepted domain
+  return 'Please use a well-known email service provider (Gmail, Yahoo, Outlook, educational institutions, etc.)';
+};
+
 // UnifiedAuth component for login
 const UnifiedAuth = ({ mode = 'signin', onSuccess, onError }) => {
   const { login, loginWithGoogle } = useAuth()
@@ -13,9 +117,43 @@ const UnifiedAuth = ({ mode = 'signin', onSuccess, onError }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [emailError, setEmailError] = useState('')
+
+  const handleEmailChange = (e) => {
+    const newEmail = e.target.value;
+    setEmail(newEmail);
+    
+    // Clear error when user types
+    if (emailError) {
+      setEmailError('');
+    }
+  };
+
+  const validateForm = () => {
+    // Validate email
+    const emailValidationResult = validateEmail(email);
+    if (emailValidationResult !== true) {
+      setEmailError(emailValidationResult);
+      return false;
+    }
+    
+    // Check if password is provided
+    if (!password.trim()) {
+      onError('Password is required');
+      return false;
+    }
+    
+    return true;
+  };
 
   const submit = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
+    
+    // Validate form before submitting
+    if (!validateForm()) {
+      return;
+    }
+    
     setBusy(true)
     const res = await login({ email, password })
     setBusy(false)
@@ -24,6 +162,15 @@ const UnifiedAuth = ({ mode = 'signin', onSuccess, onError }) => {
   }
 
   const google = async () => {
+    // Validate email before Google login
+    if (email.trim()) {
+      const emailValidationResult = validateEmail(email);
+      if (emailValidationResult !== true) {
+        setEmailError(emailValidationResult);
+        return;
+      }
+    }
+    
     setBusy(true)
     try {
       const res = await loginWithGoogle()
@@ -49,10 +196,12 @@ const UnifiedAuth = ({ mode = 'signin', onSuccess, onError }) => {
           type="email"
           label="Email Address"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={handleEmailChange}
           fullWidth
           InputProps={{ startAdornment: (<InputAdornment position="start"><EmailIcon color="action" /></InputAdornment>) }}
           required
+          error={!!emailError}
+          helperText={emailError}
         />
         <TextField
           type={showPassword ? 'text' : 'password'}

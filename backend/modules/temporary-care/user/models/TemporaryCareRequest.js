@@ -10,9 +10,12 @@ const temporaryCareRequestSchema = new mongoose.Schema({
   storeId: { type: String, required: true, index: true },
   storeName: { type: String, default: '' },
   status: { type: String, enum: ['pending', 'approved', 'assigned', 'in_care', 'completed', 'cancelled'], default: 'pending', index: true },
-  assignedCareId: { type: mongoose.Schema.Types.ObjectId, ref: 'TemporaryCare' }
+  assignedCareId: { type: mongoose.Schema.Types.ObjectId, ref: 'TemporaryCare' },
+  
+  // Price agreement
+  totalAmount: { type: Number },
+  advanceAmount: { type: Number },
+  finalAmount: { type: Number }
 }, { timestamps: true });
 
 module.exports = mongoose.model('TemporaryCareRequest', temporaryCareRequestSchema);
-
-

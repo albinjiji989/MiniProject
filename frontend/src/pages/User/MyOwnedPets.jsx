@@ -56,6 +56,7 @@ const MyOwnedPets = () => {
   const loadOwnedPets = async () => {
     try {
       setLoading(true)
+      setError('') // Clear previous errors
       
       // Load both centralized registry pets AND user-created pets
       const [registryRes, userPetsRes] = await Promise.allSettled([
@@ -78,6 +79,9 @@ const MyOwnedPets = () => {
             petNewMap.set(pet.petCode, pet)
           }
         })
+      } else {
+        console.error('Failed to load user-created pets:', userPetsRes.reason)
+        setError('Failed to load some of your pets. Please try again.')
       }
       
       // Then, get pets from centralized registry
@@ -113,6 +117,9 @@ const MyOwnedPets = () => {
             })
           }
         })
+      } else {
+        console.error('Failed to load registry pets:', registryRes.reason)
+        setError('Failed to load some of your pets. Please try again.')
       }
       
       console.log('🎯 Final merged pets:')
@@ -123,7 +130,7 @@ const MyOwnedPets = () => {
       setOwnedPets(allPets)
     } catch (e) {
       console.error('Error loading owned pets:', e)
-      setError(e?.response?.data?.message || 'Failed to load owned pets')
+      setError(e?.response?.data?.message || 'Failed to load owned pets. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -286,36 +293,100 @@ const MyOwnedPets = () => {
 
   const buildImageUrl = (url) => {
     console.log('Building image URL from:', url);
+    if (!url) return '/placeholder-pet.svg';
     return resolveMediaUrl(url);
   }
 
   const renderPetCard = (pet) => (
-    <Grid item xs={12} sm={6} md={4} key={pet._id}>
-      <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    <Grid item xs={12} sm={6} md={4} key={pet._id || pet.petCode || pet.name}>
+      <Card 
+        sx={{ 
+          height: '100%', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          position: 'relative',
+          border: pet.source === 'core' ? '2px solid #4CAF50' : 
+                 pet.source === 'petshop' ? '2px solid #2196F3' : 
+                 pet.source === 'adoption' ? '2px solid #FF9800' : 'none',
+          boxShadow: 3,
+          transition: 'transform 0.2s, box-shadow 0.2s',
+          '&:hover': {
+            transform: 'translateY(-4px)',
+            boxShadow: 6
+          }
+        }}
+      >
         <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
           <IconButton 
             size="small" 
             onClick={(e) => handleMenuOpen(e, pet)}
-            sx={{ bgcolor: 'rgba(255,255,255,0.9)', '&:hover': { bgcolor: 'white' } }}
+            sx={{ 
+              bgcolor: 'rgba(255,255,255,0.9)', 
+              '&:hover': { bgcolor: 'white' },
+              boxShadow: 1
+            }}
           >
             <MoreVertIcon />
           </IconButton>
         </Box>
+        
+        {/* Source indicator badge */}
+        <Box 
+          sx={{ 
+            position: 'absolute', 
+            top: 8, 
+            left: 8, 
+            zIndex: 1,
+            bgcolor: pet.source === 'core' ? 'success.main' : 
+                    pet.source === 'petshop' ? 'primary.main' : 
+                    pet.source === 'adoption' ? 'warning.main' : 'grey.500',
+            color: 'white',
+            px: 1,
+            py: 0.5,
+            borderRadius: 1,
+            fontSize: '0.75rem',
+            fontWeight: 'bold'
+          }}
+        >
+          {pet.source === 'core' ? 'USER ADDED' : 
+           pet.source === 'petshop' ? 'PET SHOP' : 
+           pet.source === 'adoption' ? 'ADOPTION' : 
+           pet.source?.toUpperCase()}
+        </Box>
+        
         <CardMedia
           component="img"
           height="200"
           image={
             (() => {
-              const primaryImage = pet.images?.find(img => img.isPrimary);
-              const firstImage = pet.images?.[0];
-              console.log('Pet:', pet.name, 'Primary image:', primaryImage, 'First image:', firstImage);
-              const imageUrl = primaryImage?.url || firstImage?.url;
-              console.log('Selected image URL:', imageUrl);
+              // Handle different image data structures
+              let imageUrl = null;
+              
+              // If images is an array of objects with url property
+              if (Array.isArray(pet.images) && pet.images.length > 0) {
+                const primaryImage = pet.images.find(img => img?.isPrimary);
+                const firstImage = pet.images[0];
+                imageUrl = primaryImage?.url || firstImage?.url || firstImage;
+              }
+              // If images is a single object with url property
+              else if (pet.images?.url) {
+                imageUrl = pet.images.url;
+              }
+              // If images is a string URL
+              else if (typeof pet.images === 'string') {
+                imageUrl = pet.images;
+              }
+              
+              console.log('Pet:', pet.name, 'Image data:', pet.images, 'Selected URL:', imageUrl);
               return buildImageUrl(imageUrl);
             })()
           }
-          alt={pet.name}
-          sx={{ objectFit: 'cover', cursor: 'pointer' }}
+          alt={pet.name || 'Unnamed Pet'}
+          sx={{ 
+            objectFit: 'cover', 
+            cursor: 'pointer',
+            bgcolor: 'grey.200'
+          }}
           onClick={() => {
             // For user-created pets, use the PetNew _id
             // For other pets (adoption, petshop), use the registry _id
@@ -330,13 +401,23 @@ const MyOwnedPets = () => {
             e.currentTarget.src = '/placeholder-pet.svg';
           }}
           onLoad={(e) => {
-            console.log('Image loaded successfully for pet:', pet.name, 'Image data:', pet.images);
+            console.log('Image loaded successfully for pet:', pet.name);
           }}
         />
+        
         <CardContent sx={{ flexGrow: 1 }}>
-          <Box display="flex" justifyContent="space-between" alignItems="flex-start">
+          <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
             <Box>
-              <Typography gutterBottom variant="h6" component="div" sx={{ fontWeight: 600 }}>
+              <Typography 
+                gutterBottom 
+                variant="h6" 
+                component="div" 
+                sx={{ 
+                  fontWeight: 600,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
                 {pet.name || 'Unnamed Pet'}
               </Typography>
               {pet.petCode && (
@@ -349,19 +430,34 @@ const MyOwnedPets = () => {
                 />
               )}
             </Box>
-            <IconButton onClick={(e) => handleMenuOpen(e, pet)}>
-              <MoreVertIcon />
-            </IconButton>
           </Box>
           
           <Box display="flex" alignItems="center" gap={1} mb={1}>
             <Avatar 
-              sx={{ width: 24, height: 24, fontSize: 12 }}
-              src={buildImageUrl(pet.images?.find(img => img.isPrimary)?.url || pet.images?.[0]?.url)}
+              sx={{ 
+                width: 24, 
+                height: 24, 
+                fontSize: 12,
+                bgcolor: pet.source === 'core' ? 'success.light' : 
+                        pet.source === 'petshop' ? 'primary.light' : 
+                        pet.source === 'adoption' ? 'warning.light' : 'grey.300'
+              }}
+              src={buildImageUrl(
+                Array.isArray(pet.images) && pet.images.length > 0 
+                  ? (pet.images.find(img => img?.isPrimary)?.url || pet.images[0]?.url || pet.images[0])
+                  : (typeof pet.images === 'string' ? pet.images : pet.images?.url)
+              )}
             >
-              {pet.speciesId?.displayName?.charAt(0) || pet.speciesId?.name?.charAt(0) || 'P'}
+              {pet.speciesId?.displayName?.charAt(0) || pet.speciesId?.name?.charAt(0) || pet.name?.charAt(0) || 'P'}
             </Avatar>
-            <Typography variant="body2" color="text.secondary">
+            <Typography 
+              variant="body2" 
+              color="text.secondary"
+              sx={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
               {pet.speciesId?.displayName || pet.speciesId?.name || 'Unknown Species'} • {pet.breedId?.name || 'Unknown Breed'}
             </Typography>
           </Box>
@@ -395,14 +491,15 @@ const MyOwnedPets = () => {
             </Box>
           )}
           
-          {pet.source && (
-            <Box display="flex" alignItems="center" gap={0.5} mt={0.5}>
-              <LocationIcon sx={{ fontSize: 16 }} />
-              <Typography variant="body2" color="text.secondary">
-                Source: {pet.source.replace('_', ' ')}
-              </Typography>
-            </Box>
-          )}
+          <Box display="flex" alignItems="center" gap={0.5} mt={1}>
+            <LocationIcon sx={{ fontSize: 16 }} />
+            <Typography variant="body2" color="text.secondary">
+              Status: {pet.currentStatus === 'owned' ? 'Owned' : 
+                      pet.currentStatus === 'sold' ? 'Purchased' : 
+                      pet.currentStatus === 'adopted' ? 'Adopted' : 
+                      pet.currentStatus || 'Unknown'}
+            </Typography>
+          </Box>
         </CardContent>
         
         <Box sx={{ p: 2, pt: 0, display: 'flex', gap: 1 }}>
@@ -411,6 +508,7 @@ const MyOwnedPets = () => {
             variant="outlined"
             startIcon={<HistoryIcon />}
             onClick={() => handleViewHistory(pet)}
+            size="small"
           >
             History
           </Button>
@@ -433,6 +531,7 @@ const MyOwnedPets = () => {
                 }
               }
             }}
+            size="small"
           >
             View Details
           </Button>
@@ -541,18 +640,44 @@ const MyOwnedPets = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+          <Typography variant="h4" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+            <PetsIcon sx={{ mr: 2 }} />
+            My Owned Pets
+          </Typography>
+        </Box>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
+          <Typography variant="h6" sx={{ ml: 2 }}>
+            Loading your pets...
+          </Typography>
+        </Box>
+      </Container>
     )
   }
 
+  const handleRefresh = () => {
+    loadOwnedPets();
+    loadMyPurchases();
+  };
+
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" sx={{ fontWeight: 700, mb: 3, display: 'flex', alignItems: 'center' }}>
-        <PetsIcon sx={{ mr: 2 }} />
-        My Owned Pets
-      </Typography>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+        <Typography variant="h4" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+          <PetsIcon sx={{ mr: 2 }} />
+          My Owned Pets
+        </Typography>
+        <Button 
+          variant="outlined" 
+          onClick={handleRefresh}
+          disabled={loading}
+          startIcon={loading ? <CircularProgress size={20} /> : null}
+        >
+          {loading ? 'Refreshing...' : 'Refresh'}
+        </Button>
+      </Box>
 
       <Alert severity="info" sx={{ mb: 3 }}>
         <strong>Note:</strong> You can only edit or delete pets that you manually added. 
@@ -564,16 +689,23 @@ const MyOwnedPets = () => {
       <Grid container spacing={3}>
         {ownedPets.map(renderPetCard)}
         
-        {ownedPets.length === 0 && (
+        {ownedPets.length === 0 && !loading && (
           <Grid item xs={12}>
             <Box textAlign="center" py={8}>
               <PetsIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
               <Typography variant="h6" color="text.secondary" gutterBottom>
                 No owned pets found
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Pets you purchase from the pet shop will appear here after delivery is completed.
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Pets you purchase from the pet shop or adopt will appear here after the process is completed.
               </Typography>
+              <Button 
+                variant="outlined" 
+                onClick={handleRefresh}
+                sx={{ mt: 2 }}
+              >
+                Refresh List
+              </Button>
             </Box>
           </Grid>
         )}

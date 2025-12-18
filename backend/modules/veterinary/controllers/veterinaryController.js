@@ -1,7 +1,7 @@
 const { validationResult } = require('express-validator');
 const Veterinary = require('../models/Veterinary');
+const VeterinaryAppointment = require('../models/VeterinaryAppointment');
 
-module.exports = {};
 const listClinics = async (req, res) => {
   try {
     const { isActive, page = 1, limit = 10 } = req.query;

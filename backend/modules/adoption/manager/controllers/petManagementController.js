@@ -251,8 +251,10 @@ const createPet = async (req, res) => {
   try {
     const petData = { ...req.body, createdBy: req.user.id };
     
-    // Debug logging
-    console.log('Raw documents received:', typeof req.body?.documents, req.body?.documents);
+    // Use UnifiedPetService to create adoption pet and register in PetRegistry
+    const UnifiedPetService = require('../../../../core/services/UnifiedPetService');
+    
+    const result = await UnifiedPetService.createAdoptionPet(petData, req.user);
     
     // Process images and documents - we'll handle them separately now
     let images = sanitizeMedia(ensureArray(req.body?.images), false)
@@ -276,7 +278,7 @@ const createPet = async (req, res) => {
         const savedImages = await processEntityImages(
           images, 
           'AdoptionPet', 
-          null, // Will be set after pet is created
+          result.adoptionPet._id, // Set the entity ID
           req.user.id, 
           'adoption', 
           'manager'
@@ -300,7 +302,7 @@ const createPet = async (req, res) => {
         const savedDocuments = await processEntityDocuments(
           documents,
           'AdoptionPet',
-          null, // Will be set after pet is created
+          result.adoptionPet._id, // Set the entity ID
           req.user.id,
           'adoption',
           'manager'
@@ -313,20 +315,17 @@ const createPet = async (req, res) => {
       }
     }
     
-    const pet = new AdoptionPet(petData);
-    await pet.save();
-    
     // Update image documents with the correct entityId
     if (imageIds.length > 0) {
       const Image = require('../../../../core/models/Image');
       await Image.updateMany(
         { _id: { $in: imageIds } },
-        { entityId: pet._id }
+        { entityId: result.adoptionPet._id }
       );
       
       // Add image references to the pet
-      pet.imageIds = imageIds;
-      await pet.save();
+      result.adoptionPet.imageIds = imageIds;
+      await result.adoptionPet.save();
     }
     
     // Update document records with the correct entityId
@@ -334,60 +333,22 @@ const createPet = async (req, res) => {
       const Document = require('../../../../core/models/Document');
       await Document.updateMany(
         { _id: { $in: documentIds } },
-        { entityId: pet._id }
+        { entityId: result.adoptionPet._id }
       );
       
       // Add document references to the pet
-      pet.documentIds = documentIds;
-      await pet.save();
+      result.adoptionPet.documentIds = documentIds;
+      await result.adoptionPet.save();
     }
     
-    // Respond immediately to avoid blocking UI on downstream integrations
+    // Respond with the created pet and registry entry
     res.status(201).json({
       success: true,
-      data: pet,
-      message: 'Pet added successfully'
-    });
-
-    // Fire-and-forget: Upsert centralized registry entry without blocking the response
-    // Capture minimal data needed to avoid accessing mutated req/pet later
-    const _petSnapshot = {
-      id: pet._id,
-      petCode: pet.petCode,
-      name: pet.name,
-      images: pet.images || [],
-      speciesName: pet.species,
-      breedName: pet.breed,
-    }
-    const _actorUserId = req.user.id
-
-    setImmediate(async () => {
-      try {
-        // Use relative path for the service
-        const PetRegistryService = require('../../../../core/services/petRegistryService');
-        const Species = require('../../../../core/models/Species');
-        const Breed = require('../../../../core/models/Breed');
-
-        // AdoptionPet uses string names for species/breed, registry needs ObjectIds.
-        const speciesDoc = await Species.findOne({ name: { $regex: new RegExp(`^${_petSnapshot.speciesName}$`, 'i') } });
-        const breedDoc = await Breed.findOne({ name: { $regex: new RegExp(`^${_petSnapshot.breedName}$`, 'i') } });
-
-        await PetRegistryService.upsertAndSetState({
-          petCode: _petSnapshot.petCode,
-          name: _petSnapshot.name,
-          species: speciesDoc ? speciesDoc._id : undefined,
-          breed: breedDoc ? breedDoc._id : undefined,
-          images: _petSnapshot.images,
-          source: 'adoption',
-          adoptionPetId: _petSnapshot.id,
-          actorUserId: _actorUserId,
-        }, {
-          currentLocation: 'at_adoption_center',
-          currentStatus: 'available',
-        });
-      } catch (regErr) {
-        console.warn('PetRegistry upsert failed (create adoption pet):', regErr?.message || regErr);
-      }
+      data: {
+        adoptionPet: result.adoptionPet,
+        registryEntry: result.registryEntry
+      },
+      message: 'Pet added successfully and registered in central registry'
     });
   } catch (error) {
     console.error('Create pet error:', error);

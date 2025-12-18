@@ -66,8 +66,8 @@ export default function StepBasicInfo() {
     save({ 
       categoryId, 
       category: category?.name || category?.displayName || '',
-      species: '', 
       speciesId: '',
+      species: '',
       breed: '' 
     })
 
@@ -192,8 +192,8 @@ export default function StepBasicInfo() {
             >
               <option value="">Select Breed</option>
               {breeds.map(breed => (
-                <option key={breed._id || breed.id} value={breed.name || breed.displayName}>
-                  {breed.name || breed.displayName}
+                <option key={breed._id || breed.id} value={breed.name || breed.displayName || breed._id || breed.id}>
+                  {breed.name || breed.displayName || breed._id || breed.id}
                 </option>
               ))}
             </select>
@@ -275,6 +275,7 @@ export default function StepBasicInfo() {
         <button 
           className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           onClick={next}
+          disabled={!form.categoryId || !form.speciesId || !form.breed}
         >
           Next Step
         </button>

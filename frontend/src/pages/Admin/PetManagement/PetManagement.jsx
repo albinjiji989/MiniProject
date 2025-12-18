@@ -35,8 +35,8 @@ import {
   Avatar,
   Tooltip,
   InputAdornment,
-  Switch,
   FormControlLabel,
+  Switch,
 } from '@mui/material'
 import {
   Visibility as ViewIcon,
@@ -215,7 +215,7 @@ const PetManagement = () => {
     if (!petToDelete) return
     
     try {
-      await petsAPI.delete(petToDelete._id)
+      await adminPetsAPI.delete(petToDelete._id)
       setSuccess('Pet deleted successfully!')
       setDeleteDialog(false)
       setPetToDelete(null)
@@ -227,7 +227,7 @@ const PetManagement = () => {
 
   const handleToggleStatus = async (pet) => {
     try {
-      await petsAPI.update(pet._id, { isActive: !pet.isActive })
+      await adminPetsAPI.update(pet._id, { isActive: !pet.isActive })
       setSuccess(`Pet ${pet.isActive ? 'deactivated' : 'activated'} successfully!`)
       loadPets()
     } catch (err) {
@@ -310,7 +310,7 @@ const PetManagement = () => {
             Pet Management
           </Typography>
           <Typography variant="subtitle1" color="text.secondary">
-            Manage all pets in the system ({totalPets} total)
+            Manage all user-added pets in the system ({totalPets} total)
           </Typography>
         </Box>
         <Box display="flex" gap={2}>
@@ -328,6 +328,13 @@ const PetManagement = () => {
             onClick={() => navigate('/admin/pets/import')}
           >
             Import CSV
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<PetIcon />}
+            onClick={() => navigate('/admin/pet-registry')}
+          >
+            View Pet Registry
           </Button>
         </Box>
       </Box>
@@ -477,7 +484,7 @@ const PetManagement = () => {
                             {pet.name}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {pet.color}
+                            {pet.petCode || 'No Code'}
                           </Typography>
                         </Box>
                       </Box>
@@ -496,7 +503,7 @@ const PetManagement = () => {
                       <Box display="flex" alignItems="center" gap={1}>
                         <OwnerIcon fontSize="small" color="action" />
                         <Typography variant="body2">
-                          {pet.owner?.name || 'N/A'}
+                          {pet.ownerId?.name || 'N/A'}
                         </Typography>
                       </Box>
                     </TableCell>
@@ -544,6 +551,15 @@ const PetManagement = () => {
                             color="primary"
                           >
                             <ViewIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="View in Registry">
+                          <IconButton
+                            size="small"
+                            onClick={() => navigate(`/admin/pet-registry/${pet.petCode}`)}
+                            color="secondary"
+                          >
+                            <PetsIcon />
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Medical Records">
@@ -608,6 +624,14 @@ const PetManagement = () => {
           </ListItemIcon>
           <ListItemText>View Details</ListItemText>
         </MenuItem>
+        {selectedPet?.petCode && (
+          <MenuItem onClick={() => { navigate(`/admin/pet-registry/${selectedPet?.petCode}`); handleMenuClose(); }}>
+            <ListItemIcon>
+              <PetsIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>View in Registry</ListItemText>
+          </MenuItem>
+        )}
         <MenuItem onClick={() => { navigate(`/admin/pets/${selectedPet?._id}/medical-records`); handleMenuClose(); }}>
           <ListItemIcon>
             <MedicalIcon fontSize="small" />

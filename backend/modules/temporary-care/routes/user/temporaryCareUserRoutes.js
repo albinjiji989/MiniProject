@@ -1,12 +1,16 @@
 const express = require('express');
 const { body } = require('express-validator');
 const { auth } = require('../../../../core/middleware/auth');
-const TemporaryCareRequest = require('../../user/models/TemporaryCareRequest');
-const TemporaryCare = require('../../manager/models/TemporaryCare');
+const userTemporaryCareController = require('../../user/controllers/userTemporaryCareController');
+const paymentController = require('../../user/controllers/paymentController');
+const careActivityController = require('../../user/controllers/careActivityController');
 const TemporaryCareCenter = require('../../manager/models/TemporaryCareCenter');
+const TemporaryCare = require('../../models/TemporaryCare');
+const Pet = require('../../../../core/models/Pet');
 
 const router = express.Router();
 
+// Temporary care requests
 router.post(
   '/requests',
   auth,
@@ -15,44 +19,132 @@ router.post(
     body('storeId').notEmpty(),
     body('startDate').isISO8601(),
     body('endDate').isISO8601(),
-    body('careType').isIn(['emergency', 'vacation', 'medical', 'temporary', 'foster'])
+    body('careType').isIn(['emergency', 'vacation', 'medical', 'temporary', 'foster']),
+    body('totalAmount').isNumeric().optional()
   ],
-  async (req, res) => {
-    try {
-      const payload = {
-        ...req.body,
-        userId: req.user._id
-      };
-      const doc = await TemporaryCareRequest.create(payload);
-      res.status(201).json({ success: true, message: 'Request submitted', data: { request: doc } });
-    } catch (e) {
-      console.error('Create request error:', e);
-      res.status(500).json({ success: false, message: 'Server error' });
-    }
-  }
+  userTemporaryCareController.submitRequest
 );
 
-router.get('/requests', auth, async (req, res) => {
+router.get('/requests', auth, userTemporaryCareController.listRequests);
+
+router.get('/active-care', auth, userTemporaryCareController.getActiveCare);
+
+router.get('/care-history', auth, userTemporaryCareController.getCareHistory);
+
+router.put('/requests/:id/cancel', auth, userTemporaryCareController.cancelRequest);
+
+// List available hosts (care centers)
+router.get('/hosts', auth, async (req, res) => {
   try {
-    const items = await TemporaryCareRequest.find({ userId: req.user._id }).sort({ createdAt: -1 });
-    res.json({ success: true, data: { requests: items } });
+    const hosts = await TemporaryCareCenter.find({ isActive: true })
+      .select('name description address city state capacity storeId storeName');
+    res.json({ success: true, data: { hosts } });
   } catch (e) {
-    console.error('List requests error:', e);
+    console.error('List hosts error:', e);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-router.get('/my-active-care', auth, async (req, res) => {
+// List user's stays (temporary care records)
+router.get('/my-stays', auth, async (req, res) => {
   try {
-    const items = await TemporaryCare.find({ 'owner.email': req.user.email, endDate: { $gte: new Date() } }).sort({ startDate: -1 });
-    res.json({ success: true, data: { items } });
+    const stays = await TemporaryCare.find({ 'owner.userId': req.user._id })
+      .populate('pet', 'name')
+      .sort({ startDate: -1 });
+    res.json({ success: true, data: { stays } });
   } catch (e) {
-    console.error('List my active care error:', e);
+    console.error('List stays error:', e);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-module.exports = router;
+// Get pets currently in temporary care
+router.get('/pets-in-care', auth, async (req, res) => {
+  try {
+    const cares = await TemporaryCare.find({ 
+      'owner.userId': req.user._id,
+      status: 'active'
+    }).populate('pet');
+
+    const petsInCare = cares.map(care => ({
+      ...care.pet.toObject(),
+      temporaryCareId: care._id,
+      careStartDate: care.startDate,
+      careEndDate: care.endDate,
+      careCenter: care.storeName
+    }));
+
+    res.json({ success: true, data: { pets: petsInCare } });
+  } catch (e) {
+    console.error('Get pets in care error:', e);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Payments
+router.post(
+  '/payments/order',
+  auth,
+  [
+    body('temporaryCareId').notEmpty(),
+    body('paymentType').isIn(['advance', 'final'])
+  ],
+  paymentController.createPaymentOrder
+);
+
+router.post('/payments/verify', auth, paymentController.verifyPayment);
+
+// OTP endpoints for handover
+router.post(
+  '/otp/generate-drop',
+  auth,
+  [
+    body('temporaryCareId').notEmpty()
+  ],
+  userTemporaryCareController.generateDropOTP
+);
+
+router.post(
+  '/otp/verify-drop',
+  auth,
+  [
+    body('temporaryCareId').notEmpty(),
+    body('otp').notEmpty().isLength({ min: 6, max: 6 })
+  ],
+  userTemporaryCareController.verifyDropOTP
+);
+
+router.post(
+  '/otp/generate-pickup',
+  auth,
+  [
+    body('temporaryCareId').notEmpty()
+  ],
+  userTemporaryCareController.generatePickupOTP
+);
+
+router.post(
+  '/otp/verify-pickup',
+  auth,
+  [
+    body('temporaryCareId').notEmpty(),
+    body('otp').notEmpty().isLength({ min: 6, max: 6 })
+  ],
+  userTemporaryCareController.verifyPickupOTP
+);
+
+// Care activities
+router.post(
+  '/care-activities',
+  auth,
+  [
+    body('temporaryCareId').notEmpty(),
+    body('activityType').isIn(['feeding', 'bathing', 'walking', 'medication', 'playtime', 'health_check', 'other'])
+  ],
+  careActivityController.logCareActivity
+);
+
+router.get('/care-activities/:temporaryCareId', auth, careActivityController.getCareActivities);
 
 // Public centers listing (active only)
 router.get('/public/centers', async (req, res) => {
@@ -65,4 +157,4 @@ router.get('/public/centers', async (req, res) => {
   }
 });
 
-
+module.exports = router;

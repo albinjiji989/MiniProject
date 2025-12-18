@@ -2,13 +2,16 @@ const Pet = require('../models/Pet');
 const PetChangeLog = require('../models/PetChangeLog');
 const { getStoreFilter, addStoreInfo } = require('../utils/storeFilter');
 const PetRegistryService = require('../services/centralizedPetService');
+const UnifiedPetRegistrationService = require('../services/unifiedPetRegistrationService');
 
-// Helper: ensure current user can access this pet
-const canAccessPet = (user, pet) => {
-  if (!pet) return false;
-  if (!user.storeId) return true; // public users or others without store restriction
-  return String(pet.storeId || '') === String(user.storeId || '');
-};
+// Import modularized controllers
+const { canAccessPet } = require('./pet/helpers');
+const { addOwnershipHistory, getPetHistory } = require('./pet/petOwnershipController');
+const { addMedicalHistory, addVaccinationRecord, addMedicationRecord } = require('./pet/petMedicalController');
+const { getRegistryHistory, getRegistryPetById } = require('./pet/petRegistryController');
+const ErrorHandler = require('../utils/errorHandler');
+const logger = require('../utils/logger');
+const { validate, createPetSchema, updatePetSchema, searchNearbyPetsSchema } = require('../utils/validation');
 
 // @route   GET /api/pets/my-pets
 // @desc    Get owned pets (pets that user purchased and received)
@@ -17,9 +20,19 @@ const getOwnedPets = async (req, res) => {
     // Query PetRegistry for all pets owned by current user
     const PetRegistry = require('../models/PetRegistry');
     
+    // Include pets with status 'owned', 'sold', 'adopted' or location 'at_owner' AND owned by current user
     let registryPets = await PetRegistry.find({ 
-      currentOwnerId: req.user._id,
-      currentStatus: { $in: ['owned', 'sold'] }
+      $and: [
+        {
+          currentOwnerId: req.user._id
+        },
+        {
+          $or: [
+            { currentStatus: { $in: ['owned', 'sold', 'adopted'] } },
+            { currentLocation: 'at_owner' }
+          ]
+        }
+      ]
     })
       .populate('species', 'name displayName')
       .populate('breed', 'name')
@@ -31,16 +44,7 @@ const getOwnedPets = async (req, res) => {
       await pet.populate('images');
     }
     
-    console.log('🔍 Registry pets found:', registryPets.length);
-    registryPets.forEach((regPet, idx) => {
-      console.log(`📦 Registry Pet ${idx + 1}:`, {
-        name: regPet.name,
-        petCode: regPet.petCode,
-        imageIds: regPet.imageIds,
-        images: regPet.images,
-        imagesCount: regPet.images?.length || 0
-      });
-    });
+    logger.debug(`Registry pets found: ${registryPets.length}`);
     
     // Convert to plain objects AFTER population
     const registryPetsPlain = registryPets.map(p => {
@@ -52,7 +56,6 @@ const getOwnedPets = async (req, res) => {
     
     // Map registry pets to include source information
     const pets = registryPetsPlain.map(regPet => {
-      console.log('Processing registry pet:', regPet.name, 'ImageIds:', regPet.imageIds?.length || 0, 'Images:', regPet.images?.length || 0);
       return {
         _id: regPet.corePetId || regPet.petShopItemId || regPet.adoptionPetId || regPet._id,
         name: regPet.name,
@@ -68,6 +71,10 @@ const getOwnedPets = async (req, res) => {
         firstAddedSource: regPet.firstAddedSource,
         firstAddedAt: regPet.firstAddedAt,
         acquiredDate: regPet.lastTransferAt || regPet.updatedAt,
+        gender: regPet.gender,
+        age: regPet.age,
+        ageUnit: regPet.ageUnit,
+        color: regPet.color,
         // Include source IDs for reference
         corePetId: regPet.corePetId,
         petShopItemId: regPet.petShopItemId,
@@ -75,15 +82,7 @@ const getOwnedPets = async (req, res) => {
       };
     });
     
-    console.log('✅ Mapped pets to return:', pets.length);
-    pets.forEach((pet, idx) => {
-      console.log(`🐾 Pet ${idx + 1}:`, {
-        name: pet.name,
-        petCode: pet.petCode,
-        imagesCount: pet.images?.length || 0,
-        firstImage: pet.images?.[0]
-      });
-    });
+    logger.debug(`Mapped pets to return: ${pets.length}`);
     
     // Fallback: if none found in registry, show legacy Pet model data
     if (!pets || pets.length === 0) {
@@ -109,18 +108,18 @@ const getOwnedPets = async (req, res) => {
         }
         
         if (legacyPets && legacyPets.length > 0) {
-          return res.json({ success: true, data: { pets: legacyPets } });
+          return ErrorHandler.sendSuccess(res, { pets: legacyPets });
         }
       } catch (petErr) {
-        console.warn('Failed to query legacy Pet model:', petErr);
+        logger.warn('Failed to query legacy Pet model:', petErr);
       }
       
       // Second fallback: show completed petshop reservations
       try {
-        const PetReservation = require('../../petshop/models/PetReservation');
+        const PetReservation = require('../../modules/petshop/user/models/PetReservation');
         const reservations = await PetReservation.find({
           userId: req.user._id,
-          status: { $in: ['completed', 'at_owner'] }
+          status: { $in: ['completed', 'at_owner', 'paid'] }
         }).populate({
           path: 'itemId',
           populate: [
@@ -149,22 +148,21 @@ const getOwnedPets = async (req, res) => {
             gender: r.itemId.gender,
             age: r.itemId.age,
             color: r.itemId.color,
-            currentStatus: 'sold',
+            currentStatus: r.itemId.status || 'sold', // Use actual inventory item status
             source: 'petshop',
             acquiredDate: r.updatedAt
           }));
         
-        return res.json({ success: true, data: { pets: fallbackPets } });
+        return ErrorHandler.sendSuccess(res, { pets: fallbackPets });
       } catch (e) {
         // All fallbacks failed; return empty list
-        return res.json({ success: true, data: { pets: [] } });
+        return ErrorHandler.sendSuccess(res, { pets: [] });
       }
     }
 
-    res.json({ success: true, data: { pets } });
+    ErrorHandler.sendSuccess(res, { pets });
   } catch (error) {
-    console.error('Get owned pets error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    ErrorHandler.handleControllerError(res, error, 'get_owned_pets');
   }
 };
 
@@ -172,7 +170,11 @@ const getOwnedPets = async (req, res) => {
 // POST /api/pets
 const createPet = async (req, res) => {
   try {
-    const PetNew = require('../models/PetNew'); // Also save to PetNew for consistency
+    // Validate input
+    const { isValid, error } = validate(createPetSchema, req.body);
+    if (!isValid) {
+      return ErrorHandler.sendError(res, error, 400);
+    }
 
     const {
       name,
@@ -185,11 +187,22 @@ const createPet = async (req, res) => {
       ageUnit,
       color,
       images = []
-    } = req.body || {};
+    } = req.body;
 
-    if (!name || !(speciesId || species) || !(breedId || breed)) {
-      return res.status(400).json({ success: false, message: 'name, species and breed are required' });
-    }
+    // Use UnifiedPetService to create user pet and register in PetRegistry
+    const UnifiedPetService = require('../services/UnifiedPetService');
+    
+    const userPetData = {
+      name: String(name).trim(),
+      speciesId: species || speciesId,
+      breedId: breed || breedId,
+      gender: gender || 'Unknown',
+      age: typeof age === 'number' ? age : (age ? Number(age) : undefined),
+      ageUnit: ageUnit || 'months',
+      color: color || undefined,
+      currentStatus: 'Available',
+      healthStatus: 'Good'
+    };
 
     // Process images through Cloudinary if they exist
     let imageIds = [];
@@ -200,7 +213,7 @@ const createPet = async (req, res) => {
         // Process images using our new utility
         const savedImages = await processEntityImages(
           images, 
-          'PetNew', 
+          'Pet',
           null, // Will be set after pet is created
           req.user.id, 
           'otherpets',  // Module for user pets
@@ -208,121 +221,33 @@ const createPet = async (req, res) => {
         );
         
         imageIds = savedImages.map(img => img._id);
-        console.log('🖼️  Successfully processed images, got imageIds:', imageIds);
+        logger.debug(`Successfully processed images, got imageIds: ${imageIds}`);
+        
+        // Add imageIds to userPetData
+        userPetData.imageIds = imageIds;
       } catch (imgErr) {
-        console.error('❌ Failed to save pet images:', imgErr);
+        logger.error('Failed to save pet images:', imgErr);
       }
     }
 
-    // Map incoming fields to Pet schema
-    const petPayload = {
-      name: String(name).trim(),
-      species: species || speciesId,
-      breed: breed || breedId,
-      owner: req.user._id,
-      createdBy: req.user._id,
-      gender: gender || 'Unknown',
-      age: typeof age === 'number' ? age : (age ? Number(age) : undefined),
-      ageUnit: ageUnit || 'months',
-      color: color || undefined,
-      imageIds: imageIds // Add processed image IDs
-    };
-
-    // Save to main Pet model
-    const pet = new Pet(petPayload);
-    await pet.save();
-
-    // Update image documents with the correct entityId
-    if (imageIds.length > 0) {
-      const Image = require('../models/Image');
-      await Image.updateMany(
-        { _id: { $in: imageIds } },
-        { entityId: pet._id }
-      );
-      
-      // Populate images for response
-      await pet.populate('images');
-      console.log('🖼️  Updated image documents with entityId:', pet._id);
-    }
-
-    // Also save to PetNew model for user dashboard consistency
-    try {
-      const petNewPayload = {
-        name: String(name).trim(),
-        speciesId: species || speciesId,
-        breedId: breed || breedId,
-        ownerId: req.user._id,
-        createdBy: req.user._id,
-        gender: gender || 'Unknown',
-        age: typeof age === 'number' ? age : (age ? Number(age) : undefined),
-        ageUnit: ageUnit || 'months',
-        color: color || undefined,
-        imageIds: imageIds, // Add processed image IDs
-        currentStatus: 'Available',
-        healthStatus: 'Good'
-      };
-      
-      const petNew = new PetNew(petNewPayload);
-      await petNew.save();
-      
-      // Update image documents with the correct entityId for PetNew as well
-      if (imageIds.length > 0) {
-        const Image = require('../models/Image');
-        await Image.updateMany(
-          { _id: { $in: imageIds } },
-          { $set: { entityId: petNew._id } }
-        );
-      }
-    } catch (petNewError) {
-      console.warn('Failed to save to PetNew model:', petNewError?.message || petNewError);
-      // Continue even if PetNew save fails
-    }
+    // Create user pet records using unified service
+    const result = await UnifiedPetService.createUserPet(userPetData, req.user);
 
     // Populate minimal refs for client display
-    await pet.populate([
+    await result.userPet.populate([
       { path: 'species', select: 'name displayName' },
       { path: 'breed', select: 'name' }
     ]);
 
     // Populate images for response
-    await pet.populate('images');
+    await result.userPet.populate('images');
 
-    // Upsert centralized registry entry
-    try {
-      // Populate images if they exist
-      let images = [];
-      if (pet.images && pet.images.length > 0) {
-        images = pet.images;
-      } else if (pet.imageIds && pet.imageIds.length > 0) {
-        // If using the new structure, populate images
-        await pet.populate('images');
-        images = pet.images || [];
-      }
-      
-      await PetRegistryService.upsertAndSetState({
-        petCode: pet.petCode,
-        name: pet.name,
-        species: pet.species?._id || pet.species,
-        breed: pet.breed?._id || pet.breed,
-        images: images,
-        source: 'core',
-        corePetId: pet._id,
-        actorUserId: req.user._id,
-      }, {
-        currentOwnerId: req.user._id,
-        currentLocation: 'at_owner',
-        currentStatus: 'owned',
-        lastTransferAt: new Date()
-      })
-    } catch (regErr) {
-      console.warn('PetRegistry upsert failed (create pet):', regErr?.message || regErr)
-    }
-
-    return res.status(201).json({ success: true, data: { pet } });
+    ErrorHandler.sendSuccess(res, { 
+      pet: result.userPet,
+      registryEntry: result.registryEntry 
+    }, 'Pet added successfully and registered in central registry', 201);
   } catch (error) {
-    console.error('Create pet error:', error);
-    const message = error?.errors ? Object.values(error.errors).map(e => e.message).join(', ') : (error.message || 'Server error')
-    res.status(500).json({ success: false, message });
+    ErrorHandler.handleControllerError(res, error, 'create_pet');
   }
 };
 
@@ -403,23 +328,16 @@ const getPets = async (req, res) => {
 
     const total = await Pet.countDocuments(filter);
 
-    res.json({
-      success: true,
-      data: {
-        pets,
-        pagination: {
-          current: parseInt(page),
-          pages: Math.ceil(total / limit),
-          total
-        }
+    ErrorHandler.sendSuccess(res, {
+      pets,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(total / limit),
+        total
       }
     });
   } catch (error) {
-    console.error('Get pets error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    ErrorHandler.handleControllerError(res, error, 'get_pets');
   }
 };
 
@@ -462,7 +380,7 @@ const getPetById = async (req, res) => {
           }
         }
       } catch (registryError) {
-        console.log('Failed to get images from registry:', registryError.message);
+        logger.debug(`Failed to get images from registry: ${registryError.message}`);
       }
     }
 
@@ -505,8 +423,8 @@ const getPetById = async (req, res) => {
           }
         } else if (registryPet.source === 'core' && registryPet.corePetId) {
           // Fetch from PetNew
-          const PetNew = require('../models/PetNew');
-          sourcePet = await PetNew.findById(registryPet.corePetId)
+          const Pet = require('../models/Pet');
+          sourcePet = await Pet.findById(registryPet.corePetId)
             .populate('speciesId', 'name displayName')
             .populate('breedId', 'name')
             .populate('imageIds');
@@ -548,15 +466,12 @@ const getPetById = async (req, res) => {
     }
 
     if (!pet) {
-      return res.status(404).json({
-        success: false,
-        message: 'Pet not found'
-      });
+      return ErrorHandler.sendError(res, 'Pet not found', 404);
     }
 
     // Check access permissions
     if (!canAccessPet(req.user, { storeId: pet.storeId, owner: pet.createdBy || pet.currentOwnerId })) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
+      return ErrorHandler.sendError(res, 'Forbidden', 403);
     }
 
     // Ensure the pet object properly includes images for the response
@@ -576,18 +491,9 @@ const getPetById = async (req, res) => {
       petResponse = pet;
     }
 
-    res.json({
-      success: true,
-      data: {
-        pet: petResponse
-      }
-    });
+    ErrorHandler.sendSuccess(res, { pet: petResponse });
   } catch (error) {
-    console.error('Get pet error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    ErrorHandler.handleControllerError(res, error, 'get_pet_by_id');
   }
 };
 
@@ -596,17 +502,20 @@ const getPetById = async (req, res) => {
 // @access  Private
 const updatePet = async (req, res) => {
   try {
+    // Validate input
+    const { isValid, error } = validate(updatePetSchema, req.body);
+    if (!isValid) {
+      return ErrorHandler.sendError(res, error, 400);
+    }
+
     const pet = await Pet.findById(req.params.id);
 
     if (!pet) {
-      return res.status(404).json({
-        success: false,
-        message: 'Pet not found'
-      });
+      return ErrorHandler.sendError(res, 'Pet not found', 404);
     }
 
     if (!canAccessPet(req.user, pet)) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
+      return ErrorHandler.sendError(res, 'Forbidden', 403);
     }
 
     const updateData = {
@@ -628,19 +537,9 @@ const updatePet = async (req, res) => {
       changes: req.body
     });
 
-    res.json({
-      success: true,
-      message: 'Pet updated successfully',
-      data: {
-        pet: updatedPet
-      }
-    });
+    ErrorHandler.sendSuccess(res, { pet: updatedPet }, 'Pet updated successfully');
   } catch (error) {
-    console.error('Update pet error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error during pet update'
-    });
+    ErrorHandler.handleControllerError(res, error, 'update_pet');
   }
 };
 
@@ -652,277 +551,18 @@ const deletePet = async (req, res) => {
     const pet = await Pet.findById(req.params.id);
 
     if (!pet) {
-      return res.status(404).json({
-        success: false,
-        message: 'Pet not found'
-      });
+      return ErrorHandler.sendError(res, 'Pet not found', 404);
     }
 
     if (!canAccessPet(req.user, pet)) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
+      return ErrorHandler.sendError(res, 'Forbidden', 403);
     }
 
     await Pet.findByIdAndDelete(req.params.id);
 
-    res.json({
-      success: true,
-      message: 'Pet deleted successfully'
-    });
+    ErrorHandler.sendSuccess(res, {}, 'Pet deleted successfully');
   } catch (error) {
-    console.error('Delete pet error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error during pet deletion'
-    });
-  }
-};
-
-// @route   PUT /api/pets/:id/medical-history
-// @desc    Add medical history entry
-// @access  Private
-const addMedicalHistory = async (req, res) => {
-  try {
-    const pet = await Pet.findById(req.params.id);
-
-    if (!pet) {
-      return res.status(404).json({
-        success: false,
-        message: 'Pet not found'
-      });
-    }
-
-    if (!canAccessPet(req.user, pet)) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
-    }
-
-    const medicalEntry = {
-      ...req.body,
-      date: new Date()
-    };
-
-    pet.medicalHistory.push(medicalEntry);
-    pet.lastUpdatedBy = req.user._id;
-    await pet.save();
-
-    await PetChangeLog.create({
-      petId: pet._id,
-      action: 'medical_add',
-      changedBy: req.user._id,
-      meta: medicalEntry
-    });
-
-    res.json({
-      success: true,
-      message: 'Medical history added successfully',
-      data: {
-        pet
-      }
-    });
-  } catch (error) {
-    console.error('Add medical history error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error during medical history addition'
-    });
-  }
-};
-
-// @route   PUT /api/pets/:id/vaccination
-// @desc    Add vaccination record
-// @access  Private
-const addVaccinationRecord = async (req, res) => {
-  try {
-    const pet = await Pet.findById(req.params.id);
-
-    if (!pet) {
-      return res.status(404).json({
-        success: false,
-        message: 'Pet not found'
-      });
-    }
-
-    if (!canAccessPet(req.user, pet)) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
-    }
-
-    const vaccinationRecord = {
-      ...req.body,
-      dateGiven: new Date(req.body.dateGiven)
-    };
-
-    pet.vaccinationRecords.push(vaccinationRecord);
-    pet.lastUpdatedBy = req.user._id;
-    await pet.save();
-
-    await PetChangeLog.create({
-      petId: pet._id,
-      action: 'vaccination_add',
-      changedBy: req.user._id,
-      meta: vaccinationRecord
-    });
-
-    res.json({
-      success: true,
-      message: 'Vaccination record added successfully',
-      data: {
-        pet
-      }
-    });
-  } catch (error) {
-    console.error('Add vaccination error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error during vaccination record addition'
-    });
-  }
-};
-
-// @route   PUT /api/pets/:id/owners
-// @desc    Add ownership history entry (and close previous open ownership if any)
-// @access  Private
-const addOwnershipHistory = async (req, res) => {
-  try {
-    const pet = await Pet.findById(req.params.id);
-    if (!pet) {
-      return res.status(404).json({ success: false, message: 'Pet not found' });
-    }
-
-    if (!canAccessPet(req.user, pet)) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
-    }
-
-    // Close previous open ownership (no endDate)
-    if (pet.ownershipHistory && pet.ownershipHistory.length > 0) {
-      const last = pet.ownershipHistory[pet.ownershipHistory.length - 1];
-      if (!last.endDate) {
-        last.endDate = new Date();
-      }
-    }
-
-    const entry = {
-      ownerType: req.body.ownerType || 'other',
-      ownerId: req.body.ownerId,
-      ownerName: req.body.ownerName,
-      startDate: req.body.startDate ? new Date(req.body.startDate) : new Date(),
-      notes: req.body.notes || ''
-    };
-
-    pet.ownershipHistory.push(entry);
-    pet.lastUpdatedBy = req.user._id;
-    await pet.save();
-
-    // Sync centralized registry state
-    try {
-      // Prefer explicit ownerId from request; else keep as-is
-      const newOwnerId = req.body.ownerId || undefined
-      await PetRegistryService.updateState({
-        petCode: pet.petCode,
-        currentOwnerId: newOwnerId,
-        currentLocation: newOwnerId ? 'at_owner' : undefined,
-        currentStatus: newOwnerId ? 'owned' : undefined,
-        actorUserId: req.user._id,
-        lastTransferAt: newOwnerId ? new Date() : undefined
-      })
-    } catch (regErr) {
-      console.warn('PetRegistry state sync failed (ownership_add):', regErr?.message || regErr)
-    }
-
-    await PetChangeLog.create({
-      petId: pet._id,
-      action: 'ownership_add',
-      changedBy: req.user._id,
-      meta: entry
-    });
-
-    res.json({ success: true, message: 'Ownership history updated', data: { pet } });
-  } catch (error) {
-    console.error('Add ownership error:', error);
-    res.status(500).json({ success: false, message: 'Server error during ownership update' });
-  }
-};
-
-// @route   PUT /api/pets/:id/medications
-// @desc    Add medication record
-// @access  Private
-const addMedicationRecord = async (req, res) => {
-  try {
-    const pet = await Pet.findById(req.params.id);
-    if (!pet) {
-      return res.status(404).json({ success: false, message: 'Pet not found' });
-    }
-
-    if (!canAccessPet(req.user, pet)) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
-    }
-
-    const record = {
-      medicationName: req.body.medicationName,
-      dosage: req.body.dosage,
-      frequency: req.body.frequency,
-      startDate: req.body.startDate ? new Date(req.body.startDate) : undefined,
-      endDate: req.body.endDate ? new Date(req.body.endDate) : undefined,
-      prescribedBy: req.body.prescribedBy,
-      notes: req.body.notes
-    };
-
-    pet.medicationRecords.push(record);
-    pet.lastUpdatedBy = req.user._id;
-    await pet.save();
-
-    await PetChangeLog.create({
-      petId: pet._id,
-      action: 'medication_add',
-      changedBy: req.user._id,
-      meta: record
-    });
-
-    res.json({ success: true, message: 'Medication record added', data: { pet } });
-  } catch (error) {
-    console.error('Add medication error:', error);
-    res.status(500).json({ success: false, message: 'Server error during medication addition' });
-  }
-};
-
-// @route   GET /api/pets/:id/history
-// @desc    Get combined history (ownership, medical, vaccinations, medications)
-// @access  Private
-const getPetHistory = async (req, res) => {
-  try {
-    const pet = await Pet.findById(req.params.id).select('name storeId');
-    if (!pet) {
-      return res.status(404).json({ success: false, message: 'Pet not found' });
-    }
-
-    if (!canAccessPet(req.user, pet)) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
-    }
-
-    // Fetch ownership history from OwnershipHistory collection
-    const OwnershipHistory = require('../models/OwnershipHistory');
-    const ownershipHistory = await OwnershipHistory.findByPet(req.params.id);
-
-    // Fetch medical history from MedicalRecord collection
-    const MedicalRecord = require('../models/MedicalRecord');
-    const medicalRecords = await MedicalRecord.findByPet(req.params.id);
-
-    // Separate different types of medical records
-    const medicalHistory = medicalRecords.filter(record => record.recordType === 'Treatment' || record.recordType === 'Checkup' || record.recordType === 'Surgery' || record.recordType === 'Emergency' || record.recordType === 'Dental' || record.recordType === 'Grooming' || record.recordType === 'Other');
-    const vaccinationRecords = medicalRecords.filter(record => record.recordType === 'Vaccination');
-    const medicationRecords = medicalRecords.filter(record => record.medications && record.medications.length > 0);
-
-    res.json({
-      success: true,
-      data: {
-        name: pet.name,
-        ownershipHistory: ownershipHistory || [],
-        medicalHistory: medicalHistory || [],
-        vaccinationRecords: vaccinationRecords || [],
-        medicationRecords: medicationRecords || []
-      }
-    });
-  } catch (error) {
-    console.error('Get pet history error:', error);
-    res.status(500).json({ success: false, message: 'Server error during history fetch' });
+    ErrorHandler.handleControllerError(res, error, 'delete_pet');
   }
 };
 
@@ -931,14 +571,13 @@ const getPetHistory = async (req, res) => {
 // @access  Private
 const searchNearbyPets = async (req, res) => {
   try {
-    const { lng, lat, radius = 10 } = req.query;
-
-    if (!lng || !lat) {
-      return res.status(400).json({
-        success: false,
-        message: 'Longitude and latitude are required'
-      });
+    // Validate input
+    const { isValid, error } = validate(searchNearbyPetsSchema, req.query);
+    if (!isValid) {
+      return ErrorHandler.sendError(res, error, 400);
     }
+
+    const { lng, lat, radius = 10 } = req.query;
 
     const pets = await Pet.find({
       location: {
@@ -952,18 +591,9 @@ const searchNearbyPets = async (req, res) => {
       }
     }).populate('createdBy', 'name email');
 
-    res.json({
-      success: true,
-      data: {
-        pets
-      }
-    });
+    ErrorHandler.sendSuccess(res, { pets });
   } catch (error) {
-    console.error('Search nearby pets error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error during nearby search'
-    });
+    ErrorHandler.handleControllerError(res, error, 'search_nearby_pets');
   }
 };
 
@@ -973,141 +603,17 @@ const searchNearbyPets = async (req, res) => {
 const getPetChangelog = async (req, res) => {
   try {
     const pet = await Pet.findById(req.params.id).select('_id storeId');
-    if (!pet) return res.status(404).json({ success: false, message: 'Pet not found' });
-    if (!canAccessPet(req.user, pet)) return res.status(403).json({ success: false, message: 'Forbidden' });
+    if (!pet) return ErrorHandler.sendError(res, 'Pet not found', 404);
+    if (!canAccessPet(req.user, pet)) return ErrorHandler.sendError(res, 'Forbidden', 403);
 
     const logs = await PetChangeLog.find({ petId: req.params.id })
       .populate('changedBy', 'name email')
       .sort({ createdAt: -1 })
       .limit(200);
 
-    res.json({ success: true, data: { logs } });
+    ErrorHandler.sendSuccess(res, { logs });
   } catch (error) {
-    console.error('Get pet changelog error:', error);
-    res.status(500).json({ success: false, message: 'Server error during changelog fetch' });
-  }
-};
-
-// @route   GET /api/pets/registry/:petCode/history
-// @desc    Get registry history for a pet
-// @access  Private
-const getRegistryHistory = async (req, res) => {
-  try {
-    const { petCode } = req.params;
-    const history = await PetRegistryService.getHistory(petCode);
-    res.json({ success: true, data: { history } });
-  } catch (error) {
-    console.error('Get registry history error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-};
-
-// @route   GET /api/pets/registry/:id
-// @desc    Get pet from registry by ID
-// @access  Private
-const getRegistryPetById = async (req, res) => {
-  try {
-    const PetRegistry = require('../models/PetRegistry');
-    
-    // Try to find in PetRegistry by ID
-    const registryPet = await PetRegistry.findById(req.params.id)
-      .populate('species', 'name displayName')
-      .populate('breed', 'name')
-      .populate('imageIds')
-      .populate('currentOwnerId', 'name email');
-
-    // Manually populate the virtual 'images' field
-    if (registryPet) {
-      await registryPet.populate('images');
-      
-      // Based on the source, fetch the actual pet data to get complete information
-      let sourcePet = null;
-      if (registryPet.source === 'petshop' && registryPet.petShopItemId) {
-        // Fetch from PetInventoryItem
-        const PetInventoryItem = require('../../modules/petshop/manager/models/PetInventoryItem');
-        sourcePet = await PetInventoryItem.findById(registryPet.petShopItemId)
-          .populate('speciesId', 'name displayName')
-          .populate('breedId', 'name')
-          .populate('imageIds');
-        
-        if (sourcePet) {
-          await sourcePet.populate('images');
-        }
-      } else if (registryPet.source === 'adoption' && registryPet.adoptionPetId) {
-        // Fetch from AdoptionPet
-        const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet');
-        sourcePet = await AdoptionPet.findById(registryPet.adoptionPetId)
-          .populate('species', 'name displayName')
-          .populate('breed', 'name')
-          .populate('imageIds');
-        
-        if (sourcePet) {
-          await sourcePet.populate('images');
-        }
-      } else if (registryPet.source === 'core' && registryPet.corePetId) {
-        // Fetch from PetNew
-        const PetNew = require('../models/PetNew');
-        sourcePet = await PetNew.findById(registryPet.corePetId)
-          .populate('speciesId', 'name displayName')
-          .populate('breedId', 'name')
-          .populate('imageIds');
-        
-        if (sourcePet) {
-          await sourcePet.populate('images');
-        }
-      }
-
-      // Convert to the format expected by the frontend
-      const pet = {
-        _id: registryPet._id,
-        name: sourcePet?.name || registryPet.name,
-        petCode: registryPet.petCode,
-        species: sourcePet?.species || sourcePet?.speciesId || registryPet.species,
-        speciesId: sourcePet?.species || sourcePet?.speciesId || registryPet.species,
-        breed: sourcePet?.breed || sourcePet?.breedId || registryPet.breed,
-        breedId: sourcePet?.breed || sourcePet?.breedId || registryPet.breed,
-        currentStatus: registryPet.currentStatus,
-        source: registryPet.source,
-        firstAddedSource: registryPet.firstAddedSource,
-        firstAddedAt: registryPet.firstAddedAt,
-        acquiredDate: registryPet.lastTransferAt || registryPet.updatedAt,
-        images: sourcePet?.images || registryPet.images || [],
-        gender: sourcePet?.gender || 'Unknown',
-        age: sourcePet?.age || 0,
-        ageUnit: sourcePet?.ageUnit || 'months',
-        color: sourcePet?.color || '',
-        healthStatus: sourcePet?.healthStatus || 'Good',
-        size: sourcePet?.size || 'medium',
-        weight: sourcePet?.weight || { value: 0, unit: 'kg' },
-        createdBy: registryPet.currentOwnerId,
-        lastUpdatedBy: registryPet.currentOwnerId,
-        createdAt: registryPet.createdAt,
-        updatedAt: registryPet.updatedAt
-      };
-
-      // Check access permissions
-      if (!canAccessPet(req.user, { storeId: registryPet.storeId, owner: registryPet.currentOwnerId })) {
-        return res.status(403).json({ success: false, message: 'Forbidden' });
-      }
-
-      return res.json({
-        success: true,
-        data: {
-          pet
-        }
-      });
-    }
-
-    return res.status(404).json({
-      success: false,
-      message: 'Pet not found in registry'
-    });
-  } catch (error) {
-    console.error('Get registry pet error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    ErrorHandler.handleControllerError(res, error, 'get_pet_changelog');
   }
 };
 

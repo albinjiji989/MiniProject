@@ -192,10 +192,12 @@ const PetShopDashboard = () => {
 
   // Unified layout config
   const quickActions = [
-    { label: 'Browse Pets', onClick: () => setTabValue(1), color: 'bg-emerald-600' },
-    { label: 'My Wishlist', onClick: () => setTabValue(3), color: 'bg-blue-600' },
-    { label: 'My Reservations', onClick: () => setTabValue(3), color: 'bg-indigo-600' },
-  ]
+    { label: 'Browse Pets', onClick: () => navigate('/User/petshop/shop'), color: 'bg-blue-500' },
+    { label: 'My Reservations', onClick: () => navigate('/User/petshop/reservations'), color: 'bg-green-500' },
+    { label: 'Wishlist', onClick: () => navigate('/User/petshop/wishlist'), color: 'bg-red-500' },
+    { label: 'AI/ML Insights', onClick: () => navigate('/User/petshop/aiml-dashboard'), color: 'bg-purple-500' },
+    { label: 'My Profile', onClick: () => navigate('/User/profile'), color: 'bg-yellow-500' }
+  ];
   const statCards = [
     { label: 'Pet Shops', value: stats.totalPetShops || 0, icon: '🏪' },
     { label: 'Available Pets', value: stats.availableForSale || 0, icon: '🐾' },

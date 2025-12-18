@@ -289,7 +289,7 @@ const TabContent = ({
                             </IconButton>
                           </Tooltip>
                           
-                          <Tooltip title="Delete Pet">
+                          <Tooltip title="Remove from Sale">
                             <IconButton 
                               size="small" 
                               color="error"
@@ -404,6 +404,7 @@ const TabContent = ({
                         case 'history': navigate(`/manager/petshop/pets/${data._id}/history`); break;
                         case 'release': handleReleaseToPublic(data); break;
                         case 'delete': handleDeletePet(data); break;
+                        case 'generate': navigate(`/manager/petshop/generate-pets/${data._id}`); break;
                         default: break;
                       }
                     }}
@@ -550,7 +551,7 @@ const TabContent = ({
                             </Tooltip>
                           )}
                           
-                          <Tooltip title="Delete Pet">
+                          <Tooltip title="Remove from Sale">
                             <IconButton 
                               size="small" 
                               color="error"
@@ -800,7 +801,7 @@ const TabContent = ({
                             </IconButton>
                           </Tooltip>
                           
-                          <Tooltip title="Delete Pet">
+                          <Tooltip title="Remove from Sale">
                             <IconButton 
                               size="small" 
                               color="error"
@@ -1043,7 +1044,7 @@ const TabContent = ({
                             </IconButton>
                           </Tooltip>
                           
-                          <Tooltip title="Delete Pet">
+                          <Tooltip title="Remove from Sale">
                             <IconButton 
                               size="small" 
                               color="error"

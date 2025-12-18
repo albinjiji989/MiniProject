@@ -68,7 +68,38 @@ export default function VeterinaryPetDashboard() {
     { key: 'book', label: 'Book' },
   ]
 
-  
+  // Function to get the primary image URL or first image URL
+  const getPetImageUrl = (pet) => {
+    if (!pet || !pet.images || pet.images.length === 0) {
+      return '/placeholder-pet.svg';
+    }
+    
+    // Find primary image first
+    const primaryImage = pet.images.find(img => img.isPrimary);
+    if (primaryImage && primaryImage.url) {
+      // Handle relative URLs
+      if (primaryImage.url.startsWith('http') || primaryImage.url.startsWith('/')) {
+        return primaryImage.url;
+      }
+      // For relative paths, prepend the API origin
+      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      return `${apiOrigin}${primaryImage.url.startsWith('/') ? '' : '/'}${primaryImage.url}`;
+    }
+    
+    // Fallback to first image
+    const firstImage = pet.images[0];
+    if (firstImage && firstImage.url) {
+      // Handle relative URLs
+      if (firstImage.url.startsWith('http') || firstImage.url.startsWith('/')) {
+        return firstImage.url;
+      }
+      // For relative paths, prepend the API origin
+      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      return `${apiOrigin}${firstImage.url.startsWith('/') ? '' : '/'}${firstImage.url}`;
+    }
+    
+    return '/placeholder-pet.svg';
+  };
 
   const getBookingTypeBadge = (bookingType) => {
     switch (bookingType?.toLowerCase()) {
@@ -89,9 +120,22 @@ export default function VeterinaryPetDashboard() {
           <h3 className="font-semibold mb-2">Selected Pet</h3>
           <div className="flex items-center mb-3">
             <div className="flex-shrink-0 h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
-              <svg className="h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              {/* Display pet image or default icon */}
+              {selectedPet.images && selectedPet.images.length > 0 ? (
+                <img 
+                  src={getPetImageUrl(selectedPet)} 
+                  alt={selectedPet.name}
+                  className="h-12 w-12 rounded-full object-cover"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = '/placeholder-pet.svg';
+                  }}
+                />
+              ) : (
+                <svg className="h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
             </div>
             <div className="ml-3">
               <div className="font-medium">{selectedPet.name}</div>

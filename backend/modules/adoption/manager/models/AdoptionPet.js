@@ -23,6 +23,13 @@ const adoptionPetSchema = new mongoose.Schema({
     min: 0,
     default: 0,
   },
+  dateOfBirth: {
+    type: Date
+  },
+  dateAdded: {
+    type: Date,
+    default: Date.now
+  },
   ageUnit: {
     type: String,
     enum: ['years', 'months', 'weeks', 'days'],
@@ -92,7 +99,7 @@ const adoptionPetSchema = new mongoose.Schema({
   petCode: {
     type: String,
     validate: {
-      validator: function(v) {
+      validator: function (v) {
         return !v || /^[A-Z]{3}\d{5}$/.test(v)
       },
       message: 'petCode must be 3 uppercase letters followed by 5 digits'
@@ -128,6 +135,10 @@ const adoptionPetSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
+  // Soft Delete
+  isDeleted: { type: Boolean, default: false, index: true },
+  deletedAt: { type: Date },
+  deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, {
   timestamps: true,
 });
@@ -151,6 +162,34 @@ adoptionPetSchema.virtual('documents', {
   justOne: false
 });
 
+// Calculate age from dateOfBirth before saving
+adoptionPetSchema.pre('save', function (next) {
+  if (this.dateOfBirth) {
+    const now = new Date();
+    const diffTime = Math.abs(now - this.dateOfBirth);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    // Calculate age based on the unit
+    switch (this.ageUnit) {
+      case 'days':
+        this.age = diffDays;
+        break;
+      case 'weeks':
+        this.age = Math.floor(diffDays / 7);
+        break;
+      case 'months':
+        this.age = Math.floor(diffDays / 30.44); // Average days in a month
+        break;
+      case 'years':
+        this.age = Math.floor(diffDays / 365.25); // Account for leap years
+        break;
+      default:
+        this.age = Math.floor(diffDays / 30.44); // Default to months
+    }
+  }
+  next();
+});
+
 // Indexes for better query performance
 adoptionPetSchema.index({ status: 1 });
 adoptionPetSchema.index({ breed: 1 });
@@ -158,9 +197,17 @@ adoptionPetSchema.index({ species: 1 });
 adoptionPetSchema.index({ adopterUserId: 1 });
 adoptionPetSchema.index({ createdBy: 1 });
 adoptionPetSchema.index({ petCode: 1 }, { unique: true, sparse: true });
+adoptionPetSchema.index({ dateOfBirth: 1 });
+adoptionPetSchema.index({ isDeleted: 1 });
+
+// Compound indexes for performance
+adoptionPetSchema.index({ status: 1, isDeleted: 1 });
+adoptionPetSchema.index({ createdBy: 1, status: 1 });
+adoptionPetSchema.index({ species: 1, breed: 1 });
+adoptionPetSchema.index({ isDeleted: 1, isActive: 1 });
 
 // Virtual for age display
-adoptionPetSchema.virtual('ageDisplay').get(function() {
+adoptionPetSchema.virtual('ageDisplay').get(function () {
   const n = this.age || 0
   switch (this.ageUnit) {
     case 'years':
@@ -185,7 +232,7 @@ adoptionPetSchema.virtual('ageDisplay').get(function() {
 });
 
 // Spec-friendly virtuals
-adoptionPetSchema.virtual('photos').get(function() {
+adoptionPetSchema.virtual('photos').get(function () {
   // This will work with populated images
   if (this.images && this.images.length > 0) {
     return this.images.map(img => ({ url: img.url, caption: img.caption }));
@@ -193,11 +240,11 @@ adoptionPetSchema.virtual('photos').get(function() {
   return [];
 })
 
-adoptionPetSchema.virtual('availabilityStatus').get(function() {
+adoptionPetSchema.virtual('availabilityStatus').get(function () {
   return this.status
 })
 
-adoptionPetSchema.virtual('documentsUrls').get(function() {
+adoptionPetSchema.virtual('documentsUrls').get(function () {
   // This will work with populated documents
   if (this.documents && this.documents.length > 0) {
     return this.documents.map(d => d.url).filter(Boolean);
@@ -206,12 +253,12 @@ adoptionPetSchema.virtual('documentsUrls').get(function() {
 })
 
 // Method to check if pet is available for adoption
-adoptionPetSchema.methods.isAvailable = function() {
+adoptionPetSchema.methods.isAvailable = function () {
   return this.status === 'available' && this.isActive;
 };
 
 // Method to reserve pet
-adoptionPetSchema.methods.reserve = function(userId) {
+adoptionPetSchema.methods.reserve = function (userId) {
   if (this.status === 'available') {
     this.status = 'reserved';
     this.adopterUserId = userId;
@@ -221,7 +268,7 @@ adoptionPetSchema.methods.reserve = function(userId) {
 };
 
 // Method to complete adoption
-adoptionPetSchema.methods.completeAdoption = function() {
+adoptionPetSchema.methods.completeAdoption = function () {
   if (this.status === 'reserved') {
     this.status = 'adopted';
     this.adoptionDate = new Date();
@@ -231,13 +278,13 @@ adoptionPetSchema.methods.completeAdoption = function() {
 };
 
 // Static: generate unique pet code using centralized generator
-adoptionPetSchema.statics.generatePetCode = async function() {
+adoptionPetSchema.statics.generatePetCode = async function () {
   const PetCodeGenerator = require('../../../../core/utils/petCodeGenerator')
   return await PetCodeGenerator.generateUniquePetCode()
 }
 
 // Pre-save: assign petCode if missing
-adoptionPetSchema.pre('save', async function(next) {
+adoptionPetSchema.pre('save', async function (next) {
   try {
     if (!this.petCode) {
       const Model = this.constructor
@@ -249,8 +296,42 @@ adoptionPetSchema.pre('save', async function(next) {
   }
 })
 
+// Post-save: register in centralized PetRegistry
+adoptionPetSchema.post('save', async function(doc) {
+  try {
+    // Only register if petCode exists
+    if (doc.petCode) {
+      const PetRegistry = require('../../../../core/models/PetRegistry');
+      
+      // Register the pet in the centralized registry
+      await PetRegistry.ensureRegistered({
+        petCode: doc.petCode,
+        name: doc.name,
+        species: doc.species,
+        breed: doc.breed,
+        images: doc.imageIds || [],
+        source: 'adoption',
+        adoptionPetId: doc._id,
+        actorUserId: doc.createdBy,
+        firstAddedSource: 'adoption_center',
+        firstAddedBy: doc.createdBy,
+        gender: doc.gender,
+        age: doc.age,
+        ageUnit: doc.ageUnit,
+        color: doc.color
+      }, {
+        currentOwnerId: doc.adopterUserId,
+        currentLocation: doc.status === 'adopted' ? 'at_owner' : 'at_adoption_center',
+        currentStatus: doc.status
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to register adoption pet in PetRegistry:', err.message);
+  }
+});
+
 // Pre-insertMany: assign codes for bulk inserts (e.g., CSV import)
-adoptionPetSchema.pre('insertMany', async function(docs) {
+adoptionPetSchema.pre('insertMany', async function (docs) {
   const Model = this.model ? this.model : this.constructor
   for (const doc of docs) {
     if (!doc.petCode) {

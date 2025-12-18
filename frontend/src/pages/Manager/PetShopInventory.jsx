@@ -104,7 +104,7 @@ const PetShopInventory = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton onClick={() => navigate(`/manager/petshop/manage-inventory?id=${it._id}`)}><EditIcon /></IconButton>
+                      <IconButton onClick={() => navigate(`/manager/petshop/manage-stock-images/${it._id}`)}><EditIcon /></IconButton>
                       <IconButton color="error" onClick={() => handleDelete(it._id)}><DeleteIcon /></IconButton>
                     </TableCell>
                   </TableRow>

@@ -33,6 +33,7 @@ import {
   Refresh as RefreshIcon,
   Download as DownloadIcon,
   Upload as UploadIcon,
+  Source as SourceIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { petsAPI, speciesAPI, breedsAPI, customBreedRequestsAPI } from '../../../services/petSystemAPI'
@@ -320,6 +321,16 @@ const PetManagementDashboard = () => {
                     onClick={() => navigate('/admin/breeds')}
                   >
                     Manage Breeds
+                  </Button>
+                </Grid>
+                <Grid item xs={12}>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    startIcon={<SourceIcon />}
+                    onClick={() => navigate('/admin/pet-registry')}
+                  >
+                    View Pet Registry
                   </Button>
                 </Grid>
               </Grid>

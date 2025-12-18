@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const PetNew = require('../../../../core/models/PetNew');
+const Pet = require('../../../../core/models/Pet');
 const PetDetails = require('../../../../core/models/PetDetails');
 const Species = require('../../../../core/models/Species');
 const Breed = require('../../../../core/models/Breed');
@@ -8,17 +8,21 @@ const CustomBreedRequest = require('../../../../core/models/CustomBreedRequest')
 const PetCategory = require('../../../../core/models/PetCategory');
 const { auth } = require('../../../../core/middleware/auth');
 
-// Get user's pets
+// Get user's pets - Modified to include purchased pets from petshop
 router.get('/', auth, async (req, res) => {
   try {
     const { page = 1, limit = 10, status, search } = req.query;
     const pageNum = Math.max(1, parseInt(page, 10) || 1)
     const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 10))
-    const query = { ownerId: req.user.id, isActive: true };
-
-    if (status) {
-      query.currentStatus = status;
-    }
+    
+    // Query for pets owned by the user
+    // Include both user-created pets and purchased pets from petshop
+    const query = { 
+      ownerId: req.user.id, 
+      isActive: true,
+      // Include pets with status 'sold' (purchased from petshop) or other active statuses
+      currentStatus: status ? status : { $in: ['Available', 'Adopted', 'Reserved', 'Under Treatment', 'Fostered', 'sold'] }
+    };
 
     if (search) {
       query.$or = [
@@ -27,13 +31,13 @@ router.get('/', auth, async (req, res) => {
       ];
     }
 
-    const pets = await PetNew.find(query)
+    const pets = await Pet.find(query)
       .populate('images') // Populate images virtual property
       .sort({ createdAt: -1 })
       .limit(limitNum)
       .skip((pageNum - 1) * limitNum);
 
-    const total = await PetNew.countDocuments(query);
+    const total = await Pet.countDocuments(query);
 
     res.json({
       success: true,
@@ -147,7 +151,7 @@ router.get('/:id', auth, async (req, res) => {
   try {
     console.log('🔍 Fetching pet with ID:', req.params.id, 'for user:', req.user.id);
     
-    const pet = await PetNew.findOne({ 
+    const pet = await Pet.findOne({ 
       _id: req.params.id, 
       ownerId: req.user.id, 
       isActive: true 
@@ -243,7 +247,7 @@ router.post('/', auth, async (req, res) => {
 
     console.log('📝 Creating pet with data:', { name, age, ageUnit, gender, speciesId, breedId });
     
-    const pet = new PetNew({
+    const pet = new Pet({
       name,
       age: Number(age),
       ageUnit,
@@ -272,7 +276,7 @@ router.post('/', auth, async (req, res) => {
         // Process images using our new utility
         const savedImages = await processEntityImages(
           images, 
-          'PetNew', 
+          'Pet',
           pet._id.toString(), 
           req.user.id.toString(), 
           'otherpets', 
@@ -407,7 +411,7 @@ router.put('/:id', auth, async (req, res) => {
       tags
     } = req.body;
 
-    const pet = await PetNew.findOne({ 
+    const pet = await Pet.findOne({ 
       _id: req.params.id, 
       ownerId: req.user.id, 
       isActive: true 
@@ -464,7 +468,7 @@ router.put('/:id', auth, async (req, res) => {
 // Soft delete pet
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const pet = await PetNew.findOne({ 
+    const pet = await Pet.findOne({ 
       _id: req.params.id, 
       ownerId: req.user.id, 
       isActive: true 
@@ -587,7 +591,7 @@ router.post('/:id/medical', auth, async (req, res) => {
   try {
     const { type, description, veterinarian, cost } = req.body;
 
-    const pet = await PetNew.findOne({ 
+    const pet = await Pet.findOne({ 
       _id: req.params.id, 
       ownerId: req.user.id, 
       isActive: true 
@@ -620,7 +624,7 @@ router.post('/:id/medical', auth, async (req, res) => {
 // Get pet medical history
 router.get('/:id/medical-history', auth, async (req, res) => {
   try {
-    const pet = await PetNew.findOne({ 
+    const pet = await Pet.findOne({ 
       _id: req.params.id, 
       ownerId: req.user.id, 
       isActive: true 
@@ -654,7 +658,7 @@ router.get('/:id/medical-history', auth, async (req, res) => {
 // Get pet ownership history
 router.get('/:id/history', auth, async (req, res) => {
   try {
-    const pet = await PetNew.findOne({ 
+    const pet = await Pet.findOne({ 
       _id: req.params.id, 
       ownerId: req.user.id, 
       isActive: true 
@@ -689,7 +693,7 @@ router.post('/:id/vaccination', auth, async (req, res) => {
   try {
     const { name, date, nextDue, veterinarian, certificate } = req.body;
 
-    const pet = await PetNew.findOne({ 
+    const pet = await Pet.findOne({ 
       _id: req.params.id, 
       ownerId: req.user.id, 
       isActive: true 

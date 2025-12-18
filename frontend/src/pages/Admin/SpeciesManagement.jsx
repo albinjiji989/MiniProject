@@ -242,12 +242,22 @@ const SpeciesManagement = () => {
     
     try {
       await adminSpeciesAPI.delete(speciesToDelete._id)
-      setSuccess('Species deleted successfully!')
+      setSuccess('Species deactivated successfully!')
       setDeleteDialog(false)
       setSpeciesToDelete(null)
       loadSpecies()
     } catch (err) {
-      setError('Failed to delete species')
+      setError('Failed to deactivate species')
+    }
+  }
+
+  const handleRestoreSpecies = async (species) => {
+    try {
+      await adminSpeciesAPI.restore(species._id)
+      setSuccess('Species restored successfully!')
+      loadSpecies()
+    } catch (err) {
+      setError('Failed to restore species')
     }
   }
 
@@ -257,7 +267,7 @@ const SpeciesManagement = () => {
       setSuccess(`Species ${species.isActive ? 'deactivated' : 'activated'} successfully!`)
       loadSpecies()
     } catch (err) {
-      setError('Failed to update species status')
+      setError(`Failed to ${species.isActive ? 'deactivate' : 'activate'} species`)
     }
   }
 
@@ -274,7 +284,7 @@ const SpeciesManagement = () => {
   }
 
   const getBreedCount = (speciesId) => {
-    return breeds.filter(breed => breed.species?._id === speciesId).length
+    return breeds.filter(breed => breed.speciesId?._id === speciesId || breed.species?._id === speciesId).length
   }
 
   if (loading && species.length === 0) {
@@ -461,6 +471,7 @@ const SpeciesManagement = () => {
                         </Tooltip>
                       </Box>
                     </TableCell>
+
                   </TableRow>
                 ))}
               </TableBody>
@@ -655,27 +666,36 @@ const SpeciesManagement = () => {
             {selectedSpecies?.isActive ? 'Deactivate' : 'Activate'}
           </ListItemText>
         </MenuItem>
-        <MenuItem onClick={() => { setSpeciesToDelete(selectedSpecies); setDeleteDialog(true); handleMenuClose(); }}>
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Delete Species</ListItemText>
-        </MenuItem>
+        {selectedSpecies?.isActive ? (
+          <MenuItem onClick={() => { setSpeciesToDelete(selectedSpecies); setDeleteDialog(true); handleMenuClose(); }}>
+            <ListItemIcon>
+              <DeleteIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Deactivate Species</ListItemText>
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={() => { handleRestoreSpecies(selectedSpecies); handleMenuClose(); }}>
+            <ListItemIcon>
+              <CheckCircleIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Restore Species</ListItemText>
+          </MenuItem>
+        )}
       </Menu>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialog} onClose={() => setDeleteDialog(false)}>
-        <DialogTitle>Delete Species</DialogTitle>
+        <DialogTitle>Deactivate Species</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete "{speciesToDelete?.displayName || speciesToDelete?.name}"? 
-            This action cannot be undone and will affect all associated breeds.
+            Are you sure you want to deactivate "{speciesToDelete?.displayName || speciesToDelete?.name}"? 
+            This species will no longer be available for new entries, but existing data will remain intact.
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialog(false)}>Cancel</Button>
           <Button onClick={handleDeleteSpecies} color="error" variant="contained">
-            Delete
+            Deactivate
           </Button>
         </DialogActions>
       </Dialog>

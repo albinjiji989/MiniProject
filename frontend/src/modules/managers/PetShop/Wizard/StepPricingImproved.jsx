@@ -62,6 +62,29 @@ export default function StepPricingImproved() {
       return
     }
     
+    // Validate arrival date - must be within past 3 days to today, no future dates
+    if (form.arrivalDate) {
+      const arrivalDate = new Date(form.arrivalDate)
+      const today = new Date()
+      const threeDaysAgo = new Date()
+      threeDaysAgo.setDate(today.getDate() - 3)
+      
+      // Reset time parts for comparison
+      arrivalDate.setHours(0, 0, 0, 0)
+      today.setHours(0, 0, 0, 0)
+      threeDaysAgo.setHours(0, 0, 0, 0)
+      
+      if (arrivalDate > today) {
+        setError('Arrival date cannot be in the future')
+        return
+      }
+      
+      if (arrivalDate < threeDaysAgo) {
+        setError('Arrival date must be within the last 3 days')
+        return
+      }
+    }
+    
     navigate('/manager/petshop/wizard/gender')
   }
 
@@ -162,6 +185,10 @@ export default function StepPricingImproved() {
             onChange={onChange}
             InputLabelProps={{
               shrink: true
+            }}
+            helperText="Date must be within the last 3 days (no future dates allowed)"
+            inputProps={{
+              max: new Date().toISOString().split('T')[0]
             }}
           />
         </Grid>

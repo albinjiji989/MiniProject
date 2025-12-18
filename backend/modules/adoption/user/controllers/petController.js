@@ -149,7 +149,10 @@ const getPublicPetDetails = async (req, res) => {
       .select('-createdBy -updatedBy -adopterUserId');
 
     if (!pet || !pet.isActive || pet.status !== 'available') {
-      return res.status(404).json({ success: false, error: 'Pet not found' });
+      return res.status(404).json({ 
+        success: false, 
+        error: `Pet with ID ${req.params.id} not found. The pet may have been adopted by another user, removed by the adoption manager, or the link you're using may be outdated. Please go back to the pet listings and select a currently available pet.` 
+      });
     }
 
     res.json({ success: true, data: pet });

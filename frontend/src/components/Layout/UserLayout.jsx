@@ -7,7 +7,7 @@ import {
   createTheme,
   ThemeProvider
 } from '@mui/material'
-import Sidebar from '../Navigation/Sidebar'
+import RoleBasedSidebar from './RoleBasedSidebar'
 import TopNavbar from '../Navigation/TopNavbar'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -141,11 +141,23 @@ const UserLayout = ({ children }) => {
         />
 
         {/* Sidebar - Overlay on mobile, persistent on desktop */}
-        <Sidebar 
+        <Drawer
+          variant={isMobile ? 'temporary' : 'persistent'}
+          anchor="left"
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
-          user={user}
-        />
+          ModalProps={{
+            keepMounted: true,
+          }}
+          sx={{
+            '& .MuiDrawer-paper': {
+              width: DRAWER_WIDTH,
+              boxSizing: 'border-box',
+            },
+          }}
+        >
+          <RoleBasedSidebar onClose={() => setSidebarOpen(false)} />
+        </Drawer>
 
         {/* Main Content */}
         <Box

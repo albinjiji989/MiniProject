@@ -219,9 +219,77 @@ const getContract = async (req, res) => {
   }
 };
 
+// Get payment history for adoption manager
+const getPaymentHistory = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, startDate, endDate } = req.query;
+    
+    // Build query for completed payments
+    const matchQuery = { 
+      paymentStatus: 'completed', 
+      isActive: true 
+    };
+
+    // Add date range filter if provided
+    if (startDate || endDate) {
+      matchQuery['paymentDetails.paymentDate'] = {};
+      if (startDate) matchQuery['paymentDetails.paymentDate'].$gte = new Date(startDate);
+      if (endDate) matchQuery['paymentDetails.paymentDate'].$lte = new Date(endDate);
+    }
+
+    // Get payments with pagination
+    const payments = await AdoptionRequest.find(matchQuery)
+      .populate('userId', 'name email phone')
+      .populate('petId', 'name breed species')
+      .select('paymentDetails status userId petId createdAt')
+      .sort({ 'paymentDetails.paymentDate': -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    // Get total count for pagination
+    const total = await AdoptionRequest.countDocuments(matchQuery);
+
+    // Calculate total revenue
+    const totalRevenue = payments.reduce((sum, payment) => sum + (payment.paymentDetails?.amount || 0), 0);
+
+    res.json({
+      success: true,
+      data: {
+        payments: payments.map(payment => ({
+          id: payment._id,
+          userId: payment.userId?._id,
+          userName: payment.userId?.name,
+          userEmail: payment.userId?.email,
+          userPhone: payment.userId?.phone,
+          petId: payment.petId?._id,
+          petName: payment.petId?.name,
+          petBreed: payment.petId?.breed,
+          petSpecies: payment.petId?.species,
+          amount: payment.paymentDetails?.amount || 0,
+          currency: payment.paymentDetails?.currency || 'INR',
+          transactionId: payment.paymentDetails?.transactionId,
+          paymentDate: payment.paymentDetails?.paymentDate,
+          status: payment.status,
+          createdAt: payment.createdAt
+        })),
+        pagination: {
+          current: parseInt(page),
+          pages: Math.ceil(total / limit),
+          total
+        },
+        totalRevenue,
+        totalTransactions: payments.length
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 module.exports = {
   createPaymentOrder,
   verifyPayment,
   generateContract,
-  getContract
+  getContract,
+  getPaymentHistory
 };

@@ -149,18 +149,145 @@ router.get('/notifications', auth, async (req, res) => {
   try {
     const userId = req.user.id
     
-    // Placeholder for real notifications source; returning empty for now to avoid dummy content
-    const notifications = []
-    
-    // Real notification data will be fetched from:
-    // - System notifications
-    // - Module-specific notifications
-    // - Updates and alerts
+    // Fetch notifications from multiple modules in parallel
+    const [
+      adoptionRequests,
+      petReservations
+    ] = await Promise.all([
+      // Adoption requests
+      AdoptionRequest.find({ userId, isActive: true })
+        .populate('petId', 'name images')
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean()
+        .catch(() => []),
+      
+      // Pet shop reservations
+      PetReservation.find({ userId })
+        .populate('itemId', 'name images')
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean()
+        .catch(() => [])
+    ])
+
+    // Process adoption notifications
+    const adoptionNotifications = adoptionRequests
+      .filter(request => ['approved', 'rejected', 'payment_pending', 'completed'].includes(request.status))
+      .map(request => {
+        let title = ''
+        let message = ''
+        let action = ''
+        let path = ''
+        
+        switch (request.status) {
+          case 'approved':
+            title = 'Adoption Request Approved'
+            message = `Your adoption request for ${request.petId?.name || 'a pet'} has been approved.`
+            action = 'Proceed to Payment'
+            path = `/User/adoption/applications/${request._id}/payment`
+            break
+          case 'rejected':
+            title = 'Adoption Request Rejected'
+            message = `Your adoption request for ${request.petId?.name || 'a pet'} has been rejected.`
+            action = 'View Details'
+            path = `/User/adoption/applications/${request._id}`
+            break
+          case 'payment_pending':
+            title = 'Payment Required for Adoption'
+            message = `Payment is now required for your adoption of ${request.petId?.name || 'a pet'}.`
+            action = 'Make Payment'
+            path = `/User/adoption/applications/${request._id}/payment`
+            break
+          case 'completed':
+            title = 'Adoption Completed'
+            message = `Your adoption of ${request.petId?.name || 'a pet'} is now complete.`
+            action = 'View Pet'
+            path = `/User/adoption/pets/${request.petId?._id}`
+            break
+          default:
+            title = 'Adoption Request Update'
+            message = `Your adoption request status has been updated to ${request.status}.`
+            action = 'View Details'
+            path = `/User/adoption/applications/${request._id}`
+        }
+        
+        return {
+          id: `adoption-${request._id}`,
+          type: 'adoption',
+          title,
+          message,
+          action,
+          path,
+          time: request.updatedAt || request.createdAt,
+          unread: true // All new notifications are unread
+        }
+      })
+
+    // Process pet shop notifications
+    const reservationNotifications = petReservations
+      .filter(reservation => ['approved', 'rejected', 'payment_pending', 'at_owner'].includes(reservation.status))
+      .map(reservation => {
+        let title = ''
+        let message = ''
+        let action = ''
+        let path = ''
+        
+        switch (reservation.status) {
+          case 'approved':
+            title = 'Pet Reservation Approved'
+            message = `Your reservation for ${reservation.itemId?.name || 'a pet'} has been approved.`
+            action = 'Proceed to Payment'
+            path = `/User/petshop/reservations/${reservation._id}/payment`
+            break
+          case 'rejected':
+            title = 'Pet Reservation Rejected'
+            message = `Your reservation for ${reservation.itemId?.name || 'a pet'} has been rejected.`
+            action = 'View Details'
+            path = `/User/petshop/reservations/${reservation._id}`
+            break
+          case 'payment_pending':
+            title = 'Payment Required for Reservation'
+            message = `Payment is now required for your reservation of ${reservation.itemId?.name || 'a pet'}.`
+            action = 'Make Payment'
+            path = `/User/petshop/reservations/${reservation._id}/payment`
+            break
+          case 'at_owner':
+            title = 'Pet Purchase Completed'
+            message = `Your purchase of ${reservation.itemId?.name || 'a pet'} is now complete.`
+            action = 'View Pet'
+            path = `/User/pets`
+            break
+          default:
+            title = 'Reservation Update'
+            message = `Your reservation status has been updated to ${reservation.status}.`
+            action = 'View Details'
+            path = `/User/petshop/reservations/${reservation._id}`
+        }
+        
+        return {
+          id: `reservation-${reservation._id}`,
+          type: 'reservation',
+          title,
+          message,
+          action,
+          path,
+          time: reservation.updatedAt || reservation.createdAt,
+          unread: true // All new notifications are unread
+        }
+      })
+
+    // Combine all notifications and sort by time (newest first)
+    const allNotifications = [
+      ...adoptionNotifications,
+      ...reservationNotifications
+    ].sort((a, b) => new Date(b.time) - new Date(a.time))
+    .slice(0, 20) // Limit to 20 most recent notifications
 
     res.json({
       success: true,
       data: {
-        notifications
+        notifications: allNotifications
       }
     })
   } catch (error) {

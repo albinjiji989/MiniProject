@@ -6,14 +6,14 @@ const mongoose = require('mongoose');
  * Format: 3 uppercase letters (A-Z) + 5 digits (e.g., ABC12345)
  */
 class PetCodeGenerator {
-  
+
   /**
    * Generate a unique pet code across all pet systems
    * @returns {Promise<string>} Unique pet code (e.g., "DOG12345")
    */
   static async generateUniquePetCode() {
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    const randomLetters = () => Array.from({ length: 3 }, () => 
+    const randomLetters = () => Array.from({ length: 3 }, () =>
       letters[Math.floor(Math.random() * letters.length)]
     ).join('')
     const randomNumber = () => Math.floor(10000 + Math.random() * 90000).toString() // 5 digits
@@ -25,7 +25,7 @@ class PetCodeGenerator {
 
     while (exists && attempts < maxAttempts) {
       code = `${randomLetters()}${randomNumber()}`
-      
+
       // Check across ALL pet systems for uniqueness
       exists = await this.checkCodeExists(code)
       attempts++
@@ -47,21 +47,21 @@ class PetCodeGenerator {
     try {
       // Import models dynamically to avoid circular dependencies
       const Pet = require('../models/Pet')
-      const PetNew = require('../models/PetNew')
+      const PetOld1 = require('../models/PetOld1')
       const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet')
       const PetInventoryItem = require('../../modules/petshop/manager/models/PetInventoryItem')
       const PetRegistry = require('../models/PetRegistry')
 
       // Check all pet systems in parallel
-      const [coreExists, coreNewExists, adoptionExists, petshopExists, registryExists] = await Promise.all([
-        Pet.exists({ petCode: code }).catch(() => false), // Handle if model doesn't exist
-        PetNew.exists({ petCode: code }).catch(() => false), // User-added pets
+      const [coreExists, coreOldExists, adoptionExists, petshopExists, registryExists] = await Promise.all([
+        Pet.exists({ petCode: code }).catch(() => false), // New Pet model
+        PetOld1.exists({ petCode: code }).catch(() => false), // Old Pet model
         AdoptionPet.exists({ petCode: code }).catch(() => false),
         PetInventoryItem.exists({ petCode: code }).catch(() => false),
         PetRegistry.exists({ petCode: code }).catch(() => false)
       ])
 
-      return coreExists || coreNewExists || adoptionExists || petshopExists || registryExists
+      return coreExists || coreOldExists || adoptionExists || petshopExists || registryExists
     } catch (error) {
       console.error('Error checking pet code existence:', error)
       // If there's an error, assume code exists to be safe
@@ -133,18 +133,18 @@ class PetCodeGenerator {
   static async getUsageStats() {
     try {
       const Pet = require('../models/Pet')
-      const PetNew = require('../models/PetNew')
+      const PetOld1 = require('../models/PetOld1')
       const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet')
       const PetInventoryItem = require('../../modules/petshop/manager/models/PetInventoryItem')
 
-      const [coreCount, coreNewCount, adoptionCount, petshopCount] = await Promise.all([
+      const [coreCount, coreOldCount, adoptionCount, petshopCount] = await Promise.all([
         Pet.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0),
-        PetNew.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0),
+        PetOld1.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0),
         AdoptionPet.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0),
         PetInventoryItem.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0)
       ])
 
-      const totalUsed = coreCount + coreNewCount + adoptionCount + petshopCount
+      const totalUsed = coreCount + coreOldCount + adoptionCount + petshopCount
       const totalPossible = 26 * 26 * 26 * 90000 // AAA00000 to ZZZ99999 (excluding 00000-09999)
       const usagePercentage = ((totalUsed / totalPossible) * 100).toFixed(6)
 

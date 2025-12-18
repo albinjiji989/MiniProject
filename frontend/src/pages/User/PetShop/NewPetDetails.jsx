@@ -29,7 +29,8 @@ import {
   StepLabel,
   StepContent,
   Paper,
-  Badge
+  Badge,
+  MenuItem
 } from '@mui/material'
 import {
   Pets as PetsIcon,
@@ -322,7 +323,7 @@ const NewPetDetails = () => {
                 />
                 <Chip 
                   label={pet.status} 
-                  color={pet.status === 'available' ? 'success' : pet.status === 'reserved' ? 'warning' : 'default'} 
+                  color={pet.status === 'available_for_sale' ? 'success' : pet.status === 'reserved' ? 'warning' : 'default'} 
                   variant="outlined"
                 />
               </Box>
@@ -337,7 +338,7 @@ const NewPetDetails = () => {
                   size="large" 
                   startIcon={<CheckIcon />}
                   onClick={handleReserve}
-                  disabled={pet.status !== 'available'}
+                  disabled={pet.status !== 'available_for_sale'}
                 >
                   Reserve Now
                 </Button>
@@ -689,9 +690,9 @@ const NewPetDetails = () => {
                         sx={{ mb: 1, justifyContent: 'flex-start' }}
                       >
                         <Box sx={{ textAlign: 'left' }}>
-                          <Typography variant="subtitle1">Online Purchase</Typography>
+                          <Typography variant="subtitle1">Online Payment with Pickup</Typography>
                           <Typography variant="body2" color="text.secondary">
-                            Reserve online and pay through our secure payment gateway
+                            Pay online now and pick up the pet from the store at your scheduled visit
                           </Typography>
                         </Box>
                       </Button>
@@ -705,12 +706,17 @@ const NewPetDetails = () => {
                         sx={{ justifyContent: 'flex-start' }}
                       >
                         <Box sx={{ textAlign: 'left' }}>
-                          <Typography variant="subtitle1">Offline Purchase</Typography>
+                          <Typography variant="subtitle1">In-Store Purchase</Typography>
                           <Typography variant="body2" color="text.secondary">
-                            Reserve and visit the store to complete the purchase
+                            Visit the store to meet the pet and complete payment there
                           </Typography>
                         </Box>
                       </Button>
+                      <Alert severity="info" sx={{ mt: 2 }}>
+                        <Typography variant="body2">
+                          <strong>Delivery Option:</strong> Coming soon! We're working on home delivery services for pet purchases.
+                        </Typography>
+                      </Alert>
                     </Box>
                   )}
                   
@@ -769,7 +775,7 @@ const NewPetDetails = () => {
                         sx={{ mb: 2, justifyContent: 'flex-start' }}
                       >
                         <Box sx={{ textAlign: 'left' }}>
-                          <Typography variant="subtitle1">Visit Store</Typography>
+                          <Typography variant="subtitle1">Store Visit</Typography>
                           <Typography variant="body2" color="text.secondary">
                             Schedule a visit to meet the pet at the store
                           </Typography>
@@ -809,6 +815,11 @@ const NewPetDetails = () => {
                               </TextField>
                             </Grid>
                           </Grid>
+                          <Alert severity="info" sx={{ mt: 2 }}>
+                            <Typography variant="body2">
+                              After your visit, you'll {reservationData.purchaseMethod === 'online' ? 'pick up your pet immediately' : 'complete the purchase and take your pet home'}.
+                            </Typography>
+                          </Alert>
                         </Box>
                       )}
                     </Box>
@@ -869,14 +880,10 @@ const NewPetDetails = () => {
                             <strong>Pet:</strong> {pet?.name}
                           </Typography>
                           <Typography><strong>Price:</strong> ₹{pet?.price?.toLocaleString()}</Typography>
-                          <Typography><strong>Purchase Method:</strong> {reservationData.purchaseMethod}</Typography>
-                          <Typography><strong>Reservation Type:</strong> {reservationData.reservationType}</Typography>
-                          {reservationData.reservationType === 'visit' && (
-                            <>
-                              <Typography><strong>Visit Date:</strong> {reservationData.visitDetails.preferredDate}</Typography>
-                              <Typography><strong>Visit Time:</strong> {reservationData.visitDetails.preferredTime}</Typography>
-                            </>
-                          )}
+                          <Typography><strong>Purchase Method:</strong> {reservationData.purchaseMethod === 'online' ? 'Online Payment with Pickup' : 'In-Store Purchase'}</Typography>
+                          <Typography><strong>Reservation Type:</strong> Store Visit</Typography>
+                          <Typography><strong>Visit Date:</strong> {reservationData.visitDetails.preferredDate || 'Not selected'}</Typography>
+                          <Typography><strong>Visit Time:</strong> {reservationData.visitDetails.preferredTime}</Typography>
                           <Typography><strong>Contact:</strong> {reservationData.contactInfo.name} ({reservationData.contactInfo.email}, {reservationData.contactInfo.phone})</Typography>
                         </CardContent>
                       </Card>
@@ -891,6 +898,11 @@ const NewPetDetails = () => {
                           notes: e.target.value
                         }))}
                       />
+                      <Alert severity="warning" sx={{ mt: 2 }}>
+                        <Typography variant="body2">
+                          <strong>Important:</strong> This is a reservation only. {reservationData.purchaseMethod === 'online' ? 'You will complete payment online and pick up your pet during your scheduled visit.' : 'You will complete payment and take your pet home during your scheduled visit.'} Delivery option coming soon!
+                        </Typography>
+                      </Alert>
                     </Box>
                   )}
                   

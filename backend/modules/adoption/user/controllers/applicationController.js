@@ -62,7 +62,18 @@ const getPetDetails = async (req, res) => {
       .select('-createdBy -updatedBy');
 
     if (!pet || !pet.isActive) {
-      return res.status(404).json({ success: false, error: 'Pet not found' });
+      return res.status(404).json({ 
+        success: false, 
+        error: `Pet with ID ${req.params.id} not found. The pet may have been adopted by another user, removed by the adoption manager, or the link you're using may be outdated. Please go back to the pet listings and select a currently available pet.` 
+      });
+    }
+
+    // Check if pet is available for adoption
+    if (pet.status !== 'available') {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Pet is not available for adoption. Current status: ${pet.status}. This pet may have already been reserved or adopted by someone else.` 
+      });
     }
 
     res.json({ success: true, data: pet });
@@ -180,6 +191,20 @@ const submitApplication = async (req, res) => {
       return res.status(400).json({ 
         success: false, 
         error: `Pet is not available for adoption. Current status: ${pet.status}. This pet may have already been reserved or adopted by someone else.` 
+      });
+    }
+
+    // Check if there are any existing pending applications for this pet by other users
+    const existingPendingApplications = await AdoptionRequest.countDocuments({
+      petId: pet._id,
+      status: 'pending',
+      isActive: true
+    });
+
+    if (existingPendingApplications > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'This pet already has pending adoption applications. Please check back later or select a different pet.' 
       });
     }
 

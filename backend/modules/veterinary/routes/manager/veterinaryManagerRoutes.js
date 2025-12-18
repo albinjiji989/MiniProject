@@ -9,6 +9,7 @@ const serviceController = require('../../manager/controllers/serviceController')
 const patientController = require('../../manager/controllers/patientController');
 const medicalController = require('../../user/controllers/medicalRecordsController');
 const veterinaryMedicalRecordController = require('../../manager/controllers/veterinaryMedicalRecordController');
+const medicalRecordAttachmentController = require('../../manager/controllers/medicalRecordAttachmentController');
 const veterinaryAppointmentController = require('../../manager/controllers/veterinaryAppointmentController');
 const VeterinaryStaffInvite = require('../../manager/models/VeterinaryStaffInvite');
 const { sendMail } = require('../../../../core/utils/email');
@@ -38,17 +39,17 @@ const requireManagerOrWorker = [auth, authorizeModule('veterinary'), (req, res, 
 
 // Dashboard Stats
 router.get('/dashboard/stats', requireManager, dashboardController.getDashboardStats);
-router.get('/appointments', requireManager, dashboardController.getAppointments);
+// Removed conflicting route: router.get('/appointments', requireManager, dashboardController.getAppointments);
 router.get('/records', requireManager, dashboardController.getMedicalRecords);
 router.get('/services', requireManager, dashboardController.getServices);
 
 // Appointments Management
 router.post('/appointments', requireManager, [
-  body('petId').notEmpty(),
-  body('ownerId').notEmpty(),
-  body('serviceId').notEmpty(),
-  body('appointmentDate').isISO8601(),
-  body('timeSlot').notEmpty()
+  body('petId').notEmpty().withMessage('Pet ID is required'),
+  body('ownerId').notEmpty().withMessage('Owner ID is required'),
+  body('serviceId').notEmpty().withMessage('Service ID is required'),
+  body('appointmentDate').isISO8601().withMessage('Valid appointment date is required'),
+  body('timeSlot').notEmpty().withMessage('Time slot is required')
 ], veterinaryAppointmentController.createAppointment);
 
 router.get('/appointments', requireManager, veterinaryAppointmentController.getAppointments);
@@ -59,11 +60,23 @@ router.get('/appointments/slots/available', requireManager, veterinaryAppointmen
 
 // Services Management
 router.post('/services', requireManager, [
-  body('name').notEmpty(),
-  body('price').isNumeric(),
-  body('duration').isNumeric()
+  body('name').notEmpty().withMessage('Service name is required').isLength({ max: 100 }).withMessage('Service name must be less than 100 characters'),
+  body('description').notEmpty().withMessage('Description is required').isLength({ max: 500 }).withMessage('Description must be less than 500 characters'),
+  body('price').isFloat({ min: 0 }).withMessage('Price must be a positive number'),
+  body('duration').isInt({ min: 1 }).withMessage('Duration must be a positive integer'),
+  body('category').optional().isIn(['examination', 'vaccination', 'surgery', 'grooming', 'dentistry', 'other']).withMessage('Invalid category')
 ], serviceController.createService);
-router.put('/services/:id', requireManager, serviceController.updateService);
+
+router.get('/services', requireManager, serviceController.getServices);
+
+router.put('/services/:id', requireManager, [
+  body('name').optional().isLength({ max: 100 }).withMessage('Service name must be less than 100 characters'),
+  body('description').optional().isLength({ max: 500 }).withMessage('Description must be less than 500 characters'),
+  body('price').optional().isFloat({ min: 0 }).withMessage('Price must be a positive number'),
+  body('duration').optional().isInt({ min: 1 }).withMessage('Duration must be a positive integer'),
+  body('category').optional().isIn(['examination', 'vaccination', 'surgery', 'grooming', 'dentistry', 'other']).withMessage('Invalid category')
+], serviceController.updateService);
+
 router.delete('/services/:id', requireManager, serviceController.deleteService);
 router.patch('/services/:id/toggle', requireManager, serviceController.toggleServiceStatus);
 
@@ -73,24 +86,24 @@ router.get('/patients/:id', requireManager, patientController.getPatientDetails)
 
 // Store setup
 router.get('/me/store', requireManager, storeController.getMyStoreInfo);
-router.put('/me/store', requireManager, [ body('storeName').optional().isString().isLength({ min: 3 }) ], storeController.updateMyStoreInfo);
+router.put('/me/store', requireManager, [ body('storeName').optional().isString().isLength({ min: 3 }).withMessage('Store name must be at least 3 characters') ], storeController.updateMyStoreInfo);
 
 // Staff (veterinary staff)
 router.get('/staff', requireManager, staffController.listStaff);
-router.post('/staff', requireManager, [ body('name').notEmpty(), body('email').isEmail(), body('phone').notEmpty(), body('role').optional().isString() ], staffController.createStaff);
+router.post('/staff', requireManager, [ body('name').notEmpty().withMessage('Name is required'), body('email').isEmail().withMessage('Valid email is required'), body('phone').notEmpty().withMessage('Phone is required'), body('role').optional().isString().withMessage('Role must be a string') ], staffController.createStaff);
 router.put('/staff/:id', requireManager, staffController.updateStaff);
 router.delete('/staff/:id', requireManager, staffController.deleteStaff);
 
 // Medical records (manager or staff)
-router.post('/pets/:petId/medical-records', requireManagerOrWorker, [ body('visitDate').optional().isISO8601() ], medicalController.createRecord);
+router.post('/pets/:petId/medical-records', requireManagerOrWorker, [ body('visitDate').optional().isISO8601().withMessage('Valid visit date is required') ], medicalController.createRecord);
 router.get('/pets/:petId/medical-records', requireManagerOrWorker, medicalController.listRecordsForPet);
 
 // Enhanced veterinary medical records
 router.post('/medical-records', requireManagerOrWorker, [
-  body('petId').notEmpty(),
-  body('visitDate').isISO8601(),
-  body('diagnosis').notEmpty(),
-  body('treatment').notEmpty()
+  body('petId').notEmpty().withMessage('Pet ID is required'),
+  body('visitDate').isISO8601().withMessage('Valid visit date is required'),
+  body('diagnosis').notEmpty().withMessage('Diagnosis is required'),
+  body('treatment').notEmpty().withMessage('Treatment is required')
 ], veterinaryMedicalRecordController.createMedicalRecord);
 
 router.get('/medical-records/pet/:petId', requireManagerOrWorker, veterinaryMedicalRecordController.getMedicalRecordsByPet);
@@ -98,8 +111,12 @@ router.get('/medical-records/:id', requireManagerOrWorker, veterinaryMedicalReco
 router.put('/medical-records/:id', requireManagerOrWorker, veterinaryMedicalRecordController.updateMedicalRecord);
 router.delete('/medical-records/:id', requireManagerOrWorker, veterinaryMedicalRecordController.deleteMedicalRecord);
 
+// Medical record attachments
+router.post('/medical-records/:recordId/attachments', requireManagerOrWorker, medicalRecordAttachmentController.uploadMedicalRecordAttachments);
+router.get('/medical-records/:recordId/attachments', requireManagerOrWorker, medicalRecordAttachmentController.getMedicalRecordAttachments);
+
 // Staff invite (OTP) and verify to create veterinary staff user with temp password
-router.post('/staff/invite', requireManager, [ body('name').notEmpty(), body('email').isEmail(), body('phone').optional() ], async (req, res) => {
+router.post('/staff/invite', requireManager, [ body('name').notEmpty().withMessage('Name is required'), body('email').isEmail().withMessage('Valid email is required'), body('phone').optional() ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ success: false, message: 'Validation errors', errors: errors.array() });
@@ -116,7 +133,7 @@ router.post('/staff/invite', requireManager, [ body('name').notEmpty(), body('em
   }
 });
 
-router.post('/staff/verify', requireManager, [ body('email').isEmail(), body('otp').matches(/^\d{6}$/) ], async (req, res) => {
+router.post('/staff/verify', requireManager, [ body('email').isEmail().withMessage('Valid email is required'), body('otp').matches(/^\d{6}$/).withMessage('OTP must be 6 digits') ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ success: false, message: 'Validation errors', errors: errors.array() });

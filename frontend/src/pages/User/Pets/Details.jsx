@@ -1,13 +1,17 @@
-import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { 
-  Box, 
-  Container, 
-  Typography, 
-  Card, 
-  CardContent, 
-  Button, 
-  Grid, 
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useTheme, alpha } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import {
+  Container,
+  Box,
+  Card,
+  CardContent,
+  Grid,
+  Typography,
+  Button,
+  Avatar,
+  Chip,
   IconButton,
   Menu,
   MenuItem,
@@ -16,38 +20,33 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
-  Alert,
-  Chip,
+  FormControl,
+  InputLabel,
+  Select,
   CircularProgress,
+  Alert,
   Accordion,
   AccordionSummary,
-  AccordionDetails,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
-  Avatar,
-  useTheme,
-  alpha,
-  useMediaQuery
-} from '@mui/material'
-import {
+  AccordionDetails
+} from '@mui/material';
+import { 
+  Cake as CakeIcon,
   ArrowBack as BackIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
   MoreVert as MoreVertIcon,
-  MedicalServices as MedicalIcon,
+  Pets as PetsIcon,
+  CalendarToday as CalendarIcon,
+  Male as MaleIcon,
+  Female as FemaleIcon,
+  Help as HelpIcon,
+  MedicalInformation as MedicalIcon,
   History as HistoryIcon,
   ExpandMore as ExpandMoreIcon,
-  CalendarToday as CalendarIcon,
-  Female as FemaleIcon,
-  Male as MaleIcon,
-  Help as HelpIcon,
-  Pets as PetsIcon
-} from '@mui/icons-material'
-import { userPetsAPI, petsAPI, resolveMediaUrl, apiClient } from '../../../services/api'
+  Edit as EditIcon,
+  Delete as DeleteIcon
+} from '@mui/icons-material';
+import { apiClient, petsAPI, userPetsAPI, petShopAPI, resolveMediaUrl } from '../../../services/api';
 
-const UserPetDetails = () => {
+const PetDetails = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const theme = useTheme()
@@ -63,8 +62,14 @@ const UserPetDetails = () => {
   const [deleteError, setDeleteError] = useState('')
   const [medicalHistory, setMedicalHistory] = useState([])
   const [medicalHistoryLoading, setMedicalHistoryLoading] = useState(false)
-
-  const loadPet = async () => {
+  const [showBirthdayDialog, setShowBirthdayDialog] = useState(false);
+  const [birthdayPreference, setBirthdayPreference] = useState(null);
+  const [preferredBirthday, setPreferredBirthday] = useState('');
+  const [birthdayLoading, setBirthdayLoading] = useState(false);
+  const [birthdayError, setBirthdayError] = useState('');
+  const [birthdaySuccess, setBirthdaySuccess] = useState('');
+  
+  const loadPetDetails = async () => {
     try {
       setLoading(true)
       setError('')
@@ -127,43 +132,67 @@ const UserPetDetails = () => {
             loadMedicalHistory()
             return
           } catch (userError) {
-            console.log('❌ Failed to load from userPetsAPI:', userError.message)
-            // Last resort: check if this might be a reservation ID
+            console.log('❌ Failed to load from userPetsAPI:', userError.message);
+            // Last resort: check if this might be a petshop item ID
             try {
-              const reservationRes = await apiClient.get(`/petshop/user/public/reservations/${id}`)
-              const reservation = reservationRes.data?.data?.reservation
-              if (reservation && reservation.itemId) {
-                console.log('💡 Found reservation, redirecting to item ID:', reservation.itemId._id)
-                // Redirect to the actual pet ID
-                navigate(`/User/pets/${reservation.itemId._id}`, { replace: true })
-                return
+              const listingRes = await petShopAPI.getPublicListing(id);
+              const listing = listingRes.data?.data?.item || listingRes.data?.data || listingRes.data;
+              if (listing && listing._id) {
+                console.log('💡 Found petshop listing, using listing data directly');
+                // Use the listing data directly
+                setPet(listing);
+                setPetType('centralized');
+                
+                // Load medical history
+                loadMedicalHistory();
+                return;
               }
-            } catch (reservationError) {
-              console.log('Reservation check failed:', reservationError.message)
+            } catch (listingError) {
+              console.log('Petshop listing check failed:', listingError.message);
+            }
+            
+            // Check if this is a purchased pet from petshop
+            try {
+              const purchasedPetsRes = await petShopAPI.getMyPurchasedPets();
+              const purchasedPets = purchasedPetsRes.data?.data?.pets || [];
+              const purchasedPet = purchasedPets.find(pet => pet._id === id || pet.petCode === id);
+              
+              if (purchasedPet) {
+                console.log('💡 Found purchased pet, using purchased pet data directly');
+                // Use the purchased pet data directly
+                setPet(purchasedPet);
+                setPetType('centralized');
+                
+                // Load medical history
+                loadMedicalHistory();
+                return;
+              }
+            } catch (purchasedError) {
+              console.log('Purchased pet check failed:', purchasedError.message);
             }
             
             // Try to get pet by petCode from centralized registry
             try {
               // If id looks like a petCode (3 letters + 5 digits), try that
               if (/^[A-Z]{3}\d{5}$/.test(id)) {
-                const res = await petsAPI.getPet(id)
-                const petData = res.data?.data?.pet || res.data?.data || res.data
+                const res = await petsAPI.getPet(id);
+                const petData = res.data?.data?.pet || res.data?.data || res.data;
                 console.log('✅ Pet data received from centralized registry by petCode:', {
                   petData,
                   images: petData?.images,
                   imagesCount: petData?.images?.length || 0,
                   imageIds: petData?.imageIds,
                   imageIdsCount: petData?.imageIds?.length || 0
-                })
-                setPet(petData)
-                setPetType('centralized')
+                });
+                setPet(petData);
+                setPetType('centralized');
                 
                 // Load medical history
-                loadMedicalHistory()
-                return
+                loadMedicalHistory();
+                return;
               }
             } catch (petCodeError) {
-              console.log('Pet code lookup failed:', petCodeError.message)
+              console.log('Pet code lookup failed:', petCodeError.message);
             }
             
             console.log('❌ Pet not found for ID:', id)
@@ -192,30 +221,42 @@ const UserPetDetails = () => {
           setMedicalHistory([])
         }
       } else {
-        // For centralized pets, try centralized registry first
+        // For centralized pets (including petshop), try centralized registry first
         try {
           const res = await petsAPI.getHistory(id)
           setMedicalHistory(res.data?.data?.history || res.data?.data?.medicalHistory || [])
         } catch (centralizedError) {
-          // Fall back to userPetsAPI
-          try {
-            const res = await userPetsAPI.getMedicalHistory(id)
-            setMedicalHistory(res.data?.data?.medicalHistory || [])
-          } catch (userError) {
-            console.log('Failed to load medical history from both APIs:', { centralizedError, userError })
-            setMedicalHistory([])
+          // For petshop pets, try the petshop specific endpoint
+          if (pet?.source === 'petshop') {
+            try {
+              // Petshop pets might not have medical history yet, so we'll set an empty array
+              setMedicalHistory([])
+            } catch (petshopError) {
+              console.log('Failed to load medical history from petshop API:', petshopError)
+              setMedicalHistory([])
+            }
+          } else {
+            // Fall back to userPetsAPI for other centralized pets
+            try {
+              const res = await userPetsAPI.getMedicalHistory(id)
+              setMedicalHistory(res.data?.data?.medicalHistory || [])
+            } catch (userError) {
+              console.log('Failed to load medical history from both APIs:', { centralizedError, userError })
+              setMedicalHistory([])
+            }
           }
         }
       }
     } catch (e) {
       console.error('Failed to load medical history:', e)
+      setMedicalHistory([])
     } finally {
       setMedicalHistoryLoading(false)
     }
   }
 
   useEffect(() => {
-    loadPet()
+    loadPetDetails()
   }, [id])
 
   const handleMenuOpen = (event) => {
@@ -336,6 +377,79 @@ const UserPetDetails = () => {
         return <HelpIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
     }
   }
+
+  const handleSetBirthday = () => {
+    setPreferredBirthday('');
+    setBirthdayError('');
+    setBirthdaySuccess('');
+    setShowBirthdayDialog(true);
+  };
+
+  const handleSubmitPreference = async () => {
+    if (!preferredBirthday) {
+      setBirthdayError('Please select a preferred birthday');
+      return;
+    }
+
+    if (preferredBirthday < 1 || preferredBirthday > 31) {
+      setBirthdayError('Preferred birthday must be between 1 and 31');
+      return;
+    }
+
+    setBirthdayLoading(true);
+    setBirthdayError('');
+    setBirthdaySuccess('');
+
+    try {
+      // Determine the pet model type
+      let petModel = 'Pet';
+      if (pet?.source === 'adoption') {
+        petModel = 'AdoptionPet';
+      } else if (pet?.source === 'petshop') {
+        petModel = 'PetInventoryItem';
+      } else if (pet?.tags?.includes('user-added')) {
+        petModel = 'PetNew';
+      }
+
+      const response = await apiClient.post('/pets/birthday-preference', {
+        petId: pet._id,
+        petModel: petModel,
+        currentAge: {
+          value: pet.age,
+          unit: pet.ageUnit || 'months'
+        },
+        preferredBirthday: parseInt(preferredBirthday)
+      });
+
+      if (response.data.success) {
+        setBirthdaySuccess('Birthday preference set successfully!');
+        setBirthdayPreference(response.data.data.preference);
+        // Reload pet details to update age calculation
+        loadPetDetails();
+        // Close dialog after 1.5 seconds
+        setTimeout(() => {
+          setShowBirthdayDialog(false);
+        }, 1500);
+      } else {
+        setBirthdayError(response.data.message || 'Failed to set birthday preference');
+      }
+    } catch (err) {
+      setBirthdayError(err.response?.data?.message || 'Failed to set birthday preference');
+    } finally {
+      setBirthdayLoading(false);
+    }
+  };
+
+  // Helper function to get ordinal suffix
+  const getOrdinalSuffix = (day) => {
+    if (day > 3 && day < 21) return 'th';
+    switch (day % 10) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
+    }
+  };
 
   if (loading) {
     return (
@@ -657,8 +771,156 @@ const UserPetDetails = () => {
           </Accordion>
         </CardContent>
       </Card>
+      
+      {/* Birthday Preference Section */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">Birthday Preference</Typography>
+            {!birthdayPreference && (
+              <Button 
+                variant="outlined" 
+                size="small"
+                onClick={handleSetBirthday}
+              >
+                Set Birthday Preference
+              </Button>
+            )}
+          </Box>
+          
+          {birthdayPreference ? (
+            <Box>
+              <Typography variant="body1" sx={{ mb: 1 }}>
+                <strong>Preferred Birthday:</strong> {birthdayPreference.preferredBirthday}
+                {getOrdinalSuffix(birthdayPreference.preferredBirthday)} of the month
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 1 }}>
+                <strong>Calculated Birth Date:</strong> {new Date(birthdayPreference.calculatedBirthDate).toLocaleDateString()}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Your pet's age will automatically update based on this birth date.
+              </Typography>
+            </Box>
+          ) : (
+            <Box>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                You haven't set a birthday preference for {pet?.name}. Setting a preferred birthday 
+                will allow us to automatically calculate and update your pet's age.
+              </Typography>
+              <Button 
+                variant="contained" 
+                onClick={handleSetBirthday}
+              >
+                Set Birthday Preference
+              </Button>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Birthday Preference Dialog */}
+      <Dialog open={showBirthdayDialog} onClose={() => setShowBirthdayDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Set Pet Birthday Preference</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            {birthdayError && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {birthdayError}
+              </Alert>
+            )}
+            {birthdaySuccess && (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                {birthdaySuccess}
+              </Alert>
+            )}
+            
+            {pet && (
+              <Typography variant="body1" sx={{ mb: 3 }}>
+                Your pet <strong>{pet.name}</strong> is currently {pet.age} {pet.ageUnit || 'months'} old. 
+                You can set a preferred birthday for your pet, and we'll automatically calculate 
+                their age going forward.
+              </Typography>
+            )}
+            
+            <FormControl fullWidth sx={{ mb: 3 }}>
+              <InputLabel>Preferred Birthday (Day of Month)</InputLabel>
+              <Select
+                value={preferredBirthday}
+                onChange={(e) => setPreferredBirthday(e.target.value)}
+                label="Preferred Birthday (Day of Month)"
+                disabled={birthdayLoading || birthdaySuccess}
+              >
+                {[...Array(31)].map((_, i) => (
+                  <MenuItem key={i + 1} value={i + 1}>
+                    {i + 1}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              We'll calculate your pet's actual birth date based on their current age and 
+              your preferred birthday. From then on, their age will automatically update.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowBirthdayDialog(false)} disabled={birthdayLoading || birthdaySuccess}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSubmitPreference} 
+            variant="contained" 
+            disabled={birthdayLoading || !preferredBirthday || birthdaySuccess}
+            startIcon={birthdayLoading ? <CircularProgress size={20} /> : null}
+          >
+            {birthdayLoading ? 'Setting...' : birthdaySuccess ? 'Done' : 'Set Birthday'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Menu */}
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={handleEdit}>
+          <EditIcon sx={{ mr: 2 }} />
+          Edit Pet
+        </MenuItem>
+        <MenuItem onClick={handleDeleteClick}>
+          <DeleteIcon sx={{ mr: 2 }} />
+          Delete Pet
+        </MenuItem>
+      </Menu>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title">
+          {"Delete Pet?"}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-description">
+            Are you sure you want to delete this pet? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel}>
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteConfirm} color="error" autoFocus>
+            {deleting ? <CircularProgress size={24} /> : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   )
 }
 
-export default UserPetDetails
+export default PetDetails

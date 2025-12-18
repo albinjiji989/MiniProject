@@ -83,6 +83,20 @@ export default function VeterinaryManagerAppointments() {
     }
   };
 
+  const getSourceBadge = (appointment) => {
+    // Check if appointment has _source property (from user collection) or if it's from manager collection
+    const isUserAppointment = appointment._source === 'user';
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+        isUserAppointment 
+          ? 'bg-green-100 text-green-800' 
+          : 'bg-blue-100 text-blue-800'
+      }`}>
+        {isUserAppointment ? 'User Booking' : 'Manager Booking'}
+      </span>
+    );
+  };
+
   const updateAppointmentStatus = async (appointmentId, newStatus) => {
     try {
       await veterinaryAPI.managerUpdateAppointment(appointmentId, { status: newStatus });
@@ -228,6 +242,9 @@ export default function VeterinaryManagerAppointments() {
                   Status
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Source
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -235,7 +252,7 @@ export default function VeterinaryManagerAppointments() {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center">
+                  <td colSpan="7" className="px-6 py-4 text-center">
                     <div className="flex justify-center">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
                     </div>
@@ -246,11 +263,11 @@ export default function VeterinaryManagerAppointments() {
                   <tr key={appointment._id}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{appointment.pet?.name || 'Unknown Pet'}</div>
-                      <div className="text-sm text-gray-500">{appointment.owner?.name || 'Unknown Owner'}</div>
+                      <div className="text-sm text-gray-500">{appointment.owner?.name || appointment.ownerId?.name || 'Unknown Owner'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{new Date(appointment.appointmentDate).toLocaleDateString()}</div>
-                      <div className="text-sm text-gray-500">{appointment.timeSlot}</div>
+                      <div className="text-sm text-gray-900">{appointment.appointmentDate ? new Date(appointment.appointmentDate).toLocaleDateString() : 'Anytime'}</div>
+                      <div className="text-sm text-gray-500">{appointment.timeSlot || 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {appointment.visitType || 'Consultation'}
@@ -260,6 +277,9 @@ export default function VeterinaryManagerAppointments() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {getStatusBadge(appointment.status)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {getSourceBadge(appointment)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
@@ -312,7 +332,7 @@ export default function VeterinaryManagerAppointments() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">
                     No appointments found
                   </td>
                 </tr>

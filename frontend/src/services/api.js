@@ -28,6 +28,42 @@ export const resolveMediaUrl = (pathOrUrl) => {
   }
 }
 
+// Pet Age API Functions
+export const petAgeAPI = {
+  // Get current age for a pet
+  getCurrentAge: async (petCode) => {
+    try {
+      const response = await apiClient.get(`/pet-age/${petCode}/current`)
+      return response.data
+    } catch (error) {
+      console.error(`Error fetching age for pet ${petCode}:`, error)
+      throw error
+    }
+  },
+  
+  // Get pets by age range
+  getPetsByAgeRange: async (minAge, maxAge, unit) => {
+    try {
+      const response = await apiClient.get(`/pet-age/range?minAge=${minAge}&maxAge=${maxAge}&unit=${unit}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching pets by age range:', error)
+      throw error
+    }
+  },
+  
+  // Get age statistics
+  getAgeStatistics: async () => {
+    try {
+      const response = await apiClient.get('/pet-age/statistics')
+      return response.data
+    } catch (error) {
+      console.error('Error fetching age statistics:', error)
+      throw error
+    }
+  }
+}
+
 // Create axios instance
 export const api = axios.create({
   baseURL: API_URL,
@@ -112,7 +148,7 @@ export const authAPI = {
 }
 
 // Users API
-export const usersAPI = {
+export const userAPI = {
   // Basic CRUD operations
   getUsers: (params) => api.get('/users', { params }),
   getUser: (id) => api.get(`/users/${id}`),
@@ -142,8 +178,11 @@ export const usersAPI = {
   bulkDelete: (userIds) => api.delete('/users/bulk/delete', { data: { userIds } }),
 }
 
+// Export usersAPI as an alias for userAPI to maintain compatibility
+export const usersAPI = userAPI;
+
 // Pets API
-export const petsAPI = {
+export const petAPI = {
   getPets: (params) => api.get('/pets', { params }),
   getPet: (id) => api.get(`/pets/${id}`),
   getRegistryPet: (id) => api.get(`/pets/registry/${id}`),
@@ -300,6 +339,12 @@ export const petShopAPI = {
   regenerateHandoverOTP: (reservationId) => api.post(`/petshop/user/payments/handover/${reservationId}/regenerate-otp`),
   // User purchased pets
   getMyPurchasedPets: () => api.get('/petshop/user/my-purchased-pets'),
+  
+  // ML Recommendations
+  getPersonalizedRecommendations: (params) => api.get('/petshop/user/ml/recommendations', { params }),
+  getPopularPets: (params) => api.get('/petshop/user/ml/popular', { params }),
+  getPredictedPrice: (petId) => api.get(`/petshop/user/ml/price-prediction/${petId}`),
+  getBreedInsights: (params) => api.get('/petshop/user/ml/breed-insights', { params }),
 }
 
 // Rescue API
@@ -367,6 +412,12 @@ export const petShopAdminAPI = {
   // Store name change requests
   listStoreNameChangeRequests: (params) => api.get('/petshop/admin/store-name-change-requests', { params }),
   decideStoreNameChangeRequest: (id, decision, reason='') => api.put(`/petshop/admin/store-name-change-requests/${id}/decision`, { decision, reason }),
+  
+  // ML Market Intelligence
+  getMarketAnalysis: () => api.get('/petshop/admin/ml/market-analysis'),
+  getCustomerSegmentationReport: () => api.get('/petshop/admin/ml/customer-segments'),
+  getInventoryForecasts: (params) => api.get('/petshop/admin/ml/inventory-forecasts', { params }),
+  getPricingInsights: () => api.get('/petshop/admin/ml/pricing-insights'),
 }
 
 // PetShop Manager API (reservations)
@@ -395,6 +446,21 @@ export const petShopManagerAPI = {
   verifyHandoverOTP: (id, otp) => api.post(`/petshop/manager/reservations/${id}/handover/verify-otp`, { otp }),
   // Payment approval
   approvePayment: (id, data) => api.post(`/petshop/manager/reservations/${id}/approve-payment`, data),
+  
+  // Inventory
+  listInventory: (params) => api.get('/petshop/manager/inventory', { params }),
+  getInventoryItem: (id) => api.get(`/petshop/manager/inventory/${id}`),
+  createInventoryItem: (payload) => api.post('/petshop/manager/inventory', payload),
+  updateInventoryItem: (id, payload) => api.put(`/petshop/manager/inventory/${id}`, payload),
+  deleteInventoryItem: (id) => api.delete(`/petshop/manager/inventory/${id}`),
+  
+  // ML Analytics
+  getMLAnalytics: () => api.get('/petshop/manager/ml/analytics'),
+  getKNNRecommendations: (params) => api.get('/petshop/manager/ml/recommendations', { params }),
+  getBayesianCategories: (params) => api.get('/petshop/manager/ml/categories', { params }),
+  predictPrice: (data) => api.post('/petshop/manager/ml/price-prediction', data),
+  getCustomerSegments: (params) => api.get('/petshop/manager/ml/customer-segments', { params }),
+  getDemandForecast: (params) => api.get('/petshop/manager/ml/demand-forecast', { params }),
 }
 
 // Pharmacy API
@@ -414,37 +480,48 @@ export const pharmacyAPI = {
 
 // Temporary Care API
 export const temporaryCareAPI = {
-  // Manager store setup
-  getMyStore: () => api.get('/temporary-care/manager/me/store'),
-  updateMyStore: (payload) => api.put('/temporary-care/manager/me/store', payload),
-  // Dashboard
+  // User functions
+  listPublicCenters: () => api.get('/temporary-care/public/centers'),
+  submitRequest: (data) => api.post('/temporary-care/requests', data),
+  listHosts: () => api.get('/temporary-care/hosts'),
+  listMyStays: () => api.get('/temporary-care/my-stays'),
+  getActiveCare: () => api.get('/temporary-care/user/active-care'),
+  getCareHistory: () => api.get('/temporary-care/user/care-history'),
+  
+  // Manager functions
   managerGetDashboardStats: () => api.get('/temporary-care/manager/dashboard/stats'),
-  managerGetBookings: (params) => api.get('/temporary-care/manager/bookings', { params }),
-  managerGetFacilities: (params) => api.get('/temporary-care/manager/facilities', { params }),
-  managerGetCaregivers: (params) => api.get('/temporary-care/manager/caregivers-list', { params }),
-  // Manager center
-  getMyCenter: () => api.get('/temporary-care/manager/me/center'),
-  saveMyCenter: (payload) => api.post('/temporary-care/manager/me/center', payload),
-  // Manager requests
   managerListRequests: (params) => api.get('/temporary-care/manager/requests', { params }),
-  managerDecideRequest: (id, decision) => api.put(`/temporary-care/manager/requests/${id}/decision`, { decision }),
-  managerAssignRequest: (id, caregiverId) => api.post(`/temporary-care/manager/requests/${id}/assign`, { caregiverId }),
-  // Manager caregivers
   listCaregivers: (params) => api.get('/temporary-care/caregivers', { params }),
-  createCaregiver: (caregiverData) => api.post('/temporary-care/caregivers', caregiverData),
-  updateCaregiver: (id, caregiverData) => api.put(`/temporary-care/caregivers/${id}`, caregiverData),
-  // Manager care records
-  getTemporaryCares: (params) => api.get('/temporary-care', { params }),
-  createTemporaryCare: (temporaryCareData) => api.post('/temporary-care', temporaryCareData),
-  getStats: () => api.get('/temporary-care/stats'),
-  // User requests
-  submitRequest: (payload) => api.post('/temporary-care/user/requests', payload),
-  listMyRequests: () => api.get('/temporary-care/user/requests'),
-  listMyActiveCare: () => api.get('/temporary-care/user/my-active-care'),
-  listPublicCenters: () => api.get('/temporary-care/user/public/centers'),
-  // Add missing methods for TemporaryCareDashboard
-  listHosts: () => api.get('/temporary-care/user/public/centers'),
-  listMyStays: () => api.get('/temporary-care/user/my-active-care'),
+  managerDecideRequest: (id, decision) => api.put(`/temporary-care/manager/requests/${id}/decide`, { decision }),
+  managerAssignRequest: (id, caregiverId) => api.put(`/temporary-care/manager/requests/${id}/assign`, { caregiverId }),
+  createCaregiver: (data) => api.post('/temporary-care/caregivers', data),
+  
+  // Payment functions
+  getTemporaryCare: (id) => api.get(`/temporary-care/${id}`),
+  createPaymentOrder: (data) => api.post('/temporary-care/payments/order', data),
+  verifyPayment: (data) => api.post('/temporary-care/payments/verify', data),
+  
+  // Activity functions
+  getCareActivities: (id) => api.get(`/temporary-care/${id}/activities`),
+  logCareActivity: (data) => api.post('/temporary-care/activities', data),
+  
+  // OTP endpoints
+  generateDropOTP: (data) => api.post('/temporary-care/user/otp/generate-drop', data),
+  verifyDropOTP: (data) => api.post('/temporary-care/user/otp/verify-drop', data),
+  generatePickupOTP: (data) => api.post('/temporary-care/user/otp/generate-pickup', data),
+  verifyPickupOTP: (data) => api.post('/temporary-care/user/otp/verify-pickup', data),
+  
+  // Pets in temporary care
+  getPetsInCare: () => api.get('/temporary-care/user/pets-in-care')
+}
+
+// Admin API for Temporary Care
+export const adminTemporaryCareAPI = {
+  getCenters: () => api.get('/temporary-care/admin/centers'),
+  updateCenterStatus: (id, data) => api.put(`/temporary-care/admin/centers/${id}/status`, data),
+  getStats: () => api.get('/temporary-care/admin/stats'),
+  getRevenueReport: () => api.get('/temporary-care/admin/reports/revenue'),
+  getCareTypeDistribution: () => api.get('/temporary-care/admin/reports/care-types'),
 }
 
 // Veterinary API
@@ -454,18 +531,22 @@ export const veterinaryAPI = {
   getAppointmentById: (id) => api.get(`/veterinary/user/appointments/${id}`),
   bookAppointment: (payload) => api.post('/veterinary/user/appointments/book', payload),
   cancelAppointment: (id) => api.post(`/veterinary/user/appointments/${id}/cancel`),
+  
   // Manager store setup
   managerGetMyStore: () => api.get('/veterinary/manager/me/store'),
   managerUpdateMyStore: (payload) => api.put('/veterinary/manager/me/store', payload),
+  
   // Manager dashboard
   managerGetDashboardStats: () => api.get('/veterinary/manager/dashboard/stats'),
-  // Manager appointments
+  
+  // Manager appointments (unified view)
   managerGetAppointments: (params) => api.get('/veterinary/manager/appointments', { params }),
   managerGetAppointmentById: (id) => api.get(`/veterinary/manager/appointments/${id}`),
   managerCreateAppointment: (payload) => api.post('/veterinary/manager/appointments', payload),
   managerUpdateAppointment: (id, payload) => api.put(`/veterinary/manager/appointments/${id}`, payload),
   managerDeleteAppointment: (id) => api.delete(`/veterinary/manager/appointments/${id}`),
   managerGetAvailableTimeSlots: (date) => api.get('/veterinary/manager/appointments/slots/available', { params: { date } }),
+  
   // Manager medical records
   managerGetMedicalRecords: (params) => api.get('/veterinary/manager/records', { params }),
   managerCreateMedicalRecord: (payload) => api.post('/veterinary/manager/medical-records', payload),
@@ -473,20 +554,28 @@ export const veterinaryAPI = {
   managerGetMedicalRecordById: (id) => api.get(`/veterinary/manager/medical-records/${id}`),
   managerUpdateMedicalRecord: (id, payload) => api.put(`/veterinary/manager/medical-records/${id}`, payload),
   managerDeleteMedicalRecord: (id) => api.delete(`/veterinary/manager/medical-records/${id}`),
+  
+  // Manager medical record attachments
+  managerUploadMedicalRecordAttachments: (recordId, payload) => api.post(`/veterinary/manager/medical-records/${recordId}/attachments`, payload),
+  managerGetMedicalRecordAttachments: (recordId) => api.get(`/veterinary/manager/medical-records/${recordId}/attachments`),
+  
   // Manager services
   managerGetServices: (params) => api.get('/veterinary/manager/services', { params }),
   managerCreateService: (payload) => api.post('/veterinary/manager/services', payload),
   managerUpdateService: (id, payload) => api.put(`/veterinary/manager/services/${id}`, payload),
   managerDeleteService: (id) => api.delete(`/veterinary/manager/services/${id}`),
   managerToggleService: (id) => api.patch(`/veterinary/manager/services/${id}/toggle`),
+  
   // Manager staff
   managerListStaff: () => api.get('/veterinary/manager/staff'),
   managerCreateStaff: (payload) => api.post('/veterinary/manager/staff', payload),
   managerUpdateStaff: (id, payload) => api.put(`/veterinary/manager/staff/${id}`, payload),
   managerDeleteStaff: (id) => api.delete(`/veterinary/manager/staff/${id}`),
+  
   // Manager patients
   managerGetPatients: (params) => api.get('/veterinary/manager/patients', { params }),
   managerGetPatientById: (id) => api.get(`/veterinary/manager/patients/${id}`),
+  
   // User medical records
   userListMedicalRecordsForPet: (petId) => api.get(`/veterinary/user/pets/${petId}/medical-records`),
 }
@@ -544,7 +633,10 @@ export const managersAPI = {
   update: (id, payload) => api.put(`/admin/managers/${id}`, payload),
   remove: (id) => api.delete(`/admin/managers/${id}`),
   invite: (payload) => api.post('/admin/invite-module-manager', payload),
-  verify: (payload) => api.post('/admin/verify-module-manager', payload)
+  verify: (payload) => api.post('/admin/verify-module-manager', payload),
+  getPendingInvites: () => api.get('/admin/pending-invites'),
+  resendInvite: (payload) => api.post('/admin/resend-invite', payload),
+  cancelInvite: (id) => api.delete(`/admin/cancel-invite/${id}`)
 }
 
 // Species API
@@ -607,3 +699,37 @@ export const userPetsAPI = {
   submitCustomRequest: (data) => api.post('/user/pets/custom-request', data),
   getMyCustomRequests: () => api.get('/user/pets/custom-requests/my')
 };
+
+// Dashboard API
+export const dashboardAPI = {
+  getStats: () => apiClient.get('/user-dashboard/stats'),
+  getActivities: () => apiClient.get('/user-dashboard/activities'),
+  getNotifications: () => apiClient.get('/user-dashboard/notifications'),
+  getModuleStats: () => apiClient.get('/user-dashboard/module-stats')
+}
+
+// PetShop Stock Management APIs
+export const petShopStockAPI = {
+  // Manager Stock APIs
+  listStocks: (params = {}) => apiClient.get('/petshop/manager/stocks', { params }),
+  createStock: (stockData) => apiClient.post('/petshop/manager/stocks', stockData),
+  getStockById: (id) => apiClient.get(`/petshop/manager/stocks/${id}`),
+  updateStock: (id, stockData) => apiClient.put(`/petshop/manager/stocks/${id}`, stockData),
+  deleteStock: (id) => apiClient.delete(`/petshop/manager/stocks/${id}`),
+  generatePetsFromStock: (stockId, count) => apiClient.post(`/petshop/manager/stocks/${stockId}/generate-pets`, { count }),
+  
+  // Stock Image Management APIs
+  uploadStockImage: (stockId, imageData, gender) => apiClient.post(`/petshop/manager/stocks/${stockId}/images?gender=${gender}`, imageData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  }),
+  removeStockImage: (stockId, imageId) => apiClient.delete(`/petshop/manager/stocks/${stockId}/images/${imageId}`),
+  
+  // User Stock APIs
+  listPublicStocks: (params = {}) => apiClient.get('/petshop/user/public/stocks', { params }),
+  getPublicStockById: (id) => apiClient.get(`/petshop/user/public/stocks/${id}`),
+  reservePetsFromStock: (reservationData) => apiClient.post('/petshop/user/reserve-stock', reservationData),
+  createRazorpayOrderForStock: (orderData) => apiClient.post('/petshop/user/create-order-for-stock', orderData)
+}
+

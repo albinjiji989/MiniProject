@@ -87,6 +87,20 @@ router.delete('/:id', auth, authorize('admin'), async (req, res) => {
   }
 })
 
+// Restore category
+router.patch('/:id/restore', auth, authorize('admin'), async (req, res) => {
+  try {
+    const cat = await PetCategory.findById(req.params.id)
+    if (!cat) return res.status(404).json({ success: false, message: 'Category not found' })
+    cat.isActive = true
+    cat.lastUpdatedBy = req.user.id
+    await cat.save()
+    res.json({ success: true, message: 'Category restored successfully', data: cat })
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error restoring category', error: e.message })
+  }
+})
+
 module.exports = router
 
 

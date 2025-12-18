@@ -10,6 +10,7 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material'
+import PetAgeDisplay from './PetAgeDisplay'
 import {
   Edit as EditIcon,
   Visibility as ViewIcon,
@@ -162,7 +163,7 @@ const PetCard = ({ item, isSelected, onSelect, onAction, isPending = false }) =>
             <strong>{item.speciesId?.displayName || item.speciesId?.name || 'Unknown Species'}</strong> • {item.breedId?.name || 'Unknown Breed'}
           </Typography>
           <Typography variant="body2" color="textSecondary">
-            <strong>Age:</strong> {item.age} {item.ageUnit} • <strong>Gender:</strong> {item.gender}
+            <strong>Age:</strong> <PetAgeDisplay petCode={item.petCode} initialAge={item.age} initialAgeUnit={item.ageUnit} /> • <strong>Gender:</strong> {item.gender}
           </Typography>
         </Box>
         
@@ -223,6 +224,23 @@ const PetCard = ({ item, isSelected, onSelect, onAction, isPending = false }) =>
           </Tooltip>
         )}
         
+        {/* Generate Pets button for stock items */}
+        {item.maleCount !== undefined && item.femaleCount !== undefined && (item.maleCount > 0 || item.femaleCount > 0) && (
+          <Tooltip title="Generate Pets from Stock">
+            <IconButton 
+              size="small" 
+              color="primary"
+              onClick={() => onAction('generate', item)}
+              sx={{ 
+                bgcolor: '#e3f2fd',
+                '&:hover': { bgcolor: '#bbdefb' }
+              }}
+            >
+              <PublishIcon />
+            </IconButton>
+          </Tooltip>
+        )}
+        
         <Tooltip title="View Pet History">
           <IconButton 
             size="small" 
@@ -253,7 +271,7 @@ const PetCard = ({ item, isSelected, onSelect, onAction, isPending = false }) =>
           </Tooltip>
         )}
         
-        <Tooltip title="Delete Pet">
+        <Tooltip title="Remove from Sale">
           <IconButton 
             size="small" 
             color="error"
