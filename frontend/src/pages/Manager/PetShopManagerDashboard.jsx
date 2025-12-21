@@ -31,6 +31,7 @@ import {
   Tooltip,
   Avatar
 } from '@mui/material'
+import { useAuth } from '../../contexts/AuthContext'
 import {
   Dashboard as DashboardIcon,
   ShoppingCart as OrdersIcon,
@@ -49,6 +50,7 @@ import { petShopManagerAPI, apiClient } from '../../services/api'
 import InvoiceTemplate from '../../components/PetShop/InvoiceTemplate'
 import { resolveMediaUrl } from '../../services/api'
 const PetShopManagerDashboard = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -573,10 +575,16 @@ const PetShopManagerDashboard = () => {
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" sx={{ fontWeight: 700, mb: 3, display: 'flex', alignItems: 'center' }}>
-        <DashboardIcon sx={{ mr: 2 }} />
-        PetShop Manager Dashboard
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+          <DashboardIcon sx={{ mr: 2 }} />
+          PetShop Manager Dashboard
+        </Typography>
+        <Box sx={{ textAlign: 'right' }}>
+          <Typography variant="subtitle1">Store ID: <strong>{user?.storeId || 'Not set'}</strong></Typography>
+          <Typography variant="subtitle1">Store Name: <strong>{user?.storeName || 'Not set'}</strong></Typography>
+        </Box>
+      </Box>
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 

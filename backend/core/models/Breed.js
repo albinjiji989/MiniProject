@@ -15,24 +15,7 @@ const breedSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  size: {
-    type: String,
-    enum: ['tiny', 'small', 'medium', 'large', 'giant']
-  },
-  temperament: [{
-    type: String,
-    trim: true
-  }],
-  groomingNeeds: {
-    type: String,
-    enum: ['low', 'moderate', 'high'],
-    default: 'moderate'
-  },
-  exerciseNeeds: {
-    type: String,
-    enum: ['low', 'moderate', 'high'],
-    default: 'moderate'
-  },
+
   isActive: {
     type: Boolean,
     default: true
@@ -92,7 +75,7 @@ breedSchema.statics.findActive = function() {
 };
 
 breedSchema.statics.findByNameAndSpecies = function(name, speciesId) {
-  return this.findOne({ name: name.trim(), speciesId });
+  return this.findOne({ name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }, speciesId });
 };
 
 // Instance methods

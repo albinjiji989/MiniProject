@@ -1,9 +1,11 @@
 import React from 'react';
-import { Container, Typography, Grid, Card, CardContent, Button } from '@mui/material';
+import { Container, Typography, Grid, Card, CardContent, Button, Chip, Box } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../../contexts/AuthContext';
 
 const PetManagerDashboard = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const handleNavigation = (path) => {
     navigate(path);
@@ -14,6 +16,14 @@ const PetManagerDashboard = () => {
       <Typography variant="h4" gutterBottom>
         Pet Management Dashboard
       </Typography>
+      
+      {/* Store Identity Badge */}
+      {user?.role?.includes('manager') && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+          <Chip color="primary" label={`Store ID: ${user?.storeId || 'Pending assignment'}`} />
+          <Chip color={user?.storeName ? 'success' : 'warning'} label={`Store Name: ${user?.storeName || 'Not set'}`} />
+        </Box>
+      )}
       
       <Grid container spacing={3}>
         {/* Pet Management Card */}

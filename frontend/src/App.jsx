@@ -16,55 +16,78 @@ import AdminRoutes from './routes/AdminRoutes'
 import UserRoutes from './routes/UserRoutes'
 import ManagerRoutes from './routes/ManagerRoutes'
 import ProtectedRoute from './core/components/ProtectedRoute'
+import StoreNameSetup from './pages/Manager/StoreNameSetup'
 
 function App() {
   const { user, loading } = useAuth()
 
   // Helper function to determine the redirect path
   const getRedirectPath = (user) => {
-    if (!user) return null;
+    console.log('getRedirectPath called with user:', user);
+    
+    if (!user) {
+      console.log('No user, returning null');
+      return null;
+    }
     
     if (user.role === 'admin' || user.role === 'super_admin') {
+      console.log('Admin user, redirecting to admin dashboard');
       return '/admin/dashboard';
     }
     
     if (typeof user.role === 'string' && user.role.endsWith('_manager')) {
-      if (user.needsStoreSetup) {
-        return '/manager/store-setup';
-      }
-      if (user.needsStoreNameSetup) {
+      console.log('Manager user detected:', user.role);
+      // Check both the needsStoreNameSetup property and the actual storeName
+      const needsStoreSetup = !user.storeName || user.storeName.trim() === '';
+      console.log('Store setup check:', { needsStoreSetup, storeName: user.storeName, needsStoreNameSetup: user.needsStoreNameSetup });
+      
+      if (user.needsStoreNameSetup || needsStoreSetup) {
+        console.log('Manager needs store setup, redirecting to store setup');
         return '/manager/store-name-setup';
       }
       
       switch (user.role) {
         case 'adoption_manager':
+          console.log('Adoption manager, redirecting to adoption dashboard');
           return '/manager/adoption/dashboard';
         case 'petshop_manager':
+          console.log('Petshop manager, redirecting to petshop dashboard');
           return '/manager/petshop/dashboard';
         case 'ecommerce_manager':
+          console.log('Ecommerce manager, redirecting to ecommerce dashboard');
           return '/manager/ecommerce/dashboard';
         case 'pharmacy_manager':
+          console.log('Pharmacy manager, redirecting to pharmacy dashboard');
           return '/manager/pharmacy/dashboard';
         case 'rescue_manager':
+          console.log('Rescue manager, redirecting to rescue dashboard');
           return '/manager/rescue/dashboard';
         case 'veterinary_manager':
+          console.log('Veterinary manager, redirecting to veterinary dashboard');
           return '/manager/veterinary/dashboard';
         case 'temporary_care_manager':
+          console.log('Temporary care manager, redirecting to temporary care dashboard');
           return '/manager/temporary-care/dashboard';
         default:
+          console.log('Unknown manager type, redirecting to general manager dashboard');
           return '/manager/dashboard';
       }
     }
+    
     // Workers (staff) redirects
     if (typeof user.role === 'string' && user.role.endsWith('_worker')) {
+      console.log('Worker user detected:', user.role);
       switch (user.role) {
         case 'veterinary_worker':
+          console.log('Veterinary worker, redirecting to staff dashboard');
           return '/manager/veterinary/staff-dashboard';
         default:
+          console.log('Other worker, redirecting to user dashboard');
           return '/User/dashboard';
       }
     }
     
+    console.log('Regular user, redirecting to user dashboard');
     return '/User/dashboard';
   };
 
@@ -149,12 +172,12 @@ function App() {
       {/* Manager routes */}
       <Route
         path="/manager/*"
-        element={
-          <ProtectedRoute>
-            <ManagerRoutes />
-          </ProtectedRoute>
-        }
-      />
+        element={<ManagerRoutes />} />
+      
+      {/* Manager Store Name Setup - Outside ProtectedRoute to avoid infinite loop */}
+      <Route
+        path="/manager/store-name-setup"
+        element={<StoreNameSetup />} />
       
       {/* Compatibility routes */}
       <Route path="/manager/adoptions/*" element={<Navigate to="/manager/adoption" replace />} />

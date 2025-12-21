@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adoptionAPI, resolveMediaUrl } from '../../../services/api'
 import { Box, Typography, Grid, Card, CardMedia, CardContent, Chip, Button, CircularProgress } from '@mui/material'
+import { ArrowBack as ArrowBackIcon } from '@mui/icons-material'
 
 export default function MyAdoptedPets() {
   const navigate = useNavigate()
@@ -39,7 +40,16 @@ export default function MyAdoptedPets() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" sx={{ fontWeight: 600, mb: 3 }}>My Adopted Pets</Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 600 }}>My Adopted Pets</Typography>
+        <Button 
+          variant="outlined" 
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate('/User/adoption')}
+        >
+          Back to Adoption Center
+        </Button>
+      </Box>
       {error && <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>}
       {loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

@@ -45,7 +45,8 @@ import {
   Female as FemaleIcon,
   Male as MaleIcon,
   Help as HelpIcon,
-  Pets as PetsIcon
+  Pets as PetsIcon,
+  ArrowBack as ArrowBackIcon
 } from '@mui/icons-material'
 import { adoptionAPI, resolveMediaUrl } from '../../../services/api'
 
@@ -223,7 +224,7 @@ const UserAdoptedPetDetails = () => {
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center', 
-        mb: 3,
+        mb: 2,
         flexDirection: { xs: 'column', sm: 'row' },
         gap: 2
       }}>
@@ -235,9 +236,19 @@ const UserAdoptedPetDetails = () => {
         >
           Back to My Pets
         </Button>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button 
-            variant="contained"
+        <Button 
+          variant="outlined" 
+          size="small"
+          startIcon={<ArrowBackIcon />} 
+          onClick={() => navigate('/User/adoption')}
+        >
+          Back to Adoption Center
+        </Button>
+      </Box>
+
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Button 
+          variant="contained"
             startIcon={<DownloadIcon />}
             onClick={handleDownloadCertificate}
           >
@@ -254,7 +265,6 @@ const UserAdoptedPetDetails = () => {
             <MoreVertIcon />
           </IconButton>
         </Box>
-      </Box>
 
       <Card sx={{ mb: 3, boxShadow: 4 }}>
         <CardContent>
@@ -294,7 +304,7 @@ const UserAdoptedPetDetails = () => {
             <Grid item xs={12} md={8}>
               <Box sx={{ mb: 3 }}>
                 <Typography variant="h3" sx={{ fontWeight: 700, mb: 1 }}>
-                  {pet.name}
+                  {pet.name || 'Unnamed Pet'}
                 </Typography>
                 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>

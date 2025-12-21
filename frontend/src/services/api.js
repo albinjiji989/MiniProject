@@ -18,8 +18,14 @@ export const API_ORIGIN = (() => {
 // Example: '/modules/petshop/uploads/file.jpg' -> 'http://localhost:5000/modules/petshop/uploads/file.jpg'
 export const resolveMediaUrl = (pathOrUrl) => {
   if (!pathOrUrl) return '/placeholder-pet.svg'
+  
+  // If it's already an absolute URL (including Cloudinary URLs), return as-is
+  if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+    return pathOrUrl;
+  }
+  
   try {
-    // If it's already absolute, keep it
+    // If it's a valid URL, keep it
     const u = new URL(pathOrUrl)
     return u.href
   } catch {

@@ -97,19 +97,8 @@ class UnifiedPetService {
         lastSeenAt: new Date()
       };
 
-      // Upsert the registry entry
-      const registryEntry = await PetRegistry.findOneAndUpdate(
-        { petCode },
-        {
-          $set: { ...registryData, ...stateData },
-          $setOnInsert: {
-            petCode,
-            firstAddedAt: new Date(),
-            createdBy: actorUserId
-          }
-        },
-        { new: true, upsert: true }
-      ).populate('images');
+      // Use PetRegistry.ensureRegistered to register the pet
+      const registryEntry = await PetRegistry.ensureRegistered(registryData, stateData);
 
       return registryEntry;
     } catch (error) {
@@ -579,8 +568,9 @@ class UnifiedPetService {
         lastSeenAt: new Date()
       };
 
-      const registryEntry = await PetRegistry.findOneAndUpdate(
-        { petCode },
+      // Update the registry entry using findByIdAndUpdate
+      const registryEntry = await PetRegistry.findByIdAndUpdate(
+        currentRegistry._id,
         { $set: updateData },
         { new: true }
       );

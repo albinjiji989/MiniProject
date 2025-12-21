@@ -51,11 +51,6 @@ const adoptionPetSchema = new mongoose.Schema({
     required: false,
     default: 0,
   },
-  healthStatus: {
-    type: String,
-    enum: ['excellent', 'good', 'fair', 'needs_attention'],
-    default: 'good',
-  },
   vaccinationStatus: {
     type: String,
     enum: ['up_to_date', 'partial', 'not_vaccinated'],
@@ -63,11 +58,6 @@ const adoptionPetSchema = new mongoose.Schema({
   },
   // Optional: array form to align with spec; keep string for back-compat
   vaccinationStatusList: [{ type: String }],
-  temperament: {
-    type: String,
-    enum: ['calm', 'energetic', 'playful', 'shy', 'aggressive', 'friendly'],
-    default: 'friendly',
-  },
   description: {
     type: String,
     required: false,
@@ -86,8 +76,8 @@ const adoptionPetSchema = new mongoose.Schema({
   }],
   status: {
     type: String,
-    enum: ['available', 'reserved', 'adopted'],
-    default: 'available',
+    enum: ['pending', 'available', 'reserved', 'adopted'],
+    default: 'pending',
   },
   adoptionFee: {
     type: Number,
@@ -303,27 +293,30 @@ adoptionPetSchema.post('save', async function(doc) {
     if (doc.petCode) {
       const PetRegistry = require('../../../../core/models/PetRegistry');
       
-      // Register the pet in the centralized registry
-      await PetRegistry.ensureRegistered({
-        petCode: doc.petCode,
-        name: doc.name,
-        species: doc.species,
-        breed: doc.breed,
-        images: doc.imageIds || [],
-        source: 'adoption',
-        adoptionPetId: doc._id,
-        actorUserId: doc.createdBy,
-        firstAddedSource: 'adoption_center',
-        firstAddedBy: doc.createdBy,
-        gender: doc.gender,
-        age: doc.age,
-        ageUnit: doc.ageUnit,
-        color: doc.color
-      }, {
-        currentOwnerId: doc.adopterUserId,
-        currentLocation: doc.status === 'adopted' ? 'at_owner' : 'at_adoption_center',
-        currentStatus: doc.status
-      });
+      // Check if pet is already registered to avoid conflicts
+      const existingRegistryEntry = await PetRegistry.findOne({ petCode: doc.petCode });
+      if (!existingRegistryEntry) {
+        // Register the pet in the centralized registry
+        await PetRegistry.ensureRegistered({
+          petCode: doc.petCode,
+          name: doc.name,
+          species: doc.species,
+          breed: doc.breed,
+          imageIds: doc.imageIds || [],
+          source: 'adoption',
+          adoptionPetId: doc._id,
+          firstAddedSource: 'adoption_center',
+          firstAddedBy: doc.createdBy,
+          gender: doc.gender,
+          age: doc.age,
+          ageUnit: doc.ageUnit,
+          color: doc.color
+        }, {
+          currentOwnerId: doc.adopterUserId,
+          currentLocation: doc.status === 'adopted' ? 'at_owner' : 'at_adoption_center',
+          currentStatus: doc.status
+        });
+      }
     }
   } catch (err) {
     console.warn('Failed to register adoption pet in PetRegistry:', err.message);
@@ -338,6 +331,44 @@ adoptionPetSchema.pre('insertMany', async function (docs) {
       // eslint-disable-next-line no-await-in-loop
       doc.petCode = await Model.generatePetCode()
     }
+  }
+})
+
+// Post-insertMany: register pets in centralized registry
+adoptionPetSchema.post('insertMany', async function(docs) {
+  try {
+    const PetRegistry = require('../../../../core/models/PetRegistry');
+    
+    // Register all inserted pets
+    for (const doc of docs) {
+      if (doc.petCode) {
+        // Check if pet is already registered to avoid conflicts
+        const existingRegistryEntry = await PetRegistry.findOne({ petCode: doc.petCode });
+        if (!existingRegistryEntry) {
+          await PetRegistry.ensureRegistered({
+            petCode: doc.petCode,
+            name: doc.name,
+            species: doc.species,
+            breed: doc.breed,
+            imageIds: doc.imageIds || [],
+            source: 'adoption',
+            adoptionPetId: doc._id,
+            firstAddedSource: 'adoption_center',
+            firstAddedBy: doc.createdBy,
+            gender: doc.gender,
+            age: doc.age,
+            ageUnit: doc.ageUnit,
+            color: doc.color
+          }, {
+            currentOwnerId: doc.adopterUserId,
+            currentLocation: doc.status === 'adopted' ? 'at_owner' : 'at_adoption_center',
+            currentStatus: doc.status
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to register adoption pets in PetRegistry:', err.message);
   }
 })
 

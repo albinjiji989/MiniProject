@@ -1,0 +1,4 @@
+breed,species,category,name,gender,color,age,ageUnit,vaccinationStatus,weight,healthStatus,temperament,description,adoptionFee
+Labrador Retriever,Dog,Companion Animals,Buddy,male,Golden,2,years,up_to_date,25,good,friendly,"Friendly and energetic dog, great with kids",5000
+Persian,Cat,Companion Animals,Whiskers,female,White,1,years,partial,4,good,calm,"Beautiful Persian cat, loves attention",3000
+German Shepherd,Dog,Companion Animals,Rex,male,Black/Tan,3,years,up_to_date,30,excellent,energetic,"Well-trained guard dog, loyal and protective",6000

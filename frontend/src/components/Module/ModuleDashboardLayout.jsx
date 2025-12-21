@@ -8,6 +8,7 @@ export default function ModuleDashboardLayout({
   tabs = [], // [{key, label}]
   activeTab,
   onTabChange,
+  storeInfo, // {storeId, storeName}
   children
 }) {
   return (
@@ -24,6 +25,20 @@ export default function ModuleDashboardLayout({
           ))}
         </div>
       </div>
+      
+      {/* Store Info */}
+      {storeInfo && (
+        <div className="bg-white p-4 rounded-lg shadow border">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div className="text-sm">
+              <span className="font-medium">Store ID:</span> <span className="font-semibold">{storeInfo.storeId || 'Not set'}</span>
+            </div>
+            <div className="text-sm">
+              <span className="font-medium">Store Name:</span> <span className="font-semibold">{storeInfo.storeName || 'Not set'}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       {stats.length > 0 && (

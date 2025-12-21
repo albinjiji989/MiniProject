@@ -87,12 +87,8 @@ export const AuthProvider = ({ children }) => {
   const needsStoreNameSetup = (user) => {
     if (!user) return false;
     const isModuleManager = typeof user.role === 'string' && user.role.endsWith('_manager');
-    // For adoption, petshop, and veterinary managers, check if storeName is empty
-    const isAdoptionOrPetshopOrVeterinaryManager = 
-      user.role === 'adoption_manager' || 
-      user.role === 'petshop_manager' || 
-      user.role === 'veterinary_manager';
-    return isModuleManager && isAdoptionOrPetshopOrVeterinaryManager && (!user.storeName || user.storeName.trim() === '');
+    // For all module managers, check if storeName is empty
+    return isModuleManager && (!user.storeName || user.storeName.trim() === '');
   }
 
   // Simple initialization - verify token with backend; if cookies enabled, try session-based auth
@@ -108,6 +104,7 @@ export const AuthProvider = ({ children }) => {
           console.log('AuthContext - user data:', user);
           // Check if user needs store name setup
           const shouldRedirectToStoreSetup = needsStoreNameSetup(user)
+          console.log('AuthContext - role check:', { role: user?.role, isManager: user?.role?.endsWith('_manager') });
           dispatch({
             type: 'AUTH_SUCCESS',
             payload: {
@@ -376,9 +373,13 @@ export const AuthProvider = ({ children }) => {
       const freshUserData = await authAPI.getMe();
       console.log('Update profile response:', freshUserData);
       console.log('Update profile user data:', freshUserData.data.data.user);
+      
+      // Check if user needs store name setup
+      const shouldRedirectToStoreSetup = needsStoreNameSetup(freshUserData.data.data.user);
+      
       dispatch({
         type: 'UPDATE_USER',
-        payload: freshUserData.data.data.user
+        payload: {...freshUserData.data.data.user, needsStoreNameSetup: shouldRedirectToStoreSetup}
       });
       return { success: true };
     } catch (error) {
@@ -393,9 +394,13 @@ export const AuthProvider = ({ children }) => {
       const freshUserData = await authAPI.getMe();
       console.log('Refresh user response:', freshUserData);
       console.log('Refresh user data:', freshUserData.data.data.user);
+      
+      // Check if user needs store name setup
+      const shouldRedirectToStoreSetup = needsStoreNameSetup(freshUserData.data.data.user);
+      
       dispatch({
         type: 'UPDATE_USER',
-        payload: freshUserData.data.data.user
+        payload: {...freshUserData.data.data.user, needsStoreNameSetup: shouldRedirectToStoreSetup}
       });
       return { success: true };
     } catch (error) {

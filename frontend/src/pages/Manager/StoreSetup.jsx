@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 
 const StoreSetup = () => {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -69,9 +69,9 @@ const StoreSetup = () => {
       const moduleAPI = getModuleAPI()
       const updateMethod = getAPIMethod('update')
       await moduleAPI[updateMethod]({ storeName: storeName.trim() })
-      // Refresh auth state and force a reload so AuthProvider picks up updated user via /auth/me
-      try { await authAPI.getMe() } catch (_) {}
-      // Hard reload ensures AuthProvider useEffect runs and sets updated user (with storeId/storeName)
+      // Refresh auth state to get updated user data
+      try { await refreshUser() } catch (_) {}
+      // Redirect to dashboard immediately
       navigate('/manager/dashboard')
 
     } catch (err) {

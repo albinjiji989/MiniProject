@@ -73,7 +73,7 @@ const getManagerPets = async (req, res) => {
     const rawLimit = parseInt(req.query.limit, 10)
     const page = Math.max(isNaN(rawPage) ? 1 : rawPage, 1)
     const limit = Math.min(Math.max(isNaN(rawLimit) ? 10 : rawLimit, 1), 100)
-    const { status, search, fields } = req.query;
+    const { status, search, fields, species, breed, gender, sortBy, sortOrder } = req.query;
     const query = { isActive: true };
 
     if (status) query.status = status;
@@ -85,6 +85,11 @@ const getManagerPets = async (req, res) => {
         { petCode: { $regex: search, $options: 'i' } },
       ];
     }
+    
+    // Additional filters
+    if (species) query.species = species;
+    if (breed) query.breed = breed;
+    if (gender) query.gender = gender;
 
     // Parse requested fields
     let requestedFields = [];
@@ -129,9 +134,26 @@ const getManagerPets = async (req, res) => {
       });
     }
 
+    // Sorting
+    let sortObj = { createdAt: -1 }; // Default sort by newest first
+    if (sortBy) {
+      const sortDirection = sortOrder === 'asc' ? 1 : -1;
+      if (sortBy === 'dateAdded') {
+        sortObj = { dateAdded: sortDirection };
+      } else if (sortBy === 'name') {
+        sortObj = { name: sortDirection };
+      } else if (sortBy === 'species') {
+        sortObj = { species: sortDirection };
+      } else if (sortBy === 'breed') {
+        sortObj = { breed: sortDirection };
+      } else if (sortBy === 'age') {
+        sortObj = { age: sortDirection };
+      }
+    }
+    
     const pets = await dbQuery
       .select(selectString)
-      .sort({ createdAt: -1 })
+      .sort(sortObj)
       .limit(limit)
       .skip((page - 1) * limit);
     
@@ -634,7 +656,7 @@ const deletePet = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid pet id' })
     }
     
-    // Find the pet first to get its media references
+    // Find the pet first to get its media references and petCode
     const pet = await AdoptionPet.findById(id);
     if (!pet) {
       return res.status(404).json({ success: false, error: 'Pet not found' });
@@ -645,6 +667,15 @@ const deletePet = async (req, res) => {
 
     // Completely remove the pet from the database
     await AdoptionPet.findByIdAndDelete(id);
+
+    // Also remove the pet from the PetRegistry
+    try {
+      const PetRegistry = require('../../../../core/models/PetRegistry');
+      await PetRegistry.deleteOne({ adoptionPetId: id });
+    } catch (registryError) {
+      console.warn('Failed to remove pet from PetRegistry:', registryError.message);
+      // Don't fail the whole operation if registry removal fails
+    }
 
     res.json({
       success: true,
@@ -663,14 +694,27 @@ const softDeletePet = async (req, res) => {
     if (!Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, error: 'Invalid pet id' })
     }
+    
     const pet = await AdoptionPet.findByIdAndUpdate(
       id,
-      { isActive: false },
+      { isDeleted: true, isActive: false },
       { new: true }
     );
 
     if (!pet) {
       return res.status(404).json({ success: false, error: 'Pet not found' });
+    }
+
+    // Also update the pet in the PetRegistry to mark it as deleted
+    try {
+      const PetRegistry = require('../../../../core/models/PetRegistry');
+      await PetRegistry.updateOne(
+        { adoptionPetId: id },
+        { isDeleted: true }
+      );
+    } catch (registryError) {
+      console.warn('Failed to update pet in PetRegistry:', registryError.message);
+      // Don't fail the whole operation if registry update fails
     }
 
     res.json({
@@ -787,11 +831,68 @@ const importPetsCSV = async (req, res) => {
       return res.status(400).json({ success: false, error: 'CSV appears empty' });
     }
 
+    // Validate species against existing values in database (case-insensitive)
+    const validateSpecies = async (speciesValue) => {
+      if (!speciesValue) return null;
+      
+      try {
+        const Species = require('../../../../core/models/Species');
+        // Find exact match (case-insensitive)
+        const speciesDoc = await Species.findOne({ 
+          name: { $regex: new RegExp(`^${speciesValue.trim()}$`, 'i') } 
+        });
+        
+        return speciesDoc ? speciesDoc.name : null; // Return the exact name from database
+      } catch (err) {
+        console.error('Species validation error:', err);
+        return null;
+      }
+    };
+    
+    // Validate breed against existing values in database (case-insensitive)
+    const validateBreed = async (breedValue) => {
+      if (!breedValue) return null;
+      
+      try {
+        const Breed = require('../../../../core/models/Breed');
+        // Find exact match (case-insensitive)
+        const breedDoc = await Breed.findOne({ 
+          name: { $regex: new RegExp(`^${breedValue.trim()}$`, 'i') } 
+        });
+        
+        return breedDoc ? breedDoc.name : null; // Return the exact name from database
+      } catch (err) {
+        console.error('Breed validation error:', err);
+        return null;
+      }
+    };
+    
+    // Validate category against existing values in database (case-insensitive)
+    const validateCategory = async (categoryValue) => {
+      if (!categoryValue) return null;
+      
+      try {
+        const Species = require('../../../../core/models/Species');
+        // Find species with matching category (case-insensitive) and return the standardized category
+        const speciesDocs = await Species.find({});
+        for (const species of speciesDocs) {
+          if (species.category && typeof species.category === 'string' && 
+              species.category.toLowerCase() === categoryValue.trim().toLowerCase()) {
+            return species.category; // Return the exact category name from database
+          }
+        }
+        return null;
+      } catch (err) {
+        console.error('Category validation error:', err);
+        return null;
+      }
+    };
+    
     // Map CSV columns to model fields; support common header variants and handle BOM
     const normalize = (row, key) => {
       const candidates = [key, key.toLowerCase(), key.replace(/([A-Z])/g, '_$1').toLowerCase()];
       const found = Object.keys(row).find(k => {
-        // Remove BOM (\uFEFF) and other invisible characters, then normalize
+        // Remove BOM (﻿) and other invisible characters, then normalize
         const cleanKey = String(k).replace(/^\uFEFF/, '').replace(/^\ufeff/, '').trim().toLowerCase();
         return candidates.includes(cleanKey);
       });
@@ -831,16 +932,109 @@ const importPetsCSV = async (req, res) => {
       const rowNumber = i + 2; // +2 because CSV row 1 is headers, and we're 0-indexed
       
       try {
-        // Extract and validate required fields
-        const name = normalize(row, 'name');
-        const breed = normalize(row, 'breed');
-        const species = normalize(row, 'species') || normalize(row, 'type');
+        // Extract fields with smart detection
+        let name = normalize(row, 'name');
+        let breed = normalize(row, 'breed');
+        let species = normalize(row, 'species') || normalize(row, 'type');
+        let category = normalize(row, 'category');
         
-        // Check for required fields
+        // Validate and normalize species, breed, and category against existing values
+        if (species) {
+          const validatedSpecies = await validateSpecies(species);
+          if (validatedSpecies) {
+            species = validatedSpecies; // Use the exact name from database
+          } else {
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              reason: `Invalid species: '${species}'. Must match an existing species in the system.`
+            });
+            continue;
+          }
+        }
+        
+        if (breed) {
+          const validatedBreed = await validateBreed(breed);
+          if (validatedBreed) {
+            breed = validatedBreed; // Use the exact name from database
+          } else {
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              reason: `Invalid breed: '${breed}'. Must match an existing breed in the system.`
+            });
+            continue;
+          }
+        }
+        
+        if (category) {
+          const validatedCategory = await validateCategory(category);
+          if (validatedCategory) {
+            category = validatedCategory; // Use the exact category from database
+          } else {
+            results.warnings.push({
+              row: rowNumber,
+              field: 'category',
+              value: category,
+              message: `Category '${category}' not found in system. Will use derived category from species.`
+            });
+            category = null; // Clear invalid category so it can be derived
+          }
+        }
+        
+        // Smart detection: if only breed is provided, try to derive species and category
+        if (breed && !species && !category) {
+          // Try to find existing breed in database to get species and category
+          try {
+            const Breed = require('../../../../core/models/Breed');
+            const breedDoc = await Breed.findOne({ name: new RegExp(`^${breed}$`, 'i') }).populate('species categoryId');
+            if (breedDoc && breedDoc.species && breedDoc.categoryId) {
+              species = breedDoc.species.name;
+              category = breedDoc.categoryId.name;
+            }
+          } catch (lookupErr) {
+            console.log('Failed to lookup breed for smart detection:', lookupErr.message);
+          }
+        }
+        
+        // Alternative smart detection: if only species and breed provided, derive category
+        if (species && breed && !category) {
+          try {
+            const Species = require('../../../../core/models/Species');
+            const speciesDoc = await Species.findOne({ name: new RegExp(`^${species}$`, 'i') });
+            if (speciesDoc && speciesDoc.category) {
+              category = speciesDoc.category;
+            }
+          } catch (lookupErr) {
+            console.log('Failed to lookup species for category detection:', lookupErr.message);
+          }
+        }
+        
+        // If we still don't have species/category but have breed, use defaults
+        if (breed && (!species || !category)) {
+          // Default fallbacks
+          species = species || 'Dog';
+          category = category || 'Companion Animals';
+        }
+        
+        // Check for required fields based on your exact requirements
         const missingFields = [];
-        if (!name) missingFields.push('name');
+        // breed is always required
         if (!breed) missingFields.push('breed');
-        if (!species) missingFields.push('species');
+        // gender is required
+        const gender = normalize(row, 'gender');
+        if (!gender) missingFields.push('gender');
+        // age is required
+        const age = normalize(row, 'age');
+        if (!age) missingFields.push('age');
+        // ageUnit is required
+        const ageUnit = normalize(row, 'ageUnit');
+        if (!ageUnit) missingFields.push('ageUnit');
+        // weight is required
+        const weight = normalize(row, 'weight');
+        if (!weight) missingFields.push('weight');
+        // vaccinationStatus is OPTIONAL (not required)
+        const vaccinationStatus = normalize(row, 'vaccinationStatus');
         
         if (missingFields.length > 0) {
           results.failed.push({
@@ -852,93 +1046,138 @@ const importPetsCSV = async (req, res) => {
           continue;
         }
 
-        // Process optional fields with smart defaults and validation
+        // Process required and optional fields with smart defaults and validation
         const processedData = {
-          name,
+          name: name || 'Unnamed Pet',
           breed,
           species,
+          category, // Add category to processed data
           createdBy: req.user.id,
           images: [],
-          status: 'available'
+          status: 'pending' // Default to pending, requires post-processing before becoming available
         };
 
-        // Age handling
-        const ageValue = normalize(row, 'age');
-        if (ageValue) {
-          const ageNum = Number(ageValue);
-          if (!isNaN(ageNum) && ageNum >= 0) {
-            processedData.age = ageNum;
-          } else {
-            results.warnings.push({
-              row: rowNumber,
-              field: 'age',
-              value: ageValue,
-              message: 'Invalid age value, defaulting to 0'
-            });
-            processedData.age = 0;
-          }
-        } else {
-          processedData.age = 0;
-        }
-
-        // Age unit handling
-        const ageUnitValue = normalize(row, 'ageUnit');
-        if (ageUnitValue) {
-          const ageUnitLower = ageUnitValue.toLowerCase();
-          if (['months', 'years'].includes(ageUnitLower)) {
-            processedData.ageUnit = ageUnitLower;
-          } else {
-            results.warnings.push({
-              row: rowNumber,
-              field: 'ageUnit',
-              value: ageUnitValue,
-              message: 'Invalid age unit, defaulting to months'
-            });
-            processedData.ageUnit = 'months';
-          }
-        } else {
-          processedData.ageUnit = 'months';
-        }
-
-        // Gender handling
+        // Gender handling (REQUIRED)
         const genderValue = normalize(row, 'gender');
         if (genderValue) {
           const genderLower = genderValue.toLowerCase();
           if (['male', 'female'].includes(genderLower)) {
             processedData.gender = genderLower;
           } else {
-            results.warnings.push({
+            results.failed.push({
               row: rowNumber,
-              field: 'gender',
-              value: genderValue,
-              message: 'Invalid gender, defaulting to male'
+              data: row,
+              reason: `Invalid gender value: ${genderValue}. Must be 'male' or 'female'`
             });
-            processedData.gender = 'male';
+            continue;
           }
         } else {
-          processedData.gender = 'male';
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            reason: 'Gender is required'
+          });
+          continue;
         }
 
-        // Color handling
+        // Color handling (OPTIONAL)
         processedData.color = normalize(row, 'color') || 'unknown';
 
-        // Weight handling
+        // Age handling (REQUIRED)
+        const ageValue = normalize(row, 'age');
+        if (ageValue) {
+          const ageNum = Number(ageValue);
+          if (!isNaN(ageNum) && ageNum >= 0) {
+            processedData.age = ageNum;
+          } else {
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              reason: `Invalid age value: ${ageValue}. Must be a positive number`
+            });
+            continue;
+          }
+        } else {
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            reason: 'Age is required'
+          });
+          continue;
+        }
+
+        // Age unit handling (REQUIRED)
+        const ageUnitValue = normalize(row, 'ageUnit');
+        if (ageUnitValue) {
+          const ageUnitLower = ageUnitValue.toLowerCase();
+          if (['months', 'years', 'weeks', 'days'].includes(ageUnitLower)) {
+            processedData.ageUnit = ageUnitLower;
+          } else {
+            results.failed.push({
+              row: rowNumber,
+              data: row,
+              reason: `Invalid age unit: ${ageUnitValue}. Must be 'months', 'years', 'weeks', or 'days'`
+            });
+            continue;
+          }
+        } else {
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            reason: 'Age unit is required'
+          });
+          continue;
+        }
+
+        // Vaccination status handling (OPTIONAL)
+        const vaccinationStatusValue = normalize(row, 'vaccinationStatus');
+        if (vaccinationStatusValue) {
+          const vaccinationStatusLower = vaccinationStatusValue.toLowerCase();
+          if (['up_to_date', 'partial', 'not_vaccinated'].includes(vaccinationStatusLower)) {
+            processedData.vaccinationStatus = vaccinationStatusLower;
+          } else {
+            // Allow more flexible input
+            if (vaccinationStatusLower.includes('up') || vaccinationStatusLower.includes('complete')) {
+              processedData.vaccinationStatus = 'up_to_date';
+            } else if (vaccinationStatusLower.includes('part') || vaccinationStatusLower.includes('some')) {
+              processedData.vaccinationStatus = 'partial';
+            } else if (vaccinationStatusLower.includes('not') || vaccinationStatusLower.includes('none')) {
+              processedData.vaccinationStatus = 'not_vaccinated';
+            } else {
+              results.failed.push({
+                row: rowNumber,
+                data: row,
+                reason: `Invalid vaccination status: ${vaccinationStatusValue}. Must be 'up_to_date', 'partial', or 'not_vaccinated'`
+              });
+              continue;
+            }
+          }
+        } else {
+          // Set default vaccination status when not provided
+          processedData.vaccinationStatus = 'not_vaccinated';
+        }
+
+        // Weight handling (REQUIRED)
         const weightValue = normalize(row, 'weight');
         if (weightValue) {
           const weightNum = Number(weightValue);
-          if (!isNaN(weightNum) && weightNum >= 0) {
+          if (!isNaN(weightNum) && weightNum > 0) {
             processedData.weight = weightNum;
           } else {
-            results.warnings.push({
+            results.failed.push({
               row: rowNumber,
-              field: 'weight',
-              value: weightValue,
-              message: 'Invalid weight value, defaulting to 0'
+              data: row,
+              reason: `Invalid weight value: ${weightValue}. Must be a positive number`
             });
-            processedData.weight = 0;
+            continue;
           }
         } else {
-          processedData.weight = 0;
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            reason: 'Weight is required'
+          });
+          continue;
         }
 
         // Health status handling
@@ -958,25 +1197,6 @@ const importPetsCSV = async (req, res) => {
           }
         } else {
           processedData.healthStatus = 'good';
-        }
-
-        // Vaccination status handling
-        const vaccinationStatusValue = normalize(row, 'vaccinationStatus');
-        if (vaccinationStatusValue) {
-          const vaccinationStatusLower = vaccinationStatusValue.toLowerCase();
-          if (['up_to_date', 'partial', 'not_vaccinated'].includes(vaccinationStatusLower)) {
-            processedData.vaccinationStatus = vaccinationStatusLower;
-          } else {
-            results.warnings.push({
-              row: rowNumber,
-              field: 'vaccinationStatus',
-              value: vaccinationStatusValue,
-              message: 'Invalid vaccination status, defaulting to not_vaccinated'
-            });
-            processedData.vaccinationStatus = 'not_vaccinated';
-          }
-        } else {
-          processedData.vaccinationStatus = 'not_vaccinated';
         }
 
         // Temperament handling
@@ -1033,12 +1253,22 @@ const importPetsCSV = async (req, res) => {
         });
 
       } catch (error) {
-        results.failed.push({
-          row: rowNumber,
-          data: row,
-          reason: error.message,
-          error: 'DATABASE_ERROR'
-        });
+        // Handle specific pet code generation errors
+        if (error.message.includes('Unable to generate unique pet code')) {
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            reason: 'System unable to generate unique pet code - please contact administrator',
+            error: 'PET_CODE_GENERATION_ERROR'
+          });
+        } else {
+          results.failed.push({
+            row: rowNumber,
+            data: row,
+            reason: error.message,
+            error: 'DATABASE_ERROR'
+          });
+        }
       }
     }
 
@@ -1077,6 +1307,42 @@ const importPetsCSV = async (req, res) => {
   } catch (error) {
     console.error('Import CSV error:', error);
     res.status(500).json({ success: false, error: 'Failed to import CSV: ' + error.message });
+  }
+}
+
+// CSV template download endpoint
+const downloadCSVPetTemplate = (req, res) => {
+  try {
+    // Define the CSV template headers
+    const headers = [
+      'breed',
+      'species',
+      'category',
+      'name',
+      'gender',
+      'color',
+      'age',
+      'ageUnit',
+      'vaccinationStatus',
+      'weight',
+      'healthStatus',
+      'temperament',
+      'description',
+      'adoptionFee'
+    ];
+    
+    // Create CSV content with headers only
+    const csvContent = headers.join(',') + '\n';
+    
+    // Set headers for file download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="adoption-pets-template.csv"');
+    
+    // Send the CSV template
+    res.status(200).send(csvContent);
+  } catch (error) {
+    console.error('Download CSV template error:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate CSV template' });
   }
 }
 
@@ -1217,6 +1483,57 @@ const uploadPetDocument = async (req, res) => {
   }
 }
 
+// Publish pending pets - moves pets from pending to available status
+const publishPendingPets = async (req, res) => {
+  try {
+    const { petIds } = req.body;
+    
+    if (!petIds || !Array.isArray(petIds) || petIds.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'petIds must be a non-empty array' 
+      });
+    }
+    
+    const { Types } = require('mongoose');
+    const validIds = petIds.filter(id => Types.ObjectId.isValid(id));
+    
+    if (validIds.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No valid pet IDs provided' 
+      });
+    }
+    
+    // Update pets to available status
+    const result = await AdoptionPet.updateMany(
+      { 
+        _id: { $in: validIds },
+        createdBy: req.user.id,
+        status: 'pending'
+      },
+      { 
+        $set: { 
+          status: 'available',
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    return res.json({ 
+      success: true, 
+      data: { 
+        requested: petIds.length, 
+        valid: validIds.length, 
+        published: result.modifiedCount 
+      } 
+    });
+  } catch (error) {
+    console.error('Publish pending pets error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 module.exports = {
   getManagerPets,
   createPet,
@@ -1226,8 +1543,10 @@ module.exports = {
   getPetById,
   getPetMedia,
   importPetsCSV,
+  downloadCSVPetTemplate,
   bulkDeletePets,
   uploadPetPhoto,
   uploadPetDocument,
-  getNewPetCode
+  getNewPetCode,
+  publishPendingPets
 };

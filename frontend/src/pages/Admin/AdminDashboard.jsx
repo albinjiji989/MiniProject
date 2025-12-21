@@ -77,160 +77,146 @@ const AdminDashboard = () => {
       // Fetch real statistics from backend APIs with error handling
       const results = await Promise.allSettled([
         usersAPI.getStats(),
-        modulesAPI.list(),
-        managersAPI.list().catch(err => {
-          console.warn('Failed to fetch managers data:', err);
-          return { data: { managers: [], total: 0, active: 0, pending: 0 } };
-        }),
+        modulesAPI.listAdmin(),
+        managersAPI.list(),
         adminPetsAPI.getStats(),
         speciesAPI.getStats(),
         breedsAPI.getStats(),
         customBreedRequestsAPI.getStats()
       ])
 
-      // Extract data with fallbacks for failed requests
-      const usersStats = results[0].status === 'fulfilled' ? results[0].value : { data: {} };
-      const modulesStats = results[1].status === 'fulfilled' ? results[1].value : { data: [] };
-      const managersStats = results[2].status === 'fulfilled' ? results[2].value : { data: { managers: [], total: 0, active: 0, pending: 0 } };
-      const petsStats = results[3].status === 'fulfilled' ? results[3].value : { data: {} };
-      const speciesStats = results[4].status === 'fulfilled' ? results[4].value : { data: {} };
-      const breedsStats = results[5].status === 'fulfilled' ? results[5].value : { data: {} };
-      const breedRequestsStats = results[6].status === 'fulfilled' ? results[6].value : { data: {} };
+      // Extract data with proper error handling
+      const usersResponse = results[0].status === 'fulfilled' ? results[0].value : null
+      const modulesResponse = results[1].status === 'fulfilled' ? results[1].value : null
+      const managersResponse = results[2].status === 'fulfilled' ? results[2].value : null
+      const petsResponse = results[3].status === 'fulfilled' ? results[3].value : null
+      const speciesResponse = results[4].status === 'fulfilled' ? results[4].value : null
+      const breedsResponse = results[5].status === 'fulfilled' ? results[5].value : null
+      const breedRequestsResponse = results[6].status === 'fulfilled' ? results[6].value : null
 
-      // Process statistics
-      const usersData = usersStats?.data || {}
-      const managersData = managersStats?.data?.managers || managersStats?.data || { managers: [], total: 0, active: 0, pending: 0 }
-      const petsData = petsStats?.data || {}
-      const speciesData = speciesStats?.data || {}
-      const breedsData = breedsStats?.data || {}
-      const modulesData = modulesStats?.data || []
-      const breedRequestsData = breedRequestsStats?.data || {}
+      // Process users data
+      const usersData = usersResponse?.data || {}
+      const usersStats = {
+        total: usersData.totalUsers || usersData.total || 0,
+        active: usersData.activeUsers || usersData.active || 0,
+        new: usersData.newUsers || usersData.recent || 0,
+        growth: usersData.growthRate || 0
+      }
+
+      // Process managers data
+      let managersStats = { total: 0, active: 0, pending: 0, growth: 0 }
+      if (managersResponse?.data) {
+        const managersArray = Array.isArray(managersResponse.data) 
+          ? managersResponse.data 
+          : (managersResponse.data.managers || [])
+        managersStats = {
+          total: managersArray.length,
+          active: managersArray.filter(m => m.isActive !== false).length,
+          pending: 0,
+          growth: 0
+        }
+      }
+
+      // Process pets data
+      const petsData = petsResponse?.data || {}
+      const petsStats = {
+        total: petsData.totalPets || petsData.total || 0,
+        available: petsData.availablePets || petsData.available || 0,
+        adopted: petsData.adoptedPets || petsData.adopted || 0,
+        growth: petsData.growthRate || 0
+      }
+
+      // Process species data
+      const speciesData = speciesResponse?.data || {}
+      const speciesStats = {
+        total: speciesData.total || 0,
+        active: speciesData.active || 0,
+        growth: 0
+      }
+
+      // Process breeds data
+      const breedsData = breedsResponse?.data || {}
+      const breedsStats = {
+        total: breedsData.total || 0,
+        active: breedsData.active || 0,
+        growth: 0
+      }
+
+      // Process modules data
+      const modulesData = Array.isArray(modulesResponse?.data) ? modulesResponse.data : []
+      const modulesStats = {
+        total: modulesData.length,
+        active: modulesData.filter(m => m.status === 'active').length,
+        growth: 0
+      }
+
+      // Process breed requests data
+      const breedRequestsData = breedRequestsResponse?.data || {}
+      const breedRequestsStats = {
+        total: breedRequestsData.total || 0,
+        pending: breedRequestsData.pending || 0,
+        approved: breedRequestsData.approved || 0,
+        growth: 0
+      }
 
       setStats({
-        users: {
-          total: usersData.totalUsers || usersData.total || 0,
-          active: usersData.activeUsers || usersData.active || 0,
-          new: usersData.newUsers || usersData.recent || 0,
-          growth: usersData.growthRate || 0
-        },
-        managers: {
-          total: managersData.managers?.length || managersData.total || 0,
-          active: managersData.managers?.filter ? managersData.managers.filter(m => m.isActive).length : managersData.active || 0,
-          pending: managersData.pending || 0,
-          growth: managersData.growthRate || 0
-        },
-        pets: {
-          total: petsData.totalPets || petsData.total || 0,
-          available: petsData.availablePets || petsData.available || 0,
-          adopted: petsData.adoptedPets || petsData.adopted || 0,
-          growth: petsData.growthRate || 0
-        },
-        species: {
-          total: speciesData.totalSpecies || speciesData.total || 0,
-          active: speciesData.activeSpecies || speciesData.active || 0,
-          growth: speciesData.growthRate || 0
-        },
-        breeds: {
-          total: breedsData.totalBreeds || breedsData.total || 0,
-          active: breedsData.activeBreeds || breedsData.active || 0,
-          growth: breedsData.growthRate || 0
-        },
-        modules: {
-          total: modulesData.length || modulesData.total || 0,
-          active: modulesData.filter ? modulesData.filter(m => m.isActive).length : modulesData.active || modulesData.managers?.filter(m => m.isActive).length || 0,
-          growth: modulesData.growthRate || 0
-        },
-        breedRequests: {
-          total: breedRequestsData.totalRequests || breedRequestsData.total || 0,
-          pending: breedRequestsData.pendingRequests || breedRequestsData.pending || 0,
-          approved: breedRequestsData.approvedRequests || breedRequestsData.approved || 0,
-          growth: breedRequestsData.growthRate || 0
-        },
+        users: usersStats,
+        managers: managersStats,
+        pets: petsStats,
+        species: speciesStats,
+        breeds: breedsStats,
+        modules: modulesStats,
+        breedRequests: breedRequestsStats,
       })
 
-      // Generate real recent activities from actual data
-      const realActivities = []
+      // Generate recent activities
+      const activities = []
+      
+      // Add recent users
+      if (usersData.recentUsers && Array.isArray(usersData.recentUsers)) {
+        usersData.recentUsers.slice(0, 2).forEach((user, index) => {
+          activities.push({
+            id: `user-${user._id || index}`,
+            type: 'user_registered',
+            message: `New user registered: ${user.name || user.email || 'Unknown user'}`,
+            time: user.createdAt ? new Date(user.createdAt).toLocaleString() : 'Just now',
+            icon: <PersonAddIcon />
+          })
+        })
+      }
 
-      // Add recent users (if available in stats)
-      const recentUsers = (usersData.recentUsers || [])
-        .slice(0, 3)
-        .map(user => ({
-          id: `user-${user.id || user._id}`,
-          type: 'user_registered',
-          message: `New user registered: ${user.name || user.username}`,
-          time: user.createdAt ? new Date(user.createdAt).toLocaleString() : 'Just now',
-          icon: <PersonAddIcon />
-        }))
+      // Add recent pets
+      if (petsData.recentPets && Array.isArray(petsData.recentPets)) {
+        petsData.recentPets.slice(0, 2).forEach((pet, index) => {
+          activities.push({
+            id: `pet-${pet._id || index}`,
+            type: 'pet_added',
+            message: `Pet "${pet.name || 'Unknown'}" added to system`,
+            time: pet.createdAt ? new Date(pet.createdAt).toLocaleString() : 'Just now',
+            icon: <PetsIcon />
+          })
+        })
+      }
 
-      // Add recent pets (if available in stats)
-      const recentPets = (petsData.recentPets || [])
-        .slice(0, 3)
-        .map(pet => ({
-          id: `pet-${pet.id || pet._id}`,
-          type: 'pet_added',
-          message: `Pet "${pet.name || 'Unknown'}" added to system`,
-          time: pet.createdAt ? new Date(pet.createdAt).toLocaleString() : 'Just now',
-          icon: <PetsIcon />
-        }))
+      setRecentActivities(activities.slice(0, 5))
 
-      // Add recent breed requests (if available in stats)
-      const recentRequests = (breedRequestsData.recentRequests || [])
-        .slice(0, 3)
-        .map(request => ({
-          id: `request-${request.id || request._id}`,
-          type: 'breed_request',
-          message: `New breed request: ${request.breedName || request.customBreedName || 'Unknown breed'}`,
-          time: (request.submittedAt || request.createdAt) ? new Date(request.submittedAt || request.createdAt).toLocaleString() : 'Just now',
-          icon: <AssignmentIcon />
-        }))
-
-      // Combine and sort by time
-      const allActivities = [...recentUsers, ...recentPets, ...recentRequests]
-        .sort((a, b) => new Date(b.time) - new Date(a.time))
-        .slice(0, 5)
-
-      setRecentActivities(allActivities)
-
-      // Generate real system alerts based on actual data
-      const realAlerts = []
-
+      // Generate system alerts
+      const alerts = []
+      
       // Check for pending breed requests
-      const pendingRequests = breedRequestsData.pendingRequests || breedRequestsData.pending || 0
-      if (pendingRequests > 0) {
-        realAlerts.push({
+      if (breedRequestsStats.pending > 0) {
+        alerts.push({
           id: 'pending-requests',
           type: 'warning',
-          message: `${pendingRequests} breed request${pendingRequests > 1 ? 's' : ''} need${pendingRequests === 1 ? 's' : ''} review`,
+          message: `${breedRequestsStats.pending} breed request${breedRequestsStats.pending > 1 ? 's' : ''} need${breedRequestsStats.pending === 1 ? 's' : ''} review`,
           action: 'Review Requests'
         })
       }
 
-      // Check for under review requests
-      const underReviewRequests = breedRequestsData.underReview || 0
-      if (underReviewRequests > 0) {
-        realAlerts.push({
-          id: 'under-review-requests',
-          type: 'info',
-          message: `${underReviewRequests} breed request${underReviewRequests > 1 ? 's' : ''} under review`,
-          action: 'View Requests'
-        })
-      }
-
-      // Check for inactive users
-      const inactiveUsers = usersData.inactiveUsers || usersData.inactive || 0
-      if (inactiveUsers > 0) {
-        realAlerts.push({
-          id: 'inactive-users',
-          type: 'warning',
-          message: `${inactiveUsers} inactive user${inactiveUsers > 1 ? 's' : ''}`,
-          action: 'View Users'
-        })
-      }
-
       // Check for API connection issues
-      const failedApis = results.filter(r => r.status === 'rejected').length;
+      const failedApis = results.filter(r => r.status === 'rejected').length
       if (failedApis > 0) {
-        realAlerts.push({
+        alerts.push({
           id: 'api-errors',
           type: 'error',
           message: `Failed to load data from ${failedApis} API endpoint${failedApis > 1 ? 's' : ''}. Some statistics may be incomplete.`,
@@ -238,19 +224,7 @@ const AdminDashboard = () => {
         })
       }
 
-      // Check for recent system activity
-      const recentActivityCount = allActivities.length
-      if (recentActivityCount > 0) {
-        realAlerts.push({
-          id: 'recent-activity',
-          type: 'success',
-          message: `${recentActivityCount} recent activit${recentActivityCount > 1 ? 'ies' : 'y'} in the last 24 hours`,
-          action: null
-        })
-      }
-
-      setSystemAlerts(realAlerts)
-
+      setSystemAlerts(alerts)
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
       setError('Failed to load dashboard data. Please check your network connection and try again later.')
@@ -457,8 +431,6 @@ const AdminDashboard = () => {
         </Grid>
       </Grid>
 
-
-
       {/* Quick Actions */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12}>
@@ -505,8 +477,6 @@ const AdminDashboard = () => {
           />
         </Grid>
       </Grid>
-
-
 
       {/* Recent Activities */}
       <Grid container spacing={3}>

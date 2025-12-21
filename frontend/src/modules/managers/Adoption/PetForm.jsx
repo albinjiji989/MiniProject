@@ -1,342 +1,382 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { apiClient, resolveMediaUrl } from '../../../services/api'
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { apiClient, resolveMediaUrl } from '../../../services/api';
+import { 
+  Box, 
+  Container, 
+  Typography, 
+  Card, 
+  CardContent, 
+  CardMedia, 
+  Grid, 
+  Button, 
+  TextField, 
+  Select, 
+  MenuItem, 
+  FormControl, 
+  InputLabel, 
+  InputAdornment,
+  FormHelperText, 
+  Chip, 
+  Alert, 
+  CircularProgress, 
+  IconButton, 
+  Tooltip,
+  Avatar
+} from '@mui/material';
+import { 
+  ArrowBack as BackIcon, 
+  AddPhotoAlternate as AddPhotoIcon, 
+  PictureAsPdf as PdfIcon, 
+  Delete as DeleteIcon,
+  Pets as PetsIcon,
+  Info as InfoIcon,
+  AttachMoney as MoneyIcon,
+  HealthAndSafety as HealthIcon,
+  ColorLens as ColorIcon,
+  Scale as WeightIcon,
+  Cake as AgeIcon,
+  Wc as GenderIcon
+} from '@mui/icons-material';
 
-const initial = { name: '', breed: '', species: '', age: 0, ageUnit: 'months', gender: 'male', color: '', weight: 0, healthStatus: 'good', vaccinationStatus: 'not_vaccinated', temperament: 'friendly', description: '', adoptionFee: 0, category: '' }
+const initial = { name: '', breed: '', species: '', age: 0, ageUnit: 'months', gender: 'male', color: '', weight: 0, healthStatus: 'good', vaccinationStatus: 'not_vaccinated', temperament: 'friendly', description: '', adoptionFee: 0, category: '' };
 
 const PetForm = () => {
-  const navigate = useNavigate()
-  const { id } = useParams()
-  const isEdit = Boolean(id)
-  const [form, setForm] = useState(initial)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [categories, setCategories] = useState([])
-  const [species, setSpecies] = useState([])
-  const [breeds, setBreeds] = useState([])
-  const [selectedSpeciesId, setSelectedSpeciesId] = useState('')
-  const [fetchingMeta, setFetchingMeta] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [debugInfo, setDebugInfo] = useState('')
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = Boolean(id);
+  const [isPending, setIsPending] = useState(false);
+  const [form, setForm] = useState(initial);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [speciesLookup, setSpeciesLookup] = useState({}); // Map species name to species object
+  const [species, setSpecies] = useState([]);
+  const [breeds, setBreeds] = useState([]);
+  const [selectedSpeciesId, setSelectedSpeciesId] = useState('');
+  const [fetchingMeta, setFetchingMeta] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('');
   const [apiErrors, setApiErrors] = useState({
     species: '',
     breeds: '',
     petCode: '',
     submit: ''
-  })
+  });
   // Media state for create flow
-  const [images, setImages] = useState([]) // [{url,isPrimary,caption}]
-  const [documents, setDocuments] = useState([]) // [{url}]
-  const imgInputRef = useRef(null)
-  const docInputRef = useRef(null)
+  const [images, setImages] = useState([]); // [{url,isPrimary,caption}]
+  const [documents, setDocuments] = useState([]); // [{url}]
+  const imgInputRef = useRef(null);
+  const docInputRef = useRef(null);
 
   // Fetch species (active) and derive categories from species for manager dropdowns
   useEffect(() => {
     const fetchMeta = async () => {
       try {
-        setFetchingMeta(true)
-        setApiErrors(prev => ({ ...prev, species: '' }))
-        let spec = []
+        setFetchingMeta(true);
+        setApiErrors(prev => ({ ...prev, species: '' }));
+        let spec = [];
         try {
-          setDebugInfo('Fetching species from /admin/species/active...')
-          const speciesActiveRes = await apiClient.get('/admin/species/active')
-          spec = speciesActiveRes.data?.data || speciesActiveRes.data || []
-          setDebugInfo(`Found ${spec.length} active species`)
+          setDebugInfo('Fetching species from /admin/species/active...');
+          const speciesActiveRes = await apiClient.get('/admin/species/active');
+          spec = speciesActiveRes.data?.data || speciesActiveRes.data || [];
+          setDebugInfo(`Found ${spec.length} active species`);
         } catch (e1) {
-          setDebugInfo(`Active species failed (${e1.response?.status}), trying all species...`)
+          setDebugInfo(`Active species failed (${e1.response?.status}), trying all species...`);
           try {
-            const speciesAllRes = await apiClient.get('/admin/species')
-            spec = speciesAllRes.data?.data || speciesAllRes.data || []
-            setDebugInfo(`Found ${spec.length} total species`)
+            const speciesAllRes = await apiClient.get('/admin/species');
+            spec = speciesAllRes.data?.data || speciesAllRes.data || [];
+            setDebugInfo(`Found ${spec.length} total species`);
           } catch (e2) {
-            setApiErrors(prev => ({ ...prev, species: `Failed to fetch species: ${e2.response?.status} ${e2.response?.data?.message || e2.message}` }))
-            setDebugInfo(`Species fetch failed: ${e2.response?.status} ${e2.response?.data?.message || e2.message}`)
-            spec = []
+            setDebugInfo(`Both species endpoints failed. Giving up.`);
+            setApiErrors(prev => ({ ...prev, species: `Failed to load species: ${e1.message}; ${e2.message}` }));
+            return;
           }
         }
-        setSpecies(spec)
-        // Derive categories from species (prefer displayName -> name -> categoryName)
-        const catSet = new Map()
-        for (const s of spec) {
-          const catName = (s.category?.displayName || s.category?.name || s.category || '').toString().trim()
-          if (catName) catSet.set(catName, catName)
-        }
-        setCategories(Array.from(catSet.values()).sort())
-        setDebugInfo(prev => prev + ` | Categories: ${Array.from(catSet.values()).join(', ')}`)
+        setSpecies(spec);
+        
+        // Create lookup map for species
+        const speciesMap = {};
+        spec.forEach(s => {
+          speciesMap[s.name] = s;
+        });
+        setSpeciesLookup(speciesMap);
+        
+        // Derive categories from species
+        const cats = [...new Set(spec.map(s => (s.category?.displayName || s.category?.name || s.category || '').toString()).filter(Boolean))];
+        setCategories(cats);
+        setDebugInfo(`Derived ${cats.length} categories from species`);
       } catch (e) {
-        setApiErrors(prev => ({ ...prev, species: `Unexpected error: ${e.message}` }))
-        setDebugInfo(`Unexpected error: ${e.message}`)
+        setDebugInfo(`Fetch meta failed: ${e.message}`);
+        console.error('Fetch meta failed', e);
       } finally {
-        setFetchingMeta(false)
+        setFetchingMeta(false);
       }
-    }
-    fetchMeta()
-  }, [])
+    };
+    fetchMeta();
+  }, []);
 
-  // When species list is ready, map existing form.species (name) to selectedSpeciesId (edit flow)
+  // When editing, load existing pet data
   useEffect(() => {
-    if (!selectedSpeciesId && form.species && Array.isArray(species) && species.length) {
-      const spec = species.find(s => (s.name === form.species) || (s.displayName === form.species))
-      const sid = spec?._id || spec?.id || ''
-      if (sid) setSelectedSpeciesId(sid)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [species])
-
-  // Do not prefetch code on create; it will be generated on backend and shown after creation (edit view)
-
-  // Load existing pet when editing
-  useEffect(() => {
-    const load = async () => {
-      if (!isEdit) return
+    const loadPet = async () => {
+      if (!isEdit) return;
       try {
-        const res = await apiClient.get(`/adoption/manager/pets/${id}`)
-        const p = res.data?.data
-        const updated = {
-          name: p.name || '', breed: p.breed || '', species: p.species || '', age: p.age || 0, ageUnit: p.ageUnit || 'months',
-          gender: p.gender || 'male', color: p.color || '', weight: p.weight || 0, healthStatus: p.healthStatus || 'good',
-          vaccinationStatus: p.vaccinationStatus || 'not_vaccinated', temperament: p.temperament || 'friendly', description: p.description || '',
+        setDebugInfo('Loading existing pet data...');
+        const res = await apiClient.get(`/adoption/manager/pets/${id}`);
+        const p = res.data?.data;
+        if (!p) throw new Error('Pet not found');
+        
+        // Check if pet is pending
+        setIsPending(p.status === 'pending');
+        
+        // Map pet data to form fields
+        const mapped = {
+          name: p.name || '',
+          breed: p.breed || '',
+          species: p.species || '',
+          age: p.age || 0,
+          ageUnit: p.ageUnit || 'months',
+          gender: p.gender || 'male',
+          color: p.color || '',
+          weight: p.weight || 0,
+          healthStatus: p.healthStatus || 'good',
+          vaccinationStatus: p.vaccinationStatus || 'not_vaccinated',
+          temperament: p.temperament || 'friendly',
+          description: p.description || '',
           adoptionFee: p.adoptionFee || 0,
           category: p.category || '',
           petCode: p.petCode || ''
-        }
-        setForm(updated)
+        };
+        setForm(mapped);
         
-        // Set images and documents if they exist
-        if (p.images && Array.isArray(p.images)) {
-          const formattedImages = p.images.map(img => ({
-            url: img.url || '',
-            caption: img.caption || '',
-            isPrimary: !!img.isPrimary
-          })).filter(img => img.url)
-          setImages(formattedImages)
-        }
-        
-        if (p.documents && Array.isArray(p.documents)) {
-          const formattedDocuments = p.documents.map(doc => ({
-            url: doc.url || '',
-            name: doc.name || doc.url?.split('/').pop() || 'document',
-            type: doc.type || 'application/pdf'
-          })).filter(doc => doc.url)
-          setDocuments(formattedDocuments)
+        // Set species selection
+        if (mapped.species) {
+          // First try exact match
+          let matchedSpec = (species || []).find(s => s.name === mapped.species);
+          
+          // If no exact match, try case-insensitive match
+          if (!matchedSpec) {
+            matchedSpec = (species || []).find(s => s.name.toLowerCase() === mapped.species.toLowerCase());
+          }
+          
+          if (matchedSpec) {
+            setSelectedSpeciesId(matchedSpec._id || matchedSpec.id);
+          }
         }
         
-        // Try to map species name to id and load breeds for it
-        // Delay until species list is loaded
-        setTimeout(async () => {
-          try {
-            const spec = (species || []).find(s => (s.name || s.displayName) === updated.species)
-            if (spec?._id) {
-              setSelectedSpeciesId(spec._id)
-              const brRes = await apiClient.get(`/admin/breeds/species/${spec._id}`)
-              setBreeds(brRes.data?.data || [])
-              // Auto-fill category from species
-              const catName = (spec.category?.displayName || spec.category?.name || spec.category || '').toString()
-              if (catName) setForm(f => ({ ...f, category: catName }))
-            }
-          } catch (_) {}
-        }, 0)
+        setDebugInfo('Pet data loaded');
+        
+        // Load media
+        if (Array.isArray(p.images)) {
+          const imageUrls = p.images.map(img => ({
+            _id: img?._id || (typeof img === 'object' && img?.url ? img.url.split('/').pop().split('.')[0] : null),
+            url: resolveMediaUrl(typeof img === 'string' ? img : (img?.url || '')),
+            isPrimary: img?.isPrimary || false,
+            caption: img?.caption || ''
+          })).filter(img => img.url);
+          setImages(imageUrls);
+        }
+        if (Array.isArray(p.documents)) {
+          const docUrls = p.documents.map(doc => ({
+            _id: doc?._id || (typeof doc === 'object' && doc?.url ? doc.url.split('/').pop().split('.')[0] : null),
+            url: resolveMediaUrl(typeof doc === 'string' ? doc : (doc?.url || '')),
+            name: doc?.name || (typeof doc === 'string' ? doc.split('/').pop() : 'document')
+          })).filter(doc => doc.url);
+          setDocuments(docUrls);
+        }
       } catch (e) {
-        setError(e?.response?.data?.error || 'Failed to load pet')
+        setDebugInfo(`Load pet failed: ${e.message}`);
+        console.error('Load pet failed', e);
+        setError('Failed to load pet data');
       }
-    }
-    load()
-  }, [id, isEdit])
+    };
+    loadPet();
+  }, [id, isEdit]);
 
-  // Handle cascading changes
-  const onChange = (e) => {
-    const { name, value } = e.target
-    if (name === 'category') {
-      // When category changes, clear species/breed if incompatible
-      setForm(f => {
-        const next = { ...f, category: value }
-        // If current species is not in selected category, clear species and breed
-        const inCat = (species || []).some(s => ((s.category?.displayName || s.category?.name || s.category || '').toString() === value) && (s.name === f.species || s.displayName === f.species))
-        if (!inCat) { next.species = ''; next.breed = '' }
-        return next
-      })
-      // Also reset species selection and breeds list
-      setSelectedSpeciesId('')
-      setBreeds([])
-      return
-    }
-    if (name === 'species') {
-      // Species select now carries speciesId as value
-      const sid = value || ''
-      setSelectedSpeciesId(sid)
-      const spec = (species || []).find(s => (s._id || s.id) === sid)
-      const speciesName = (spec?.displayName || spec?.name || '').toString()
-      setForm(f => ({ ...f, species: speciesName }))
-      setApiErrors(prev => ({ ...prev, breeds: '' }))
-      
-      if (sid) {
-        setDebugInfo(prev => prev + ` | Fetching breeds for species ${speciesName} (${sid})...`)
-        apiClient.get(`/admin/breeds/species/${sid}`)
-          .then(brRes => {
-            const breedList = brRes.data?.data || []
-            setBreeds(breedList)
-            setDebugInfo(prev => prev + ` | Found ${breedList.length} breeds`)
-            
-            // Only clear breed if it's not compatible with the new species
-            setForm(f => {
-              const currentBreed = f.breed
-              if (currentBreed) {
-                const isBreedCompatible = breedList.some(b => 
-                  (b.name || b.title || '').toString() === currentBreed
-                )
-                if (!isBreedCompatible) {
-                  return { ...f, breed: '' }
-                }
-              }
-              return f
-            })
-          })
-          .catch(e => {
-            setBreeds([])
-            setApiErrors(prev => ({ ...prev, breeds: `Breeds fetch failed: ${e.response?.status} ${e.response?.data?.message || e.message}` }))
-            setDebugInfo(prev => prev + ` | Breeds error: ${e.response?.status}`)
-            // Clear breed when breeds can't be fetched
-            setForm(f => ({ ...f, breed: '' }))
-          })
-      } else {
-        setBreeds([])
-        // Clear breed when no species is selected
-        setForm(f => ({ ...f, breed: '' }))
-      }
-      const catName = (spec?.category?.displayName || spec?.category?.name || spec?.category || '').toString()
-      if (catName) setForm(f => ({ ...f, category: catName }))
-      return
-    }
-    if (name === 'breed') {
-      // Set breed, and only infer species/category if no species is currently selected
-      setForm(f => ({ ...f, breed: value }))
-      
-      // Only auto-fill species if no species is currently selected
-      if (!form.species && !selectedSpeciesId) {
-        const b = (breeds || []).find(x => (x.name || x.title) === value)
-        const sName = (b?.species?.displayName || b?.species?.name)
-        if (sName) {
-          setForm(f => ({ ...f, species: sName }))
-          const spec = (species || []).find(s => (s.name || s.displayName) === sName)
-          const catName = (spec?.category?.displayName || spec?.category?.name || spec?.category || '').toString()
-          if (catName) setForm(f => ({ ...f, category: catName }))
-          const sid = spec?._id || ''
-          setSelectedSpeciesId(sid)
+  // When species changes, map to id and fetch breeds for that species (also handled in onChange, but keep to sync external setForm)
+  useEffect(() => {
+    const syncBreeds = async () => {
+      try {
+        const spec = (species || []).find(s => (s._id || s.id) === selectedSpeciesId);
+        const sid = spec?._id || selectedSpeciesId || '';
+        if (sid) {
+          const brRes = await apiClient.get(`/admin/breeds/species/${sid}`);
+          setBreeds(brRes.data?.data || []);
+        } else {
+          setBreeds([]);
         }
+        // ensure category reflects species
+        const catName = (spec?.category?.displayName || spec?.category?.name || spec?.category || '').toString();
+        if (catName && form.category !== catName) setForm(f => ({ ...f, category: catName }));
+      } catch (e) {
+        setBreeds([]);
       }
-      return
+    };
+    syncBreeds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSpeciesId]);
+
+  const onChange = (e) => {
+    const { name, value } = e.target;
+    
+    // Special handling for species, breed, and category - they must be updated together
+    if (name === 'species' || name === 'breed' || name === 'category') {
+      // For species selection, we need to update all three fields
+      if (name === 'species') {
+        const selectedSpec = species.find(s => (s._id || s.id) === value);
+        if (selectedSpec) {
+          setSelectedSpeciesId(value);
+          
+          // Update all three fields together
+          setForm(prev => ({
+            ...prev,
+            species: selectedSpec.name,
+            category: (selectedSpec.category?.displayName || selectedSpec.category?.name || selectedSpec.category || '').toString()
+          }));
+          
+          // Fetch breeds for this species
+          fetchBreedsForSpecies(value);
+        } else {
+          setSelectedSpeciesId('');
+          setBreeds([]);
+          
+          // Clear all three fields
+          setForm(prev => ({
+            ...prev,
+            species: '',
+            breed: '',
+            category: ''
+          }));
+        }
+      } else if (name === 'breed') {
+        // When breed changes, we don't change species or category
+        setForm(prev => ({ ...prev, breed: value }));
+      } else if (name === 'category') {
+        // When category changes, we don't change species or breed
+        setForm(prev => ({ ...prev, category: value }));
+      }
+    } else {
+      // For all other fields, update individually
+      setForm(prev => ({ ...prev, [name]: value }));
     }
-    setForm((f) => ({ ...f, [name]: name === 'age' || name === 'weight' || name === 'adoptionFee' ? Number(value) : value }))
-  }
+  };
+  
+  const fetchBreedsForSpecies = async (speciesId) => {
+    try {
+      const brRes = await apiClient.get(`/admin/breeds/species/${speciesId}`);
+      setBreeds(brRes.data?.data || []);
+    } catch (e) {
+      setBreeds([]);
+    }
+  };
 
-  // Media helpers
-  const onChooseImage = () => imgInputRef.current?.click()
-  const onChooseDocument = () => docInputRef.current?.click()
-
-  // Convert file to base64
-  const toBase64 = (file) => new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = error => reject(error)
-  })
+  const onChooseImage = () => imgInputRef.current?.click();
+  const onChooseDocument = () => docInputRef.current?.click();
 
   const onImageSelected = async (e) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-    e.target.value = ''
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
     
+    setSaving(true);
     try {
-      // Process all selected images
-      const uploadedImages = []
+      const newImages = [];
       for (const file of files) {
-        // Upload image to backend and get URL
-        const formData = new FormData()
-        formData.append('file', file)
-        const res = await apiClient.post('/adoption/manager/pets/upload', formData, { 
-          headers: { 'Content-Type': 'multipart/form-data' } 
-        })
-        const url = resolveMediaUrl(res.data?.data?.url)
-        if (url) {
-          uploadedImages.push({ 
-            url, 
-            name: file.name, 
-            type: file.type, 
-            size: file.size,
-            isPrimary: false
-          })
-        }
+        if (!file.type.startsWith('image/')) continue;
+        const dataUrl = await readAsDataUrl(file);
+        newImages.push({ url: dataUrl, isPrimary: images.length === 0 && newImages.length === 0 });
       }
-      
-      // Add uploaded images to state
-      setImages(prev => {
-        const next = [...prev, ...uploadedImages]
-        // Set first image as primary if no primary exists
-        if (next.length > 0 && !next.some(img => img.isPrimary)) {
-          next[0].isPrimary = true
-        }
-        return next
-      })
+      setImages(prev => [...prev, ...newImages]);
     } catch (err) {
-      setError(err?.response?.data?.error || 'Image upload failed')
+      setError(err?.response?.data?.error || 'Image processing failed');
+    } finally {
+      setSaving(false);
     }
-  }
+  };
 
   const onDocumentSelected = async (e) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-    e.target.value = ''
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
     
+    setSaving(true);
     try {
-      // Process all selected documents
-      const uploadedDocs = []
+      const newDocs = [];
       for (const file of files) {
-        // Upload document to backend and get URL
-        const formData = new FormData()
-        formData.append('file', file)
-        const res = await apiClient.post('/adoption/manager/pets/upload-document', formData, { 
-          headers: { 'Content-Type': 'multipart/form-data' } 
-        })
-        const url = resolveMediaUrl(res.data?.data?.url)
-        if (url) {
-          uploadedDocs.push({ 
-            url, 
-            name: file.name, 
-            type: file.type, 
-            size: file.size 
-          })
-        }
+        const dataUrl = await readAsDataUrl(file);
+        newDocs.push({ url: dataUrl, name: file.name, type: file.type, size: file.size });
       }
-      
-      // Add uploaded documents to state
-      setDocuments(prev => [...prev, ...uploadedDocs])
+      setDocuments(prev => [...prev, ...newDocs]);
     } catch (err) {
-      setError(err?.response?.data?.error || 'Document upload failed')
+      setError(err?.response?.data?.error || 'Document processing failed');
+    } finally {
+      setSaving(false);
     }
-  }
+  };
+
+  const readAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 
   const removeImage = (index) => {
-    setImages(prev => prev.filter((_, i) => i !== index))
-  }
+    setImages(prev => prev.filter((_, i) => i !== index));
+  };
 
   const removeDocument = (index) => {
-    setDocuments(prev => prev.filter((_, i) => i !== index))
-  }
+    setDocuments(prev => prev.filter((_, i) => i !== index));
+  };
 
   const setPrimaryImage = (index) => {
     setImages(prev => prev.map((img, i) => ({
       ...img,
       isPrimary: i === index
-    })))
-  }
+    })));
+  };
 
-  const onSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setApiErrors(prev => ({ ...prev, submit: '' }))
+  const publishPet = async () => {
+    if (!id) return;
+    
+    if (!window.confirm('Are you sure you want to publish this pet? This will make it available for adoption.')) return;
     
     try {
+      setLoading(true);
+      // Publish the pet
+      await apiClient.post('/adoption/manager/pets/publish', { petIds: [id] });
+      
+      // Redirect to pending pets list
+      alert('Pet published successfully!');
+      navigate('../..');
+    } catch (e) {
+      const errorMsg = e?.response?.data?.error || e?.response?.data?.message || e.message || 'Publish failed';
+      setError(errorMsg);
+      setApiErrors(prev => ({ ...prev, submit: `Publish error: ${errorMsg}` }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setApiErrors(prev => ({ ...prev, submit: '' }));
+    
+    try {
+      // Validation
+      if (!form.species) {
+        setApiErrors(prev => ({ ...prev, species: 'Species is required' }));
+        return;
+      }
+      if (!form.breed) {
+        setApiErrors(prev => ({ ...prev, breeds: 'Breed is required' }));
+        return;
+      }
+      if (!form.gender) {
+        setApiErrors(prev => ({ ...prev, submit: 'Gender is required' }));
+        return;
+      }
+      
       // Only submit expected fields for backend AdoptionPet model
       const payload = {
         name: form.name,
@@ -350,510 +390,608 @@ const PetForm = () => {
         healthStatus: form.healthStatus || 'good',
         vaccinationStatus: form.vaccinationStatus || 'not_vaccinated',
         temperament: form.temperament || 'friendly',
-        description: form.description || 'N/A',
+        description: form.description || '',
         adoptionFee: Number(form.adoptionFee) || 0,
-        // include uploaded media URLs
-        images: images.map(x => ({ url: x.url, isPrimary: !!x.isPrimary, caption: x.caption || '' })),
-        documents: documents.map(x => ({ url: x.url, name: x.name || x.url?.split('/').pop() || 'document', type: x.type || 'application/pdf' })),
-      }
-
-      // Only allow editing petCode in edit mode (typically read-only anyway)
-      if (isEdit && form.petCode) payload.petCode = form.petCode
+        category: form.category || ''
+      };
       
-      setDebugInfo(prev => prev + ` | Submitting: ${JSON.stringify(payload, null, 2)}`)
+      setDebugInfo(`Submitting ${isEdit ? 'update' : 'create'} request...`);
       
-      if (!payload.name) {
-        setError('Please enter Name')
-        setLoading(false)
-        return
-      }
-      if (!payload.species) {
-        setError('Please select a Species')
-        setLoading(false)
-        return
-      }
-      if (!payload.breed) {
-        setError('Please select or enter a Breed')
-        setLoading(false)
-        return
-      }
-      
+      let res;
       if (isEdit) {
-        setDebugInfo(prev => prev + ` | PUT /adoption/manager/pets/${id}`)
-        const res = await apiClient.put(`/adoption/manager/pets/${id}`, payload)
-        setDebugInfo(prev => prev + ` | Update success: ${res.status}`)
-        navigate('..')
+        // For updates, only send changed fields to avoid overwriting with defaults
+        const changedFields = {};
+        Object.keys(payload).forEach(key => {
+          if (payload[key] !== initial[key]) {
+            changedFields[key] = payload[key];
+          }
+        });
+        res = await apiClient.put(`/adoption/manager/pets/${id}`, changedFields);
       } else {
-        setDebugInfo(prev => prev + ' | POST /adoption/manager/pets')
-        const res = await apiClient.post('/adoption/manager/pets', payload)
-        setDebugInfo(prev => prev + ` | Create success: ${res.status}`)
-        const newId = res.data?.data?._id
-        if (newId) {
-          setDebugInfo(prev => prev + ` | New pet ID: ${newId}`)
-          navigate(`/manager/adoption/pets/${newId}`)
-        } else {
-          navigate('..')
+        res = await apiClient.post('/adoption/manager/pets', payload);
+      }
+      
+      const petId = res.data?.data?._id || res.data?.data?.id || id;
+      if (!petId) throw new Error('Pet ID not returned from server');
+      
+      setDebugInfo(`${isEdit ? 'Updated' : 'Created'} pet with ID: ${petId}`);
+      
+      // Handle media uploads for both new and existing pets
+      // For existing pets, we need to distinguish between new uploads and existing media
+      const newImages = images.filter(img => img.url.startsWith('data:'));
+      const existingImages = images.filter(img => !img.url.startsWith('data:'));
+      const newDocuments = documents.filter(doc => doc.url.startsWith('data:'));
+      const existingDocuments = documents.filter(doc => !doc.url.startsWith('data:'));
+      
+      // Collect existing image and document IDs
+      const existingImageIds = existingImages
+        .map(img => img._id)
+        .filter(id => id && typeof id === 'string');
+      
+      const existingDocIds = existingDocuments
+        .map(doc => doc._id)
+        .filter(id => id && typeof id === 'string');
+      
+      if (newImages.length > 0 || newDocuments.length > 0) {
+        setDebugInfo('Uploading new media files...');
+        const imageIds = [];
+        const docIds = [];
+        
+        // Upload new images
+        for (const img of newImages) {
+          if (img.url.startsWith('data:')) {
+            const blob = await (await fetch(img.url)).blob();
+            const formData = new FormData();
+            formData.append('file', blob, 'image.jpg');
+            const uploadRes = await apiClient.post('/adoption/manager/pets/upload', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            if (uploadRes.data?.data?._id) {
+              imageIds.push(uploadRes.data.data._id);
+            }
+          }
+        }
+        
+        // Upload new documents
+        for (const doc of newDocuments) {
+          if (doc.url.startsWith('data:')) {
+            const blob = await (await fetch(doc.url)).blob();
+            const formData = new FormData();
+            formData.append('file', blob, doc.name);
+            const uploadRes = await apiClient.post('/adoption/manager/pets/upload-document', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            if (uploadRes.data?.data?._id) {
+              docIds.push(uploadRes.data.data._id);
+            }
+          }
         }
       }
+      
+      // Link all media to pet (existing + new)
+      const allImageIds = [...existingImageIds, ...imageIds];
+      const allDocIds = [...existingDocIds, ...docIds];
+      
+      // Only update media if there are any images or documents
+      if (allImageIds.length > 0 || allDocIds.length > 0) {
+        setDebugInfo('Linking media to pet...');
+        await apiClient.put(`/adoption/manager/pets/${petId}`, {
+          imageIds: allImageIds,
+          documentIds: allDocIds
+        });
+      }
+      
+      // Success - redirect to appropriate page based on pet status
+      if (isPending) {
+        // If editing a pending pet, stay on the form to allow adding more media
+        alert('Pet updated successfully! You can continue adding media or navigate back to the pending pets list.');
+      } else {
+        // For regular pets, redirect to pet list
+        navigate('..');
+      }
     } catch (e2) {
-      const errorMsg = e2?.response?.data?.error || e2?.response?.data?.message || e2.message || 'Save failed'
-      setError(errorMsg)
-      setApiErrors(prev => ({ ...prev, submit: `${e2.response?.status}: ${errorMsg}` }))
-      setDebugInfo(prev => prev + ` | Submit error: ${e2.response?.status} ${errorMsg}`)
+      const errorMsg = e2?.response?.data?.error || e2?.response?.data?.message || e2.message || 'Save failed';
+      setError(errorMsg);
+      setApiErrors(prev => ({ ...prev, submit: `${e2.response?.status}: ${errorMsg}` }));
+      setDebugInfo(prev => prev + ` | Submit error: ${e2.response?.status} ${errorMsg}`);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   // No code regeneration in create mode; code is generated by backend upon creation
 
-  // When species changes, map to id and fetch breeds for that species (also handled in onChange, but keep to sync external setForm)
-  useEffect(() => {
-    const syncBreeds = async () => {
-      try {
-        const spec = (species || []).find(s => (s._id || s.id) === selectedSpeciesId)
-        const sid = spec?._id || selectedSpeciesId || ''
-        if (sid) {
-          const brRes = await apiClient.get(`/admin/breeds/species/${sid}`)
-          setBreeds(brRes.data?.data || [])
-        } else {
-          setBreeds([])
-        }
-        // ensure category reflects species
-        const catName = (spec?.category?.displayName || spec?.category?.name || spec?.category || '').toString()
-        if (catName && form.category !== catName) setForm(f => ({ ...f, category: catName }))
-      } catch (e) {
-        setBreeds([])
-      }
-    }
-    syncBreeds()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSpeciesId])
-
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">{isEdit ? 'Edit Pet' : 'Add New Pet'}</h2>
-        <p className="text-sm text-gray-600 mb-6">You can do a quick intake now and complete details later. Species is required; other fields can be added later.</p>
-        
-        {apiErrors.submit && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded">{apiErrors.submit}</div>}
-        
-        {/* Image Preview Section */}
-        {images.length > 0 && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-800 mb-3">Pet Images</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {images.map((img, index) => (
-                <div key={index} className="relative group">
-                  <img 
-                    src={img.url} 
-                    alt={`Preview ${index + 1}`} 
-                    className="w-full h-32 object-cover rounded border"
-                  />
-                  {img.isPrimary && (
-                    <span className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">Primary</span>
-                  )}
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center gap-2">
-                    {!img.isPrimary && (
-                      <button
-                        type="button"
-                        onClick={() => setPrimaryImage(index)}
-                        className="opacity-0 group-hover:opacity-100 bg-blue-500 text-white p-2 rounded text-sm transition-opacity"
-                      >
-                        Set Primary
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeImage(index)}
-                      className="opacity-0 group-hover:opacity-100 bg-red-500 text-white p-2 rounded text-sm transition-opacity"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
-            <input 
-              name="name" 
-              placeholder="e.g., Bruno" 
-              className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-              value={form.name} 
-              onChange={onChange} 
-              required 
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Age</label>
-            <div className="flex gap-3">
-              <input 
-                name="age" 
-                type="number" 
-                min="0" 
-                className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                value={form.age} 
-                onChange={onChange} 
-              />
-              <select 
-                name="ageUnit" 
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                value={form.ageUnit} 
-                onChange={onChange}
-              >
-                <option value="years">Years</option>
-                <option value="months">Months</option>
-                <option value="weeks">Weeks</option>
-                <option value="days">Days</option>
-              </select>
-            </div>
-          </div>
-          {isEdit && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Pet Code</label>
-              <div className="flex gap-3">
-                <input 
-                  value={form.petCode || ''} 
-                  readOnly 
-                  className="px-4 py-2 border border-gray-300 rounded-lg w-full bg-gray-50 font-mono" 
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">Auto-generated unique code displayed after creation.</p>
-            </div>
+    <Container maxWidth="lg" sx={{ py: 3 }}>
+      <Card variant="outlined">
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+            <PetsIcon color="primary" />
+            <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
+              {isPending ? 'Complete Pending Pet' : isEdit ? 'Edit Pet' : 'Add New Pet'}
+            </Typography>
+          </Box>
+          
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+            {isPending 
+              ? 'This pet was imported via CSV and is currently pending. Add images and documents, then publish it to make it available for adoption.' 
+              : 'You can do a quick intake now and complete details later. Species is required; other fields can be added later.'}
+          </Typography>
+          
+          {apiErrors.submit && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {apiErrors.submit}
+            </Alert>
           )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-            <input 
-              value={form.category || ''} 
-              readOnly 
-              className="px-4 py-2 border border-gray-300 rounded-lg w-full bg-gray-50" 
-              disabled 
-            />
-            <p className="text-xs text-gray-500 mt-1">Category is derived from the selected species.</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-              <span>Species</span>
-              {form.category && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">Category: {form.category}</span>
-              )}
-            </label>
-            <select 
-              name="species" 
-              className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-              value={selectedSpeciesId}
-              onChange={onChange} 
-              disabled={fetchingMeta} 
-              required
-            >
-              <option value="">Select species</option>
-              {species
-                .filter(s => !form.category || ((s.category?.displayName || s.category?.name || s.category || '').toString() === form.category))
-                .map(s => (
-                  <option key={s._id || s.id} value={s._id || s.id}>{s.displayName || s.name || s.title}</option>
-                ))}
-            </select>
-            {!fetchingMeta && species.length===0 && (
-              <p className="text-xs text-amber-700 mt-1">No species available. Please ensure admin has created species or try refreshing.</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Breed</label>
-            <select
-              name="breed"
-              className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              value={form.breed}
-              onChange={onChange}
-              required
-              disabled={breeds.length === 0}
-            >
-              <option value="">{breeds.length ? 'Select breed' : 'No breeds available (ask Admin to add)'}</option>
-              {breeds.map(b => (
-                <option key={b._id || b.id} value={(b.name || b.title || '').toString()}>{b.name || b.title}</option>
-              ))}
-            </select>
-            {!fetchingMeta && selectedSpeciesId && breeds.length===0 && (
-              <p className="text-xs text-amber-700 mt-1">No breeds configured for this species. Please contact Admin to add breeds.</p>
-            )}
-            {(form.species || form.category) && (
-              <p className="text-xs text-gray-500 mt-1">Selected: {form.species ? `Species: ${form.species}` : ''}{form.species && form.category ? ' • ' : ''}{form.category ? `Category: ${form.category}` : ''}</p>
-            )}
-          </div>
-
-          {isEdit && (
-            <>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
-          <select 
-            name="gender" 
-            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-            value={form.gender} 
-            onChange={onChange}
-          >
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
-          <input 
-            name="color" 
-            placeholder="e.g., Brown & White" 
-            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-            value={form.color} 
-            onChange={onChange} 
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Weight (kg)</label>
-          <input 
-            name="weight" 
-            type="number" 
-            placeholder="e.g., 12" 
-            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-            value={form.weight} 
-            onChange={onChange} 
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Health Status</label>
-          <select 
-            name="healthStatus" 
-            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-            value={form.healthStatus} 
-            onChange={onChange}
-          >
-            <option value="excellent">Excellent</option>
-            <option value="good">Good</option>
-            <option value="fair">Fair</option>
-            <option value="needs_attention">Needs Attention</option>
-          </select>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Vaccination Status</label>
-          <select 
-            name="vaccinationStatus" 
-            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-            value={form.vaccinationStatus} 
-            onChange={onChange}
-          >
-            <option value="up_to_date">Up to Date</option>
-            <option value="partial">Partial</option>
-            <option value="not_vaccinated">Not Vaccinated</option>
-          </select>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Temperament</label>
-          <select 
-            name="temperament" 
-            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-            value={form.temperament} 
-            onChange={onChange}
-          >
-            <option value="calm">Calm</option>
-            <option value="energetic">Energetic</option>
-            <option value="playful">Playful</option>
-            <option value="shy">Shy</option>
-            <option value="aggressive">Aggressive</option>
-            <option value="friendly">Friendly</option>
-          </select>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Adoption Fee (₹)</label>
-          <input 
-            name="adoptionFee" 
-            type="number" 
-            placeholder="e.g., 500" 
-            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-            value={form.adoptionFee} 
-            onChange={onChange} 
-          />
-        </div>
-        
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-          <textarea 
-            name="description" 
-            placeholder="Temperament, special needs, etc." 
-            className="px-4 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-            rows={4} 
-            value={form.description} 
-            onChange={onChange} 
-          />
-        </div>
-          </>
-        )}
           
-          {/* Image Upload Section */}
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Pet Images</label>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={onChooseImage}
-                className="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm"
-              >
-                Upload Image
-              </button>
-              <input
-                type="file"
-                ref={imgInputRef}
-                onChange={onImageSelected}
-                accept="image/*"
-                multiple
-                className="hidden"
-              />
-              <p className="text-xs text-gray-500 self-center">
-                Upload clear photos of the pet (optional but recommended)
-              </p>
-            </div>
-            
-            {/* Image Preview */}
-            {images.length > 0 && (
-              <div className="mt-3">
-                <h4 className="text-sm font-medium mb-2">Uploaded Images:</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                  {images.map((img, index) => (
-                    <div key={index} className="relative group">
-                      <img 
-                        src={img.url} 
-                        alt={`Preview ${index + 1}`} 
-                        className="w-full h-24 object-cover rounded border"
-                        onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }}
-                      />
-                      {img.isPrimary && (
-                        <span className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">Primary</span>
-                      )}
-                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center gap-1">
-                        {!img.isPrimary && (
-                          <button
-                            type="button"
-                            onClick={() => setPrimaryImage(index)}
-                            className="opacity-0 group-hover:opacity-100 bg-blue-500 text-white p-1 rounded text-xs transition-opacity"
-                          >
-                            Set Primary
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => removeImage(index)}
-                          className="opacity-0 group-hover:opacity-100 bg-red-500 text-white p-1 rounded text-xs transition-opacity"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          {error && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {error}
+            </Alert>
+          )}
           
-          {/* Document Upload Section */}
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Documents</label>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={onChooseDocument}
-                className="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm"
-              >
-                Upload Document
-              </button>
-              <input
-                type="file"
-                ref={docInputRef}
-                onChange={onDocumentSelected}
-                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
-                multiple
-                className="hidden"
-              />
-              <p className="text-xs text-gray-500 self-center">
-                Upload medical records, certificates, or other documents (PDF, DOC, DOCX, TXT, JPG, PNG)
-              </p>
-            </div>
-            
-            {/* Document Preview */}
-            {documents.length > 0 && (
-              <div className="mt-3">
-                <h4 className="text-sm font-medium mb-2">Uploaded Documents:</h4>
-                <div className="space-y-2">
-                  {documents.map((doc, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 border rounded-lg bg-gray-50">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-xs">
-                          {doc.type?.includes('pdf') ? '📄' : doc.type?.startsWith('image/') ? '🖼️' : '📝'}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium truncate max-w-32">
-                            {doc.name || (typeof doc === 'string' ? doc.split('/').pop() : 'Document')}
-                          </p>
-                          {doc.size && (
-                            <p className="text-xs text-gray-500">
-                              {(doc.size / 1024 / 1024).toFixed(2)} MB
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeDocument(index)}
-                        className="text-red-600 hover:text-red-800 text-sm"
+          <form onSubmit={onSubmit}>
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <TextField 
+                  fullWidth
+                  label="Pet Name"
+                  name="name" 
+                  placeholder="e.g., Bruno" 
+                  value={form.name} 
+                  onChange={onChange} 
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Gender *</InputLabel>
+                  <Select 
+                    name="gender" 
+                    value={form.gender} 
+                    onChange={onChange}
+                    label="Gender *"
+                  >
+                    <MenuItem value="male">Male</MenuItem>
+                    <MenuItem value="female">Female</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <TextField 
+                  fullWidth
+                  label="Color"
+                  name="color" 
+                  placeholder="e.g., Brown, Black & White" 
+                  value={form.color} 
+                  onChange={onChange} 
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <TextField 
+                  fullWidth
+                  type="number"
+                  label="Weight (kg)"
+                  name="weight" 
+                  value={form.weight} 
+                  onChange={onChange} 
+                  InputProps={{
+                    inputProps: { min: 0 }
+                  }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Health Status</InputLabel>
+                  <Select 
+                    name="healthStatus" 
+                    value={form.healthStatus} 
+                    onChange={onChange}
+                    label="Health Status"
+                  >
+                    <MenuItem value="excellent">Excellent</MenuItem>
+                    <MenuItem value="good">Good</MenuItem>
+                    <MenuItem value="fair">Fair</MenuItem>
+                    <MenuItem value="poor">Poor</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Vaccination Status</InputLabel>
+                  <Select 
+                    name="vaccinationStatus" 
+                    value={form.vaccinationStatus} 
+                    onChange={onChange}
+                    label="Vaccination Status"
+                  >
+                    <MenuItem value="fully_vaccinated">Fully Vaccinated</MenuItem>
+                    <MenuItem value="partially_vaccinated">Partially Vaccinated</MenuItem>
+                    <MenuItem value="not_vaccinated">Not Vaccinated</MenuItem>
+                    <MenuItem value="unknown">Unknown</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Temperament</InputLabel>
+                  <Select 
+                    name="temperament" 
+                    value={form.temperament} 
+                    onChange={onChange}
+                    label="Temperament"
+                  >
+                    <MenuItem value="calm">Calm</MenuItem>
+                    <MenuItem value="friendly">Friendly</MenuItem>
+                    <MenuItem value="playful">Playful</MenuItem>
+                    <MenuItem value="shy">Shy</MenuItem>
+                    <MenuItem value="aggressive">Aggressive</MenuItem>
+                    <MenuItem value="energetic">Energetic</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <TextField 
+                  fullWidth
+                  type="number"
+                  label="Adoption Fee"
+                  name="adoptionFee" 
+                  value={form.adoptionFee} 
+                  onChange={onChange} 
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                    inputProps: { min: 0 }
+                  }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <Grid container spacing={2}>
+                  <Grid item xs={8}>
+                    <TextField 
+                      fullWidth
+                      type="number"
+                      label="Age"
+                      name="age" 
+                      value={form.age} 
+                      onChange={onChange} 
+                      InputProps={{
+                        inputProps: { min: 0 }
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={4}>
+                    <FormControl fullWidth>
+                      <InputLabel>Unit</InputLabel>
+                      <Select 
+                        name="ageUnit" 
+                        value={form.ageUnit} 
+                        onChange={onChange}
+                        label="Unit"
                       >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <div className="md:col-span-2 flex flex-wrap gap-3 mt-6 pt-6 border-t border-gray-200">
-            <button 
-              type="submit" 
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              disabled={loading}
-            >
-              {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
-              {loading ? 'Saving...' : isEdit ? 'Update Pet' : 'Add Pet'}
-            </button>
-            <button 
-              type="button" 
-              className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={()=>navigate('..')} 
-              disabled={loading}
-            >
-              Cancel
-            </button>
-          </div>
+                        <MenuItem value="years">Years</MenuItem>
+                        <MenuItem value="months">Months</MenuItem>
+                        <MenuItem value="weeks">Weeks</MenuItem>
+                        <MenuItem value="days">Days</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+              </Grid>
+              
+              {isEdit && (
+                <Grid item xs={12} md={6}>
+                  <TextField 
+                    fullWidth
+                    label="Pet Code"
+                    value={form.petCode || ''} 
+                    InputProps={{
+                      readOnly: true,
+                    }}
+                    helperText="Auto-generated unique code displayed after creation."
+                  />
+                </Grid>
+              )}
+              
+              <Grid item xs={12} md={6}>
+                <TextField 
+                  fullWidth
+                  label="Category"
+                  value={form.category || ''} 
+                  InputProps={{
+                    readOnly: true,
+                  }}
+                  helperText="Category is derived from the selected species."
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth required error={!!apiErrors.species} disabled={fetchingMeta}>
+                  <InputLabel>Species *</InputLabel>
+                  <Select
+                    name="species"
+                    value={selectedSpeciesId}
+                    onChange={onChange}
+                    label="Species *"
+                  >
+                    <MenuItem value="">Select species</MenuItem>
+                    {species.map(s => (
+                      <MenuItem key={s._id || s.id} value={s._id || s.id}>{s.displayName || s.name || s.title}</MenuItem>
+                    ))}
+                  </Select>
+                  {!fetchingMeta && species.length===0 && (
+                    <FormHelperText>No species available. Please ensure admin has created species or try refreshing.</FormHelperText>
+                  )}
+                  {apiErrors.species && <FormHelperText>{apiErrors.species}</FormHelperText>}
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth required error={!!apiErrors.breeds} disabled={breeds.length === 0}>
+                  <InputLabel>Breed *</InputLabel>
+                  <Select
+                    name="breed"
+                    value={form.breed}
+                    onChange={onChange}
+                    label="Breed *"
+                  >
+                    <MenuItem value="">{breeds.length ? 'Select breed' : 'No breeds available (ask Admin to add)'}</MenuItem>
+                    {breeds.map(b => (
+                      <MenuItem key={b._id || b.id} value={(b.name || b.title || '').toString()}>{b.name || b.title}</MenuItem>
+                    ))}
+                  </Select>
+                  {!fetchingMeta && selectedSpeciesId && breeds.length===0 && (
+                    <FormHelperText>No breeds configured for this species. Please contact Admin to add breeds.</FormHelperText>
+                  )}
+                  {apiErrors.breeds && <FormHelperText>{apiErrors.breeds}</FormHelperText>}
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12}>
+                <TextField 
+                  fullWidth
+                  multiline
+                  rows={4}
+                  label="Description"
+                  name="description" 
+                  placeholder="Describe the pet's personality, habits, special needs, etc." 
+                  value={form.description} 
+                  onChange={onChange} 
+                />
+              </Grid>
+              
+              {/* Image Upload Section */}
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <AddPhotoIcon /> Pet Images
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={onChooseImage}
+                  >
+                    Upload Image
+                  </Button>
+                  <input
+                    type="file"
+                    ref={imgInputRef}
+                    onChange={onImageSelected}
+                    accept="image/*"
+                    multiple
+                    style={{ display: 'none' }}
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Upload clear photos of the pet (optional but recommended)
+                  </Typography>
+                </Box>
+                
+                {/* Image Preview */}
+                {images.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 500, mb: 1 }}>
+                      Uploaded Images:
+                    </Typography>
+                    <Grid container spacing={2}>
+                      {images.map((img, index) => (
+                        <Grid item xs={6} sm={4} md={3} key={index}>
+                          <Box sx={{ position: 'relative' }}>
+                            <CardMedia 
+                              component="img" 
+                              height="140" 
+                              image={img.url} 
+                              alt={`Preview ${index + 1}`} 
+                              sx={{ borderRadius: 1 }}
+                              onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }}
+                            />
+                            {img.isPrimary && (
+                              <Chip 
+                                label="Primary" 
+                                size="small" 
+                                color="primary" 
+                                sx={{ 
+                                  position: 'absolute', 
+                                  top: 8, 
+                                  left: 8 
+                                }} 
+                              />
+                            )}
+                            <Box 
+                              sx={{ 
+                                position: 'absolute', 
+                                inset: 0,
+                                bgcolor: 'rgba(0,0,0,0)',
+                                transition: 'bgcolor 0.2s',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 1,
+                                '&:hover': {
+                                  bgcolor: 'rgba(0,0,0,0.3)'
+                                }
+                              }}
+                            >
+                              {!img.isPrimary && (
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  onClick={() => setPrimaryImage(index)}
+                                  sx={{ opacity: 0, '&:hover': { opacity: 1 }, transition: 'opacity 0.2s' }}
+                                >
+                                  Set Primary
+                                </Button>
+                              )}
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="error"
+                                onClick={() => removeImage(index)}
+                                sx={{ opacity: 0, '&:hover': { opacity: 1 }, transition: 'opacity 0.2s' }}
+                              >
+                                Remove
+                              </Button>
+                            </Box>
+                          </Box>
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Box>
+                )}
+              </Grid>
+              
+              {/* Document Upload Section */}
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <PdfIcon /> Documents
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={onChooseDocument}
+                  >
+                    Upload Document
+                  </Button>
+                  <input
+                    type="file"
+                    ref={docInputRef}
+                    onChange={onDocumentSelected}
+                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                    multiple
+                    style={{ display: 'none' }}
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    Upload medical records, certificates, or other documents (PDF, DOC, DOCX, TXT, JPG, PNG)
+                  </Typography>
+                </Box>
+                
+                {/* Document Preview */}
+                {documents.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 500, mb: 1 }}>
+                      Uploaded Documents:
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {documents.map((doc, index) => (
+                        <Card 
+                          key={index} 
+                          variant="outlined" 
+                          sx={{ display: 'flex', alignItems: 'center', p: 1, bgcolor: 'grey.50' }}
+                        >
+                          <Avatar 
+                            sx={{ 
+                              bgcolor: 'grey.200', 
+                              color: 'grey.700',
+                              width: 32,
+                              height: 32,
+                              mr: 1
+                            }}
+                          >
+                            {doc.type?.includes('pdf') ? '📄' : doc.type?.startsWith('image/') ? '🖼️' : '📝'}
+                          </Avatar>
+                          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                            <Typography 
+                              variant="body2" 
+                              noWrap
+                              sx={{ fontWeight: 500 }}
+                            >
+                              {doc.name || (typeof doc === 'string' ? doc.split('/').pop() : 'Document')}
+                            </Typography>
+                            {doc.size && (
+                              <Typography variant="caption" color="text.secondary">
+                                {(doc.size / 1024 / 1024).toFixed(2)} MB
+                              </Typography>
+                            )}
+                          </Box>
+                          <Tooltip title="Delete document">
+                            <IconButton 
+                              size="small" 
+                              onClick={() => removeDocument(index)}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Card>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
+              </Grid>
+              
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', gap: 2, mt: 3, pt: 3, borderTop: 1, borderColor: 'divider' }}>
+                  <Button 
+                    type="submit" 
+                    variant="contained" 
+                    color="primary"
+                    disabled={loading}
+                    startIcon={loading ? <CircularProgress size={20} /> : null}
+                  >
+                    {loading ? 'Saving...' : isPending ? 'Save & Continue' : isEdit ? 'Update Pet' : 'Add Pet'}
+                  </Button>
+                  {isPending && (
+                    <Button 
+                      type="button" 
+                      variant="contained" 
+                      color="success"
+                      disabled={loading}
+                      onClick={publishPet}
+                      startIcon={loading ? <CircularProgress size={20} /> : null}
+                    >
+                      Publish Pet
+                    </Button>
+                  )}
+                  <Button 
+                    type="button" 
+                    variant="outlined" 
+                    onClick={()=>navigate('..')} 
+                    disabled={loading}
+                  >
+                    Cancel
+                  </Button>
+                </Box>
+              </Grid>
+            </Grid>
+          </form>
         
-          {error && <div className="md:col-span-2 mt-4 p-3 bg-red-50 text-red-700 rounded-lg">{error}</div>}
-        </form>
-      
-        {/* Debug Info (only shown in development) */}
-        {debugInfo && process.env.NODE_ENV === 'development' && (
-          <div className="mt-6 p-3 bg-yellow-50 text-yellow-800 text-xs rounded">
-            <strong>Debug:</strong> {debugInfo}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
+          {/* Debug Info (only shown in development) */}
+          {debugInfo && process.env.NODE_ENV === 'development' && (
+            <Box sx={{ mt: 3, p: 2, bgcolor: 'warning.light', borderRadius: 1 }}>
+              <Typography variant="caption" color="warning.dark">
+                <strong>Debug:</strong> {debugInfo}
+              </Typography>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+    </Container>
+  );
+};
 
-export default PetForm
+export default PetForm;

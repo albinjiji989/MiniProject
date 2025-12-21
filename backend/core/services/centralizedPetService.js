@@ -41,32 +41,23 @@ const CentralizedPetService = {
     if (!petCode) throw new Error('petCode is required for registry registration');
     if (!source) throw new Error('source is required for registry registration');
 
-    // Prepare update data
-    const update = {
+    // Prepare registry data
+    const registryData = {
+      petCode,
       name,
       species,
       breed,
+      imageIds: Array.isArray(images) ? images.map(img => img.url || img) : [],
       source,
-      images: Array.isArray(images) ? images.map(img => img.url || img) : [],
+      corePetId,
+      petShopItemId,
+      adoptionPetId,
+      createdBy: actorUserId || undefined,
       updatedBy: actorUserId || undefined
     };
 
-    // Set the appropriate reference based on source
-    if (corePetId) update.corePetId = corePetId;
-    if (petShopItemId) update.petShopItemId = petShopItemId;
-    if (adoptionPetId) update.adoptionPetId = adoptionPetId;
-
-    // Upsert the registry entry
-    const registryEntry = await PetRegistry.findOneAndUpdate(
-      { petCode },
-      { $set: update, $setOnInsert: { petCode, createdBy: actorUserId || undefined } },
-      { new: true, upsert: true }
-    );
-
-    // Apply state if provided
-    if (state) {
-      await this.updatePetState(petCode, state);
-    }
+    // Use PetRegistry.ensureRegistered to register the pet
+    const registryEntry = await PetRegistry.ensureRegistered(registryData, state);
 
     return registryEntry;
   },
@@ -91,6 +82,12 @@ const CentralizedPetService = {
       lastTransferAt
     } = state;
 
+    // First find the registry entry by petCode
+    const registryEntry = await PetRegistry.findOne({ petCode });
+    if (!registryEntry) {
+      throw new Error(`Pet with code ${petCode} not found in registry`);
+    }
+
     const update = {
       updatedBy: actorUserId || undefined,
       lastSeenAt: new Date()
@@ -101,13 +98,14 @@ const CentralizedPetService = {
     if (typeof currentStatus !== 'undefined') update.currentStatus = currentStatus;
     if (lastTransferAt) update.lastTransferAt = lastTransferAt;
 
-    const registryEntry = await PetRegistry.findOneAndUpdate(
-      { petCode },
+    // Update the registry entry using findByIdAndUpdate
+    const updatedRegistryEntry = await PetRegistry.findByIdAndUpdate(
+      registryEntry._id,
       { $set: update },
       { new: true }
     );
 
-    return registryEntry;
+    return updatedRegistryEntry;
   },
 
   /**

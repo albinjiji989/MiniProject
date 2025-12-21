@@ -21,6 +21,7 @@ const ApplicationDetailsImproved = () => {
   const [handover, setHandover] = useState(defaultHandover)
   const [saving, setSaving] = useState(false)
   const [showOTPModal, setShowOTPModal] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -42,6 +43,114 @@ const ApplicationDetailsImproved = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Upload images for the pet
+  const uploadPetImages = async (files) => {
+    if (!files.length || !app?.petId?._id) return;
+    
+    setUploading(true);
+    try {
+      const newImageIds = [];
+      
+      // Upload each image to server
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) continue;
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const res = await apiClient.post('/adoption/manager/pets/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        
+        if (res.data?.data?._id) {
+          newImageIds.push(res.data.data._id);
+        }
+      }
+      
+      // Get current image IDs
+      const currentImageIds = (app.petId.imageIds || []).filter(id => typeof id === 'string' && id.length > 0);
+      
+      // Link all images to pet (existing + new)
+      if (newImageIds.length > 0) {
+        await apiClient.put(`/adoption/manager/pets/${app.petId._id}`, {
+          imageIds: [...currentImageIds, ...newImageIds]
+        });
+        
+        // Reload application to show new images
+        await load();
+        alert('Images uploaded successfully');
+      }
+    } catch (e) {
+      console.error('Upload images failed', e);
+      alert('Failed to upload images. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // Upload documents for the pet
+  const uploadPetDocuments = async (files) => {
+    if (!files.length || !app?.petId?._id) return;
+    
+    setUploading(true);
+    try {
+      const newDocIds = [];
+      
+      // Upload each document to server
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const res = await apiClient.post('/adoption/manager/pets/upload-document', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        
+        if (res.data?.data?._id) {
+          newDocIds.push(res.data.data._id);
+        }
+      }
+      
+      // Get current document IDs
+      const currentDocIds = (app.petId.documentIds || []).filter(id => typeof id === 'string' && id.length > 0);
+      
+      // Link all documents to pet (existing + new)
+      if (newDocIds.length > 0) {
+        await apiClient.put(`/adoption/manager/pets/${app.petId._id}`, {
+          documentIds: [...currentDocIds, ...newDocIds]
+        });
+        
+        // Reload application to show new documents
+        await load();
+        alert('Documents uploaded successfully');
+      }
+    } catch (e) {
+      console.error('Upload documents failed', e);
+      alert('Failed to upload documents. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // Handle image file selection
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      uploadPetImages(files);
+    }
+    // Reset input to allow selecting the same file again
+    e.target.value = '';
+  }
+
+  // Handle document file selection
+  const handleDocumentUpload = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      uploadPetDocuments(files);
+    }
+    // Reset input to allow selecting the same file again
+    e.target.value = '';
   }
 
   const generateCertificate = async () => {
@@ -322,9 +431,27 @@ const ApplicationDetailsImproved = () => {
 
   // Get applicant documents
   const getApplicantDocuments = () => {
+    // Debug: Log application data
+    console.log('Application data in getApplicantDocuments:', app);
     const d1 = Array.isArray(app?.documents) ? app.documents : []
     const d2 = Array.isArray(app?.applicationData?.documents) ? app.applicationData.documents : []
+    console.log('Documents found:', { d1, d2, combined: [...d1, ...d2] });
     return [...d1, ...d2]
+  }
+
+  // Get manager pet documents
+  const getPetDocuments = () => {
+    return Array.isArray(app?.petId?.documents) ? app.petId.documents : []
+  }
+
+  // Download document
+  const downloadDocument = (url, name) => {
+    const link = document.createElement('a');
+    link.href = resolveMediaUrl(url);
+    link.download = name || 'document';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   // Check if handover can be scheduled
@@ -507,83 +634,159 @@ const ApplicationDetailsImproved = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {activeTab === 'overview' && (
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Pet Information Card */}
-              <div className="bg-gray-50 rounded-lg p-5">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Pet Information</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100 shadow-sm">
+                <div className="flex items-center mb-4">
+                  <div className="flex-shrink-0 h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+                    <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Pet Information</h3>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-lg p-5 shadow-sm border border-gray-100 mb-5">
+                  <div className="flex items-center mb-4">
+                    <div className="flex-shrink-0 h-16 w-16 bg-blue-100 rounded-full flex items-center justify-center">
+                      <svg className="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                     <div className="ml-4">
-                      <h4 className="text-lg font-medium text-gray-900">{app.petId?.name || 'N/A'}</h4>
-                      <p className="text-gray-500">{app.petId?.breed || 'N/A'} • {app.petId?.species || 'N/A'}</p>
+                      <h4 className="text-xl font-bold text-gray-900">{app.petId?.name || 'N/A'}</h4>
+                      <p className="text-gray-600">{app.petId?.breed || 'N/A'} • {app.petId?.species || 'N/A'}</p>
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white p-3 rounded-lg border border-gray-200">
-                      <p className="text-xs text-gray-500">Adoption Fee</p>
-                      <p className="text-lg font-semibold text-gray-900">₹{app.petId?.adoptionFee || 0}</p>
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                      <p className="text-xs text-blue-700 font-medium">Adoption Fee</p>
+                      <p className="text-2xl font-bold text-blue-900 mt-1">₹{app.petId?.adoptionFee || 0}</p>
                     </div>
-                    <div className="bg-white p-3 rounded-lg border border-gray-200">
-                      <p className="text-xs text-gray-500">Age</p>
-                      <p className="text-lg font-semibold text-gray-900">{app.petId?.ageDisplay || 'N/A'}</p>
+                    <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
+                      <p className="text-xs text-indigo-700 font-medium">Pet Code</p>
+                      <p className="text-lg font-bold text-indigo-900 mt-1">{app.petId?.petCode || 'N/A'}</p>
                     </div>
-                    <div className="bg-white p-3 rounded-lg border border-gray-200">
-                      <p className="text-xs text-gray-500">Gender</p>
-                      <p className="text-lg font-semibold text-gray-900 capitalize">
-                        {app.petId?.gender ? app.petId.gender.charAt(0).toUpperCase() + app.petId.gender.slice(1) : 'N/A'}
-                      </p>
-                    </div>
-                    <div className="bg-white p-3 rounded-lg border border-gray-200">
-                      <p className="text-xs text-gray-500">Health Status</p>
-                      <p className="text-lg font-semibold text-gray-900 capitalize">
-                        {app.petId?.healthStatus?.replace(/_/g, ' ') || 'N/A'}
-                      </p>
-                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <p className="text-xs text-gray-500">Age</p>
+                    <p className="text-lg font-semibold text-gray-900">{app.petId?.ageDisplay || 'N/A'}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <p className="text-xs text-gray-500">Gender</p>
+                    <p className="text-lg font-semibold text-gray-900 capitalize">
+                      {app.petId?.gender ? app.petId.gender.charAt(0).toUpperCase() + app.petId.gender.slice(1) : 'N/A'}
+                    </p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <p className="text-xs text-gray-500">Health Status</p>
+                    <p className="text-lg font-semibold text-gray-900 capitalize">
+                      {app.petId?.healthStatus?.replace(/_/g, ' ') || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <p className="text-xs text-gray-500">Vaccination</p>
+                    <p className="text-lg font-semibold text-gray-900 capitalize">
+                      {app.petId?.vaccinationStatus?.replace(/_/g, ' ') || 'N/A'}
+                    </p>
                   </div>
                 </div>
               </div>
               
               {/* Application Details Card */}
-              <div className="bg-gray-50 rounded-lg p-5">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Application Details</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
-                      <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="bg-gradient-to-br from-green-50 to-teal-50 rounded-xl p-6 border border-green-100 shadow-sm">
+                <div className="flex items-center mb-4">
+                  <div className="flex-shrink-0 h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
+                    <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Application Details</h3>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-lg p-5 shadow-sm border border-gray-100 mb-5">
+                  <div className="flex items-center mb-4">
+                    <div className="flex-shrink-0 h-16 w-16 bg-green-100 rounded-full flex items-center justify-center">
+                      <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                     </div>
                     <div className="ml-4">
-                      <h4 className="text-lg font-medium text-gray-900">{app.userId?.name || 'N/A'}</h4>
-                      <p className="text-gray-500">{app.userId?.email || 'N/A'}</p>
+                      <h4 className="text-xl font-bold text-gray-900">{app.userId?.name || 'N/A'}</h4>
+                      <p className="text-gray-600">{app.userId?.email || 'N/A'}</p>
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-1 gap-3">
-                    <div className="flex justify-between items-center bg-white p-3 rounded-lg border border-gray-200">
-                      <span className="text-gray-500">Applied On</span>
-                      <span className="font-medium">{formatDate(app.createdAt)}</span>
+                  <div className="flex flex-wrap gap-2">
+                    <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                      Applied: {formatDate(app.createdAt)}
                     </div>
-                    <div className="flex justify-between items-center bg-white p-3 rounded-lg border border-gray-200">
-                      <span className="text-gray-500">Application Status</span>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700 font-medium">Application Status</span>
                       <span>{getStatusBadge(app.status)}</span>
                     </div>
-                    <div className="flex justify-between items-center bg-white p-3 rounded-lg border border-gray-200">
-                      <span className="text-gray-500">Payment Status</span>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700 font-medium">Payment Status</span>
                       <span>{getPaymentBadge(app.paymentStatus)}</span>
                     </div>
-                    <div className="flex justify-between items-center bg-white p-3 rounded-lg border border-gray-200">
-                      <span className="text-gray-500">Handover Status</span>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-700 font-medium">Handover Status</span>
                       <span>{getHandoverBadge(app.handover?.status)}</span>
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+            
+            {/* Quick Actions */}
+            <div className="mt-6 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+              <div className="flex flex-wrap gap-3">
+                <button 
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                  onClick={() => setActiveTab('actions')}
+                >
+                  <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Manage Application
+                </button>
+                <button 
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                  onClick={() => setActiveTab('documents')}
+                >
+                  <svg className="-ml-1 mr-2 h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  View Documents
+                </button>
+                <button 
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+                  onClick={() => setActiveTab('pet')}
+                >
+                  <svg className="-ml-1 mr-2 h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Pet Details
+                </button>
               </div>
             </div>
           </div>
@@ -703,85 +906,223 @@ const ApplicationDetailsImproved = () => {
           <div className="p-6">
             <h3 className="text-xl font-semibold text-gray-900 mb-6">Pet Details</h3>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
+              <div className="lg:col-span-2 space-y-6">
                 <div className="bg-gray-50 rounded-lg p-5">
                   <h4 className="text-lg font-medium text-gray-900 mb-4">Basic Information</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                       <p className="text-xs text-gray-500">Name</p>
                       <p className="font-medium">{app.petId?.name || 'N/A'}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                       <p className="text-xs text-gray-500">Species</p>
                       <p className="font-medium capitalize">{app.petId?.species || 'N/A'}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                       <p className="text-xs text-gray-500">Breed</p>
                       <p className="font-medium">{app.petId?.breed || 'N/A'}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                       <p className="text-xs text-gray-500">Gender</p>
                       <p className="font-medium capitalize">{app.petId?.gender || 'N/A'}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                       <p className="text-xs text-gray-500">Age</p>
                       <p className="font-medium">{app.petId?.ageDisplay || 'N/A'}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                       <p className="text-xs text-gray-500">Weight</p>
                       <p className="font-medium">{app.petId?.weight ? `${app.petId.weight} kg` : 'N/A'}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                       <p className="text-xs text-gray-500">Color</p>
                       <p className="font-medium capitalize">{app.petId?.color || 'N/A'}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                       <p className="text-xs text-gray-500">Temperament</p>
                       <p className="font-medium capitalize">{app.petId?.temperament?.replace(/_/g, ' ') || 'N/A'}</p>
                     </div>
                   </div>
                 </div>
                 
-                <div className="bg-gray-50 rounded-lg p-5 mt-6">
+                <div className="bg-gray-50 rounded-lg p-5">
                   <h4 className="text-lg font-medium text-gray-900 mb-4">Health Information</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                       <p className="text-xs text-gray-500">Health Status</p>
                       <p className="font-medium capitalize">{app.petId?.healthStatus?.replace(/_/g, ' ') || 'N/A'}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                       <p className="text-xs text-gray-500">Vaccination Status</p>
                       <p className="font-medium capitalize">{app.petId?.vaccinationStatus?.replace(/_/g, ' ') || 'N/A'}</p>
                     </div>
-                    <div className="md:col-span-2 bg-white p-4 rounded-lg border border-gray-200">
+                    <div className="md:col-span-2 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                       <p className="text-xs text-gray-500">Description</p>
                       <p className="font-medium">{app.petId?.description || 'N/A'}</p>
                     </div>
                   </div>
                 </div>
+                
+                <div className="bg-gray-50 rounded-lg p-5">
+                  <h4 className="text-lg font-medium text-gray-900 mb-4">Pet Code</h4>
+                  <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                    <p className="text-xs text-gray-500">Unique Identifier</p>
+                    <div className="flex items-center mt-2">
+                      <span className="font-mono font-medium bg-blue-50 text-blue-700 px-3 py-1 rounded border border-blue-200">
+                        {app.petId?.petCode || 'N/A'}
+                      </span>
+                      <button 
+                        onClick={() => navigator.clipboard.writeText(app.petId?.petCode || '')}
+                        className="ml-2 text-gray-500 hover:text-gray-700"
+                        title="Copy to clipboard"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">This unique code identifies the pet in the centralized registry</p>
+                  </div>
+                </div>
               </div>
               
-              <div>
+              <div className="space-y-6">
                 <div className="bg-gray-50 rounded-lg p-5">
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">Images</h4>
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="text-lg font-medium text-gray-900">Images</h4>
+                    <label className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                      <svg className="-ml-1 mr-1.5 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Add Images
+                      <input 
+                        type="file" 
+                        className="hidden" 
+                        accept="image/*" 
+                        multiple 
+                        onChange={handleImageUpload}
+                        disabled={uploading}
+                      />
+                    </label>
+                  </div>
+                  {uploading && (
+                    <div className="mb-4 flex items-center text-blue-600">
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Uploading images...
+                    </div>
+                  )}
                   {app.petId?.images && app.petId.images.length > 0 ? (
                     <div className="grid grid-cols-2 gap-2">
                       {app.petId.images.map((img, index) => (
-                        <div key={index} className="aspect-square rounded-lg overflow-hidden bg-gray-200">
+                        <div key={index} className="aspect-square rounded-lg overflow-hidden bg-gray-200 shadow-sm relative group">
                           <img 
                             src={resolveMediaUrl(img.url)} 
                             alt={img.caption || `Pet image ${index + 1}`}
                             className="w-full h-full object-cover"
                           />
+                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                            <a 
+                              href={resolveMediaUrl(img.url)} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-white bg-black bg-opacity-50 rounded-full p-2 hover:bg-opacity-70 transition-all"
+                              title="View image"
+                            >
+                              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            </a>
+                          </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-gray-500">
+                    <div className="text-center py-8 text-gray-500 bg-white rounded-lg border border-gray-200">
                       <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                       <p className="mt-2">No images available</p>
+                      <p className="text-sm text-gray-500 mt-1">Click "Add Images" to upload pet photos</p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg p-5">
+                  <h4 className="text-lg font-medium text-gray-900 mb-4">Documents</h4>
+                  {getPetDocuments().length > 0 ? (
+                    <div className="space-y-3">
+                      {getPetDocuments().map((doc, index) => {
+                        const docObj = typeof doc === 'string' ? { url: doc } : doc;
+                        const url = resolveMediaUrl(docObj.url);
+                        const type = docObj.type || (url.match(/\.(pdf|doc|docx)$/i) ? 'application/' + (url.match(/\.pdf$/i) ? 'pdf' : url.match(/\.docx$/i) ? 'vnd.openxmlformats-officedocument.wordprocessingml.document' : 'msword') : 'image');
+                        
+                        return (
+                          <div key={`pet-doc-${index}`} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+                            <div className="flex items-center">
+                              {type === 'application/pdf' ? (
+                                <div className="flex-shrink-0 w-8 h-8 bg-red-100 rounded-md flex items-center justify-center">
+                                  <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                </div>
+                              ) : type.startsWith('image') ? (
+                                <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-md flex items-center justify-center">
+                                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                </div>
+                              ) : (
+                                <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-md flex items-center justify-center">
+                                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                </div>
+                              )}
+                              <div className="ml-3">
+                                <p className="text-sm font-medium text-gray-900 truncate max-w-xs">
+                                  {docObj.name || `Document ${index + 1}`}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {type.split('/')[1]?.toUpperCase() || 'FILE'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex space-x-2">
+                              <a 
+                                href={url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-900"
+                                title="View document"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                              </a>
+                              <button 
+                                onClick={() => downloadDocument(docObj.url, docObj.name || `pet-document-${index + 1}`)}
+                                className="text-green-600 hover:text-green-900"
+                                title="Download document"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 bg-white rounded-lg border border-gray-200">
+                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <p className="mt-2">No documents available</p>
                     </div>
                   )}
                 </div>
@@ -793,59 +1134,153 @@ const ApplicationDetailsImproved = () => {
         {activeTab === 'documents' && (
           <div className="p-6">
             <h3 className="text-xl font-semibold text-gray-900 mb-6">Applicant Documents</h3>
-            {getApplicantDocuments().length === 0 ? (
-              <div className="text-center py-12">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No documents</h3>
-                <p className="mt-1 text-sm text-gray-500">No documents have been uploaded by the applicant.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {getApplicantDocuments().map((doc, index) => {
-                  const docObj = typeof doc === 'string' ? { url: doc } : doc;
-                  const url = resolveMediaUrl(docObj.url);
-                  const type = docObj.type || (url.match(/\.(pdf|doc|docx)$/i) ? 'application/' + (url.match(/\.pdf$/i) ? 'pdf' : url.match(/\.docx$/i) ? 'vnd.openxmlformats-officedocument.wordprocessingml.document' : 'msword') : 'image');
-                  
-                  return (
-                    <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
-                      {type === 'application/pdf' ? (
-                        <div className="bg-red-50 aspect-video flex items-center justify-center">
-                          <svg className="h-12 w-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                        </div>
-                      ) : type.startsWith('image') ? (
-                        <div className="aspect-video bg-gray-200">
-                          <img src={url} alt={docObj.name || `Document ${index + 1}`} className="w-full h-full object-cover" />
-                        </div>
-                      ) : (
-                        <div className="bg-blue-50 aspect-video flex items-center justify-center">
-                          <svg className="h-12 w-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                        </div>
-                      )}
-                      <div className="p-3">
-                        <h4 className="font-medium text-sm truncate">{docObj.name || `Document ${index + 1}`}</h4>
-                        <div className="flex justify-between items-center mt-2">
-                          <span className="text-xs text-gray-500">{type.split('/')[1]?.toUpperCase() || 'FILE'}</span>
-                          <a 
-                            href={url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                          >
-                            View
-                          </a>
+            <div className="mb-8">
+              <h4 className="text-lg font-medium text-gray-900 mb-4">Applicant Documents</h4>
+              {getApplicantDocuments().length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No documents</h3>
+                  <p className="mt-1 text-sm text-gray-500">No documents have been uploaded by the applicant.</p>
+                  {/* Debug info */}
+                  <div className="mt-2 text-xs text-gray-400">
+                    Documents checked: {getApplicantDocuments().length}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {getApplicantDocuments().map((doc, index) => {
+                    const docObj = typeof doc === 'string' ? { url: doc } : doc;
+                    const url = resolveMediaUrl(docObj.url);
+                    const type = docObj.type || (url.match(/\.(pdf|doc|docx)$/i) ? 'application/' + (url.match(/\.pdf$/i) ? 'pdf' : url.match(/\.docx$/i) ? 'vnd.openxmlformats-officedocument.wordprocessingml.document' : 'msword') : 'image');
+                    
+                    return (
+                      <div key={index} className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                        {type === 'application/pdf' ? (
+                          <div className="bg-red-50 aspect-video flex items-center justify-center">
+                            <svg className="h-12 w-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                        ) : type.startsWith('image') ? (
+                          <div className="aspect-video bg-gray-200">
+                            <img src={url} alt={docObj.name || `Document ${index + 1}`} className="w-full h-full object-cover" />
+                          </div>
+                        ) : (
+                          <div className="bg-blue-50 aspect-video flex items-center justify-center">
+                            <svg className="h-12 w-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                        )}
+                        <div className="p-4">
+                          <h4 className="font-medium text-sm truncate text-gray-900">{docObj.name || `Document ${index + 1}`}</h4>
+                          <div className="flex justify-between items-center mt-3">
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{type.split('/')[1]?.toUpperCase() || 'FILE'}</span>
+                            <div className="flex space-x-2">
+                              <a 
+                                href={url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center"
+                              >
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                View
+                              </a>
+                              <button 
+                                onClick={() => downloadDocument(docObj.url, docObj.name || `document-${index + 1}`)}
+                                className="text-xs text-green-600 hover:text-green-800 font-medium flex items-center"
+                              >
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Download
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h4 className="text-lg font-medium text-gray-900 mb-4">Pet Documents</h4>
+              {getPetDocuments().length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No documents</h3>
+                  <p className="mt-1 text-sm text-gray-500">No documents have been uploaded by the manager for this pet.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {getPetDocuments().map((doc, index) => {
+                    const docObj = typeof doc === 'string' ? { url: doc } : doc;
+                    const url = resolveMediaUrl(docObj.url);
+                    const type = docObj.type || (url.match(/\.(pdf|doc|docx)$/i) ? 'application/' + (url.match(/\.pdf$/i) ? 'pdf' : url.match(/\.docx$/i) ? 'vnd.openxmlformats-officedocument.wordprocessingml.document' : 'msword') : 'image');
+                    
+                    return (
+                      <div key={`pet-${index}`} className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                        {type === 'application/pdf' ? (
+                          <div className="bg-red-50 aspect-video flex items-center justify-center">
+                            <svg className="h-12 w-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                        ) : type.startsWith('image') ? (
+                          <div className="aspect-video bg-gray-200">
+                            <img src={url} alt={docObj.name || `Pet Document ${index + 1}`} className="w-full h-full object-cover" />
+                          </div>
+                        ) : (
+                          <div className="bg-blue-50 aspect-video flex items-center justify-center">
+                            <svg className="h-12 w-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                        )}
+                        <div className="p-4">
+                          <h4 className="font-medium text-sm truncate text-gray-900">{docObj.name || `Pet Document ${index + 1}`}</h4>
+                          <div className="flex justify-between items-center mt-3">
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{type.split('/')[1]?.toUpperCase() || 'FILE'}</span>
+                            <div className="flex space-x-2">
+                              <a 
+                                href={url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center"
+                              >
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                View
+                              </a>
+                              <button 
+                                onClick={() => downloadDocument(docObj.url, docObj.name || `pet-document-${index + 1}`)}
+                                className="text-xs text-green-600 hover:text-green-800 font-medium flex items-center"
+                              >
+                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Download
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+               )}
+            </div>
           </div>
         )}
 
@@ -882,15 +1317,20 @@ const ApplicationDetailsImproved = () => {
                 )}
 
                 {/* Handover Management */}
-                <div className="bg-white border border-gray-200 rounded-lg p-5">
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">Handover Management</h4>
+                <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                  <h4 className="text-lg font-medium text-gray-900 mb-4 pb-2 border-b border-gray-100">Handover Management</h4>
                   
                   {(!app.handover || app.handover.status === 'none') && (
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                       {canScheduleHandover() ? (
                         <>
-                          <div className="text-sm text-blue-700 bg-blue-50 p-3 rounded-lg">
-                            <div className="font-medium">Schedule Handover</div>
+                          <div className="text-sm text-blue-700 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                            <div className="font-medium flex items-center">
+                              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              Schedule Handover
+                            </div>
                             <div className="mt-1">Schedule the handover appointment for the adopter.</div>
                           </div>
                           <div className="space-y-4">
@@ -898,7 +1338,7 @@ const ApplicationDetailsImproved = () => {
                               <label className="block text-sm font-medium text-gray-700 mb-1">Date & Time</label>
                               <input 
                                 type="datetime-local" 
-                                className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                                className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
                                 value={handover.scheduledAt ? new Date(handover.scheduledAt).toISOString().slice(0, 16) : ''} 
                                 onChange={e=>setHandover(h=>({ ...h, scheduledAt: e.target.value }))}
                               />
@@ -906,7 +1346,7 @@ const ApplicationDetailsImproved = () => {
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">Special Notes</label>
                               <textarea 
-                                className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                                className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
                                 rows={3} 
                                 value={handover.notes||''} 
                                 onChange={e=>setHandover(h=>({ ...h, notes: e.target.value }))}
@@ -914,114 +1354,170 @@ const ApplicationDetailsImproved = () => {
                               />
                             </div>
                           </div>
-                          <div className="text-xs text-gray-500 bg-amber-50 p-3 rounded-lg">
-                            Note: An OTP will be generated and sent to the adopter's email upon scheduling.
-                            The adopter must present this OTP at the adoption center to receive the pet.
+                          <div className="text-xs text-amber-700 bg-amber-50 p-4 rounded-lg border border-amber-100">
+                            <div className="font-medium flex items-center">
+                              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              Important Notice
+                            </div>
+                            <div className="mt-1">
+                              An OTP will be generated and sent to the adopter's email upon scheduling.
+                              The adopter must present this OTP at the adoption center to receive the pet.
+                            </div>
                           </div>
                           <button 
-                            className={`w-full px-4 py-2 rounded-lg font-medium flex items-center justify-center ${
+                            className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-center ${
                               saving ? 'bg-gray-400' : 'bg-blue-600 text-white hover:bg-blue-700'
-                            }`} 
+                            } transition-colors duration-200`} 
                             disabled={saving} 
                             onClick={scheduleHandover}
                           >
-                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                             {saving ? 'Scheduling...' : 'Schedule Handover'}
                           </button>
                         </>
                       ) : (
-                        <div className="space-y-4">
-                          <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
-                            <div className="font-medium">Handover Prerequisites</div>
+                        <div className="space-y-5">
+                          <div className="text-sm text-amber-700 bg-amber-50 p-4 rounded-lg border border-amber-100">
+                            <div className="font-medium flex items-center">
+                              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              Handover Prerequisites
+                            </div>
                             <div className="mt-2">Please complete the following steps before scheduling handover:</div>
                           </div>
-                          <div className="space-y-2">
-                            <div className={`flex items-center ${getHandoverPrerequisites().isApproved ? 'text-green-600' : 'text-gray-600'}`}>
+                          <div className="space-y-3">
+                            <div className={`flex items-center p-3 rounded-lg ${getHandoverPrerequisites().isApproved ? 'bg-green-50 border border-green-100' : 'bg-gray-50 border border-gray-100'}`}>
                               {getHandoverPrerequisites().isApproved ? (
-                                <svg className="h-5 w-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="h-5 w-5 mr-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               ) : (
-                                <svg className="h-5 w-5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="h-5 w-5 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                               )}
-                              <span>Application must be approved</span>
-                              {app.status === 'pending' && (
-                                <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Pending Review</span>
-                              )}
-                              {app.status === 'rejected' && (
-                                <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Rejected</span>
-                              )}
-                              {getHandoverPrerequisites().isApproved && (
-                                <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Completed</span>
-                              )}
+                              <div className="flex-1">
+                                <div className={`font-medium ${getHandoverPrerequisites().isApproved ? 'text-green-800' : 'text-gray-700'}`}>
+                                  Application must be approved
+                                </div>
+                                <div className="text-sm mt-1">
+                                  {app.status === 'pending' && (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                      Pending Review
+                                    </span>
+                                  )}
+                                  {app.status === 'rejected' && (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                      Rejected
+                                    </span>
+                                  )}
+                                  {getHandoverPrerequisites().isApproved && (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                      Completed
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div className={`flex items-center ${getHandoverPrerequisites().isPaymentCompleted ? 'text-green-600' : 'text-gray-600'}`}>
+                            
+                            <div className={`flex items-center p-3 rounded-lg ${getHandoverPrerequisites().isPaymentCompleted ? 'bg-green-50 border border-green-100' : 'bg-gray-50 border border-gray-100'}`}>
                               {getHandoverPrerequisites().isPaymentCompleted ? (
-                                <svg className="h-5 w-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="h-5 w-5 mr-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               ) : (
-                                <svg className="h-5 w-5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="h-5 w-5 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                               )}
-                              <span>Adoption payment must be completed</span>
-                              {app.paymentStatus && app.paymentStatus !== 'completed' && (
-                                <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded capitalize">
-                                  {app.paymentStatus === 'processing' ? 'Processing' : 'Not Completed'}
-                                </span>
-                              )}
-                              {getHandoverPrerequisites().isPaymentCompleted && (
-                                <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Completed</span>
-                              )}
+                              <div className="flex-1">
+                                <div className={`font-medium ${getHandoverPrerequisites().isPaymentCompleted ? 'text-green-800' : 'text-gray-700'}`}>
+                                  Adoption payment must be completed
+                                </div>
+                                <div className="text-sm mt-1">
+                                  {app.paymentStatus && app.paymentStatus !== 'completed' && (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 capitalize">
+                                      {app.paymentStatus === 'processing' ? 'Processing' : 'Not Completed'}
+                                    </span>
+                                  )}
+                                  {getHandoverPrerequisites().isPaymentCompleted && (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                      Completed
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div className={`flex items-center ${getHandoverPrerequisites().isContractGenerated ? 'text-green-600' : 'text-gray-600'}`}>
+                            
+                            <div className={`flex items-center p-3 rounded-lg ${getHandoverPrerequisites().isContractGenerated ? 'bg-green-50 border border-green-100' : 'bg-gray-50 border border-gray-100'}`}>
                               {getHandoverPrerequisites().isContractGenerated ? (
-                                <svg className="h-5 w-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="h-5 w-5 mr-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               ) : (
-                                <svg className="h-5 w-5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="h-5 w-5 mr-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                               )}
-                              <span>Contract/Certificate must be generated</span>
-                              {getHandoverPrerequisites().isContractGenerated && (
-                                <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Completed</span>
-                              )}
+                              <div className="flex-1">
+                                <div className={`font-medium ${getHandoverPrerequisites().isContractGenerated ? 'text-green-800' : 'text-gray-700'}`}>
+                                  Contract/Certificate must be generated
+                                </div>
+                                <div className="text-sm mt-1">
+                                  {getHandoverPrerequisites().isContractGenerated && (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                      Completed
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
-                          {!getHandoverPrerequisites().isApproved && (
-                            <div className="text-xs text-gray-500 mt-2">
-                              {app.status === 'pending' 
-                                ? 'Please review and approve this application first.' 
-                                : app.status === 'rejected' 
-                                  ? 'This application has been rejected and cannot be scheduled for handover.' 
-                                  : 'Application approval is required before proceeding.'}
-                            </div>
-                          )}
-                          {getHandoverPrerequisites().isApproved && !getHandoverPrerequisites().isPaymentCompleted && (
-                            <div className="text-xs text-gray-500 mt-2">
-                              The adopter must complete the adoption payment before handover can be scheduled.
-                            </div>
-                          )}
-                          {getHandoverPrerequisites().isApproved && getHandoverPrerequisites().isPaymentCompleted && !getHandoverPrerequisites().isContractGenerated && (
-                            <div className="text-xs text-gray-500 mt-2">
-                              Generate the contract/certificate after payment is completed.
-                            </div>
-                          )}
+                          
+                          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                            {!getHandoverPrerequisites().isApproved && (
+                              <div className="text-sm text-gray-600 mb-2">
+                                {app.status === 'pending' 
+                                  ? 'Please review and approve this application first.' 
+                                  : app.status === 'rejected' 
+                                    ? 'This application has been rejected and cannot be scheduled for handover.' 
+                                    : 'Application approval is required before proceeding.'}
+                              </div>
+                            )}
+                            {getHandoverPrerequisites().isApproved && !getHandoverPrerequisites().isPaymentCompleted && (
+                              <div className="text-sm text-gray-600 mb-2">
+                                The adopter must complete the adoption payment before handover can be scheduled.
+                              </div>
+                            )}
+                            {getHandoverPrerequisites().isApproved && getHandoverPrerequisites().isPaymentCompleted && !getHandoverPrerequisites().isContractGenerated && (
+                              <div className="text-sm text-gray-600 mb-2">
+                                Generate the contract/certificate after payment is completed.
+                              </div>
+                            )}
+                            <button 
+                              className="mt-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                              onClick={generateCertificate}
+                              disabled={saving}
+                            >
+                              <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              {saving ? 'Generating...' : 'Generate Certificate'}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
                   )}
                   
                   {app.handover && app.handover.status === 'scheduled' && (
-                    <div className="space-y-4">
-                      <div className="bg-green-50 p-3 rounded-lg">
+                    <div className="space-y-6">
+                      <div className="bg-green-50 p-4 rounded-lg border border-green-100">
                         <div className="font-medium text-green-800 flex items-center">
                           <svg className="h-5 w-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1033,107 +1529,138 @@ const ApplicationDetailsImproved = () => {
                         </div>
                       </div>
                       
-                      <div className="space-y-3">
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-500">Scheduled Date</span>
-                          <span className="text-sm font-medium">
-                            {app.handover.scheduledAt ? formatDateTime(app.handover.scheduledAt) : 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-500">Location</span>
-                          <span className="text-sm font-medium text-right">Adoption Center - Main Branch<br/>123 Pet Welfare Road, Animal City</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-500">Contact</span>
-                          <span className="text-sm font-medium">+91-9876543210</span>
-                        </div>
-                        {app.handover.notes && (
-                          <div>
-                            <span className="text-sm text-gray-500">Notes</span>
-                            <p className="text-sm font-medium mt-1">{app.handover.notes}</p>
+                      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                        <h5 className="font-medium text-gray-900 mb-3 pb-2 border-b border-gray-100">Scheduled Handover Details</h5>
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="text-sm text-gray-500">Scheduled Date & Time</span>
+                              <div className="text-sm font-medium mt-1">
+                                {app.handover.scheduledAt ? formatDateTime(app.handover.scheduledAt) : 'N/A'}
+                              </div>
+                            </div>
+                            <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              Scheduled
+                            </div>
                           </div>
-                        )}
-                      </div>
-                      
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Update Date & Time</label>
-                          <input 
-                            type="datetime-local" 
-                            className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                            value={handover.scheduledAt ? new Date(handover.scheduledAt).toISOString().slice(0, 16) : ''} 
-                            onChange={e=>setHandover(h=>({ ...h, scheduledAt: e.target.value }))}
-                          />
+                          
+                          <div>
+                            <span className="text-sm text-gray-500">Location</span>
+                            <div className="text-sm font-medium mt-1">Adoption Center - Main Branch</div>
+                            <div className="text-sm text-gray-600">123 Pet Welfare Road, Animal City</div>
+                          </div>
+                          
+                          <div>
+                            <span className="text-sm text-gray-500">Contact</span>
+                            <div className="text-sm font-medium mt-1">+91-9876543210</div>
+                          </div>
+                          
+                          {app.handover.notes && (
+                            <div>
+                              <span className="text-sm text-gray-500">Special Notes</span>
+                              <div className="text-sm font-medium mt-1 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                {app.handover.notes}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Update Notes</label>
-                          <textarea 
-                            className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                            rows={2} 
-                            value={handover.notes||''} 
-                            onChange={e=>setHandover(h=>({ ...h, notes: e.target.value }))}
-                          />
+                      </div>
+                      
+                      <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                        <h5 className="font-medium text-gray-900 mb-3 pb-2 border-b border-gray-100">Update Handover</h5>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">New Date & Time</label>
+                            <input 
+                              type="datetime-local" 
+                              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                              value={handover.scheduledAt ? new Date(handover.scheduledAt).toISOString().slice(0, 16) : ''} 
+                              onChange={e=>setHandover(h=>({ ...h, scheduledAt: e.target.value }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
+                            <textarea 
+                              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                              rows={3} 
+                              value={handover.notes||''} 
+                              onChange={e=>setHandover(h=>({ ...h, notes: e.target.value }))}
+                              placeholder="Any special instructions for the adopter"
+                            />
+                          </div>
+                          <button 
+                            className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-center ${
+                              saving ? 'bg-gray-400' : 'bg-blue-600 text-white hover:bg-blue-700'
+                            } transition-colors duration-200`} 
+                            disabled={saving} 
+                            onClick={updateHandover}
+                          >
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            {saving ? 'Updating...' : 'Update Schedule'}
+                          </button>
                         </div>
                       </div>
                       
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        <button 
-                          className={`px-4 py-2 rounded-lg font-medium flex items-center justify-center ${
-                            saving ? 'bg-gray-400' : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                          } flex-1`} 
-                          disabled={saving} 
-                          onClick={completeHandover}
-                        >
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <div className="bg-amber-50 p-4 rounded-lg border border-amber-100">
+                        <div className="font-medium text-amber-800 flex items-center">
+                          <svg className="h-5 w-5 mr-2 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                           </svg>
-                          {saving ? 'Completing...' : 'Complete Handover (Requires OTP)'}
-                        </button>
-                        <button 
-                          className={`px-4 py-2 rounded-lg font-medium flex items-center justify-center ${
-                            saving ? 'bg-gray-400' : 'bg-amber-600 text-white hover:bg-amber-700'
-                          } flex-1`} 
-                          disabled={saving} 
-                          onClick={regenerateOTP}
-                        >
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          {saving ? 'Regenerating...' : 'Regenerate OTP'}
-                        </button>
-                        <button 
-                          className={`px-4 py-2 rounded-lg font-medium flex items-center justify-center ${
-                            saving ? 'bg-gray-400' : 'bg-blue-600 text-white hover:bg-blue-700'
-                          } flex-1`} 
-                          disabled={saving} 
-                          onClick={updateHandover}
-                        >
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          {saving ? 'Updating...' : 'Update Schedule'}
-                        </button>
-                      </div>
-                      
-                      <div className="text-xs text-amber-600 bg-amber-50 p-3 rounded-lg">
-                        Note: To complete the handover, you must verify the OTP provided by the adopter.
-                        This ensures the pet is actually transferred to the new owner.
+                          Complete Handover
+                        </div>
+                        <div className="text-sm text-amber-700 mt-2 mb-4">
+                          To complete the handover, you must verify the OTP provided by the adopter.
+                          This ensures the pet is actually transferred to the new owner.
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <button 
+                            className={`px-4 py-3 rounded-lg font-medium flex items-center justify-center ${
+                              saving ? 'bg-gray-400' : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            } flex-1 transition-colors duration-200`} 
+                            disabled={saving} 
+                            onClick={completeHandover}
+                          >
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {saving ? 'Completing...' : 'Complete Handover'}
+                          </button>
+                          <button 
+                            className={`px-4 py-3 rounded-lg font-medium flex items-center justify-center ${
+                              saving ? 'bg-gray-400' : 'bg-amber-600 text-white hover:bg-amber-700'
+                            } flex-1 transition-colors duration-200`} 
+                            disabled={saving} 
+                            onClick={regenerateOTP}
+                          >
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            {saving ? 'Regenerating...' : 'Regenerate OTP'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
                   
                   {app.handover && app.handover.status === 'completed' && (
-                    <div className="text-sm bg-green-50 p-4 rounded-lg">
-                      <div className="font-medium text-green-800 flex items-center">
+                    <div className="text-sm bg-green-50 p-5 rounded-lg border border-green-100">
+                      <div className="font-medium text-green-800 flex items-center mb-2">
                         <svg className="h-5 w-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         Handover Completed
                       </div>
-                      <div className="text-green-700 mt-2">
+                      <div className="text-green-700">
                         The handover was completed on {app.handoverCompletedAt ? formatDateTime(app.handoverCompletedAt) : 'recently'}.
                         The pet is now officially owned by {app.userId?.name} and will appear in their dashboard.
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-green-100 flex items-center text-green-700">
+                        <svg className="h-5 w-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="font-medium">Process Complete</span>
                       </div>
                     </div>
                   )}
@@ -1142,11 +1669,11 @@ const ApplicationDetailsImproved = () => {
 
               {/* Certificate & Contract */}
               <div className="space-y-6">
-                <div className="bg-white border border-gray-200 rounded-lg p-5">
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">Certificate & Contract</h4>
+                <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                  <h4 className="text-lg font-medium text-gray-900 mb-4 pb-2 border-b border-gray-100">Certificate & Contract</h4>
                   {app.contractURL ? (
-                    <div className="space-y-4">
-                      <div className="flex items-center text-green-700">
+                    <div className="space-y-5">
+                      <div className="flex items-center text-green-700 bg-green-50 p-3 rounded-lg border border-green-100">
                         <svg className="h-5 w-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
@@ -1154,26 +1681,26 @@ const ApplicationDetailsImproved = () => {
                       </div>
                       <div className="flex flex-col space-y-3">
                         <button 
-                          className={`px-4 py-2 rounded-lg font-medium flex items-center justify-center ${
+                          className={`px-4 py-3 rounded-lg font-medium flex items-center justify-center ${
                             saving ? 'bg-gray-400' : 'bg-blue-600 text-white hover:bg-blue-700'
-                          }`} 
+                          } transition-colors duration-200`} 
                           disabled={saving} 
                           onClick={viewCertificate}
                         >
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                           {saving ? 'Opening...' : 'View Contract'}
                         </button>
                         <button 
-                          className={`px-4 py-2 rounded-lg font-medium flex items-center justify-center ${
+                          className={`px-4 py-3 rounded-lg font-medium flex items-center justify-center ${
                             saving ? 'bg-gray-400' : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                          }`} 
+                          } transition-colors duration-200`} 
                           disabled={saving} 
                           onClick={generateCertificate}
                         >
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                           </svg>
                           {saving ? 'Regenerating...' : 'Regenerate Certificate'}
@@ -1181,19 +1708,25 @@ const ApplicationDetailsImproved = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      <div className="text-gray-600">
+                    <div className="space-y-5">
+                      <div className="text-gray-700 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                        <div className="font-medium flex items-center mb-2">
+                          <svg className="w-5 h-5 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          Generate Certificate
+                        </div>
                         <p className="mb-3">Generate contract and certificate before scheduling handover</p>
-                        <p className="text-sm text-gray-500">This can only be done after the adopter has completed payment.</p>
+                        <p className="text-sm text-gray-600">This can only be done after the adopter has completed payment.</p>
                       </div>
                       <button 
-                        className={`w-full px-4 py-2 rounded-lg font-medium flex items-center justify-center ${
+                        className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-center ${
                           saving ? 'bg-gray-400' : 'bg-blue-600 text-white hover:bg-blue-700'
-                        }`} 
+                        } transition-colors duration-200`} 
                         disabled={saving} 
                         onClick={generateCertificate}
                       >
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         {saving ? 'Generating...' : 'Generate Certificate'}
@@ -1262,7 +1795,7 @@ const ApplicationDetailsImproved = () => {
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default ApplicationDetailsImproved
+export default ApplicationDetailsImproved;

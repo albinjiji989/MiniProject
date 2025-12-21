@@ -37,24 +37,27 @@ class PetAuditService {
         throw new Error(`Pet with code ${petCode} not found in registry`);
       }
 
-      // Create audit log entry in the ownership history
-      const auditEntry = {
-        previousOwnerId: petRegistry.currentOwnerId,
-        newOwnerId: petRegistry.currentOwnerId, // Default to same owner
-        transferType: action,
-        transferDate: new Date(),
-        transferPrice: details.transferPrice || 0,
-        transferReason: details.reason || '',
-        source: module,
-        notes: notes,
-        performedBy: performedBy
-      };
+      // For ownership transfers (not creation), create audit log entry in the ownership history
+      if (action !== 'created') {
+        const OwnershipHistory = require('../models/OwnershipHistory');
+        
+        const auditEntry = {
+          pet: petRegistry._id,
+          previousOwner: petRegistry.currentOwnerId,
+          newOwner: details.newOwnerId || petRegistry.currentOwnerId,
+          transferType: action,
+          transferDate: new Date(),
+          transferPrice: details.transferPrice || 0,
+          transferReason: details.reason || 'No reason provided',
+          source: module,
+          notes: notes,
+          createdBy: performedBy
+        };
 
-      // Add the audit entry to the pet's ownership history
-      petRegistry.ownershipHistory.push(auditEntry);
-      
-      // Update logs count
-      petRegistry.logsCount = (petRegistry.logsCount || 0) + 1;
+        // Create a new ownership history entry
+        const ownershipHistoryEntry = new OwnershipHistory(auditEntry);
+        await ownershipHistoryEntry.save();
+      }
       
       // Update last seen timestamp
       petRegistry.lastSeenAt = new Date();
@@ -88,7 +91,7 @@ class PetAuditService {
       
       await petRegistry.save();
 
-      return auditEntry;
+      return { action, module, performedBy, details, notes };
     } catch (error) {
       console.error('Error logging pet movement:', error);
       throw error;

@@ -410,12 +410,13 @@ const ManagerManagement = () => {
   const getModuleColor = (module) => {
     const colors = {
       'adoption': 'success',
+      'petshop': 'primary',
+      'temporary-care': 'info',
+      'veterinary': 'warning',
       'shelter': 'info',
       'rescue': 'warning',
       'ecommerce': 'primary',
-      'pharmacy': 'secondary',
-      'temporary-care': 'error',
-      'veterinary': 'default'
+      'pharmacy': 'secondary'
     }
     return colors[module] || 'default'
   }

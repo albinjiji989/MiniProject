@@ -89,9 +89,6 @@ const BreedsManagement = () => {
     name: '',
     speciesId: '',
     description: '',
-    size: '',
-    origin: '',
-    temperament: '',
     isActive: true
   })
   const [speciesCategory, setSpeciesCategory] = useState('')
@@ -188,9 +185,6 @@ const BreedsManagement = () => {
       name: breed.name || '',
       speciesId: breed.species?._id || breed.speciesId || '',
       description: breed.description || '',
-      size: breed.size || '',
-      origin: breed.origin || '',
-      temperament: Array.isArray(breed.temperament) ? breed.temperament.join(', ') : (breed.temperament || ''),
       isActive: breed.isActive !== false
     })
     const spec = species.find(s => s._id === (breed.species?._id || breed.speciesId))
@@ -204,7 +198,31 @@ const BreedsManagement = () => {
     const errors = {}
     if (!formData.name?.trim()) errors.name = 'Breed name is required'
     if (!formData.speciesId) errors.speciesId = 'Species is required'
-    // no size validation
+    
+    // Check for duplicate breed names (case-insensitive)
+    if (!editBreed) {
+      // When creating, check against all existing breeds
+      const isDuplicate = breeds.some(breed => 
+        breed.name.toLowerCase() === formData.name.trim().toLowerCase() && 
+        breed.species?._id === formData.speciesId
+      );
+      
+      if (isDuplicate) {
+        errors.name = 'A breed with this name already exists for the selected species';
+      }
+    } else {
+      // When editing, check against all other breeds (exclude the current one)
+      const isDuplicate = breeds.some(breed => 
+        breed._id !== editBreed._id &&
+        breed.name.toLowerCase() === formData.name.trim().toLowerCase() && 
+        breed.species?._id === formData.speciesId
+      );
+      
+      if (isDuplicate) {
+        errors.name = 'A breed with this name already exists for the selected species';
+      }
+    }
+    
     setFormErrors(errors)
     if (Object.keys(errors).length > 0) return
 
@@ -214,9 +232,6 @@ const BreedsManagement = () => {
           name: formData.name,
           speciesId: formData.speciesId,
           description: formData.description,
-          size: formData.size,
-          origin: formData.origin,
-          temperament: formData.temperament,
           isActive: formData.isActive
         })
         setSuccess('Breed updated successfully!')
@@ -226,9 +241,6 @@ const BreedsManagement = () => {
           name: formData.name,
           speciesId: formData.speciesId,
           description: formData.description,
-          size: formData.size,
-          origin: formData.origin,
-          temperament: formData.temperament,
           isActive: formData.isActive
         })
         setSuccess('Breed created successfully!')
@@ -354,7 +366,7 @@ const BreedsManagement = () => {
                 </Select>
               </FormControl>
             </Grid>
-            {/* Size filter removed */}
+            {/* Size filter removed as per requirements */}
             <Grid item xs={12} md={2}>
               <FormControlLabel
                 control={
@@ -540,38 +552,7 @@ const BreedsManagement = () => {
                 disabled
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Size</InputLabel>
-                <Select
-                  value={formData.size || ''}
-                  onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                >
-                  <MenuItem value="tiny">Tiny</MenuItem>
-                  <MenuItem value="small">Small</MenuItem>
-                  <MenuItem value="medium">Medium</MenuItem>
-                  <MenuItem value="large">Large</MenuItem>
-                  <MenuItem value="giant">Giant</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Origin"
-                value={formData.origin || ''}
-                onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Temperament"
-                value={formData.temperament || ''}
-                onChange={(e) => setFormData({ ...formData, temperament: e.target.value })}
-              />
-            </Grid>
-            {/* Size, Origin, Temperament fields included for both add and edit forms */}
+            {/* Size, Origin, Temperament fields removed as per requirements */}
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -615,6 +596,8 @@ const BreedsManagement = () => {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
+                error={!!formErrors.name}
+                helperText={formErrors.name}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -632,37 +615,7 @@ const BreedsManagement = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Size</InputLabel>
-                <Select
-                  value={formData.size || ''}
-                  onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                >
-                  <MenuItem value="tiny">Tiny</MenuItem>
-                  <MenuItem value="small">Small</MenuItem>
-                  <MenuItem value="medium">Medium</MenuItem>
-                  <MenuItem value="large">Large</MenuItem>
-                  <MenuItem value="giant">Giant</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Origin"
-                value={formData.origin || ''}
-                onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Temperament"
-                value={formData.temperament || ''}
-                onChange={(e) => setFormData({ ...formData, temperament: e.target.value })}
-              />
-            </Grid>
+            {/* Size, Origin, Temperament fields removed as per requirements */}
             <Grid item xs={12}>
               <TextField
                 fullWidth

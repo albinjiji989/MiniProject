@@ -143,7 +143,7 @@ router.post('/', auth, authorize('admin'), async (req, res) => {
       });
     }
 
-    // Check if breed already exists for this species
+    // Check if breed already exists for this species (case-insensitive)
     const existingBreed = await Breed.findByNameAndSpecies(name, speciesId);
     if (existingBreed) {
       return res.status(400).json({
@@ -216,7 +216,7 @@ router.put('/:id', auth, authorize('admin'), async (req, res) => {
         });
       }
 
-      // Check if breed name already exists for new species
+      // Check if breed name already exists for new species (case-insensitive)
       const existingBreed = await Breed.findByNameAndSpecies(name || breed.name, speciesId);
       if (existingBreed && existingBreed._id.toString() !== breed._id.toString()) {
         return res.status(400).json({
@@ -226,8 +226,8 @@ router.put('/:id', auth, authorize('admin'), async (req, res) => {
       }
     }
 
-    // If only name is being changed, check for conflicts
-    if (name && name !== breed.name && (!speciesId || speciesId === breed.speciesId.toString())) {
+    // If only name is being changed, check for conflicts (case-insensitive)
+    if (name && name.toLowerCase() !== breed.name.toLowerCase() && (!speciesId || speciesId === breed.speciesId.toString())) {
       const existingBreed = await Breed.findByNameAndSpecies(name, breed.speciesId);
       if (existingBreed && existingBreed._id.toString() !== breed._id.toString()) {
         return res.status(400).json({

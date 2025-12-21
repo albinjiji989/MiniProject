@@ -6,6 +6,14 @@ const { sendMail } = require('../../../../core/utils/email');
 const { sendSMS } = require('../../../../core/utils/sms');
 const path = require('path');
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 // User Controllers
 const getAvailablePets = async (req, res) => {
@@ -223,21 +231,44 @@ const submitApplication = async (req, res) => {
       });
     }
 
-    // Normalize documents from body (supports [string] or [{url}])
+    // Normalize documents from body (supports [string], [{url}], or full document objects)
+    console.log('Raw documents from request body:', req.body?.documents);
     const rawDocs = Array.isArray(req.body?.documents) ? req.body.documents
                   : (Array.isArray(applicationData?.documents) ? applicationData.documents : [])
+    console.log('Processed rawDocs:', rawDocs);
     const documents = rawDocs
-      .map(d => (typeof d === 'string' ? d : (d && d.url ? d.url : null)))
-      .filter(u => typeof u === 'string' && u.trim())
+      .map(d => {
+        console.log('Processing document:', d, 'Type:', typeof d);
+        if (typeof d === 'string') {
+          // Simple URL string
+          return { url: d, name: 'document', type: 'unknown', uploadedAt: new Date() };
+        } else if (d && d.url) {
+          // Object with at least URL
+          console.log('Document uploadedAt:', d.uploadedAt, 'Type:', typeof d.uploadedAt);
+          return {
+            url: d.url,
+            name: d.name || 'document',
+            type: d.type || 'unknown',
+            uploadedAt: d.uploadedAt ? new Date(d.uploadedAt) : new Date()
+          };
+        }
+        return null;
+      })
+      .filter(d => d && d.url && typeof d.url === 'string' && d.url.trim())
+    console.log('Final documents array:', documents);
 
+    console.log('Creating AdoptionRequest with documents:', documents);
     const application = new AdoptionRequest({
       userId: req.user.id,
       petId: pet._id,
       applicationData: applicationData,
       documents: documents
     });
+    console.log('AdoptionRequest created successfully');
 
+    console.log('About to save application');
     await application.save();
+    console.log('Application saved successfully');
 
     // Notify managers (best-effort)
     try {
@@ -263,6 +294,7 @@ const submitApplication = async (req, res) => {
 // Upload applicant document (image/pdf)
 const uploadDocument = async (req, res) => {
   try {
+    
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'No file uploaded' });
     }
@@ -293,29 +325,44 @@ const uploadDocument = async (req, res) => {
     const fileExtension = mimetype.split('/')[1];
     const filename = `${timestamp}_${randomString}.${fileExtension}`;
 
-    // Create upload path - corrected to save to the user document directory
-    const uploadDir = path.join(__dirname, '..', '..', '..', '..', 'uploads', 'adoption', 'user', 'document');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    // Convert buffer to base64 for Cloudinary upload
+    const base64Data = `data:${mimetype};base64,${buffer.toString('base64')}`;
+    
+    let resourceType = 'image';
+    let format = undefined;
+    
+    // Set appropriate resource type and format for Cloudinary
+    // For PDFs to be viewable in browsers, use 'image' resource type
+    if (mimetype === 'application/pdf') {
+      resourceType = 'image';
+      format = 'pdf';
+    } else if (mimetype.startsWith('image/')) {
+      resourceType = 'image';
     }
 
-    const filePath = path.join(uploadDir, filename);
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(base64Data, {
+      folder: 'adoption/user/application',
+      public_id: filename,
+      overwrite: false,
+      resource_type: resourceType,
+      ...(format && { format: format })
+    });
+
+    // Create URL from Cloudinary result
+    const fileUrl = result.secure_url;
+
+    // Return success response with full document information
+    const documentInfo = {
+      url: fileUrl,
+      name: originalname,
+      type: mimeTypeToDocType[mimetype] || 'Other',
+      uploadedAt: new Date()
+    };
     
-    // Save file to disk
-    fs.writeFileSync(filePath, buffer);
-
-    // Create URL - corrected to match static route
-    const fileUrl = `/uploads/adoption/user/document/${filename}`;
-
-    // Return success response
     res.json({
       success: true,
-      data: {
-        url: fileUrl,
-        name: originalname,
-        type: mimeTypeToDocType[mimetype] || 'Other',
-        uploadedAt: new Date()
-      }
+      data: documentInfo
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -328,7 +375,7 @@ const getUserApplications = async (req, res) => {
       userId: req.user.id, 
       isActive: true 
     })
-      .populate('petId', 'name breed species age images adoptionFee')
+      .populate('petId')
       .populate('reviewedBy', 'name email')
       .sort({ createdAt: -1 });
 
@@ -345,7 +392,7 @@ const getUserApplicationById = async (req, res) => {
       userId: req.user.id,
       isActive: true
     })
-      .populate('petId', 'name breed species age images adoptionFee')
+      .populate('petId')
       .populate('reviewedBy', 'name email');
 
     if (!application) {

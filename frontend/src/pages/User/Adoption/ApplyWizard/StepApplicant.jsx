@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { authAPI } from '../../../../services/api'
+import { useAuth } from '../../../../contexts/AuthContext'
 
 const KEY = 'adopt_apply_wizard'
 
 export default function StepApplicant() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
+  const { user } = useAuth()
+  
   const [form, setForm] = useState(() => {
     try { 
       const savedData = JSON.parse(localStorage.getItem(KEY))?.applicant || {}
@@ -31,10 +33,9 @@ export default function StepApplicant() {
 
   // Prefill from logged-in user profile (editable)
   useEffect(() => {
-    const prefill = async () => {
+    const prefill = () => {
       try {
-        const res = await authAPI.getMe()
-        const u = res?.data?.user || res?.data?.data || res?.data || {}
+        const u = user || {}
         const fullName = u.name || u.fullName || ''
         const email = u.email || ''
         const phone = u.phone || u.mobile || u.contact || ''
@@ -49,7 +50,7 @@ export default function StepApplicant() {
     }
     prefill()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user])
 
   const update = (patch) => {
     const prev = JSON.parse(localStorage.getItem(KEY) || '{}')

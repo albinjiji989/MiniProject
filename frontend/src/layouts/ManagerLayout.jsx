@@ -4,8 +4,6 @@ import { Menu as MenuIcon, Logout as LogoutIcon, Notifications as NotificationIc
 import ManagerSidebar from '../components/Navigation/ManagerSidebar'
 import { useAuth } from '../contexts/AuthContext'
 import { Navigate, useNavigate } from 'react-router-dom'
-import StoreNameSetupDialog from '../components/Manager/StoreNameSetupDialog'
-
 const drawerWidth = 280
 
 const ManagerLayout = ({ children }) => {
@@ -13,23 +11,35 @@ const ManagerLayout = ({ children }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [mobileOpen, setMobileOpen] = useState(false)
   const [anchorEl, setAnchorEl] = useState(null)
-  const [storeDialogOpen, setStoreDialogOpen] = useState(false)
-  const { user, logout } = useAuth()
+  const { user, token, logout } = useAuth()
   const navigate = useNavigate()
 
-  // Only managers allowed here
-  const isManager = user?.role?.endsWith('_manager')
-  if (!isManager) {
-    return <Navigate to="/User/dashboard" replace />
+  // If user data is still loading, show loading state
+  if (!user && token) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <Typography>Loading...</Typography>
+      </Box>
+    );
   }
+  
+  // If no user at all (should be caught by ProtectedRoute), redirect to login
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  // If we have user data, proceed (managers only should reach this point)
 
   // Check if user needs to set up store name
-  useEffect(() => {
-    const needsSetup = user?.role?.includes('manager') && user?.storeId && !user?.storeName;
-    if (needsSetup) {
-      setStoreDialogOpen(true)
-    }
-  }, [user])
+  // Note: This redirect is now handled by ProtectedRoute, so we don't need to do it here
+  // useEffect(() => {
+  //   const isModuleManager = user?.role?.endsWith('_manager');
+  //   const needsStoreSetup = isModuleManager && (!user?.storeName || user?.storeName?.trim() === '');
+  //   if (user?.needsStoreNameSetup || needsStoreSetup) {
+  //     // Redirect to store setup page instead of showing dialog
+  //     navigate('/manager/store-name-setup');
+  //   }
+  // }, [user, navigate])
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen)
   const handleProfileMenuOpen = (e) => setAnchorEl(e.currentTarget)
@@ -115,14 +125,6 @@ const ManagerLayout = ({ children }) => {
           Logout
         </MenuItem>
       </Menu>
-
-      {/* Store Name Setup Dialog */}
-      <StoreNameSetupDialog
-        open={storeDialogOpen}
-        onClose={() => setStoreDialogOpen(false)}
-        user={user}
-        moduleKey={moduleType}
-      />
     </Box>
   )
 }

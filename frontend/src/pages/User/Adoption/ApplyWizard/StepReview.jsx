@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { adoptionAPI } from '../../../../services/api'
+import { adoptionAPI, resolveMediaUrl } from '../../../../services/api'
 
 const KEY = 'adopt_apply_wizard'
 
@@ -9,7 +9,30 @@ export default function StepReview() {
   const [params] = useSearchParams()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [data, setData] = useState(() => { try { return JSON.parse(localStorage.getItem(KEY)) || {} } catch { return {} } })
+  const [data, setData] = useState(() => { 
+    try { 
+      const rawData = localStorage.getItem(KEY);
+      const parsedData = JSON.parse(rawData) || {};
+      console.log('Raw parsed data:', parsedData);
+      
+      // Convert uploadedAt strings back to Date objects in documents
+      if (parsedData.documents && Array.isArray(parsedData.documents)) {
+        console.log('Converting documents:', parsedData.documents);
+        parsedData.documents = parsedData.documents.map(doc => ({
+          ...doc,
+          uploadedAt: doc.uploadedAt ? new Date(doc.uploadedAt) : new Date()
+        }));
+        console.log('Converted documents:', parsedData.documents);
+      }
+
+
+      return parsedData;
+    } catch (err) { 
+      console.error('Error parsing localStorage data:', err);
+      return {} 
+    } 
+  })
+  const [petData, setPetData] = useState(null)
 
   // Always sync petId from URL if present to avoid stale localStorage
   useEffect(() => {
@@ -23,6 +46,27 @@ export default function StepReview() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  
+  // Fetch pet data to display pet code
+  useEffect(() => {
+    const fetchPetData = async () => {
+      try {
+        const applicant = data.applicant || {}
+        const petId = applicant.petId
+        if (petId) {
+          const petResponse = await adoptionAPI.getPet(petId);
+          if (petResponse?.data?.data) {
+            console.log('Pet data received:', petResponse.data.data);
+            setPetData(petResponse.data.data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch pet data:', err);
+      }
+    };
+    
+    fetchPetData();
+  }, [data.applicant?.petId]);
 
   const back = () => navigate('/User/adoption/apply/documents')
 
@@ -33,7 +77,8 @@ export default function StepReview() {
       const applicant = data.applicant || {}
       const home = data.home || {}
       const exp = data.experience || {}
-      const docs = data.documents || {}
+      const docs = data.documents || []
+      console.log('Documents data:', docs, 'Type:', typeof docs, 'Is array:', Array.isArray(docs))
 
       if (!applicant.petId) throw new Error('Missing petId. Start from the pet details page (Apply/Adopt button) or reopen the wizard from a pet listing.')
 
@@ -101,9 +146,16 @@ export default function StepReview() {
         }
       }
 
+      // Ensure documents is a proper array of objects
+      const cleanDocs = Array.isArray(docs) ? docs.map(doc => ({
+        ...doc,
+        // Ensure uploadedAt is properly serialized
+        uploadedAt: doc.uploadedAt instanceof Date ? doc.uploadedAt.toISOString() : doc.uploadedAt
+      })) : [];
+      
       const payload = {
         petId: petId.trim(),
-        documents: (docs.documents || []).map(u => ({ url: u })),
+        documents: cleanDocs,
         applicationData: {
           fullName: applicant.fullName,
           email: applicant.email,
@@ -121,6 +173,7 @@ export default function StepReview() {
           expectations: exp.expectations,
         }
       }
+
 
       await adoptionAPI.submitRequest(payload)
       localStorage.removeItem(KEY)
@@ -143,7 +196,8 @@ export default function StepReview() {
   const applicant = data.applicant || {}
   const home = data.home || {}
   const exp = data.experience || {}
-  const docs = data.documents || {}
+  const docs = data.documents || []
+
 
   return (
     <div className="space-y-4">
@@ -190,7 +244,7 @@ export default function StepReview() {
             <li><strong>Name:</strong> {applicant.fullName || '-'}</li>
             <li><strong>Email:</strong> {applicant.email || '-'}</li>
             <li><strong>Phone:</strong> {applicant.phone || '-'}</li>
-            <li><strong>Pet ID:</strong> {applicant.petId || '-'}</li>
+            <li><strong>Pet Code:</strong> {petData?.petCode || petData?.code || applicant.petId || '-'}</li>
           </ul>
         </div>
         <div>
@@ -217,8 +271,12 @@ export default function StepReview() {
         <div>
           <h3 className="font-semibold mb-2">Documents</h3>
           <ul className="text-sm space-y-1">
-            {(docs.documents || []).map((u, i) => (
-              <li key={i}><a className="text-blue-600 underline" href={u} target="_blank" rel="noreferrer">{u}</a></li>
+            {(docs || []).map((doc, i) => (
+              <li key={i}>
+                <a className="text-blue-600 underline" href={typeof doc === 'string' ? doc : doc?.url} target="_blank" rel="noreferrer">
+                  {typeof doc === 'string' ? doc : (doc?.name || 'Document')}
+                </a>
+              </li>
             ))}
           </ul>
         </div>

@@ -2,188 +2,83 @@ const mongoose = require('mongoose')
 
 // Centralized registry for ALL pets across modules
 // One document per unique petCode
+// Simplified registry - only essential identification and routing information
 const petRegistrySchema = new mongoose.Schema({
-  // Identity
+  // Core identity
   petCode: {
     type: String,
     required: true,
-    index: true,
     validate: {
       validator: v => /^[A-Z]{3}\d{5}$/.test(v),
       message: 'petCode must be 3 uppercase letters followed by 5 digits'
     }
   },
   name: { type: String, trim: true },
-  species: { type: mongoose.Schema.Types.ObjectId, ref: 'Species' },
-  breed: { type: mongoose.Schema.Types.ObjectId, ref: 'Breed' },
-  imageIds: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Image'
-  }],
-
-  // Physical characteristics
-  gender: {
-    type: String,
-    enum: ['Male', 'Female', 'Unknown'],
-    default: 'Unknown'
+  species: { 
+    type: mongoose.Schema.Types.Mixed, // Can be ObjectId reference or string
   },
-  age: {
-    type: Number,
-    min: [0, 'Age cannot be negative']
-  },
-  ageUnit: {
-    type: String,
-    enum: ['weeks', 'months', 'years'],
-    default: 'months'
-  },
-  color: {
-    type: String,
-    trim: true,
-    maxlength: [50, 'Color cannot exceed 50 characters']
+  breed: { 
+    type: mongoose.Schema.Types.Mixed, // Can be ObjectId reference or string
   },
 
-  // Source references (sparse, only one is typically set)
+  // Source information - where this pet lives
   source: { 
     type: String, 
     enum: ['core', 'petshop', 'adoption', 'user'], 
     required: true 
   },
   sourceLabel: { type: String, default: '' }, // Human-readable source label
-  firstAddedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Who first added this pet
-  firstAddedAt: { type: Date, default: Date.now }, // When pet was first added
-  firstAddedSource: { 
-    type: String, 
-    enum: ['user', 'adoption_center', 'pet_shop'], 
-    required: true 
-  }, // Where pet was first added
   
-  // References to the specific pet tables
+  // References to the specific pet tables (only one will be set)
   petShopItemId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'PetInventoryItem', 
-    index: true, 
     sparse: true 
   },
   adoptionPetId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'AdoptionPet', 
-    index: true, 
     sparse: true 
   },
   userPetId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Pet', 
-    index: true, 
     sparse: true 
   },
 
-  // Relationships to track generated pets from stock
-  stockId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'PetStock', 
-    index: true, 
-    sparse: true 
-  }, // If generated from stock
-  generatedFromStock: { type: Boolean, default: false }, // Indicates if this pet was generated from stock
-  stockGenerationDate: { type: Date }, // When this pet was generated from stock
-
-  // Ownership/location/state
-  currentOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
-  currentLocation: { 
+  // Minimal tracking
+  firstAddedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  firstAddedAt: { type: Date, default: Date.now },
+  firstAddedSource: { 
     type: String, 
-    enum: [
-      'at_petshop', 
-      'at_adoption_center', 
-      'in_transit', 
-      'at_owner', 
-      'in_hospital', 
-      'in_temporary_care', 
-      'deceased', 
-      'unknown'
-    ], 
-    default: 'unknown' 
+    enum: ['user', 'adoption_center', 'pet_shop'], 
+    required: true 
   },
-  currentStatus: { 
-    type: String, 
-    default: 'unknown' 
-  }, // e.g., available, reserved, sold, adopted, owned, in_hospital, in_temporary_care
-  lastTransferAt: { type: Date },
+  
+  // Last seen for staleness tracking
   lastSeenAt: { type: Date, default: Date.now },
-
-  // Additional tracking
-  isDeceased: { type: Boolean, default: false },
-  deceasedAt: { type: Date },
-  deceasedReason: { type: String, trim: true },
-
-  // Ownership history tracking
-  ownershipHistory: [{
-    previousOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    newOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    transferType: { 
-      type: String, 
-      enum: [
-        'initial', 
-        'purchase', 
-        'adoption', 
-        'transfer', 
-        'return', 
-        'hospital_admission', 
-        'hospital_discharge', 
-        'temporary_care_start', 
-        'temporary_care_end'
-      ], 
-      required: true 
-    },
-    transferDate: { type: Date, default: Date.now },
-    transferPrice: { type: Number, default: 0 },
-    transferReason: { type: String, trim: true },
-    source: { type: String }, // Where transfer happened (petshop, adoption, user-to-user)
-    notes: { type: String, trim: true },
-    performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
-  }],
-
-  // For quick joins with history/logs
-  logsCount: { type: Number, default: 0 },
-
+  
   // Audit
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  metadata: { type: Object },
-
+  
   // Soft Delete
-  isDeleted: { type: Boolean, default: false, index: true },
-  deletedAt: { type: Date },
-  deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-
-  // Audit Trail - Track all changes
-  changeHistory: [{
-    field: { type: String, required: true },
-    oldValue: { type: mongoose.Schema.Types.Mixed },
-    newValue: { type: mongoose.Schema.Types.Mixed },
-    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    changedAt: { type: Date, default: Date.now },
-    reason: { type: String, trim: true }
-  }]
+  isDeleted: { type: Boolean, default: false }
 }, { timestamps: true })
 
 // Unique index for petCode
 petRegistrySchema.index({ petCode: 1 }, { unique: true })
 
-// Single field indexes
-petRegistrySchema.index({ currentOwnerId: 1 })
+// Essential indexes for common queries
 petRegistrySchema.index({ source: 1 })
-petRegistrySchema.index({ currentStatus: 1 })
-petRegistrySchema.index({ currentLocation: 1 })
 petRegistrySchema.index({ firstAddedSource: 1 })
 petRegistrySchema.index({ isDeleted: 1 })
-
-// Compound indexes for common queries
-petRegistrySchema.index({ source: 1, currentStatus: 1 })
-petRegistrySchema.index({ currentOwnerId: 1, currentLocation: 1 })
-petRegistrySchema.index({ currentOwnerId: 1, isDeleted: 1 })
 petRegistrySchema.index({ firstAddedSource: 1, createdAt: -1 })
-petRegistrySchema.index({ currentStatus: 1, currentLocation: 1 })
-petRegistrySchema.index({ isDeleted: 1, currentStatus: 1 })
+
+// Reference indexes
+petRegistrySchema.index({ petShopItemId: 1 })
+petRegistrySchema.index({ adoptionPetId: 1 })
+petRegistrySchema.index({ userPetId: 1 })
 
 // Virtual for populating images
 petRegistrySchema.virtual('images', {
@@ -339,73 +234,125 @@ petRegistrySchema.statics.ensureRegistered = async function (petData, state = {}
 
   if (!petCode) throw new Error('petCode is required for registry registration');
 
-  // Prepare update data
-  const update = {
-    name,
-    species,
-    breed,
-    imageIds: Array.isArray(imageIds) ? imageIds : [],
-    source: source || 'core',
-    updatedBy: firstAddedBy || undefined,
-    lastSeenAt: new Date()
-  };
+  // Simple approach: always try to create, handle duplicate key errors
+  try {
+    const createData = {
+      petCode,
+      name,
+      species,
+      breed,
+      imageIds: Array.isArray(imageIds) ? imageIds : [],
+      source: source || 'core',
+      sourceLabel: source === 'adoption' ? 'Adoption Center' : 
+                  source === 'petshop' ? 'Pet Shop' : 
+                  source === 'user' ? 'User Added' : 
+                  'User Added',
+      createdBy: firstAddedBy || undefined,
+      updatedBy: firstAddedBy || undefined,
+      firstAddedBy: firstAddedBy || undefined,
+      firstAddedSource: firstAddedSource || 'user',
+      lastSeenAt: new Date()
+    };
 
-  // Set the appropriate reference based on source
-  if (userPetId) update.userPetId = userPetId;
-  if (petShopItemId) update.petShopItemId = petShopItemId;
-  if (adoptionPetId) update.adoptionPetId = adoptionPetId;
+    // Set the appropriate reference based on source
+    if (userPetId) createData.userPetId = userPetId;
+    if (petShopItemId) createData.petShopItemId = petShopItemId;
+    if (adoptionPetId) createData.adoptionPetId = adoptionPetId;
 
-  // Set source label based on source
-  const sourceLabels = {
-    'core': 'User Added',
-    'petshop': 'Pet Shop',
-    'adoption': 'Adoption Center',
-    'user': 'User Added'
-  };
-  update.sourceLabel = sourceLabels[source] || source;
-
-  // Prepare $setOnInsert data
-  const setOnInsert = {
-    petCode,
-    createdBy: firstAddedBy || undefined
-  };
-
-  // Set first added info if provided
-  if (firstAddedSource) {
-    update.firstAddedSource = firstAddedSource;
-    setOnInsert.firstAddedAt = new Date();
-  }
-  if (firstAddedBy) {
-    update.firstAddedBy = firstAddedBy;
-    if (!setOnInsert.firstAddedAt) {
-      setOnInsert.firstAddedAt = new Date();
+    // Apply state if provided
+    if (state) {
+      if (state.currentOwnerId) createData.currentOwnerId = state.currentOwnerId;
+      if (state.currentLocation) createData.currentLocation = state.currentLocation;
+      if (state.currentStatus) createData.currentStatus = state.currentStatus;
+      if (state.lastTransferAt) createData.lastTransferAt = state.lastTransferAt;
     }
+
+    const registryEntry = await this.create(createData);
+    return registryEntry;
+  } catch (error) {
+    // If it's a duplicate key error, update the existing entry
+    if (error.code === 11000) { // Duplicate key error
+      // Find the existing entry
+      const existingEntry = await this.findOne({ petCode });
+      if (existingEntry) {
+        // Update existing entry
+        const update = {
+          name,
+          species,
+          breed,
+          imageIds: Array.isArray(imageIds) ? imageIds : [],
+          source: source || 'core',
+          updatedBy: firstAddedBy || undefined,
+          lastSeenAt: new Date()
+        };
+
+        // Set the appropriate reference based on source
+        if (userPetId) update.userPetId = userPetId;
+        if (petShopItemId) update.petShopItemId = petShopItemId;
+        if (adoptionPetId) update.adoptionPetId = adoptionPetId;
+
+        // Set source label based on source
+        const sourceLabels = {
+          'core': 'User Added',
+          'petshop': 'Pet Shop',
+          'adoption': 'Adoption Center',
+          'user': 'User Added'
+        };
+        update.sourceLabel = sourceLabels[source] || source;
+
+        // Apply state if provided
+        if (state) {
+          if (state.currentOwnerId) update.currentOwnerId = state.currentOwnerId;
+          if (state.currentLocation) update.currentLocation = state.currentLocation;
+          if (state.currentStatus) update.currentStatus = state.currentStatus;
+          if (state.lastTransferAt) update.lastTransferAt = state.lastTransferAt;
+        }
+
+        // Update the existing entry
+        const registryEntry = await this.findByIdAndUpdate(
+          existingEntry._id,
+          { $set: update },
+          { new: true, session: options.session }
+        );
+        
+        return registryEntry;
+      }
+    }
+    // If it's not a duplicate key error, rethrow
+    throw error;
   }
-
-  // Apply state if provided
-  if (state) {
-    if (state.currentOwnerId) update.currentOwnerId = state.currentOwnerId;
-    if (state.currentLocation) update.currentLocation = state.currentLocation;
-    if (state.currentStatus) update.currentStatus = state.currentStatus;
-    if (state.lastTransferAt) update.lastTransferAt = state.lastTransferAt;
-  }
-
-  const registryEntry = await this.findOneAndUpdate(
-    { petCode },
-    { $set: update, $setOnInsert: setOnInsert },
-    { new: true, upsert: true, setDefaultsOnInsert: true, session: options.session }
-  );
-
-  return registryEntry;
 }
+
+// Virtual getters for consistent species and breed access
+petRegistrySchema.virtual('speciesName').get(function() {
+  // If species is an ObjectId reference, we would populate it
+  // If it's a string, return it directly
+  if (typeof this.species === 'string') {
+    return this.species;
+  } else if (this.species && this.species.name) {
+    return this.species.name;
+  }
+  return null;
+});
+
+petRegistrySchema.virtual('breedName').get(function() {
+  // If breed is an ObjectId reference, we would populate it
+  // If it's a string, return it directly
+  if (typeof this.breed === 'string') {
+    return this.breed;
+  } else if (this.breed && this.breed.name) {
+    return this.breed.name;
+  }
+  return null;
+});
+
+// Ensure virtual fields are serialized
+petRegistrySchema.set('toJSON', { virtuals: true });
 
 // Static method to get a pet with all its details from the appropriate source
 petRegistrySchema.statics.getFullPetDetails = async function (petCode) {
   // First get the registry entry
   const registryEntry = await this.findOne({ petCode })
-    .populate('species', 'name displayName')
-    .populate('breed', 'name')
-    .populate('images')
     .populate('currentOwnerId', 'name email')
     .populate('firstAddedBy', 'name email');
 

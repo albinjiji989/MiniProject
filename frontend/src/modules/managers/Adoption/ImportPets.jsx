@@ -1,11 +1,14 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../../../services/api'
 
 const ImportPets = () => {
+  const navigate = useNavigate();
   const [file, setFile] = useState(null)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [downloading, setDownloading] = useState(false)
 
   const onSubmit = async (e) => {
     e.preventDefault()
@@ -18,16 +21,54 @@ const ImportPets = () => {
     try {
       const res = await apiClient.post('/adoption/manager/pets/import', form, { headers: { 'Content-Type': 'multipart/form-data' } })
       setResult(res.data || {})
+      
+      // If import was successful (even partially), redirect to post-processing
+      if (res.data?.data?.successful > 0) {
+        setTimeout(() => {
+          navigate('/manager/adoption/post-import-processing');
+        }, 2000);
+      }
     } catch (e2) {
       const errorData = e2?.response?.data
       if (errorData && errorData.data) {
         // Partial success case (status 207)
         setResult(errorData)
+        
+        // Even with some failures, if we had successes, redirect to post-processing
+        if (errorData.data.successful > 0) {
+          setTimeout(() => {
+            navigate('/manager/adoption/post-import-processing');
+          }, 2000);
+        }
       } else {
         setError(errorData?.error || 'Import failed')
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const downloadTemplate = async () => {
+    setDownloading(true);
+    setError('');
+    try {
+      const response = await apiClient.get('/adoption/manager/pets/download-template', { 
+        responseType: 'blob' 
+      });
+      
+      // Create a blob URL and trigger download
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'adoption-pets-template.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('Failed to download template: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -143,14 +184,20 @@ const ImportPets = () => {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
           <h3 className="font-semibold text-blue-800 mb-2">CSV Format Requirements</h3>
           <p className="text-sm text-blue-700 mb-2">
-            <strong>Required fields:</strong> name, breed, species (or type)
+            <strong>Smart Detection:</strong> Provide breed name and we'll automatically detect species and category. You can also provide all three explicitly.
           </p>
           <p className="text-sm text-blue-700 mb-2">
-            <strong>Optional fields:</strong> age, ageUnit, gender, color, weight, healthStatus, vaccinationStatus, temperament, description, adoptionFee
+            <strong>Required fields:</strong> breed, gender, age, ageUnit, weight (kg), vaccinationStatus
+          </p>
+          <p className="text-sm text-blue-700 mb-2">
+            <strong>Optional fields:</strong> name, species, category, color, healthStatus, temperament, description, adoptionFee
           </p>
           <div className="text-xs text-blue-600 mt-2">
-            <p><strong>Smart handling:</strong> Missing optional fields will use sensible defaults. Invalid values will show warnings but won't prevent import.</p>
-            <p><strong>Flexible headers:</strong> Supports variations like "Age Unit", "age_unit", "ageunit", etc.</p>
+            <p><strong>Post-import processing:</strong> After import, you'll be redirected to a page where you can upload images/documents, set adoption fees, and make pets available for adoption.</p>
+            <p><strong>Vaccination Status Values:</strong> up_to_date, partial, not_vaccinated (or similar terms like "complete", "some", "none")</p>
+            <p><strong>Flexible headers:</strong> Supports variations like "Age Unit", "age_unit", "weight_kg", etc.</p>
+            <p><strong>Age Units:</strong> months, years, weeks, days</p>
+            <p><strong>Genders:</strong> male, female</p>
           </div>
         </div>
       </div>
@@ -172,6 +219,22 @@ const ImportPets = () => {
             disabled={loading || !file}
           >
             {loading ? 'Processing...' : 'Import Pets'}
+          </button>
+          <button 
+            type="button"
+            onClick={downloadTemplate}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            disabled={downloading}
+          >
+            {downloading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Downloading...
+              </>
+            ) : 'Download Template'}
           </button>
           {file && (
             <button 

@@ -28,6 +28,7 @@ import {
   Home as HomeIcon,
   Work as WorkIcon,
   Description as DocumentIcon,
+  ArrowBack as ArrowBackIcon,
   Payment as PaymentIcon,
   CalendarToday as CalendarIcon,
   LocationOn as LocationIcon,
@@ -241,7 +242,7 @@ export default function UserAdoptionApplicationDetails() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
           Adoption Application Details
         </Typography>
@@ -250,6 +251,16 @@ export default function UserAdoptionApplicationDetails() {
           onClick={() => navigate('/User/adoption/applications')}
         >
           Back to Applications
+        </Button>
+      </Box>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
+        <Button 
+          variant="outlined" 
+          size="small"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate('/User/adoption')}
+        >
+          Back to Adoption Center
         </Button>
       </Box>
 

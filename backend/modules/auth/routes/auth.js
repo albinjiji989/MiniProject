@@ -9,10 +9,10 @@ const UserDetails = require('../../../core/models/UserDetails');
 const Activity = require('../../../core/models/Activity');
 const { auth } = require('../../../core/middleware/auth');
 
-// Login rate limiter - 5 attempts per 15 minutes
+// Login rate limiter - More lenient for development
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 login attempts per windowMs
+  max: process.env.NODE_ENV === 'development' ? 1000 : 5, // Much higher limit in development
   message: 'Too many login attempts, please try again after 15 minutes',
   skipSuccessfulRequests: true
 });
@@ -243,7 +243,7 @@ router.post('/register', [
 // @desc    Login user
 // @access  Public
 router.post('/login', [
-  loginLimiter,
+  process.env.NODE_ENV === 'development' ? (req, res, next) => next() : loginLimiter,
   body('email')
     .notEmpty().withMessage('Email is required')
     .isEmail().withMessage('Please provide a valid email address')

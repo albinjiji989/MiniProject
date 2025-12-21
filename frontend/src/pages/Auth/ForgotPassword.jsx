@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 
 const ForgotPassword = () => {
-	const { requestPasswordResetOTP, verifyOTPAndResetPassword } = useAuth()
+	const { forgotPassword, resetPasswordWithOtp } = useAuth()
 	const navigate = useNavigate()
 	const [step, setStep] = useState('request') // 'request' | 'verify'
 	const [email, setEmail] = useState('')
@@ -20,7 +20,7 @@ const ForgotPassword = () => {
 		setError('')
 		setSuccess('')
 		setBusy(true)
-		const res = await requestPasswordResetOTP(email)
+		const res = await forgotPassword(email)
 		setBusy(false)
 		if (res.success) {
 			setSuccess('OTP sent to your email. It expires in 5 minutes.')
@@ -39,7 +39,7 @@ const ForgotPassword = () => {
 			return
 		}
 		setBusy(true)
-		const res = await verifyOTPAndResetPassword({ email, otp, newPassword })
+		const res = await resetPasswordWithOtp(email, otp, newPassword)
 		setBusy(false)
 		if (res.success) {
 			setSuccess('Password has been reset successfully! Redirecting...')

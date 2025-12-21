@@ -13,6 +13,7 @@ import AdoptionPetForm from '../modules/managers/Adoption/PetForm'
 import ApplicationsList from '../modules/managers/Adoption/ApplicationsList'
 import ApplicationDetailsImproved from '../modules/managers/Adoption/ApplicationDetailsImproved'
 import ImportPets from '../modules/managers/Adoption/ImportPets'
+import PostImportProcessing from '../modules/managers/Adoption/PostImportProcessing'
 import Reports from '../modules/managers/Adoption/Reports'
 import AIMLDashboard from '../modules/managers/Adoption/AIMLDashboard'
 import PetProfile from '../modules/managers/Adoption/PetProfile'
@@ -105,9 +106,6 @@ const ManagerRoutes = () => {
         {/* Manager: Store Name Change Request */}
         <Route path="/store-name-change" element={<RequestStoreNameChange />} />
         
-        {/* Manager Store Name Setup */}
-        <Route path="/store-name-setup" element={<StoreNameSetup />} />
-        
         {/* Unified manager dashboard redirect */}
         <Route path="/dashboard" element={<ManagerDashboardRedirect />} />
         
@@ -131,6 +129,7 @@ const ManagerRoutes = () => {
             <Route path="/applications/:id" element={<ApplicationDetailsImproved />} />
             <Route path="/payments" element={<PaymentHistory />} />
             <Route path="/import" element={<ImportPets />} />
+            <Route path="/post-import-processing" element={<PostImportProcessing />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/aiml-dashboard" element={<AIMLDashboard />} />
             <Route path="/manage" element={<AdoptionManage />} />

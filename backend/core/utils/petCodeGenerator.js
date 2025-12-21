@@ -47,21 +47,19 @@ class PetCodeGenerator {
     try {
       // Import models dynamically to avoid circular dependencies
       const Pet = require('../models/Pet')
-      const PetOld1 = require('../models/PetOld1')
       const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet')
       const PetInventoryItem = require('../../modules/petshop/manager/models/PetInventoryItem')
       const PetRegistry = require('../models/PetRegistry')
 
       // Check all pet systems in parallel
-      const [coreExists, coreOldExists, adoptionExists, petshopExists, registryExists] = await Promise.all([
-        Pet.exists({ petCode: code }).catch(() => false), // New Pet model
-        PetOld1.exists({ petCode: code }).catch(() => false), // Old Pet model
-        AdoptionPet.exists({ petCode: code }).catch(() => false),
-        PetInventoryItem.exists({ petCode: code }).catch(() => false),
-        PetRegistry.exists({ petCode: code }).catch(() => false)
+      const [userPetExists, adoptionExists, petshopExists, registryExists] = await Promise.all([
+        Pet.exists({ petCode: code }).catch(() => false), // User-added pets
+        AdoptionPet.exists({ petCode: code }).catch(() => false), // Adoption manager pets
+        PetInventoryItem.exists({ petCode: code }).catch(() => false), // Pet shop manager pets
+        PetRegistry.exists({ petCode: code }).catch(() => false) // Central registry
       ])
 
-      return coreExists || coreOldExists || adoptionExists || petshopExists || registryExists
+      return userPetExists || adoptionExists || petshopExists || registryExists
     } catch (error) {
       console.error('Error checking pet code existence:', error)
       // If there's an error, assume code exists to be safe
@@ -133,18 +131,16 @@ class PetCodeGenerator {
   static async getUsageStats() {
     try {
       const Pet = require('../models/Pet')
-      const PetOld1 = require('../models/PetOld1')
       const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet')
       const PetInventoryItem = require('../../modules/petshop/manager/models/PetInventoryItem')
 
-      const [coreCount, coreOldCount, adoptionCount, petshopCount] = await Promise.all([
-        Pet.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0),
-        PetOld1.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0),
-        AdoptionPet.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0),
-        PetInventoryItem.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0)
+      const [userPetCount, adoptionCount, petshopCount] = await Promise.all([
+        Pet.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0), // User-added pets
+        AdoptionPet.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0), // Adoption manager pets
+        PetInventoryItem.countDocuments({ petCode: { $exists: true, $ne: null } }).catch(() => 0) // Pet shop manager pets
       ])
 
-      const totalUsed = coreCount + coreOldCount + adoptionCount + petshopCount
+      const totalUsed = userPetCount + adoptionCount + petshopCount
       const totalPossible = 26 * 26 * 26 * 90000 // AAA00000 to ZZZ99999 (excluding 00000-09999)
       const usagePercentage = ((totalUsed / totalPossible) * 100).toFixed(6)
 
@@ -153,8 +149,7 @@ class PetCodeGenerator {
         totalPossible,
         usagePercentage: `${usagePercentage}%`,
         breakdown: {
-          corePets: coreCount,
-          userAddedPets: coreNewCount,
+          userPets: userPetCount,
           adoptionPets: adoptionCount,
           petshopInventory: petshopCount
         }

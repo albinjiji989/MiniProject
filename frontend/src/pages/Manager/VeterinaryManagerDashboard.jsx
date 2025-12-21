@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ModuleDashboardLayout from '../../components/Module/ModuleDashboardLayout';
 import { veterinaryAPI } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function VeterinaryManagerDashboard() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalAppointments: 0,
@@ -301,6 +303,7 @@ export default function VeterinaryManagerDashboard() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
+      storeInfo={{ storeId: user?.storeId, storeName: user?.storeName }}
     >
       {activeTab === 'overview' && <Overview />}
       {activeTab === 'appointments' && <Appointments />}

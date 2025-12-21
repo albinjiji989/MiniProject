@@ -35,17 +35,22 @@ import {
   FilterList as FilterIcon,
   MoreVert as MoreVertIcon,
   Visibility as ViewIcon,
+  Visibility as VisibilityIcon,
   Download as DownloadIcon,
   CalendarToday as CalendarIcon,
   Person as PersonIcon,
   Description as DescriptionIcon,
+  InsertDriveFile as InsertDriveFileIcon,
+  Image as ImageIcon,
   AttachMoney as MoneyIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   Pending as PendingIcon,
   Schedule as ScheduleIcon,
   Assignment as AssignmentIcon,
-  Pets as PetsIcon
+  Pets as PetsIcon,
+  ManageAccounts as ManageAccountsIcon,
+  FilterList as FilterListIcon
 } from '@mui/icons-material'
 
 const ApplicationsList = () => {
@@ -74,7 +79,7 @@ const ApplicationsList = () => {
           status: statusFilter === 'all' ? '' : statusFilter, 
           page, 
           limit, 
-          fields: 'status,paymentStatus,contractURL,userId.name,userId.email,petId.name,petId.breed,petId.species,petId.age,petId.ageUnit,petId.ageDisplay,petId.gender,petId.healthStatus,petId.adoptionFee,createdAt', 
+          fields: 'status,paymentStatus,contractURL,userId.name,userId.email,petId.name,petId.breed,petId.species,petId.age,petId.ageUnit,petId.ageDisplay,petId.gender,petId.healthStatus,petId.adoptionFee,petId.petCode,createdAt',
           lean: true 
         }, 
         signal 
@@ -96,7 +101,8 @@ const ApplicationsList = () => {
           ageDisplay: app.petId.ageDisplay,
           gender: app.petId.gender,
           healthStatus: app.petId.healthStatus,
-          adoptionFee: app.petId.adoptionFee 
+          adoptionFee: app.petId.adoptionFee,
+          petCode: app.petId.petCode
         } : null,
       }))
       setItems(minimal)
@@ -217,6 +223,62 @@ const ApplicationsList = () => {
     }
   }
 
+  // Approve application with notes
+  const approveApplication = async (applicationId) => {
+    const notes = prompt('Add any notes for approval (optional):')
+    if (notes !== null) {
+      try {
+        setActionLoadingId(applicationId)
+        await apiClient.patch(`/adoption/manager/applications/${applicationId}`, {
+          status: 'approved',
+          notes: notes || ''
+        })
+        await load()
+        alert('Application approved successfully')
+      } catch (e) {
+        alert(e?.response?.data?.error || 'Failed to approve application')
+      } finally {
+        setActionLoadingId('')
+      }
+    }
+  }
+
+  // Reject application with reason
+  const rejectApplication = async (applicationId) => {
+    const reason = prompt('Reason for rejection:')
+    if (reason) {
+      try {
+        setActionLoadingId(applicationId)
+        await apiClient.patch(`/adoption/manager/applications/${applicationId}`, {
+          status: 'rejected',
+          reason: reason
+        })
+        await load()
+        alert('Application rejected')
+      } catch (e) {
+        alert(e?.response?.data?.error || 'Failed to reject application')
+      } finally {
+        setActionLoadingId('')
+      }
+    }
+  }
+
+  // Download user document
+  const downloadUserDocument = (url, name) => {
+    const link = document.createElement('a');
+    link.href = resolveMediaUrl(url);
+    link.download = name || 'document';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // View user document
+  const viewUserDocument = (url) => {
+    const resolvedUrl = resolveMediaUrl(url);
+    window.open(resolvedUrl, '_blank');
+  };
+
   const handleMenuClick = (event, application) => {
     setMenuAnchor(event.currentTarget)
     setSelectedApplication(application)
@@ -251,10 +313,31 @@ const ApplicationsList = () => {
   return (
     <Box sx={{ p: 3 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          Adoption Applications
-        </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 600 }}>
+            Adoption Applications
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Manage and review adoption applications from potential pet owners
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button 
+            variant="outlined" 
+            startIcon={<FilterListIcon />} 
+            onClick={() => {}}
+          >
+            Advanced Filters
+          </Button>
+          <Button 
+            variant="contained" 
+            startIcon={<DownloadIcon />} 
+            onClick={() => {}}
+          >
+            Export Data
+          </Button>
+        </Box>
       </Box>
 
       {error && (
@@ -359,6 +442,11 @@ const ApplicationsList = () => {
                           <Typography variant="caption" color="text.secondary">
                             {app.petId?.breed || 'Breed not specified'}
                           </Typography>
+                          {app.petId?.petCode && (
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Code: {app.petId.petCode}
+                            </Typography>
+                          )}
                         </Box>
                       </Box>
                     </Grid>
@@ -433,6 +521,28 @@ const ApplicationsList = () => {
                     >
                       View Details
                     </Button>
+                    {app.status === 'pending' && (
+                      <>
+                        <Button 
+                          size="small" 
+                          variant="contained" 
+                          color="success" 
+                          disabled={actionLoadingId === app._id} 
+                          onClick={() => approveApplication(app._id)}
+                        >
+                          {actionLoadingId === app._id ? 'Approving...' : 'Approve'}
+                        </Button>
+                        <Button 
+                          size="small" 
+                          variant="outlined" 
+                          color="error"
+                          disabled={actionLoadingId === app._id} 
+                          onClick={() => rejectApplication(app._id)}
+                        >
+                          {actionLoadingId === app._id ? 'Rejecting...' : 'Reject'}
+                        </Button>
+                      </>
+                    )}
                     {app.paymentStatus === 'completed' && (
                       <>
                         <Button 
@@ -459,8 +569,15 @@ const ApplicationsList = () => {
                     <Button 
                       size="small" 
                       variant="contained"
+                      sx={{
+                        backgroundColor: '#3b82f6',
+                        '&:hover': {
+                          backgroundColor: '#2563eb'
+                        }
+                      }}
                       onClick={() => navigate(`/manager/adoption/applications/${app._id}`)}
                     >
+                      <ManageAccountsIcon sx={{ mr: 1 }} />
                       Manage
                     </Button>
                   </Box>
@@ -499,131 +616,333 @@ const ApplicationsList = () => {
       </Menu>
 
       {/* Application Details Dialog */}
-      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="lg" fullWidth>
         <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
             <Typography variant="h6" component="div">
               Application Details
             </Typography>
             {selectedApplication && (
-              <Chip 
-                label={
-                  selectedApplication.status === 'pending' ? 'Pending Review' :
-                  selectedApplication.status === 'approved' ? 'Approved' :
-                  selectedApplication.status === 'rejected' ? 'Rejected' :
-                  selectedApplication.status === 'completed' ? 'Completed' :
-                  selectedApplication.status
-                } 
-                color={
-                  selectedApplication.status === 'pending' ? 'warning' :
-                  selectedApplication.status === 'approved' ? 'info' :
-                  selectedApplication.status === 'rejected' ? 'error' :
-                  selectedApplication.status === 'completed' ? 'success' : 'default'
-                } 
-                size="small"
-              />
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                <Chip 
+                  label={
+                    selectedApplication.status === 'pending' ? 'Pending Review' :
+                    selectedApplication.status === 'approved' ? 'Approved' :
+                    selectedApplication.status === 'rejected' ? 'Rejected' :
+                    selectedApplication.status === 'completed' ? 'Completed' :
+                    selectedApplication.status
+                  } 
+                  color={
+                    selectedApplication.status === 'pending' ? 'warning' :
+                    selectedApplication.status === 'approved' ? 'info' :
+                    selectedApplication.status === 'rejected' ? 'error' :
+                    selectedApplication.status === 'completed' ? 'success' : 'default'
+                  } 
+                  size="small"
+                />
+                <Chip 
+                  label={
+                    selectedApplication.paymentStatus === 'pending' ? 'Payment Pending' :
+                    selectedApplication.paymentStatus === 'processing' ? 'Processing' :
+                    selectedApplication.paymentStatus === 'completed' ? 'Payment Completed' :
+                    selectedApplication.paymentStatus === 'failed' ? 'Payment Failed' :
+                    selectedApplication.paymentStatus
+                  } 
+                  color={
+                    selectedApplication.paymentStatus === 'pending' ? 'default' :
+                    selectedApplication.paymentStatus === 'processing' ? 'warning' :
+                    selectedApplication.paymentStatus === 'completed' ? 'success' :
+                    selectedApplication.paymentStatus === 'failed' ? 'error' : 'default'
+                  } 
+                  size="small"
+                />
+                {selectedApplication.handover?.status && (
+                  <Chip 
+                    label={
+                      selectedApplication.handover.status === 'none' ? 'Not Scheduled' :
+                      selectedApplication.handover.status === 'scheduled' ? 'Scheduled' :
+                      selectedApplication.handover.status === 'completed' ? 'Completed' :
+                      selectedApplication.handover.status
+                    } 
+                    color={
+                      selectedApplication.handover.status === 'none' ? 'default' :
+                      selectedApplication.handover.status === 'scheduled' ? 'info' :
+                      selectedApplication.handover.status === 'completed' ? 'success' : 'default'
+                    } 
+                    size="small"
+                  />
+                )}
+              </Box>
             )}
           </Box>
         </DialogTitle>
         <DialogContent>
           {selectedApplication && (
             <Box sx={{ py: 2 }}>
-              <Grid container spacing={3}>
+              <Grid container spacing={4}>
                 {/* Applicant Information */}
                 <Grid item xs={12} md={6}>
-                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Applicant Information</Typography>
-                  <Box sx={{ display: 'grid', gap: 1.5 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <PersonIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">Name:</Typography>
-                      <Typography variant="body2">{selectedApplication.userId?.name || '-'}</Typography>
+                  <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                      <Avatar sx={{ bgcolor: 'primary.light', mr: 2 }}>
+                        <PersonIcon />
+                      </Avatar>
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        Applicant Information
+                      </Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <DescriptionIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">Email:</Typography>
-                      <Typography variant="body2">{selectedApplication.userId?.email || '-'}</Typography>
-                    </Box>
-                  </Box>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <PersonIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                          <Typography variant="body2" color="text.secondary">Name:</Typography>
+                          <Typography variant="body2" fontWeight={500}>{selectedApplication.userId?.name || '-'}</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <DescriptionIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                          <Typography variant="body2" color="text.secondary">Email:</Typography>
+                          <Typography variant="body2" fontWeight={500}>{selectedApplication.userId?.email || '-'}</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <CalendarIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                          <Typography variant="body2" color="text.secondary">Application Date:</Typography>
+                          <Typography variant="body2" fontWeight={500}>{new Date(selectedApplication.createdAt).toLocaleDateString()}</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <AssignmentIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                          <Typography variant="body2" color="text.secondary">Application ID:</Typography>
+                          <Typography variant="body2" fontWeight={500} sx={{ fontFamily: 'monospace' }}>#{selectedApplication._id?.slice(-8)}</Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </Paper>
                 </Grid>
-                
+                        
                 {/* Pet Information */}
                 <Grid item xs={12} md={6}>
-                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Pet Information</Typography>
-                  <Box sx={{ display: 'grid', gap: 1.5 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="text.secondary">Name:</Typography>
-                      <Typography variant="body2">{selectedApplication.petId?.name || '-'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="text.secondary">Breed:</Typography>
-                      <Typography variant="body2">{selectedApplication.petId?.breed || '-'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="text.secondary">Species:</Typography>
-                      <Typography variant="body2">{selectedApplication.petId?.species || '-'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="text.secondary">Age:</Typography>
-                      <Typography variant="body2">{selectedApplication.petId?.ageDisplay || 'N/A'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="text.secondary">Gender:</Typography>
-                      <Typography variant="body2">
-                        {selectedApplication.petId?.gender ? 
-                          selectedApplication.petId.gender.charAt(0).toUpperCase() + selectedApplication.petId.gender.slice(1) : 
-                          'N/A'}
+                  <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                      <Avatar sx={{ bgcolor: 'secondary.light', mr: 2 }}>
+                        <PetsIcon />
+                      </Avatar>
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        Pet Information
                       </Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="text.secondary">Health Status:</Typography>
-                      <Typography variant="body2">
-                        {selectedApplication.petId?.healthStatus ? 
-                          selectedApplication.petId.healthStatus.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 
-                          'N/A'}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="text.secondary">Adoption Fee:</Typography>
-                      <Typography variant="body2">₹{selectedApplication.petId?.adoptionFee || 0}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="text.secondary">Application Date:</Typography>
-                      <Typography variant="body2">{new Date(selectedApplication.createdAt).toLocaleDateString()}</Typography>
-                    </Box>
-                  </Box>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">Name:</Typography>
+                          <Typography variant="body2" fontWeight={500}>{selectedApplication.petId?.name || '-'}</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">Breed:</Typography>
+                          <Typography variant="body2" fontWeight={500}>{selectedApplication.petId?.breed || '-'}</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">Species:</Typography>
+                          <Typography variant="body2" fontWeight={500}>{selectedApplication.petId?.species || '-'}</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">Age:</Typography>
+                          <Typography variant="body2" fontWeight={500}>{selectedApplication.petId?.ageDisplay || 'N/A'}</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">Gender:</Typography>
+                          <Typography variant="body2" fontWeight={500}>
+                            {selectedApplication.petId?.gender ? 
+                              selectedApplication.petId.gender.charAt(0).toUpperCase() + selectedApplication.petId.gender.slice(1) : 
+                              'N/A'}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">Health Status:</Typography>
+                          <Typography variant="body2" fontWeight={500}>
+                            {selectedApplication.petId?.healthStatus ? 
+                              selectedApplication.petId.healthStatus.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 
+                              'N/A'}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      {selectedApplication.petId?.petCode && (
+                        <Grid item xs={12}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <Typography variant="body2" color="text.secondary">Pet Code:</Typography>
+                            <Typography variant="body2" fontWeight={600} sx={{ fontFamily: 'monospace', color: 'primary.main' }}>
+                              {selectedApplication.petId.petCode}
+                            </Typography>
+                          </Box>
+                        </Grid>
+                      )}
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2" color="text.secondary">Adoption Fee:</Typography>
+                          <Typography variant="body2" fontWeight={500}>₹{selectedApplication.petId?.adoptionFee || 0}</Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </Paper>
                 </Grid>
-                
+                        
                 {/* Status Information */}
                 <Grid item xs={12}>
-                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Status Information</Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                        <Typography variant="body2" color="text.secondary" component="span">Application Status:</Typography>
-                        <StatusChip value={selectedApplication.status} />
-                      </Box>
+                  <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                    <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>Status Overview</Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={4}>
+                        <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                          <Typography variant="body2" color="text.secondary" component="div" sx={{ mb: 1 }}>Application Status</Typography>
+                          <Box sx={{ mt: 'auto' }}>
+                            <StatusChip value={selectedApplication.status} />
+                          </Box>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                          <Typography variant="body2" color="text.secondary" component="div" sx={{ mb: 1 }}>Payment Status</Typography>
+                          <Box sx={{ mt: 'auto' }}>
+                            {getPaymentStatusChip(selectedApplication.paymentStatus)}
+                          </Box>
+                        </Paper>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                          <Typography variant="body2" color="text.secondary" component="div" sx={{ mb: 1 }}>Handover Status</Typography>
+                          <Box sx={{ mt: 'auto' }}>
+                            {selectedApplication.handover?.status ? (
+                              <Chip 
+                                label={
+                                  selectedApplication.handover.status === 'none' ? 'Not Scheduled' :
+                                  selectedApplication.handover.status === 'scheduled' ? 'Scheduled' :
+                                  selectedApplication.handover.status === 'completed' ? 'Completed' :
+                                  selectedApplication.handover.status
+                                } 
+                                color={
+                                  selectedApplication.handover.status === 'none' ? 'default' :
+                                  selectedApplication.handover.status === 'scheduled' ? 'info' :
+                                  selectedApplication.handover.status === 'completed' ? 'success' : 'default'
+                                } 
+                                size="small"
+                              />
+                            ) : (
+                              <Typography variant="body2" color="text.secondary">N/A</Typography>
+                            )}
+                          </Box>
+                        </Paper>
+                      </Grid>
                     </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                        <Typography variant="body2" color="text.secondary" component="span">Payment Status:</Typography>
-                        {getPaymentStatusChip(selectedApplication.paymentStatus)}
+                  </Paper>
+                </Grid>
+
+                {/* User Documents */}
+                <Grid item xs={12}>
+                  <Paper elevation={0} sx={{ p: 3, bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                    <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>User Documents</Typography>
+                    {(selectedApplication.documents && selectedApplication.documents.length > 0) || 
+                     (selectedApplication.applicationData && selectedApplication.applicationData.documents && selectedApplication.applicationData.documents.length > 0) ? (
+                      <Grid container spacing={2}>
+                        {[...(selectedApplication.documents || []), ...(selectedApplication.applicationData?.documents || [])].map((doc, index) => {
+                          const docObj = typeof doc === 'string' ? { url: doc } : doc;
+                          const url = resolveMediaUrl(docObj.url);
+                          const type = docObj.type || (url.match(/\.(pdf|doc|docx)$/i) ? 'application/' + (url.match(/\.pdf$/i) ? 'pdf' : url.match(/\.docx$/i) ? 'vnd.openxmlformats-officedocument.wordprocessingml.document' : 'msword') : 'image');
+                          
+                          return (
+                            <Grid item xs={12} sm={6} md={4} key={`user-doc-${index}`}>
+                              <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                                  {type === 'application/pdf' ? (
+                                    <Avatar sx={{ width: 32, height: 32, bgcolor: 'red.100', color: 'red.600', mr: 1 }}>
+                                      <DescriptionIcon sx={{ fontSize: 16 }} />
+                                    </Avatar>
+                                  ) : type.startsWith('image') ? (
+                                    <Avatar sx={{ width: 32, height: 32, bgcolor: 'blue.100', color: 'blue.600', mr: 1 }}>
+                                      <ImageIcon sx={{ fontSize: 16 }} />
+                                    </Avatar>
+                                  ) : (
+                                    <Avatar sx={{ width: 32, height: 32, bgcolor: 'grey.100', color: 'grey.600', mr: 1 }}>
+                                      <InsertDriveFileIcon sx={{ fontSize: 16 }} />
+                                    </Avatar>
+                                  )}
+                                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {docObj.name || `Document ${index + 1}`}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {type.split('/')[1]?.toUpperCase() || 'FILE'}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                                <Box sx={{ display: 'flex', gap: 1, mt: 'auto' }}>
+                                  <Button 
+                                    size="small" 
+                                    variant="outlined" 
+                                    startIcon={<VisibilityIcon />} 
+                                    onClick={() => viewUserDocument(docObj.url)}
+                                    sx={{ flex: 1 }}
+                                  >
+                                    View
+                                  </Button>
+                                  <Button 
+                                    size="small" 
+                                    variant="contained" 
+                                    startIcon={<DownloadIcon />} 
+                                    onClick={() => downloadUserDocument(docObj.url, docObj.name || `user-document-${index + 1}`)}
+                                    sx={{ flex: 1 }}
+                                  >
+                                    Download
+                                  </Button>
+                                </Box>
+                              </Paper>
+                            </Grid>
+                          );
+                        })}
+                      </Grid>
+                    ) : (
+                      <Box sx={{ textAlign: 'center', py: 4 }}>
+                        <DescriptionIcon sx={{ fontSize: 48, color: 'grey.400', mb: 2 }} />
+                        <Typography variant="body2" color="text.secondary">No documents uploaded by the applicant</Typography>
                       </Box>
-                    </Grid>
-                  </Grid>
+                    )}
+                  </Paper>
                 </Grid>
               </Grid>
             </Box>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDetailsOpen(false)}>Close</Button>
+        <DialogActions sx={{ p: 3, bgcolor: 'background.paper' }}>
+          <Button onClick={() => setDetailsOpen(false)} sx={{ mr: 1 }}>
+            Close
+          </Button>
           <Button 
             variant="contained" 
             onClick={() => {
               setDetailsOpen(false)
-              navigate(`/manager/adoption/applications/${selectedApplication._id}`)
+              navigate(`/manager/adoption/applications/${selectedApplication._id}`)}
+            }
+            sx={{
+              backgroundColor: '#3b82f6',
+              '&:hover': {
+                backgroundColor: '#2563eb'
+              }
             }}
           >
+            <ManageAccountsIcon sx={{ mr: 1 }} />
             Manage Application
           </Button>
         </DialogActions>

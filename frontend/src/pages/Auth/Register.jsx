@@ -38,7 +38,8 @@ const Register = () => {
 		const result = await registerUser(payload)
 		setIsLoading(false)
 		if (result?.success) {
-			alert(result.message || 'Signup successful! Welcome email sent.')
+			// Show success message in a better way without alert
+			console.log(result.message || 'Signup successful! Welcome email sent.')
 			setTimeout(() => {
 				navigate('/')
 			}, 100)

@@ -17,6 +17,7 @@ router.put('/me/store', auth, authorize('adoption_manager'), storeController.upd
 
 // Manager Routes - Adoption Manager only
 router.get('/pets', auth, authorize('adoption_manager'), petManagementController.getManagerPets);
+router.get('/pets/download-template', auth, authorize('adoption_manager'), petManagementController.downloadCSVPetTemplate);
 router.get('/pets/:id', auth, authorize('adoption_manager'), petManagementController.getPetById);
 router.put('/pets/:id', auth, authorize('adoption_manager'), petManagementController.updatePet);
 router.get('/pets/:id/media', auth, authorize('adoption_manager'), petManagementController.getPetMedia);
@@ -25,6 +26,12 @@ router.get('/reports', auth, authorize('adoption_manager'), reportingController.
 // Manager Upload Routes - Adoption Manager only
 router.post('/pets/upload', auth, authorize('adoption_manager'), upload.single('file'), petManagementController.uploadPetPhoto);
 router.post('/pets/upload-document', auth, authorize('adoption_manager'), upload.single('file'), petManagementController.uploadPetDocument);
+
+// CSV Import Route
+router.post('/pets/import', auth, authorize('adoption_manager'), upload.single('file'), petManagementController.importPetsCSV);
+
+// Publish Pending Pets Route
+router.post('/pets/publish', auth, authorize('adoption_manager'), petManagementController.publishPendingPets);
 
 // REST aliases per specification
 // POST /adoption/pets → Add pet for adoption (Manager)

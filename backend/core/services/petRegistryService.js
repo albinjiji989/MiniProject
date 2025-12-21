@@ -51,29 +51,27 @@ const PetRegistryService = {
         .filter(Boolean)
     }
 
-    const update = {
+    // Prepare registry data
+    const registryData = {
+      petCode,
       name,
       species,
       breed,
+      imageIds: imageIds,
       source,
+      corePetId,
+      petShopItemId,
+      adoptionPetId,
+      createdBy: actorUserId || undefined,
       updatedBy: actorUserId || undefined,
       metadata
     }
     
     // Add physical characteristics
-    if (gender) update.gender = gender
-    if (typeof age !== 'undefined') update.age = age
-    if (ageUnit) update.ageUnit = ageUnit
-    if (color) update.color = color
-    
-    // Only update imageIds if we have valid IDs
-    if (imageIds.length > 0) {
-      update.imageIds = imageIds
-    }
-    
-    if (corePetId) update.corePetId = corePetId
-    if (petShopItemId) update.petShopItemId = petShopItemId
-    if (adoptionPetId) update.adoptionPetId = adoptionPetId
+    if (gender) registryData.gender = gender
+    if (typeof age !== 'undefined') registryData.age = age
+    if (ageUnit) registryData.ageUnit = ageUnit
+    if (color) registryData.color = color
 
     // Set source label based on source
     const sourceLabels = {
@@ -81,27 +79,22 @@ const PetRegistryService = {
       'petshop': 'Pet Shop',
       'adoption': 'Adoption Center'
     }
-    update.sourceLabel = sourceLabels[source] || source
+    registryData.sourceLabel = sourceLabels[source] || source
 
-    const insertFields = {
-      petCode,
-      createdBy: actorUserId || undefined
-    }
+    // Prepare state data
+    const stateData = {}
     
     // Set first added info only on creation
     if (firstAddedSource) {
-      insertFields.firstAddedSource = firstAddedSource
-      insertFields.firstAddedAt = new Date()
+      stateData.firstAddedSource = firstAddedSource
+      stateData.firstAddedAt = new Date()
     }
     if (firstAddedBy) {
-      insertFields.firstAddedBy = firstAddedBy
+      stateData.firstAddedBy = firstAddedBy
     }
 
-    const doc = await PetRegistry.findOneAndUpdate(
-      { petCode },
-      { $set: update, $setOnInsert: insertFields },
-      { new: true, upsert: true }
-    ).populate('images')
+    // Use PetRegistry.ensureRegistered to register the pet
+    const doc = await PetRegistry.ensureRegistered(registryData, stateData)
     
     return doc
   },
@@ -118,6 +111,13 @@ const PetRegistryService = {
     lastTransferAt
   }) {
     if (!petCode) throw new Error('petCode required for registry state update')
+    
+    // First find the registry entry by petCode
+    const registryEntry = await PetRegistry.findOne({ petCode });
+    if (!registryEntry) {
+      throw new Error(`Pet with code ${petCode} not found in registry`);
+    }
+
     const update = {
       updatedBy: actorUserId || undefined,
       lastSeenAt: new Date()
@@ -127,8 +127,9 @@ const PetRegistryService = {
     if (typeof currentStatus !== 'undefined') update.currentStatus = currentStatus
     if (lastTransferAt) update.lastTransferAt = lastTransferAt
 
-    const doc = await PetRegistry.findOneAndUpdate(
-      { petCode },
+    // Update the registry entry using findByIdAndUpdate
+    const doc = await PetRegistry.findByIdAndUpdate(
+      registryEntry._id,
       { $set: update },
       { new: true }
     )
@@ -211,6 +212,12 @@ const PetRegistryService = {
   }) {
     if (!petCode) throw new Error('petCode required for location/status update')
     
+    // First find the registry entry by petCode
+    const registryEntry = await PetRegistry.findOne({ petCode });
+    if (!registryEntry) {
+      throw new Error(`Pet with code ${petCode} not found in registry`);
+    }
+
     const update = {
       currentLocation,
       currentStatus,
@@ -218,8 +225,9 @@ const PetRegistryService = {
       lastSeenAt: new Date()
     }
   
-    const doc = await PetRegistry.findOneAndUpdate(
-      { petCode },
+    // Update the registry entry using findByIdAndUpdate
+    const doc = await PetRegistry.findByIdAndUpdate(
+      registryEntry._id,
       { $set: update },
       { new: true }
     )

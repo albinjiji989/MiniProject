@@ -49,6 +49,7 @@ import {
   Info as InfoIcon,
   Email as EmailIcon,
   Phone as PhoneIcon,
+  ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material'
 
 const AdoptionApplications = () => {
@@ -63,6 +64,8 @@ const AdoptionApplications = () => {
   const [handoverOpen, setHandoverOpen] = useState(false)
   const [handoverData, setHandoverData] = useState(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  const [applicationToCancel, setApplicationToCancel] = useState(null)
 
   useEffect(() => {
     const loadApplications = async () => {
@@ -71,20 +74,61 @@ const AdoptionApplications = () => {
       try {
         const res = await adoptionAPI.listMyRequests()
         const items = res?.data?.data || res?.data || []
-        const normalized = (Array.isArray(items) ? items : []).map((a) => ({
-          id: a._id || a.id,
-          petId: a.petId?._id || a.petId || '',
-          petName: a.petId?.name || 'Pet',
-          petSpecies: a.petId?.species || '-',
-          petBreed: a.petId?.breed || '-',
-          status: a.status || 'pending',
-          applicationDate: a.createdAt ? new Date(a.createdAt).toLocaleDateString() : '-',
-          adoptionFee: a.petId?.adoptionFee || 0,
-          rejectionReason: a.rejectionReason || '',
-          paymentStatus: a.paymentStatus || 'pending',
-          documents: a.documents || [],
-          applicationData: a.applicationData || {}
-        }))
+        // Removed debugging logs for production
+        
+        // Fetch pet data for each application to ensure we get the petCode
+        const applicationsWithPetData = await Promise.all(
+          (Array.isArray(items) ? items : []).map(async (a) => {
+            try {
+              // Fetch the full pet data to get the petCode
+              if (a.petId) {
+                // Extract the actual pet ID - it might be an object or string
+                const petId = a.petId?._id || a.petId || '';
+                if (petId) {
+                  const petResponse = await adoptionAPI.getPet(petId);
+                  if (petResponse?.data?.data) {
+                    const petData = petResponse.data.data;
+                    return {
+                      ...a,
+                      petData: petData
+                    };
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('Failed to fetch pet data for application:', a._id || a.id, err);
+            }
+            return a;
+          })
+        );
+        
+        const normalized = applicationsWithPetData.map((a) => {
+          // Get petCode from either the populated data or the fetched petData
+          let petCode = 'N/A';
+          if (a.petId?.petCode) {
+            petCode = a.petId.petCode;
+          } else if (a.petData?.petCode) {
+            petCode = a.petData.petCode;
+          } else if (a.petId?._id) {
+            petCode = a.petId._id.substring(0, 8) + '...';
+          }
+          
+          return {
+            id: a._id || a.id,
+            petId: a.petId?._id || a.petId || '',
+            petCode: petCode,
+            petName: a.petId?.name || a.petData?.name || 'Unnamed Pet',
+            petSpecies: a.petId?.species || a.petData?.species || '-',
+            petBreed: a.petId?.breed || a.petData?.breed || '-',
+            status: a.status || 'pending',
+            applicationDate: a.createdAt ? new Date(a.createdAt).toLocaleDateString() : '-',
+            adoptionFee: a.petId?.adoptionFee || a.petData?.adoptionFee || 0,
+            rejectionReason: a.rejectionReason || '',
+            paymentStatus: a.paymentStatus || 'pending',
+            documents: a.documents || [],
+            applicationData: a.applicationData || {}
+          }
+        })
         setApplications(normalized)
         setFilteredApplications(normalized)
       } catch (e) {
@@ -161,24 +205,83 @@ const AdoptionApplications = () => {
     setSelectedApplication(null)
   }
 
-  const handleViewApplication = () => {
-    setDetailsOpen(true)
-    handleMenuClose()
+  const handleViewApplication = async () => {
+    try {
+      if (selectedApplication) {
+        // Fetch fresh data for the selected application to ensure we have the latest information
+        const res = await adoptionAPI.getMyRequest(selectedApplication.id);
+        if (res?.data?.data) {
+          // Also fetch the pet data to ensure we have the petCode
+          try {
+            // Extract the actual pet ID - it might be an object or string
+            const petId = res.data.data.petId?._id || res.data.data.petId || '';
+            if (petId) {
+              const petResponse = await adoptionAPI.getPet(petId);
+              if (petResponse?.data?.data) {
+                const updatedApplication = {
+                  ...res.data.data,
+                  petData: petResponse.data.data,
+                  petCode: petResponse.data.data.petCode || 'N/A',
+                  petName: petResponse.data.data.name || 'Unnamed Pet',
+                  petSpecies: petResponse.data.data.species || '-',
+                  petBreed: petResponse.data.data.breed || '-',
+                  adoptionFee: petResponse.data.data.adoptionFee || 0,
+                  applicationDate: res.data.data.createdAt ? new Date(res.data.data.createdAt).toLocaleDateString() : '-'
+                };
+                setSelectedApplication(updatedApplication);
+              } else {
+                setSelectedApplication(res.data.data);
+              }
+            } else {
+              setSelectedApplication(res.data.data);
+            }
+          } catch (petErr) {
+            console.error('Failed to fetch pet data:', petErr);
+            setSelectedApplication(res.data.data);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch application details:', err);
+      // Fallback to existing data
+      setDetailsOpen(true);
+      handleMenuClose();
+      return;
+    }
+    setDetailsOpen(true);
+    handleMenuClose();
   }
 
-  const handleCancelApplication = async () => {
+  const handleCancelApplication = (application) => {
+    // Open confirmation dialog instead of using window.confirm
+    setApplicationToCancel(application)
+    setCancelConfirmOpen(true)
+  }
+  
+  const handleConfirmCancel = async () => {
     try {
-      if (!selectedApplication) return
-      if (!window.confirm('Are you sure you want to cancel this application?')) return
+      if (!applicationToCancel) return
       
-      await adoptionAPI.cancelMyRequest(selectedApplication.id)
-      setApplications((apps) => apps.map(a => a.id === selectedApplication.id ? { ...a, status: 'cancelled' } : a))
-      setFilteredApplications((apps) => apps.map(a => a.id === selectedApplication.id ? { ...a, status: 'cancelled' } : a))
-    } catch (e) {
-      alert(e?.response?.data?.error || 'Failed to cancel application')
-    } finally {
+      await adoptionAPI.cancelMyRequest(applicationToCancel.id)
+      setApplications((apps) => apps.map(a => a.id === applicationToCancel.id ? { ...a, status: 'cancelled' } : a))
+      setFilteredApplications((apps) => apps.map(a => a.id === applicationToCancel.id ? { ...a, status: 'cancelled' } : a))
+      
+      // Close dialog and menu
+      setCancelConfirmOpen(false)
+      setApplicationToCancel(null)
       handleMenuClose()
+    } catch (e) {
+      // Show error in dialog
+      alert(e?.response?.data?.error || 'Failed to cancel application')
+      setCancelConfirmOpen(false)
+      setApplicationToCancel(null)
     }
+  }
+  
+  const handleCancelCancel = () => {
+    // Close dialog without cancelling
+    setCancelConfirmOpen(false)
+    setApplicationToCancel(null)
   }
 
   const getStatusColor = (status) => {
@@ -309,18 +412,94 @@ const AdoptionApplications = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" sx={{ fontWeight: 600 }}>
-          My Adoption Applications
-        </Typography>
-        <Button
-          variant="contained"
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
+      {/* Professional Header */}
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        mb: 3,
+        flexDirection: { xs: 'column', sm: 'row' },
+        gap: 2
+      }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 600, mb: 0.5 }}>
+            My Adoption Applications
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Track and manage your pet adoption applications
+          </Typography>
+        </Box>
+        <Button 
+          variant="contained" 
+          color="primary"
           startIcon={<AddIcon />}
           onClick={() => window.location.href = '/User/adoption'}
+          sx={{ minWidth: 180 }}
         >
           New Application
+        </Button>
+      </Box>
+      
+      {/* Stats Overview */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ bgcolor: 'primary.light', color: 'primary.contrastText' }}>
+            <CardContent>
+              <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                {applications.length}
+              </Typography>
+              <Typography variant="body2">
+                Total Applications
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ bgcolor: 'warning.light', color: 'warning.contrastText' }}>
+            <CardContent>
+              <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                {applications.filter(a => a.status === 'pending').length}
+              </Typography>
+              <Typography variant="body2">
+                Pending Review
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ bgcolor: 'success.light', color: 'success.contrastText' }}>
+            <CardContent>
+              <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                {applications.filter(a => ['approved', 'payment_pending', 'payment_completed', 'completed'].includes(a.status)).length}
+              </Typography>
+              <Typography variant="body2">
+                Approved
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ bgcolor: 'error.light', color: 'error.contrastText' }}>
+            <CardContent>
+              <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                {applications.filter(a => ['rejected', 'cancelled'].includes(a.status)).length}
+              </Typography>
+              <Typography variant="body2">
+                Closed
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
+        <Button 
+          variant="outlined" 
+          size="small"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => window.location.href = '/User/adoption'}
+        >
+          Back to Adoption Center
         </Button>
       </Box>
 
@@ -329,14 +508,15 @@ const AdoptionApplications = () => {
       )}
 
       {/* Search and Filters */}
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 3, boxShadow: 2 }}>
         <CardContent>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 3 }}>
             <TextField
               fullWidth
               placeholder="Search by pet name, species, or breed..."
               value={searchTerm}
               onChange={handleSearch}
+              variant="outlined"
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -347,20 +527,24 @@ const AdoptionApplications = () => {
             />
           </Box>
           
-          <Tabs 
-            value={statusFilter} 
-            onChange={handleStatusFilterChange}
-            variant="scrollable"
-            scrollButtons="auto"
-          >
-            <Tab label="All Applications" value="all" />
-            <Tab label="Pending" value="pending" />
-            <Tab label="Approved" value="approved" />
-            <Tab label="Payment Pending" value="payment_pending" />
-            <Tab label="Completed" value="completed" />
-            <Tab label="Rejected" value="rejected" />
-            <Tab label="Cancelled" value="cancelled" />
-          </Tabs>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs 
+              value={statusFilter} 
+              onChange={handleStatusFilterChange}
+              variant="scrollable"
+              scrollButtons="auto"
+              textColor="primary"
+              indicatorColor="primary"
+            >
+              <Tab label="All Applications" value="all" />
+              <Tab label="Pending" value="pending" />
+              <Tab label="Approved" value="approved" />
+              <Tab label="Payment Pending" value="payment_pending" />
+              <Tab label="Completed" value="completed" />
+              <Tab label="Rejected" value="rejected" />
+              <Tab label="Cancelled" value="cancelled" />
+            </Tabs>
+          </Box>
         </CardContent>
       </Card>
 
@@ -368,22 +552,38 @@ const AdoptionApplications = () => {
       {loading ? (
         <Typography>Loading applications...</Typography>
       ) : filteredApplications.length === 0 ? (
-        <Card>
-          <CardContent sx={{ textAlign: 'center', py: 6 }}>
-            <PetsIcon sx={{ fontSize: 48, color: 'grey.400', mb: 2 }} />
-            <Typography variant="h6" sx={{ mb: 1 }}>No Applications Found</Typography>
-            <Typography color="text.secondary" sx={{ mb: 2 }}>
+        <Card sx={{ boxShadow: 2 }}>
+          <CardContent sx={{ textAlign: 'center', py: 8 }}>
+            <Box sx={{ 
+              width: 120, 
+              height: 120, 
+              borderRadius: '50%', 
+              bgcolor: 'grey.100', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              mx: 'auto',
+              mb: 3
+            }}>
+              <PetsIcon sx={{ fontSize: 60, color: 'grey.400' }} />
+            </Box>
+            <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
+              No Applications Found
+            </Typography>
+            <Typography color="text.secondary" sx={{ mb: 3, maxWidth: 500, mx: 'auto' }}>
               {searchTerm || statusFilter !== 'all' 
-                ? 'No applications match your search criteria.' 
-                : 'You haven\'t submitted any adoption applications yet.'}
+                ? 'No applications match your search criteria. Try adjusting your filters.' 
+                : 'You haven\'t submitted any adoption applications yet. Start your journey to find your perfect companion.'}
             </Typography>
             {!searchTerm && statusFilter === 'all' && (
               <Button 
                 variant="contained" 
+                size="large"
                 startIcon={<AddIcon />}
                 onClick={() => window.location.href = '/User/adoption'}
+                sx={{ px: 4, py: 1.5 }}
               >
-                Apply for Adoption
+                Browse Available Pets
               </Button>
             )}
           </CardContent>
@@ -395,67 +595,104 @@ const AdoptionApplications = () => {
               <Card sx={{ 
                 borderLeft: 4, 
                 borderLeftColor: getStatusColor(application.status),
-                '&:hover': { boxShadow: 3 }
+                '&:hover': { boxShadow: 4 },
+                transition: 'box-shadow 0.3s ease'
               }}>
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar sx={{ bgcolor: 'primary.light' }}>
+                      <Avatar sx={{ 
+                        bgcolor: 'primary.light', 
+                        width: 56, 
+                        height: 56 
+                      }}>
                         <PetsIcon />
                       </Avatar>
                       <Box>
                         <Typography variant="h6" sx={{ fontWeight: 600 }}>
                           {application.petName}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                           {application.petSpecies} • {application.petBreed}
                         </Typography>
+                        <Chip
+                          label={getStatusLabel(application.status)}
+                          color={getStatusColor(application.status)}
+                          size="small"
+                          sx={{ height: 20 }}
+                        />
                       </Box>
                     </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Chip
-                        label={getStatusLabel(application.status)}
-                        color={getStatusColor(application.status)}
-                        size="small"
-                      />
-                      <IconButton size="small" onClick={(e) => handleMenuClick(e, application)}>
-                        <MoreVertIcon />
-                      </IconButton>
-                    </Box>
+                    <IconButton size="small" onClick={(e) => handleMenuClick(e, application)}>
+                      <MoreVertIcon />
+                    </IconButton>
                   </Box>
                   
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6} md={3}>
+                  <Grid container spacing={2} sx={{ mb: 2 }}>
+                    <Grid item xs={6} sm={3}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <CalendarIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                        <Typography variant="body2">
-                          <strong>Applied:</strong> {application.applicationDate}
-                        </Typography>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" component="div">
+                            Applied Date
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {application.applicationDate}
+                          </Typography>
+                        </Box>
                       </Box>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
+                    <Grid item xs={6} sm={3}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <MoneyIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                        <Typography variant="body2">
-                          <strong>Fee:</strong> ₹{application.adoptionFee}
-                        </Typography>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" component="div">
+                            Adoption Fee
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            ₹{application.adoptionFee}
+                          </Typography>
+                        </Box>
                       </Box>
                     </Grid>
-                    <Grid item xs={12} sm={6} md={3}>
+                    <Grid item xs={6} sm={3}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <PersonIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                        <Typography variant="body2">
-                          <strong>Status:</strong> {getStatusLabel(application.status)}
-                        </Typography>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" component="div">
+                            Applied Date
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {application.applicationDate}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <PetsIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" component="div">
+                            Pet Code
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {application.petCode || 'N/A'}
+                          </Typography>
+                        </Box>
                       </Box>
                     </Grid>
                     {application.status === 'rejected' && (
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <InfoIcon sx={{ fontSize: 16, color: 'error.main' }} />
-                          <Typography variant="body2" color="error.main">
-                            <strong>Reason:</strong> {application.rejectionReason || 'Not provided'}
-                          </Typography>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mt: 1 }}>
+                          <InfoIcon sx={{ fontSize: 16, color: 'error.main', mt: 0.5 }} />
+                          <Box>
+                            <Typography variant="caption" color="error.main" component="div">
+                              Rejection Reason
+                            </Typography>
+                            <Typography variant="body2" color="error.main">
+                              {application.rejectionReason || 'Not provided'}
+                            </Typography>
+                          </Box>
                         </Box>
                       </Grid>
                     )}
@@ -471,8 +708,9 @@ const AdoptionApplications = () => {
                         color="success" 
                         startIcon={<PaymentIcon />}
                         onClick={() => handlePayNow(application)}
+                        sx={{ minWidth: 120 }}
                       >
-                        Pay Now (₹{application.adoptionFee})
+                        Pay Now
                       </Button>
                     )}
                     {['payment_completed', 'certificate_generated', 'handover_scheduled', 'handed_over', 'completed'].includes(application.status) && (
@@ -481,39 +719,83 @@ const AdoptionApplications = () => {
                         variant="outlined"
                         startIcon={<DownloadIcon />}
                         onClick={() => handleDownloadCertificate(application)}
+                        sx={{ minWidth: 120 }}
                       >
-                        Download Certificate
+                        Certificate
                       </Button>
                     )}
                     {['approved','payment_completed','certificate_generated','handover_scheduled','handed_over','completed'].includes(application.status) && (
                       <Button 
                         size="small" 
                         variant="outlined"
+                        startIcon={<HomeIcon />}
                         onClick={() => handleViewHandover(application)}
+                        sx={{ minWidth: 120 }}
                       >
-                        View Handover
+                        Handover
                       </Button>
                     )}
                     {application.status === 'pending' && (
                       <Button 
                         size="small" 
                         color="error" 
+                        variant="outlined"
                         startIcon={<CancelIcon />}
-                        onClick={handleCancelApplication}
+                        onClick={() => handleCancelApplication(application)}
+                        sx={{ minWidth: 120 }}
                       >
                         Cancel
                       </Button>
                     )}
                     <Button 
                       size="small" 
-                      variant="outlined"
+                      variant="contained"
+                      color="primary"
                       startIcon={<ViewIcon />}
-                      onClick={() => {
-                        setSelectedApplication(application)
-                        setDetailsOpen(true)
+                      onClick={async () => {
+                        try {
+                          // Fetch fresh data for the selected application
+                          const res = await adoptionAPI.getMyRequest(application.id);
+                          if (res?.data?.data) {
+                            // Also fetch the pet data to ensure we have the petCode
+                            try {
+                              // Extract the actual pet ID - it might be an object or string
+                              const petId = res.data.data.petId?._id || res.data.data.petId || '';
+                              if (petId) {
+                                const petResponse = await adoptionAPI.getPet(petId);
+                                if (petResponse?.data?.data) {
+                                  const updatedApplication = {
+                                    ...res.data.data,
+                                    petData: petResponse.data.data,
+                                    petCode: petResponse.data.data.petCode || 'N/A',
+                                    petName: petResponse.data.data.name || 'Unnamed Pet',
+                                    petSpecies: petResponse.data.data.species || '-',
+                                    petBreed: petResponse.data.data.breed || '-',
+                                    adoptionFee: petResponse.data.data.adoptionFee || 0,
+                                    applicationDate: res.data.data.createdAt ? new Date(res.data.data.createdAt).toLocaleDateString() : '-'
+                                  };
+                                  setSelectedApplication(updatedApplication);
+                                } else {
+                                  setSelectedApplication(res.data.data);
+                                }
+                              } else {
+                                setSelectedApplication(res.data.data);
+                              }
+                            } catch (petErr) {
+                              console.error('Failed to fetch pet data:', petErr);
+                              setSelectedApplication(res.data.data);
+                            }
+                          }
+                        } catch (err) {
+                          console.error('Failed to fetch application details:', err);
+                          // Fallback to existing data
+                          setSelectedApplication(application);
+                        }
+                        setDetailsOpen(true);
                       }}
+                      sx={{ minWidth: 120 }}
                     >
-                      View Details
+                      Details
                     </Button>
                   </Box>
                 </CardContent>
@@ -534,7 +816,7 @@ const AdoptionApplications = () => {
           View Details
         </MenuItem>
         {selectedApplication && selectedApplication.status === 'pending' && (
-          <MenuItem onClick={handleCancelApplication} sx={{ color: 'error.main' }}>
+          <MenuItem onClick={() => handleCancelApplication(selectedApplication)} sx={{ color: 'error.main' }}>
             <CancelIcon sx={{ mr: 1 }} />
             Cancel Application
           </MenuItem>
@@ -575,12 +857,25 @@ const AdoptionApplications = () => {
                   
                   <Box sx={{ display: 'grid', gap: 1.5 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">Pet Code:</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>{selectedApplication.petCode || 'N/A'}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" color="text.secondary">Adoption Fee:</Typography>
                       <Typography variant="body2">₹{selectedApplication.adoptionFee}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" color="text.secondary">Application Date:</Typography>
                       <Typography variant="body2">{selectedApplication.applicationDate}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="text.secondary">Status:</Typography>
+                      <Chip 
+                        label={getStatusLabel(selectedApplication.status)}
+                        color={getStatusColor(selectedApplication.status)}
+                        size="small"
+                        sx={{ height: 20 }}
+                      />
                     </Box>
                   </Box>
                 </Grid>
@@ -619,37 +914,51 @@ const AdoptionApplications = () => {
                 
                 {/* Documents */}
                 <Grid item xs={12}>
-                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Documents</Typography>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Uploaded Documents</Typography>
                   {selectedApplication.documents && selectedApplication.documents.length > 0 ? (
-                    <Grid container spacing={1}>
+                    <Grid container spacing={2}>
                       {selectedApplication.documents.map((doc, index) => {
                         const url = typeof doc === 'string' ? doc : (doc && doc.url ? doc.url : '')
                         const name = (typeof doc === 'object' && doc.name) ? doc.name : (url ? url.split('/').pop() : `Document ${index + 1}`)
+                        const type = (typeof doc === 'object' && doc.type) ? doc.type : ''
+                        const uploadedAt = (typeof doc === 'object' && doc.uploadedAt) ? new Date(doc.uploadedAt).toLocaleDateString() : ''
+                        
                         return url ? (
                           <Grid item xs={12} sm={6} key={index}>
                             <Paper 
                               variant="outlined" 
                               sx={{ 
-                                p: 1.5, 
+                                p: 2, 
                                 display: 'flex', 
                                 alignItems: 'center', 
                                 justifyContent: 'space-between',
-                                '&:hover': { bgcolor: 'grey.50' }
+                                '&:hover': { bgcolor: 'grey.50', boxShadow: 2 },
+                                transition: 'all 0.2s ease'
                               }}
                             >
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <DescriptionIcon sx={{ fontSize: 16, color: 'primary.main' }} />
-                                <Typography variant="body2" noWrap>
-                                  {name}
-                                </Typography>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.light', color: 'primary.main' }}>
+                                  <DescriptionIcon sx={{ fontSize: 16 }} />
+                                </Avatar>
+                                <Box>
+                                  <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
+                                    {name}
+                                  </Typography>
+                                  {uploadedAt && (
+                                    <Typography variant="caption" color="text.secondary">
+                                      Uploaded: {uploadedAt}
+                                    </Typography>
+                                  )}
+                                </Box>
                               </Box>
                               <IconButton 
                                 size="small" 
-                                href={resolveMediaUrl(url)} 
+                                href={url} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
+                                sx={{ ml: 1 }}
                               >
-                                <DownloadIcon sx={{ fontSize: 16 }} />
+                                <DownloadIcon />
                               </IconButton>
                             </Paper>
                           </Grid>
@@ -657,7 +966,17 @@ const AdoptionApplications = () => {
                       })}
                     </Grid>
                   ) : (
-                    <Typography variant="body2" color="text.secondary">No documents uploaded</Typography>
+                    <Paper 
+                      variant="outlined" 
+                      sx={{ 
+                        p: 3, 
+                        textAlign: 'center', 
+                        bgcolor: 'grey.50' 
+                      }}
+                    >
+                      <DescriptionIcon sx={{ fontSize: 40, color: 'grey.400', mb: 1 }} />
+                      <Typography variant="body2" color="text.secondary">No documents uploaded for this application</Typography>
+                    </Paper>
                   )}
                 </Grid>
                 
@@ -752,6 +1071,37 @@ const AdoptionApplications = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setHandoverOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Cancel Application Confirmation Dialog */}
+      <Dialog open={cancelConfirmOpen} onClose={handleCancelCancel} maxWidth="sm" fullWidth>
+        <DialogTitle>Confirm Cancellation</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Are you sure you want to cancel this adoption application?
+          </Typography>
+          {applicationToCancel && (
+            <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Application for: {applicationToCancel.petName}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Pet Code: {applicationToCancel.petCode}
+              </Typography>
+            </Box>
+          )}
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            This action cannot be undone. If you wish to reapply, you will need to submit a new application.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelCancel} color="inherit">
+            Keep Application
+          </Button>
+          <Button onClick={handleConfirmCancel} color="error" variant="contained">
+            Cancel Application
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

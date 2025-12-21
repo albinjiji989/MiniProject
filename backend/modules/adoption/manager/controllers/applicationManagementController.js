@@ -14,7 +14,7 @@ const getManagerApplications = async (req, res) => {
 
     const applications = await AdoptionRequest.find(query)
       .populate('userId', 'name email phone')
-      .populate('petId', 'name breed species age ageUnit ageDisplay gender adoptionFee healthStatus')
+      .populate('petId', 'name breed species age ageUnit ageDisplay gender adoptionFee healthStatus petCode')
       .populate('reviewedBy', 'name email')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
@@ -42,12 +42,46 @@ const getApplicationById = async (req, res) => {
   try {
     const application = await AdoptionRequest.findById(req.params.id)
       .populate('userId', 'name email phone')
-      .populate('petId', 'name breed species age ageUnit ageDisplay gender adoptionFee healthStatus images')
+      .populate({
+        path: 'petId',
+        select: 'name breed species age ageUnit ageDisplay gender adoptionFee healthStatus petCode imageIds documentIds'
+      })
       .populate('reviewedBy', 'name email');
 
     if (!application) {
       return res.status(404).json({ success: false, error: 'Application not found' });
     }
+
+    // Manually populate images and documents
+    if (application.petId) {
+      // Populate images
+      if (application.petId.imageIds && application.petId.imageIds.length > 0) {
+        const Image = require('../../../../core/models/Image');
+        application.petId.images = await Image.find({
+          _id: { $in: application.petId.imageIds }
+        }).select('url caption isPrimary');
+      } else {
+        application.petId.images = [];
+      }
+      
+      // Populate documents
+      if (application.petId.documentIds && application.petId.documentIds.length > 0) {
+        const Document = require('../../../../core/models/Document');
+        application.petId.documents = await Document.find({
+          _id: { $in: application.petId.documentIds }
+        }).select('name type url');
+      } else {
+        application.petId.documents = [];
+      }
+    }
+
+    // Debug: Log application data to see what's being returned
+    console.log('getApplicationById - Application data:', {
+      id: application._id,
+      hasDocuments: !!application.documents,
+      documentsCount: application.documents ? application.documents.length : 0,
+      documents: application.documents
+    });
 
     res.json({ success: true, data: application });
   } catch (error) {

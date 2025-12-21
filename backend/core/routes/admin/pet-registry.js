@@ -119,9 +119,18 @@ router.put('/:petCode/location', auth, authorize('admin'), async (req, res) => {
     const { currentLocation, currentStatus } = req.body;
     const petCode = req.params.petCode;
     
-    // Find and update the pet registry entry
-    const updatedPet = await PetRegistry.findOneAndUpdate(
-      { petCode },
+    // First find the registry entry by petCode
+    const registryEntry = await PetRegistry.findOne({ petCode });
+    if (!registryEntry) {
+      return res.status(404).json({
+        success: false,
+        error: 'Pet not found in registry'
+      });
+    }
+
+    // Update the pet registry entry using findByIdAndUpdate
+    const updatedPet = await PetRegistry.findByIdAndUpdate(
+      registryEntry._id,
       { 
         currentLocation,
         currentStatus,

@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext' // Fix the import
 
 const StoreNameSetup = () => {
   const navigate = useNavigate()
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -16,9 +16,18 @@ const StoreNameSetup = () => {
   const [pincode, setPincode] = useState('')
 
   useEffect(() => {
+    // If auth is still loading, don't proceed
+    if (authLoading) return;
+    
     let mounted = true
     const load = async () => {
       try {
+        // If user is not available, redirect to login
+        if (!user) {
+          navigate('/login');
+          return;
+        }
+        
         // Get the module information from the user context
         if (!mounted) return
         const moduleKeyVal = user?.assignedModule || user?.role?.replace('_manager', '') || 'adoption'
@@ -37,7 +46,7 @@ const StoreNameSetup = () => {
             const response = await petShopAPI.getMyStore()
             storeData = response.data?.data
           } else if (moduleKeyLower.includes('veterinary')) {
-            const response = await veterinaryAPI.managerGetMyStore()
+            const response = await veterinaryAPI.getMyStore()
             storeData = response.data?.data
           }
         } catch (apiError) {
@@ -61,7 +70,7 @@ const StoreNameSetup = () => {
     }
     load()
     return () => { mounted = false }
-  }, [user])
+  }, [user, authLoading, navigate])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -100,7 +109,7 @@ const StoreNameSetup = () => {
       } else if (moduleKeyLower.includes('petshop')) {
         response = await petShopAPI.updateMyStore(updateData)
       } else if (moduleKeyLower.includes('veterinary')) {
-        response = await veterinaryAPI.managerUpdateMyStore(updateData)
+        response = await veterinaryAPI.updateMyStore(updateData)
       } else {
         response = await authAPI.updateProfile(updateData)
       }
@@ -126,7 +135,7 @@ const StoreNameSetup = () => {
     }
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div style={{ maxWidth: 640, margin: '64px auto', padding: 24 }}>
         <h2>Setting things up…</h2>

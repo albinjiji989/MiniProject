@@ -1,0 +1,11 @@
+name,breed,species,category,gender,age,ageUnit,weight,color,vaccinationStatus,adoptionFee
+Fluffy,Poodle,Dog,Companion Animals,male,2,years,5.5,white,up_to_date,2500
+Buddy,Golden Retriever,Dog,Companion Animals,female,1,years,28,brown,partial,3000
+Whiskers,Persian Cat,Cat,Companion Animals,female,6,months,3,cream,up_to_date,2000
+Max,German Shepherd,Dog,Companion Animals,male,3,years,35,black,tan,partial,3500
+Luna,Siamese Cat,Cat,Companion Animals,female,4,years,4,seal point,not_vaccinated,1500
+Rocky,Bulldog,Dog,Companion Animals,male,2,years,22,brindle,up_to_date,4000
+Mittens,Maine Coon,Cat,Companion Animals,female,1,years,6,brown tabby,partial,2200
+Charlie,Beagle,Dog,Companion Animals,male,8,months,12,tricolor,up_to_date,2800
+Coco,Ragdoll,Cat,Companion Animals,female,5,months,2.5,lilac point,not_vaccinated,1800
+Buster,Labrador Retriever,Dog,Companion Animals,male,4,years,30,yellow,up_to_date,3200

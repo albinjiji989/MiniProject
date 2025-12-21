@@ -7,44 +7,28 @@ import {
   Typography,
   Button,
   Chip,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   Alert,
   CircularProgress,
-  useTheme,
-  alpha,
-  CardActions,
-  Tooltip
+  Tabs,
+  Tab,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Pagination,
+  Skeleton
 } from '@mui/material'
 import {
-  Dashboard as DashboardIcon,
-  Pets as PetIcon,
-  Home as HomeIcon,
-  ShoppingCart as ShopIcon,
-  LocalShipping as RescueIcon,
-  Medication as PharmacyIcon,
-  Healing as VeterinaryIcon,
-  Assignment as AdoptionIcon,
-  Build as CareIcon,
-  TrendingUp as TrendingIcon,
   Search as SearchIcon,
-  Add as AddIcon,
-  FavoriteOutlined as FavoriteIcon,
-  Notifications as NotificationIcon,
-  Star as StarIcon,
-  ArrowForward as ArrowIcon,
-  Block as BlockIcon,
-  Construction as ConstructionIcon,
-  Schedule as ScheduleIcon,
+  Pets as PetIcon,
+  Favorite as FavoriteIcon,
+  Assignment as ApplicationIcon,
+  CheckCircle as AdoptedIcon,
   AutoAwesome as AutoAwesomeIcon
 } from '@mui/icons-material'
-import { useAuth } from '../../../contexts/AuthContext'
-import { apiClient, adoptionAPI, resolveMediaUrl } from '../../../services/api'
+import { adoptionAPI, resolveMediaUrl } from '../../../services/api'
 import { useNavigate, useLocation } from 'react-router-dom'
-import UserLayout from '../../../components/Layout/UserLayout'
-import LoadingSpinner from '../../../components/UI/LoadingSpinner'
 import ModuleDashboardLayout from '../../../components/Module/ModuleDashboardLayout'
 
 const AdoptionDashboard = () => {
@@ -53,8 +37,16 @@ const AdoptionDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [pets, setPets] = useState([]);
   const [applications, setApplications] = useState([]);
-  const [adopted, setAdopted] = useState([])
-  const [tab, setTab] = useState('browse')
+  const [adopted, setAdopted] = useState([]);
+  const [tab, setTab] = useState('browse');
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Filter pets based on search term
+  const filteredPets = pets.filter(pet => 
+    (pet.name || 'Unnamed Pet').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (pet.breed || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (pet.species || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   useEffect(() => {
     fetchData();
@@ -80,36 +72,42 @@ const AdoptionDashboard = () => {
         adoptionAPI.getMyAdoptedPets()
       ]);
 
+      console.log('Fetched pets:', petsRes.data.data.pets);
       setPets(petsRes.data.data.pets || []);
       setApplications(applicationsRes.data.data || []);
       setAdopted(adoptedRes.data.data || [])
     } catch (error) {
       console.error('Error fetching adoption data:', error);
+      setError('Failed to load adoption data');
     } finally {
       setLoading(false);
     }
   };
 
   if (loading) {
-    return <LoadingSpinner />;
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   const actions = [
-    { label: 'My Applications', onClick: () => navigate('/User/adoption/applications'), color: 'bg-blue-600' },
-    { label: 'My Adoptions', onClick: () => navigate('/User/adoption/adopted'), color: 'bg-indigo-600' },
-    { label: 'AI/ML Insights', onClick: () => navigate('/User/adoption/aiml-dashboard'), color: 'bg-purple-600', icon: <AutoAwesomeIcon /> }
+    { label: 'My Applications', onClick: () => navigate('/User/adoption/applications'), icon: <ApplicationIcon /> },
+    { label: 'My Adoptions', onClick: () => navigate('/User/adoption/adopted'), icon: <AdoptedIcon /> },
+    { label: 'AI/ML Insights', onClick: () => navigate('/User/adoption/aiml-dashboard'), icon: <AutoAwesomeIcon /> }
   ]
 
   const stats = [
-    { label: 'Available Pets', value: pets.length, icon: '🐾' },
-    { label: 'My Applications', value: applications.length, icon: '📋' },
-    { label: 'Adopted Pets', value: adopted.length, icon: '✅' },
+    { label: 'Available Pets', value: pets.length, icon: <PetIcon /> },
+    { label: 'My Applications', value: applications.length, icon: <ApplicationIcon /> },
+    { label: 'Adopted Pets', value: adopted.length, icon: <FavoriteIcon /> },
   ]
 
   const tabs = [
-    { key: 'browse', label: 'Browse Pets' },
-    { key: 'applications', label: 'My Applications' },
-    { key: 'adopted', label: 'My Adoptions' },
+    { key: 'browse', label: 'Browse Pets', icon: <PetIcon /> },
+    { key: 'applications', label: 'My Applications', icon: <ApplicationIcon /> },
+    { key: 'adopted', label: 'My Adoptions', icon: <FavoriteIcon /> },
   ]
 
   const handleTabChange = (key) => {
@@ -120,98 +118,403 @@ const AdoptionDashboard = () => {
   }
 
   const renderBrowse = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {pets.map((pet) => (
-        <div key={pet._id} className="bg-white border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
-          {pet.images && pet.images.length > 0 && (
-            <img src={resolveMediaUrl(pet.images[0]?.url || pet.images[0])} alt={pet.name} className="w-full h-48 object-cover" onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }} />
+    <Box>
+      {/* Search Bar */}
+      <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center' }}>
+        <TextField
+          fullWidth
+          placeholder="Search pets by name, breed, or species..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
+          }}
+        />
+      </Box>
+      
+      {/* Pet Grid */}
+      {loading ? (
+        <Grid container spacing={3}>
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Grid item xs={12} sm={6} md={4} key={i}>
+              <Card>
+                <Skeleton variant="rectangular" height={180} />
+                <CardContent>
+                  <Skeleton variant="text" sx={{ mb: 1 }} />
+                  <Skeleton variant="text" width="60%" sx={{ mb: 2 }} />
+                  <Skeleton variant="rectangular" height={36} />
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      ) : (
+        <Grid container spacing={3}>
+          {filteredPets.length > 0 ? (
+            filteredPets.map(pet => (
+              <Grid item xs={12} sm={6} md={4} key={pet._id}>
+                <Card 
+                  sx={{ 
+                    height: '100%', 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    transition: 'transform 0.2s, box-shadow 0.2s',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 3
+                    }
+                  }}
+                >
+                  {/* Pet Image */}
+                  <Box 
+                    sx={{ 
+                      position: 'relative', 
+                      width: '100%', 
+                      height: 180, 
+                      bgcolor: 'grey.100', 
+                      overflow: 'hidden', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      borderBottom: '1px solid',
+                      borderColor: 'divider'
+                    }}
+                  >
+                    {pet.images && pet.images.length > 0 ? (
+                      <img 
+                        loading="lazy" 
+                        src={resolveMediaUrl(pet.images[0]?.url || '')} 
+                        alt={pet.name || 'Pet'} 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        onError={(e) => { 
+                          e.currentTarget.src = '/placeholder-pet.svg';
+                        }} 
+                      />
+                    ) : (
+                      <Box sx={{ textAlign: 'center', p: 2 }}>
+                        <Box 
+                          component="img" 
+                          src="/placeholder-pet.svg" 
+                          alt="No image" 
+                          sx={{ width: 60, height: 60, opacity: 0.5, mb: 1 }} 
+                        />
+                        <Typography variant="caption" color="text.secondary">No image</Typography>
+                      </Box>
+                    )}
+                  </Box>
+                  
+                  {/* Pet Info */}
+                  <CardContent sx={{ flexGrow: 1, pb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', mb: 1 }}>
+                      <Box>
+                        <Typography variant="h6" fontWeight={600} noWrap>
+                          {pet.name || 'Unnamed Pet'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" noWrap>
+                          {pet.breed} • {pet.species}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    
+                    {/* Pet Details Grid */}
+                    <Box 
+                      component="dl" 
+                      sx={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(2, 1fr)',
+                        gap: 1,
+                        fontSize: '0.8rem',
+                        mb: 2
+                      }}
+                    >
+                      <>
+                        <dt>Gender:</dt>
+                        <dd>{pet.gender}</dd>
+                        
+                        <dt>Age:</dt>
+                        <dd>{pet.ageDisplay || `${pet.age} ${pet.ageUnit}`}</dd>
+                        
+                        <dt>Health:</dt>
+                        <dd>{pet.healthStatus}</dd>
+                        
+                        <dt>Fee:</dt>
+                        <dd>₹{pet.adoptionFee || 0}</dd>
+                      </>
+                    </Box>
+                    
+                    {/* Action Buttons */}
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 'auto' }}>
+                      <Button 
+                        size="small" 
+                        variant="outlined" 
+                        sx={{ flex: 1, minWidth: 80 }}
+                        onClick={() => {
+                          console.log('View Details clicked, pet._id:', pet._id);
+                          navigate(`/User/adoption/detail/${pet._id}`);
+                        }}
+                      >
+                        View Details
+                      </Button>
+                      <Button 
+                        size="small" 
+                        variant="contained" 
+                        sx={{ flex: 1, minWidth: 80 }}
+                        onClick={() => {
+                          console.log('Adopt clicked, pet._id:', pet._id);
+                          navigate(`/User/adoption/apply?petId=${pet._id}`);
+                        }}
+                      >
+                        Adopt
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))
+          ) : (
+            <Grid item xs={12}>
+              <Box 
+                sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  py: 8,
+                  textAlign: 'center'
+                }}
+              >
+                <PetIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  No pets found
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  {searchTerm ? 'Try adjusting your search criteria' : 'No pets available right now'}
+                </Typography>
+              </Box>
+            </Grid>
           )}
-          <div className="p-4">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h3 className="font-semibold text-lg">{pet.name}</h3>
-                <p className="text-gray-600">{pet.breed} • {pet.species}</p>
-              </div>
-              <span className="text-lg font-bold text-green-600">₹{pet.adoptionFee}</span>
-            </div>
-            <div className="space-y-2 text-sm text-gray-600 mb-4">
-              <p><span className="font-medium">Age:</span> {pet.ageDisplay || `${pet.age} ${pet.ageUnit}`}</p>
-              <p><span className="font-medium">Gender:</span> {pet.gender}</p>
-              <p><span className="font-medium">Health:</span> {pet.healthStatus}</p>
-            </div>
-            <div className="flex space-x-2">
-              <button onClick={() => navigate(`/User/adoption/${pet._id}`)} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">View Details</button>
-              <button onClick={() => navigate(`/User/adoption/apply/applicant?petId=${pet._id}`)} className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Adopt</button>
-            </div>
-          </div>
-        </div>
-      ))}
-      {pets.length === 0 && (
-        <div className="col-span-full text-center text-gray-500">No pets available right now.</div>
+        </Grid>
       )}
-    </div>
+    </Box>
   )
 
   const renderApplications = () => (
-    <div className="overflow-x-auto">
-      <div className="flex items-center justify-between mb-2">
-        <div className="font-semibold">Recent Applications</div>
-        <button className="text-blue-600 hover:underline" onClick={() => navigate('/User/adoption/applications')}>View All</button>
-      </div>
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="text-left border-b">
-            <th className="py-2 pr-4">Pet</th>
-            <th className="py-2 pr-4">Status</th>
-            <th className="py-2 pr-4">Reason</th>
-            <th className="py-2 pr-4">Date</th>
-            <th className="py-2">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {applications.map(a => (
-            <tr key={a._id} className="border-b">
-              <td className="py-2 pr-4">
-                <div className="font-medium">{a.petId?.name || 'Pet'}</div>
-                <div className="text-gray-500">{a.petId?.species} • {a.petId?.breed}</div>
-              </td>
-              <td className="py-2 pr-4">{a.status}</td>
-              <td className="py-2 pr-4">{a.status === 'rejected' ? (a.rejectionReason || '-') : '-'}</td>
-              <td className="py-2 pr-4">{a.createdAt ? new Date(a.createdAt).toLocaleDateString() : '-'}</td>
-              <td className="py-2">
-                <button className="px-3 py-1 rounded bg-gray-100" onClick={() => navigate(`/User/adoption/applications/${a._id}`)}>View</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {applications.length === 0 && (
-        <div className="py-4 text-center text-gray-500">No applications yet.</div>
+    <Box>
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : applications.length > 0 ? (
+        <Box sx={{ overflowX: 'auto' }}>
+          <Box sx={{ minWidth: 600 }}>
+            <Box 
+              sx={{ 
+                display: 'grid', 
+                gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
+                gap: 2,
+                p: 2,
+                bgcolor: 'background.paper',
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                fontWeight: 'bold'
+              }}
+            >
+              <Box>Pet</Box>
+              <Box>Status</Box>
+              <Box>Reason</Box>
+              <Box>Date</Box>
+              <Box>Action</Box>
+            </Box>
+            {applications.map(application => (
+              <Box 
+                key={application._id}
+                sx={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
+                  gap: 2,
+                  p: 2,
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                  '&:hover': { bgcolor: 'action.hover' }
+                }}
+              >
+                <Box>
+                  <Typography variant="subtitle2">
+                    {application.petId?.name || 'Unnamed Pet'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {application.petId?.species} • {application.petId?.breed}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Chip 
+                    size="small" 
+                    label={application.status} 
+                    color={application.status === 'approved' ? 'success' : application.status === 'rejected' ? 'error' : 'default'} 
+                  />
+                </Box>
+                <Box>
+                  {application.status === 'rejected' ? (application.rejectionReason || '-') : '-'}
+                </Box>
+                <Box>
+                  {application.createdAt ? new Date(application.createdAt).toLocaleDateString() : '-'}
+                </Box>
+                <Box>
+                  <Button 
+                    size="small" 
+                    variant="outlined" 
+                    onClick={() => navigate(`/User/adoption/applications/${application._id}`)}
+                  >
+                    View
+                  </Button>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      ) : (
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            py: 8,
+            textAlign: 'center'
+          }}
+        >
+          <ApplicationIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            No applications yet
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Apply for a pet to see your applications here
+          </Typography>
+          <Button 
+            variant="contained" 
+            startIcon={<PetIcon />}
+            onClick={() => navigate('/User/adoption')}
+          >
+            Browse Pets
+          </Button>
+        </Box>
       )}
-    </div>
+    </Box>
   )
 
   const renderAdopted = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <div className="col-span-full flex items-center justify-between">
-        <div className="font-semibold">Recently Adopted</div>
-        <button className="text-blue-600 hover:underline" onClick={() => navigate('/User/adoption/adopted')}>View All</button>
-      </div>
-      {adopted.map(pet => (
-        <div key={pet._id} className="bg-white border rounded-lg overflow-hidden">
-          {pet.images && pet.images.length > 0 && (
-            <img src={resolveMediaUrl(pet.images[0]?.url || pet.images[0])} alt={pet.name} className="w-full h-40 object-cover" onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }} />
-          )}
-          <div className="p-4">
-            <div className="font-semibold">{pet.name}</div>
-            <div className="text-gray-600 text-sm">{pet.breed} • {pet.species}</div>
-          </div>
-        </div>
-      ))}
-      {adopted.length === 0 && (
-        <div className="col-span-full text-center text-gray-500">No adopted pets yet.</div>
+    <Box>
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : adopted.length > 0 ? (
+        <Grid container spacing={3}>
+          {adopted.map(pet => (
+            <Grid item xs={12} sm={6} md={4} key={pet._id}>
+              <Card 
+                sx={{ 
+                  height: '100%', 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 3
+                  }
+                }}
+              >
+                <Box 
+                  sx={{ 
+                    position: 'relative', 
+                    width: '100%', 
+                    height: 180, 
+                    bgcolor: 'grey.100', 
+                    overflow: 'hidden', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    borderBottom: '1px solid',
+                    borderColor: 'divider'
+                  }}
+                >
+                  {pet.images && pet.images.length > 0 ? (
+                    <img 
+                      src={resolveMediaUrl(pet.images[0]?.url || '')} 
+                      alt={pet.name || 'Pet'} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      onError={(e) => { 
+                        e.currentTarget.src = '/placeholder-pet.svg';
+                      }} 
+                    />
+                  ) : (
+                    <Box sx={{ textAlign: 'center', p: 2 }}>
+                      <Box 
+                        component="img" 
+                        src="/placeholder-pet.svg" 
+                        alt="No image" 
+                        sx={{ width: 60, height: 60, opacity: 0.5, mb: 1 }} 
+                      />
+                      <Typography variant="caption" color="text.secondary">No image</Typography>
+                    </Box>
+                  )}
+                </Box>
+                
+                <CardContent sx={{ flexGrow: 1, pb: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', mb: 1 }}>
+                    <Box>
+                      <Typography variant="h6" fontWeight={600} noWrap>
+                        {pet.name || 'Unnamed Pet'}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        {pet.breed} • {pet.species}
+                      </Typography>
+                    </Box>
+                  </Box>
+                  
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 'auto' }}>
+                    <Button 
+                      size="small" 
+                      variant="outlined" 
+                      sx={{ flex: 1, minWidth: 80 }}
+                      onClick={() => navigate(`/User/adoption/adopted/${pet._id}`)}
+                    >
+                      View Details
+                    </Button>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      ) : (
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            py: 8,
+            textAlign: 'center'
+          }}
+        >
+          <FavoriteIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            No adopted pets yet
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Adopt a pet to see them here
+          </Typography>
+          <Button 
+            variant="contained" 
+            startIcon={<PetIcon />}
+            onClick={() => navigate('/User/adoption')}
+          >
+            Browse Pets
+          </Button>
+        </Box>
       )}
-    </div>
+    </Box>
   )
 
   return (
