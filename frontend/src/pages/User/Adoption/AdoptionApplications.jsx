@@ -84,45 +84,79 @@ const AdoptionApplications = () => {
               if (a.petId) {
                 // Extract the actual pet ID - it might be an object or string
                 const petId = a.petId?._id || a.petId || '';
-                if (petId) {
-                  const petResponse = await adoptionAPI.getPet(petId);
-                  if (petResponse?.data?.data) {
-                    const petData = petResponse.data.data;
-                    return {
-                      ...a,
-                      petData: petData
-                    };
+                if (petId && typeof petId === 'string' && petId.length > 5) {
+                  // Validate that petId looks like a valid MongoDB ObjectId
+                  const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(petId);
+                  if (isValidObjectId) {
+                    const petResponse = await adoptionAPI.getPet(petId);
+                    if (petResponse?.data?.data) {
+                      const petData = petResponse.data.data;
+                      return {
+                        ...a,
+                        petData: petData
+                      };
+                    }
+                  } else {
+                    console.warn('Invalid pet ID format for application:', a._id || a.id, 'Pet ID:', petId);
                   }
+                } else {
+                  console.warn('Missing or invalid pet ID for application:', a._id || a.id);
                 }
+              } else {
+                console.warn('No petId found for application:', a._id || a.id);
               }
             } catch (err) {
-              console.error('Failed to fetch pet data for application:', a._id || a.id, err);
+              console.error('Failed to fetch pet data for application:', a._id || a.id, 'Pet ID:', a.petId?._id || a.petId, err);
             }
             return a;
           })
         );
         
         const normalized = applicationsWithPetData.map((a) => {
-          // Get petCode from either the populated data or the fetched petData
+          // Get petCode and other data from either the populated data or the fetched petData
           let petCode = 'N/A';
-          if (a.petId?.petCode) {
-            petCode = a.petId.petCode;
-          } else if (a.petData?.petCode) {
-            petCode = a.petData.petCode;
-          } else if (a.petId?._id) {
-            petCode = a.petId._id.substring(0, 8) + '...';
+          let petName = 'Unnamed Pet';
+          let petSpecies = '-';
+          let petBreed = '-';
+          let adoptionFee = 0;
+          
+          // Try to get data from different sources
+          if (a.petId) {
+            if (typeof a.petId === 'object') {
+              petCode = a.petId.petCode || petCode;
+              petName = a.petId.name || petName;
+              petSpecies = a.petId.species || petSpecies;
+              petBreed = a.petId.breed || petBreed;
+              adoptionFee = a.petId.adoptionFee || adoptionFee;
+            }
+          }
+          
+          if (a.petData) {
+            petCode = a.petData.petCode || petCode;
+            petName = a.petData.name || petName;
+            petSpecies = a.petData.species || petSpecies;
+            petBreed = a.petData.breed || petBreed;
+            adoptionFee = a.petData.adoptionFee || adoptionFee;
+          }
+          
+          // Fallback for petCode
+          if (petCode === 'N/A' && a.petId) {
+            const petId = a.petId?._id || a.petId || '';
+            if (petId && typeof petId === 'string' && petId.length >= 8) {
+              petCode = petId.substring(0, 8) + '...';
+            }
           }
           
           return {
             id: a._id || a.id,
             petId: a.petId?._id || a.petId || '',
             petCode: petCode,
-            petName: a.petId?.name || a.petData?.name || 'Unnamed Pet',
-            petSpecies: a.petId?.species || a.petData?.species || '-',
-            petBreed: a.petId?.breed || a.petData?.breed || '-',
+            petName: petName,
+            petSpecies: petSpecies,
+            petBreed: petBreed,
             status: a.status || 'pending',
             applicationDate: a.createdAt ? new Date(a.createdAt).toLocaleDateString() : '-',
-            adoptionFee: a.petId?.adoptionFee || a.petData?.adoptionFee || 0,
+            adoptionFee: adoptionFee,
             rejectionReason: a.rejectionReason || '',
             paymentStatus: a.paymentStatus || 'pending',
             documents: a.documents || [],
@@ -215,28 +249,36 @@ const AdoptionApplications = () => {
           try {
             // Extract the actual pet ID - it might be an object or string
             const petId = res.data.data.petId?._id || res.data.data.petId || '';
-            if (petId) {
-              const petResponse = await adoptionAPI.getPet(petId);
-              if (petResponse?.data?.data) {
-                const updatedApplication = {
-                  ...res.data.data,
-                  petData: petResponse.data.data,
-                  petCode: petResponse.data.data.petCode || 'N/A',
-                  petName: petResponse.data.data.name || 'Unnamed Pet',
-                  petSpecies: petResponse.data.data.species || '-',
-                  petBreed: petResponse.data.data.breed || '-',
-                  adoptionFee: petResponse.data.data.adoptionFee || 0,
-                  applicationDate: res.data.data.createdAt ? new Date(res.data.data.createdAt).toLocaleDateString() : '-'
-                };
-                setSelectedApplication(updatedApplication);
+            if (petId && typeof petId === 'string' && petId.length > 5) {
+              // Validate that petId looks like a valid MongoDB ObjectId
+              const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(petId);
+              if (isValidObjectId) {
+                const petResponse = await adoptionAPI.getPet(petId);
+                if (petResponse?.data?.data) {
+                  const updatedApplication = {
+                    ...res.data.data,
+                    petData: petResponse.data.data,
+                    petCode: petResponse.data.data.petCode || 'N/A',
+                    petName: petResponse.data.data.name || 'Unnamed Pet',
+                    petSpecies: petResponse.data.data.species || '-',
+                    petBreed: petResponse.data.data.breed || '-',
+                    adoptionFee: petResponse.data.data.adoptionFee || 0,
+                    applicationDate: res.data.data.createdAt ? new Date(res.data.data.createdAt).toLocaleDateString() : '-'
+                  };
+                  setSelectedApplication(updatedApplication);
+                } else {
+                  setSelectedApplication(res.data.data);
+                }
               } else {
+                console.warn('Invalid pet ID format for application:', res.data.data._id, 'Pet ID:', petId);
                 setSelectedApplication(res.data.data);
               }
             } else {
+              console.warn('Missing or invalid pet ID for application:', res.data.data._id);
               setSelectedApplication(res.data.data);
             }
           } catch (petErr) {
-            console.error('Failed to fetch pet data:', petErr);
+            console.error('Failed to fetch pet data for application:', res.data.data._id, 'Pet ID:', petId, petErr);
             setSelectedApplication(res.data.data);
           }
         }
@@ -735,7 +777,7 @@ const AdoptionApplications = () => {
                         Handover
                       </Button>
                     )}
-                    {application.status === 'pending' && (
+                    {['pending', 'approved', 'payment_pending'].includes(application.status) && (
                       <Button 
                         size="small" 
                         color="error" 
@@ -744,7 +786,7 @@ const AdoptionApplications = () => {
                         onClick={() => handleCancelApplication(application)}
                         sx={{ minWidth: 120 }}
                       >
-                        Cancel
+                        Cancel Application
                       </Button>
                     )}
                     <Button 
@@ -1001,76 +1043,170 @@ const AdoptionApplications = () => {
       </Dialog>
 
       {/* Handover Modal */}
-      <Dialog open={handoverOpen} onClose={() => setHandoverOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Handover Details</DialogTitle>
+      <Dialog open={handoverOpen} onClose={() => setHandoverOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>Adoption Handover Details</DialogTitle>
         <DialogContent>
           {handoverData ? (
-            <Box sx={{ py: 2 }}>
-              <Box sx={{ display: 'grid', gap: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body1" color="text.secondary">Status:</Typography>
-                  <Chip 
-                    label={handoverData.handover?.status || handoverData.status || '-'} 
-                    color={handoverData.handover?.status === 'completed' ? 'success' : 'info'} 
-                    size="small" 
-                  />
-                </Box>
-                
-                {handoverData.handover?.scheduledAt && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body1" color="text.secondary">Scheduled At:</Typography>
-                    <Typography variant="body1">
-                      {new Date(handoverData.handover.scheduledAt).toLocaleString()}
-                    </Typography>
-                  </Box>
-                )}
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body1" color="text.secondary">Location:</Typography>
-                  <Typography variant="body1">
-                    Adoption Center - Main Branch, 123 Pet Welfare Road, Animal City
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body1" color="text.secondary">Contact:</Typography>
-                  <Typography variant="body1">+91-9876543210</Typography>
-                </Box>
-                
-                {handoverData.handover?.notes && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body1" color="text.secondary">Notes:</Typography>
-                    <Typography variant="body1">{handoverData.handover.notes}</Typography>
-                  </Box>
-                )}
-                
-                {handoverData.handover?.confirmedByUserAt && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="body1" color="text.secondary">Confirmed:</Typography>
-                    <Typography variant="body1" color="success.main">
-                      {new Date(handoverData.handover.confirmedByUserAt).toLocaleString()}
-                    </Typography>
-                  </Box>
-                )}
-              </Box>
+            <Box sx={{ py: 1 }}>
+              {/* Pet Information */}
+              <Card variant="outlined" sx={{ mb: 3 }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Pet Information</Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body2" color="text.secondary">Pet Name</Typography>
+                      <Typography variant="body1">{handoverData.petId?.name || '-'}</Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body2" color="text.secondary">Pet Code</Typography>
+                      <Typography variant="body1">{handoverData.petId?.petCode || '-'}</Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body2" color="text.secondary">Species & Breed</Typography>
+                      <Typography variant="body1">{handoverData.petId?.species || '-'} • {handoverData.petId?.breed || '-'}</Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body2" color="text.secondary">Age</Typography>
+                      <Typography variant="body1">{handoverData.petId?.ageDisplay || '-'}</Typography>
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
               
-              {handoverData.handover?.status === 'scheduled' && (
-                <Box sx={{ mt: 3, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>Important Information</Typography>
-                  <Typography variant="body2">
-                    Please note that pet pickup is only available at our adoption center. 
-                    You must present the OTP sent to your email when picking up your pet.
-                    Arrive 15 minutes before your scheduled time.
-                  </Typography>
-                </Box>
+              {/* Handover Status */}
+              <Card variant="outlined" sx={{ mb: 3 }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Handover Status</Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="body1" color="text.secondary">Current Status:</Typography>
+                    <Chip 
+                      label={handoverData.handover?.status === 'scheduled' ? 'Scheduled' : 
+                             handoverData.handover?.status === 'completed' ? 'Completed' : 
+                             'Not Scheduled'} 
+                      color={handoverData.handover?.status === 'completed' ? 'success' : 
+                             handoverData.handover?.status === 'scheduled' ? 'warning' : 'default'} 
+                      size="medium" 
+                      sx={{ fontWeight: 600 }}
+                    />
+                  </Box>
+                  
+                  {handoverData.handover?.status === 'scheduled' && (
+                    <>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="text.secondary">Scheduled Date & Time</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {handoverData.handover.scheduledAt ? new Date(handoverData.handover.scheduledAt).toLocaleString() : '-'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="text.secondary">OTP</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500, color: 'primary.main' }}>
+                            {handoverData.handover.otpHistory && handoverData.handover.otpHistory.length > 0 
+                              ? handoverData.handover.otpHistory[handoverData.handover.otpHistory.length - 1].otp 
+                              : 'Not Generated'}
+                          </Typography>
+                        </Grid>
+                      </Grid>
+                      
+                      <Box sx={{ mt: 2, p: 2, bgcolor: 'warning.light', borderRadius: 1 }}>
+                        <Typography variant="subtitle2" color="warning.main" sx={{ mb: 1 }}>
+                          Important Instructions
+                        </Typography>
+                        <Typography variant="body2" color="warning.dark">
+                          Please arrive at the adoption center at least 15 minutes before your scheduled time. 
+                          Bring a valid ID and the OTP sent to your email. Failure to present the OTP will result in 
+                          denial of pet release.
+                        </Typography>
+                      </Box>
+                    </>
+                  )}
+                  
+                  {handoverData.handover?.status === 'completed' && (
+                    <>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="text.secondary">Completion Date & Time</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {handoverData.handoverCompletedAt ? new Date(handoverData.handoverCompletedAt).toLocaleString() : '-'}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="text.secondary">Confirmation</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500, color: 'success.main' }}>
+                            Confirmed
+                          </Typography>
+                        </Grid>
+                      </Grid>
+                      
+                      <Box sx={{ mt: 2, p: 2, bgcolor: 'success.light', borderRadius: 1 }}>
+                        <Typography variant="subtitle2" color="success.main" sx={{ mb: 1 }}>
+                          Adoption Completed Successfully
+                        </Typography>
+                        <Typography variant="body2" color="success.dark">
+                          Congratulations! Your adoption is now complete. The pet is officially yours and will appear 
+                          in your dashboard under "My Pets". Welcome your new family member!
+                        </Typography>
+                      </Box>
+                    </>
+                  )}
+                  
+                  {handoverData.handover?.status !== 'scheduled' && handoverData.handover?.status !== 'completed' && (
+                    <Box sx={{ p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Handover has not been scheduled yet. Once your application is fully processed, 
+                        the adoption manager will schedule a handover appointment.
+                      </Typography>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+              
+              {/* Location & Contact Information */}
+              <Card variant="outlined" sx={{ mb: 3 }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Location & Contact</Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary">Adoption Center Address</Typography>
+                      <Typography variant="body1">
+                        PetConnect Adoption Center<br />
+                        123 Pet Welfare Road<br />
+                        Animal City, AC 560001
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body2" color="text.secondary">Phone</Typography>
+                      <Typography variant="body1">+91-9876543210</Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body2" color="text.secondary">Email</Typography>
+                      <Typography variant="body1">adoptions@petconnect.com</Typography>
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+              
+              {/* Special Notes */}
+              {handoverData.handover?.notes && (
+                <Card variant="outlined" sx={{ mb: 3 }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Special Notes</Typography>
+                    <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                      {handoverData.handover.notes}
+                    </Typography>
+                  </CardContent>
+                </Card>
               )}
             </Box>
           ) : (
             <Typography variant="body2">No handover information available.</Typography>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setHandoverOpen(false)}>Close</Button>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setHandoverOpen(false)} variant="contained" color="primary">
+            Close
+          </Button>
         </DialogActions>
       </Dialog>
       

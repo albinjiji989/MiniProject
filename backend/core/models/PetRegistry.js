@@ -63,7 +63,28 @@ const petRegistrySchema = new mongoose.Schema({
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   
   // Soft Delete
-  isDeleted: { type: Boolean, default: false }
+  isDeleted: { type: Boolean, default: false },
+  
+  // Status tracking
+  currentOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  currentLocation: { type: String, default: 'at_adoption_center' },
+  currentStatus: { type: String, default: 'available' },
+  lastTransferAt: { type: Date },
+  isDeceased: { type: Boolean, default: false },
+  deceasedAt: { type: Date },
+  deceasedReason: { type: String },
+  ownershipHistory: [{
+    previousOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    newOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    transferType: { type: String },
+    transferDate: { type: Date, default: Date.now },
+    transferPrice: { type: Number, default: 0 },
+    transferReason: { type: String },
+    source: { type: String },
+    notes: { type: String },
+    performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    endDate: { type: Date }
+  }]
 }, { timestamps: true })
 
 // Unique index for petCode

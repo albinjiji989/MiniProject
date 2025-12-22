@@ -40,8 +40,14 @@ const getOwnedPets = async (req, res) => {
       .sort({ updatedAt: -1 });
     
     // Manually populate the virtual 'images' field for each pet
+    // Safer population with error handling
     for (const pet of registryPets) {
-      await pet.populate('images');
+      try {
+        await pet.populate('images');
+      } catch (populateErr) {
+        logger.warn(`Failed to populate images for pet ${pet._id}:`, populateErr.message);
+        // Continue with the pet even if image population fails
+      }
     }
     
     logger.debug(`Registry pets found: ${registryPets.length}`);
@@ -101,9 +107,15 @@ const getOwnedPets = async (req, res) => {
           .lean();
         
         // Manually populate the virtual 'images' field for each pet
+        // Safer population with error handling
         for (const pet of legacyPets) {
           if (pet) {
-            await pet.populate('images');
+            try {
+              await pet.populate('images');
+            } catch (populateErr) {
+              logger.warn(`Failed to populate images for legacy pet ${pet._id}:`, populateErr.message);
+              // Continue with the pet even if image population fails
+            }
           }
         }
         
@@ -130,9 +142,15 @@ const getOwnedPets = async (req, res) => {
         });
         
         // Manually populate the virtual 'images' field for each item
+        // Safer population with error handling
         for (const reservation of reservations) {
           if (reservation && reservation.itemId) {
-            await reservation.itemId.populate('images');
+            try {
+              await reservation.itemId.populate('images');
+            } catch (populateErr) {
+              logger.warn(`Failed to populate images for petshop item ${reservation.itemId?._id}:`, populateErr.message);
+              // Continue with the reservation even if image population fails
+            }
           }
         }
         

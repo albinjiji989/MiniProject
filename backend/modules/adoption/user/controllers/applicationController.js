@@ -19,7 +19,20 @@ cloudinary.config({
 const getAvailablePets = async (req, res) => {
   try {
     const { page = 1, limit = 12, breed, species, age, gender } = req.query;
-    const query = { status: 'available', isActive: true };
+    
+    // First, find pets with pending or approved applications for other users
+    const reservedPetIds = await AdoptionRequest.distinct('petId', {
+      status: { $in: ['pending', 'approved', 'payment_pending'] },
+      isActive: true,
+      userId: { $ne: req.user.id } // Exclude current user's applications
+    });
+    
+    // Build query to exclude reserved pets
+    const query = { 
+      status: 'available', 
+      isActive: true,
+      _id: { $nin: reservedPetIds } // Exclude pets with active applications by other users
+    };
 
     if (breed) query.breed = { $regex: breed, $options: 'i' };
     if (species) query.species = { $regex: species, $options: 'i' };
@@ -38,7 +51,7 @@ const getAvailablePets = async (req, res) => {
     }
 
     const pets = await AdoptionPet.find(query)
-      .select('name breed species age ageUnit gender color weight healthStatus vaccinationStatus temperament description adoptionFee')
+      .select('name breed species age ageUnit gender color weight healthStatus vaccinationStatus temperament description adoptionFee petCode')
       .populate('images')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
@@ -58,6 +71,7 @@ const getAvailablePets = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Error fetching available pets:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -83,9 +97,25 @@ const getPetDetails = async (req, res) => {
         error: `Pet is not available for adoption. Current status: ${pet.status}. This pet may have already been reserved or adopted by someone else.` 
       });
     }
+    
+    // Check if pet has active applications by other users
+    const activeApplications = await AdoptionRequest.countDocuments({
+      petId: pet._id,
+      status: { $in: ['pending', 'approved', 'payment_pending'] },
+      isActive: true,
+      userId: { $ne: req.user.id } // Exclude current user's applications
+    });
+    
+    if (activeApplications > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Pet is not available for adoption. This pet currently has active applications from other users.` 
+      });
+    }
 
     res.json({ success: true, data: pet });
   } catch (error) {
+    console.error('Error fetching pet details:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -232,43 +262,160 @@ const submitApplication = async (req, res) => {
     }
 
     // Normalize documents from body (supports [string], [{url}], or full document objects)
-    console.log('Raw documents from request body:', req.body?.documents);
     const rawDocs = Array.isArray(req.body?.documents) ? req.body.documents
                   : (Array.isArray(applicationData?.documents) ? applicationData.documents : [])
-    console.log('Processed rawDocs:', rawDocs);
     const documents = rawDocs
       .map(d => {
-        console.log('Processing document:', d, 'Type:', typeof d);
         if (typeof d === 'string') {
           // Simple URL string
           return { url: d, name: 'document', type: 'unknown', uploadedAt: new Date() };
         } else if (d && d.url) {
           // Object with at least URL
-          console.log('Document uploadedAt:', d.uploadedAt, 'Type:', typeof d.uploadedAt);
+          // Handle date conversion properly
+          let uploadedAt = new Date();
+          if (d.uploadedAt) {
+            // If it's already a Date object, use it directly
+            if (d.uploadedAt instanceof Date) {
+              uploadedAt = d.uploadedAt;
+            } 
+            // If it's a string (likely ISO string from frontend), parse it
+            else if (typeof d.uploadedAt === 'string') {
+              const parsedDate = new Date(d.uploadedAt);
+              if (!isNaN(parsedDate.getTime())) {
+                uploadedAt = parsedDate;
+              }
+            }
+            // If it's a number (timestamp), convert it
+            else if (typeof d.uploadedAt === 'number') {
+              uploadedAt = new Date(d.uploadedAt);
+            }
+          }
           return {
             url: d.url,
             name: d.name || 'document',
             type: d.type || 'unknown',
-            uploadedAt: d.uploadedAt ? new Date(d.uploadedAt) : new Date()
+            uploadedAt: uploadedAt
           };
         }
         return null;
       })
       .filter(d => d && d.url && typeof d.url === 'string' && d.url.trim())
-    console.log('Final documents array:', documents);
 
-    console.log('Creating AdoptionRequest with documents:', documents);
+    // Ensure documents is properly formatted before creating AdoptionRequest
+    const cleanDocuments = Array.isArray(documents) ? documents.map(doc => ({
+      url: doc.url,
+      name: doc.name,
+      type: doc.type,
+      uploadedAt: doc.uploadedAt instanceof Date && !isNaN(doc.uploadedAt.getTime()) ? doc.uploadedAt : new Date(doc.uploadedAt || Date.now())
+    })) : [];
+    
+    // Additional validation to ensure documents array structure
+    if (Array.isArray(cleanDocuments)) {
+      cleanDocuments.forEach((doc, index) => {
+        // Validate each document
+        if (!doc.url || typeof doc.url !== 'string') {
+          console.warn(`Document ${index} has invalid URL:`, doc.url);
+        }
+        if (!(doc.uploadedAt instanceof Date) || isNaN(doc.uploadedAt.getTime())) {
+          console.warn(`Document ${index} has invalid date:`, doc.uploadedAt);
+        }
+      });
+    }
+    
+    // Final validation before creating AdoptionRequest
+    const validatedDocuments = Array.isArray(cleanDocuments) ? cleanDocuments.map(doc => ({
+      url: typeof doc.url === 'string' ? doc.url : '',
+      name: typeof doc.name === 'string' ? doc.name : 'document',
+      type: typeof doc.type === 'string' ? doc.type : 'unknown',
+      uploadedAt: doc.uploadedAt instanceof Date && !isNaN(doc.uploadedAt.getTime()) ? doc.uploadedAt : 
+                 (typeof doc.uploadedAt === 'string' ? new Date(doc.uploadedAt) : new Date())
+    })).filter(doc => doc.url && doc.url.trim()) : [];
+    
+    // Validate the structure of validatedDocuments
+    if (Array.isArray(validatedDocuments)) {
+      validatedDocuments.forEach((doc, index) => {
+        // Validate each document
+        if (!doc.url || typeof doc.url !== 'string') {
+          console.warn(`Validated document ${index} has invalid URL:`, doc.url);
+        }
+        if (!(doc.uploadedAt instanceof Date) || isNaN(doc.uploadedAt.getTime())) {
+          console.warn(`Validated document ${index} has invalid date:`, doc.uploadedAt);
+        }
+      });
+    }
+    
+    // Clone the documents array to ensure it's a proper array
+    const clonedDocuments = JSON.parse(JSON.stringify(validatedDocuments));
+    
+    // Manually construct documents array to ensure proper format
+    const finalDocuments = clonedDocuments.map(doc => ({
+      url: String(doc.url || ''),
+      name: String(doc.name || 'document'),
+      type: String(doc.type || 'unknown'),
+      uploadedAt: doc.uploadedAt instanceof Date && !isNaN(doc.uploadedAt.getTime()) ? doc.uploadedAt : 
+                 (typeof doc.uploadedAt === 'string' ? new Date(doc.uploadedAt) : new Date(doc.uploadedAt || Date.now()))
+    }));
+    // Validate the structure of finalDocuments
+    if (Array.isArray(finalDocuments)) {
+      finalDocuments.forEach((doc, index) => {
+        // Validate each document
+        if (!doc.url || typeof doc.url !== 'string') {
+          console.warn(`Final document ${index} has invalid URL:`, doc.url);
+        }
+        if (!(doc.uploadedAt instanceof Date) || isNaN(doc.uploadedAt.getTime())) {
+          console.warn(`Final document ${index} has invalid date:`, doc.uploadedAt);
+        }
+      });
+    }
+    
+    // Additional validation to ensure documents array is properly formatted
+    const validatedFinalDocuments = Array.isArray(finalDocuments) ? finalDocuments.map(doc => ({
+      url: typeof doc.url === 'string' ? doc.url : '',
+      name: typeof doc.name === 'string' ? doc.name : 'document',
+      type: typeof doc.type === 'string' ? doc.type : 'unknown',
+      uploadedAt: doc.uploadedAt instanceof Date && !isNaN(doc.uploadedAt.getTime()) ? doc.uploadedAt : 
+                 (typeof doc.uploadedAt === 'string' && doc.uploadedAt.length > 0 ? new Date(doc.uploadedAt) : new Date())
+    })).filter(doc => doc.url && doc.url.trim()) : [];
+    
+    // Validate the structure of validatedFinalDocuments
+    if (Array.isArray(validatedFinalDocuments)) {
+      validatedFinalDocuments.forEach((doc, index) => {
+        // Validate each document
+        if (!doc.url || typeof doc.url !== 'string') {
+          console.warn(`Validated final document ${index} has invalid URL:`, doc.url);
+        }
+        if (!(doc.uploadedAt instanceof Date) || isNaN(doc.uploadedAt.getTime())) {
+          console.warn(`Validated final document ${index} has invalid date:`, doc.uploadedAt);
+        }
+      });
+    }
+    
+    // Validate that the AdoptionRequest schema is correctly defined
+    if (!AdoptionRequest.schema.paths['documents']) {
+      console.error('AdoptionRequest schema missing documents path');
+      throw new Error('Schema validation error: documents path missing');
+    }
+    
+    // Validate that all documents have the required fields
+    if (Array.isArray(validatedFinalDocuments)) {
+      for (const [index, doc] of validatedFinalDocuments.entries()) {
+        if (!doc.url || !doc.name || !doc.type) {
+          console.warn(`Document ${index} is missing required fields:`, doc);
+        }
+        if (!(doc.uploadedAt instanceof Date) || isNaN(doc.uploadedAt.getTime())) {
+          console.warn(`Document ${index} has invalid date:`, doc.uploadedAt);
+        }
+      }
+    }
+    
     const application = new AdoptionRequest({
       userId: req.user.id,
       petId: pet._id,
       applicationData: applicationData,
-      documents: documents
+      documents: validatedFinalDocuments
     });
-    console.log('AdoptionRequest created successfully');
 
-    console.log('About to save application');
     await application.save();
-    console.log('Application saved successfully');
 
     // Notify managers (best-effort)
     try {
@@ -426,12 +573,36 @@ const cancelApplication = async (req, res) => {
 
     await application.updateStatus('cancelled', req.user.id, 'Application cancelled by user');
 
-    // Make pet available again if it was reserved
+    // Make pet available again if it was reserved or approved
     const pet = await AdoptionPet.findById(application.petId);
-    if (pet && pet.status === 'reserved' && pet.adopterUserId.toString() === req.user.id) {
-      pet.status = 'available';
-      pet.adopterUserId = null;
+    if (pet && pet.adopterUserId && pet.adopterUserId.toString() === req.user.id) {
+      // Reset pet status based on current status
+      if (pet.status === 'reserved' || pet.status === 'available') {
+        pet.status = 'available';
+        pet.adopterUserId = null;
+      } else if (pet.status === 'adopted') {
+        // If already adopted, we can't make it available again
+        // But we should log this unusual situation
+        console.warn(`Attempt to cancel application for already adopted pet: ${pet._id}`);
+      }
       await pet.save();
+      
+      // Update the pet registry to reflect the status change
+      try {
+        const PetRegistry = require('../../../../core/models/PetRegistry');
+        await PetRegistry.updateOne(
+          { adoptionPetId: pet._id },
+          { 
+            $set: { 
+              currentStatus: pet.status,
+              currentOwnerId: pet.adopterUserId,
+              lastSeenAt: new Date()
+            }
+          }
+        );
+      } catch (registryError) {
+        console.warn('Failed to update pet registry:', registryError.message);
+      }
     }
 
     res.json({

@@ -293,7 +293,7 @@ adoptionPetSchema.post('save', async function(doc) {
     if (doc.petCode) {
       const PetRegistry = require('../../../../core/models/PetRegistry');
       
-      // Check if pet is already registered to avoid conflicts
+      // Check if pet is already registered
       const existingRegistryEntry = await PetRegistry.findOne({ petCode: doc.petCode });
       if (!existingRegistryEntry) {
         // Register the pet in the centralized registry
@@ -316,10 +316,23 @@ adoptionPetSchema.post('save', async function(doc) {
           currentLocation: doc.status === 'adopted' ? 'at_owner' : 'at_adoption_center',
           currentStatus: doc.status
         });
+      } else {
+        // Update existing registry entry with current status
+        await PetRegistry.updateOne(
+          { petCode: doc.petCode },
+          { 
+            $set: { 
+              currentOwnerId: doc.adopterUserId,
+              currentLocation: doc.status === 'adopted' ? 'at_owner' : (doc.status === 'reserved' ? 'reserved_for_adoption' : 'at_adoption_center'),
+              currentStatus: doc.status,
+              lastSeenAt: new Date()
+            }
+          }
+        );
       }
     }
   } catch (err) {
-    console.warn('Failed to register adoption pet in PetRegistry:', err.message);
+    console.warn('Failed to register/update adoption pet in PetRegistry:', err.message);
   }
 });
 
@@ -342,7 +355,7 @@ adoptionPetSchema.post('insertMany', async function(docs) {
     // Register all inserted pets
     for (const doc of docs) {
       if (doc.petCode) {
-        // Check if pet is already registered to avoid conflicts
+        // Check if pet is already registered
         const existingRegistryEntry = await PetRegistry.findOne({ petCode: doc.petCode });
         if (!existingRegistryEntry) {
           await PetRegistry.ensureRegistered({
@@ -364,11 +377,24 @@ adoptionPetSchema.post('insertMany', async function(docs) {
             currentLocation: doc.status === 'adopted' ? 'at_owner' : 'at_adoption_center',
             currentStatus: doc.status
           });
+        } else {
+          // Update existing registry entry with current status
+          await PetRegistry.updateOne(
+            { petCode: doc.petCode },
+            { 
+              $set: { 
+                currentOwnerId: doc.adopterUserId,
+                currentLocation: doc.status === 'adopted' ? 'at_owner' : (doc.status === 'reserved' ? 'reserved_for_adoption' : 'at_adoption_center'),
+                currentStatus: doc.status,
+                lastSeenAt: new Date()
+              }
+            }
+          );
         }
       }
     }
   } catch (err) {
-    console.warn('Failed to register adoption pets in PetRegistry:', err.message);
+    console.warn('Failed to register/update adoption pets in PetRegistry:', err.message);
   }
 })
 

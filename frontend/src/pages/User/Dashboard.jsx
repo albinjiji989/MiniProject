@@ -89,14 +89,13 @@ const UserDashboard = () => {
       setActivityError('')
       
       // USE EXACT SAME CODE AS PETS LIST PAGE
-      // Fetch from PetNew, Pet, adopted pets, and purchased pets models in parallel
-      const [petNewRes, petRes, adoptedRes, purchasedRes] = await Promise.allSettled([
+      // Fetch from PetNew, Pet, and purchased pets models in parallel
+      const [petNewRes, petRes, purchasedRes] = await Promise.allSettled([
         userPetsAPI.list({
           page: 1,
           limit: 12,
         }),
         apiClient.get('/pets/my-pets'),
-        adoptionAPI.getMyAdoptedPets(),
         apiClient.get('/petshop/user/my-purchased-pets') // Add pet shop purchased pets
       ])
       
@@ -115,11 +114,8 @@ const UserDashboard = () => {
         corePets = petRes.value.data?.data?.pets || []
       }
       
-      // Process adopted pets - EXACT SAME CODE AS PETS LIST PAGE
+      // Process adopted pets (now included in registry pets) - EXACT SAME CODE AS PETS LIST PAGE
       let adoptedPets = []
-      if (adoptedRes.status === 'fulfilled') {
-        adoptedPets = adoptedRes.value.data?.data || []
-      }
       
       // Process purchased pets - EXACT SAME CODE AS PETS LIST PAGE
       let purchasedPets = []
@@ -128,23 +124,8 @@ const UserDashboard = () => {
       }
       
       // Map adopted pets to pet-like objects - EXACT SAME CODE AS PETS LIST PAGE
-      const mappedAdoptedPets = adoptedPets.map(pet => ({
-        _id: pet._id,
-        name: pet.name || 'Pet',
-        images: pet.images || [],
-        petCode: pet.petCode,
-        breed: pet.breed,
-        species: pet.species,
-        gender: pet.gender || 'Unknown',
-        status: 'adopted',
-        currentStatus: 'adopted',
-        tags: ['adoption'],
-        adoptionDate: pet.adoptionDate,
-        age: pet.age,
-        ageUnit: pet.ageUnit,
-        color: pet.color,
-        createdAt: pet.adoptionDate
-      }))
+      // No longer needed as adopted pets are included in registry pets
+      const mappedAdoptedPets = []
       
       // Map purchased pets to pet-like objects - EXACT SAME CODE AS PETS LIST PAGE
       const mappedPurchasedPets = purchasedPets.map(pet => ({
@@ -168,7 +149,7 @@ const UserDashboard = () => {
       }))
       
       // Combine and deduplicate pets - EXACT SAME CODE AS PETS LIST PAGE
-      const combinedPets = [...petNewPets, ...corePets, ...mappedAdoptedPets, ...mappedPurchasedPets]
+      const combinedPets = [...petNewPets, ...corePets, ...mappedPurchasedPets]
       const uniquePets = combinedPets.filter((pet, index, self) => 
         index === self.findIndex(p => (p.petCode || p._id) === (pet.petCode || pet._id))
       )

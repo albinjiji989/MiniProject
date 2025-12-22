@@ -11,6 +11,13 @@ const ApplicationDetailsImproved = () => {
   const [error, setError] = useState('')
   const [contractUrl, setContractUrl] = useState('')
   const [activeTab, setActiveTab] = useState('overview')
+  // State for dialogs
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false)
+  const [approveNotes, setApproveNotes] = useState('')
+  // State for notifications
+  const [notification, setNotification] = useState({ show: false, message: '', type: 'info' })
 
   const defaultHandover = {
     scheduledAt: '',
@@ -80,11 +87,12 @@ const ApplicationDetailsImproved = () => {
         
         // Reload application to show new images
         await load();
-        alert('Images uploaded successfully');
+        setNotification({ show: true, message: 'Images uploaded successfully', type: 'success' });
+        setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 3000);
       }
     } catch (e) {
       console.error('Upload images failed', e);
-      alert('Failed to upload images. Please try again.');
+      setError('Failed to upload images. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -123,11 +131,12 @@ const ApplicationDetailsImproved = () => {
         
         // Reload application to show new documents
         await load();
-        alert('Documents uploaded successfully');
+        setNotification({ show: true, message: 'Documents uploaded successfully', type: 'success' });
+        setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 3000);
       }
     } catch (e) {
       console.error('Upload documents failed', e);
-      alert('Failed to upload documents. Please try again.');
+      setError('Failed to upload documents. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -169,7 +178,7 @@ const ApplicationDetailsImproved = () => {
             throw new Error('Payment must be completed before generating contract')
           }
           
-          const resGen = await apiClient.post(`/adoption/manager/contracts/generate/${id}`)
+          const resGen = await apiClient.post(`/adoption/manager/certificates`, { applicationId: id })
           contractURL = resGen?.data?.data?.contractURL || ''
         } else {
           throw e
@@ -185,10 +194,11 @@ const ApplicationDetailsImproved = () => {
       const url = res?.data?.data?.agreementFile || res?.data?.data?.contractURL
       if (url) {
         await load()
-        alert('Certificate generated successfully')
+        setNotification({ show: true, message: 'Certificate generated successfully', type: 'success' })
+        setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 3000)
       }
     } catch (e) {
-      alert(e?.response?.data?.error || e?.message || 'Failed to generate certificate')
+      setError(e?.response?.data?.error || e?.message || 'Failed to generate certificate')
     } finally {
       setSaving(false)
     }
@@ -206,7 +216,7 @@ const ApplicationDetailsImproved = () => {
       // Fallback: attempt to open provided URL if present
       const resolved = contractUrl ? resolveMediaUrl(contractUrl) : ''
       if (resolved) window.open(resolved, '_blank')
-      else alert(e?.response?.data?.error || e?.message || 'Failed to fetch certificate')
+      else setError(e?.response?.data?.error || e?.message || 'Failed to fetch certificate')
     } finally {
       setSaving(false)
     }
@@ -214,7 +224,8 @@ const ApplicationDetailsImproved = () => {
 
   const scheduleHandover = async () => {
     if (!handover.scheduledAt) {
-      return alert('Please provide date/time for handover')
+      setError('Please provide date/time for handover')
+      return
     }
     
     // Check prerequisites before attempting to schedule
@@ -224,7 +235,8 @@ const ApplicationDetailsImproved = () => {
       if (!prereqs.isApproved) errorMsg += '\n- Application is approved'
       if (!prereqs.isPaymentCompleted) errorMsg += '\n- Payment is completed'
       if (!prereqs.isContractGenerated) errorMsg += '\n- Contract is generated'
-      return alert(errorMsg)
+      setError(errorMsg)
+      return
     }
     
     setSaving(true)
@@ -235,33 +247,36 @@ const ApplicationDetailsImproved = () => {
       })
       await load()
       const message = response?.data?.message || 'Handover scheduled successfully'
-      alert(message)
+      setNotification({ show: true, message: message, type: 'success' })
+      setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 3000)
       
       // Automatically switch to the Actions tab to make it easier for managers to complete handover
       setActiveTab('actions')
       
       // Show a more prominent notification about the next step
       setTimeout(() => {
-        const nextStep = confirm("Handover scheduled successfully! An OTP has been sent to the adopter's email.\n\nClick OK to open the OTP entry form now, or Cancel to do it later.");
-        if (nextStep) {
-          // Automatically show the OTP modal
-          setShowOTPModal(true);
-        }
+        setNotification({ 
+          show: true, 
+          message: "Handover scheduled successfully! An OTP has been sent to the adopter's email. Click the OTP button below to enter it now.", 
+          type: 'info' 
+        })
+        setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 5000)
       }, 500);
       
       // If email failed to send, show additional warning
       if (response?.data?.emailError) {
-        alert(`Warning: ${response.data.emailError}\n\nPlease inform the adopter about their handover details manually.`)
+        setError(`Warning: ${response.data.emailError}\n\nPlease inform the adopter about their handover details manually.`)
       }
     } catch (e) {
       const errorMessage = e?.response?.data?.error || 'Failed to schedule handover'
-      alert(errorMessage)
+      setError(errorMessage)
     } finally {
       setSaving(false)
     }
   }
 
   const regenerateOTP = async () => {
+    // TODO: Replace with proper dialog
     if (!window.confirm('Are you sure you want to regenerate the OTP? The adopter will receive a new OTP via email.')) {
       return
     }
@@ -284,40 +299,64 @@ const ApplicationDetailsImproved = () => {
     }
   }
 
+  // Open approval dialog
+  const openApproveDialog = () => {
+    setApproveNotes('')
+    setApproveDialogOpen(true)
+  }
+
+  // Close approval dialog
+  const closeApproveDialog = () => {
+    setApproveDialogOpen(false)
+    setApproveNotes('')
+  }
+
   // Add approve application function
   const approveApplication = async () => {
-    const notes = prompt('Add any notes for approval (optional):')
-    if (notes !== null) {
-      try {
-        setSaving(true)
-        await adoptionAPI.managerPatchRequest(id, {
-          status: 'approved',
-          notes: notes || ''
-        })
-        await load()
-        alert('Application approved successfully')
-      } catch (e) {
-        alert(e?.response?.data?.error || 'Failed to approve application')
-      } finally {
-        setSaving(false)
-      }
+    try {
+      setSaving(true)
+      closeApproveDialog()
+      await adoptionAPI.managerPatchRequest(id, {
+        status: 'approved',
+        notes: approveNotes.trim() || ''
+      })
+      await load()
+      setError('Application approved successfully')
+      setTimeout(() => setError(''), 3000)
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Failed to approve application')
+    } finally {
+      setSaving(false)
     }
+  }
+
+  // Open rejection dialog
+  const openRejectDialog = () => {
+    setRejectReason('')
+    setRejectDialogOpen(true)
+  }
+
+  // Close rejection dialog
+  const closeRejectDialog = () => {
+    setRejectDialogOpen(false)
+    setRejectReason('')
   }
 
   // Add reject application function
   const rejectApplication = async () => {
-    const reason = prompt('Reason for rejection:')
-    if (reason) {
+    if (rejectReason.trim()) {
       try {
         setSaving(true)
+        closeRejectDialog()
         await adoptionAPI.managerPatchRequest(id, {
           status: 'rejected',
-          reason: reason
+          reason: rejectReason.trim()
         })
         await load()
-        alert('Application rejected')
+        setError('Application rejected successfully')
+        setTimeout(() => setError(''), 3000)
       } catch (e) {
-        alert(e?.response?.data?.error || 'Failed to reject application')
+        setError(e?.response?.data?.error || 'Failed to reject application')
       } finally {
         setSaving(false)
       }
@@ -486,17 +525,19 @@ const ApplicationDetailsImproved = () => {
       })
       await load()
       const message = response?.data?.message || 'Handover completed successfully'
-      alert(message)
+      setNotification({ show: true, message: message, type: 'success' })
+      setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 3000)
       setShowOTPModal(false)
     } catch (e) {
       const errorMessage = e?.response?.data?.error || 'Failed to complete handover'
-      alert(errorMessage)
+      setError(errorMessage)
     } finally {
       setSaving(false)
     }
   }
 
   const handleOTPRegenerate = async () => {
+    // TODO: Replace with proper dialog
     if (!window.confirm('Are you sure you want to regenerate the OTP? The adopter will receive a new OTP via email.')) {
       return
     }
@@ -1300,14 +1341,14 @@ const ApplicationDetailsImproved = () => {
                     <div className="flex flex-col sm:flex-row gap-3">
                       <button 
                         className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex-1"
-                        onClick={approveApplication}
+                        onClick={openApproveDialog}
                         disabled={saving}
                       >
                         {saving ? 'Approving...' : 'Approve Application'}
                       </button>
                       <button 
                         className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex-1"
-                        onClick={rejectApplication}
+                        onClick={openRejectDialog}
                         disabled={saving}
                       >
                         {saving ? 'Rejecting...' : 'Reject Application'}
@@ -1794,6 +1835,80 @@ const ApplicationDetailsImproved = () => {
           </div>
         )}
       </div>
+      
+      {/* Approve Application Dialog */}
+      {approveDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Approve Application</h3>
+              <p className="text-gray-600 mb-4">
+                Add any notes for approval (optional). This will be saved with the application record.
+              </p>
+              <textarea
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows="3"
+                placeholder="Approval notes (optional)..."
+                value={approveNotes}
+                onChange={(e) => setApproveNotes(e.target.value)}
+              />
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
+                  onClick={closeApproveDialog}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
+                  onClick={approveApplication}
+                  disabled={saving}
+                >
+                  {saving ? 'Approving...' : 'Approve Application'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Reject Application Dialog */}
+      {rejectDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Reject Application</h3>
+              <p className="text-gray-600 mb-4">
+                Please provide a reason for rejecting this adoption application. This reason will be communicated to the applicant.
+              </p>
+              <textarea
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows="4"
+                placeholder="Enter rejection reason..."
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+              />
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
+                  onClick={closeRejectDialog}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
+                  onClick={rejectApplication}
+                  disabled={!rejectReason.trim() || saving}
+                >
+                  {saving ? 'Rejecting...' : 'Reject Application'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

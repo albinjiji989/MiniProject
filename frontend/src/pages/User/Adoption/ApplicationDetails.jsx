@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { apiClient } from '../../../services/api'
+import { apiClient, adoptionAPI } from '../../../services/api'
 import {
   Box,
   Typography,
@@ -52,7 +52,7 @@ export default function UserAdoptionApplicationDetails() {
     setLoading(true)
     setError('')
     try {
-      const res = await adoptionAPI.getMyRequestById(id)
+      const res = await adoptionAPI.getMyRequest(id)
       const data = res?.data?.data || res?.data
       setApp(data)
     } catch (e) {
@@ -351,6 +351,33 @@ export default function UserAdoptionApplicationDetails() {
                 </Box>
               )}
               
+              {['pending', 'approved', 'payment_pending'].includes(app.status) && (
+                <Box sx={{ mt: 2 }}>
+                  <Button 
+                    variant="outlined" 
+                    color="error"
+                    fullWidth
+                    startIcon={<CancelIcon />}
+                    onClick={async () => {
+                      if (window.confirm('Are you sure you want to cancel this adoption application?')) {
+                        try {
+                          await adoptionAPI.cancelMyRequest(app._id || id);
+                          await load();
+                        } catch (e) {
+                          alert(e?.response?.data?.error || 'Failed to cancel application');
+                        }
+                      }
+                    }}
+                    sx={{ mb: 1 }}
+                  >
+                    Cancel Application
+                  </Button>
+                  <Typography variant="caption" color="text.secondary" align="center">
+                    You can cancel this application before the adoption is completed
+                  </Typography>
+                </Box>
+              )}
+              
               {(app.paymentStatus === 'completed' || ['certificate_generated', 'handover_scheduled', 'handed_over', 'completed'].includes(app.status)) && (
                 <Box sx={{ mt: 2 }}>
                   <Button 
@@ -410,6 +437,69 @@ export default function UserAdoptionApplicationDetails() {
                   <ListItemText 
                     primary="Application Date" 
                     secondary={app.createdAt ? new Date(app.createdAt).toLocaleDateString() : '-'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <CalendarIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Pet Age" 
+                    secondary={app.petId?.ageDisplay || `${app.petId?.age || 0} ${app.petId?.ageUnit || 'months'}`} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <PersonIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Gender" 
+                    secondary={app.petId?.gender ? app.petId.gender.charAt(0).toUpperCase() + app.petId.gender.slice(1) : '-'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <WorkIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Color" 
+                    secondary={app.petId?.color || '-'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <WorkIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Weight" 
+                    secondary={`${app.petId?.weight || 0} kg`} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <WorkIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Vaccination Status" 
+                    secondary={app.petId?.vaccinationStatus ? app.petId.vaccinationStatus.replace('_', ' ').replace(/\w/g, l => l.toUpperCase()) : '-'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <DescriptionIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Pet Code" 
+                    secondary={app.petId?.petCode || 'Not assigned'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon>
+                    <DescriptionIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Description" 
+                    secondary={app.petId?.description || 'No description available'} 
                   />
                 </ListItem>
               </List>
@@ -487,12 +577,12 @@ export default function UserAdoptionApplicationDetails() {
           </Card>
         </Grid>
 
-        {/* Documents Card */}
+        {/* Applicant Documents Card */}
         <Grid item xs={12}>
           <Card>
             <CardContent>
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                Documents
+                Your Documents
               </Typography>
               
               {docs().length === 0 ? (
@@ -503,8 +593,10 @@ export default function UserAdoptionApplicationDetails() {
                     const url = typeof d === 'string' ? d : (d && d.url ? d.url : '')
                     if (!url) return null
                     const name = (typeof d === 'object' && d.name) ? d.name : url.split('/').pop()
+                    const fileType = (typeof d === 'object' && d.type) ? d.type : ''
+                    
                     return (
-                      <Grid item xs={12} sm={6} md={4} key={i}>
+                      <Grid item xs={12} sm={6} md={4} key={`applicant-${i}`}>
                         <Paper 
                           variant="outlined" 
                           sx={{ 
@@ -517,9 +609,16 @@ export default function UserAdoptionApplicationDetails() {
                         >
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <DocumentIcon color="primary" />
-                            <Typography variant="body2" noWrap>
-                              {name}
-                            </Typography>
+                            <Box>
+                              <Typography variant="body2" noWrap>
+                                {name}
+                              </Typography>
+                              {fileType && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {fileType}
+                                </Typography>
+                              )}
+                            </Box>
                           </Box>
                           <IconButton 
                             size="small" 
@@ -538,6 +637,58 @@ export default function UserAdoptionApplicationDetails() {
             </CardContent>
           </Card>
         </Grid>
+        
+        {/* Pet Documents Card */}
+        {app.petId?.documents && app.petId.documents.length > 0 && (
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                  Pet Documents
+                </Typography>
+                
+                <Grid container spacing={2}>
+                  {app.petId.documents.map((doc, i) => (
+                    <Grid item xs={12} sm={6} md={4} key={`pet-${i}`}>
+                      <Paper 
+                        variant="outlined" 
+                        sx={{ 
+                          p: 2, 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'space-between',
+                          '&:hover': { bgcolor: 'grey.50' }
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <DocumentIcon color="secondary" />
+                          <Box>
+                            <Typography variant="body2" noWrap>
+                              {doc.name || 'Document'}
+                            </Typography>
+                            {doc.type && (
+                              <Typography variant="caption" color="text.secondary">
+                                {doc.type}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                        <IconButton 
+                          size="small" 
+                          href={resolveMediaUrl(doc.url)} 
+                          target="_blank" 
+                          rel="noreferrer"
+                        >
+                          <DownloadIcon fontSize="small" />
+                        </IconButton>
+                      </Paper>
+                    </Grid>
+                  ))}
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
 
         {/* Handover Information */}
         {app.handover?.status === 'scheduled' && (

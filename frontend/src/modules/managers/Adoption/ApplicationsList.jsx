@@ -164,12 +164,12 @@ const ApplicationsList = () => {
       // 1) Try to fetch existing contract
       let contractURL = ''
       try {
-        const resGet = await apiClient.get(`/adoption/manager/contracts/${applicationId}`)
+        const resGet = await apiClient.get(`/adoption/manager/certificates/${applicationId}`)
         contractURL = resGet?.data?.data?.contractURL || ''
       } catch (e) {
         // 2) If not found, generate it
         if (e?.response?.status === 404) {
-          const resGen = await apiClient.post(`/adoption/manager/contracts/generate/${applicationId}`)
+          const resGen = await apiClient.post(`/adoption/manager/certificates`, { applicationId })
           contractURL = resGen?.data?.data?.contractURL || ''
         } else {
           throw e
@@ -185,10 +185,11 @@ const ApplicationsList = () => {
       const url = res?.data?.data?.agreementFile || res?.data?.data?.contractURL
       if (url) {
         await load()
-        alert('Certificate generated')
+        setError('Certificate generated successfully')
+        setTimeout(() => setError(''), 3000)
       }
     } catch (e) {
-      alert(e?.response?.data?.error || e?.message || 'Failed to generate certificate')
+      setError(e?.response?.data?.error || e?.message || 'Failed to generate certificate')
     } finally {
       setActionLoadingId('')
     }
@@ -217,46 +218,84 @@ const ApplicationsList = () => {
       // Fallback: attempt to open provided URL if present
       const resolved = fallbackUrl ? resolveMediaUrl(fallbackUrl) : ''
       if (resolved) window.open(resolved, '_blank')
-      else alert(e?.response?.data?.error || e?.message || 'Failed to fetch certificate')
+      else setError(e?.response?.data?.error || e?.message || 'Failed to fetch certificate')
     } finally {
       setActionLoadingId('')
     }
   }
 
+  // State for approval dialog
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false)
+  const [approveNotes, setApproveNotes] = useState('')
+  const [approveApplicationId, setApproveApplicationId] = useState('')
+
+  // Open approval dialog
+  const openApproveDialog = (applicationId) => {
+    setApproveApplicationId(applicationId)
+    setApproveNotes('')
+    setApproveDialogOpen(true)
+  }
+
+  // Close approval dialog
+  const closeApproveDialog = () => {
+    setApproveDialogOpen(false)
+    setApproveNotes('')
+    setApproveApplicationId('')
+  }
+
   // Approve application with notes
-  const approveApplication = async (applicationId) => {
-    const notes = prompt('Add any notes for approval (optional):')
-    if (notes !== null) {
-      try {
-        setActionLoadingId(applicationId)
-        await apiClient.patch(`/adoption/manager/applications/${applicationId}`, {
-          status: 'approved',
-          notes: notes || ''
-        })
-        await load()
-        alert('Application approved successfully')
-      } catch (e) {
-        alert(e?.response?.data?.error || 'Failed to approve application')
-      } finally {
-        setActionLoadingId('')
-      }
+  const approveApplication = async () => {
+    try {
+      setActionLoadingId(approveApplicationId)
+      closeApproveDialog()
+      await apiClient.patch(`/adoption/manager/applications/${approveApplicationId}`, {
+        status: 'approved',
+        notes: approveNotes.trim() || ''
+      })
+      await load()
+      setError('Application approved successfully')
+      setTimeout(() => setError(''), 3000)
+    } catch (e) {
+      setError(e?.response?.data?.error || 'Failed to approve application')
+    } finally {
+      setActionLoadingId('')
     }
   }
 
+  // State for rejection dialog
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectApplicationId, setRejectApplicationId] = useState('')
+
+  // Open rejection dialog
+  const openRejectDialog = (applicationId) => {
+    setRejectApplicationId(applicationId)
+    setRejectReason('')
+    setRejectDialogOpen(true)
+  }
+
+  // Close rejection dialog
+  const closeRejectDialog = () => {
+    setRejectDialogOpen(false)
+    setRejectReason('')
+    setRejectApplicationId('')
+  }
+
   // Reject application with reason
-  const rejectApplication = async (applicationId) => {
-    const reason = prompt('Reason for rejection:')
-    if (reason) {
+  const rejectApplication = async () => {
+    if (rejectReason.trim()) {
       try {
-        setActionLoadingId(applicationId)
-        await apiClient.patch(`/adoption/manager/applications/${applicationId}`, {
+        setActionLoadingId(rejectApplicationId)
+        closeRejectDialog()
+        await apiClient.patch(`/adoption/manager/applications/${rejectApplicationId}`, {
           status: 'rejected',
-          reason: reason
+          reason: rejectReason.trim()
         })
         await load()
-        alert('Application rejected')
+        setError('Application rejected successfully')
+        setTimeout(() => setError(''), 3000)
       } catch (e) {
-        alert(e?.response?.data?.error || 'Failed to reject application')
+        setError(e?.response?.data?.error || 'Failed to reject application')
       } finally {
         setActionLoadingId('')
       }
@@ -528,7 +567,7 @@ const ApplicationsList = () => {
                           variant="contained" 
                           color="success" 
                           disabled={actionLoadingId === app._id} 
-                          onClick={() => approveApplication(app._id)}
+                          onClick={() => openApproveDialog(app._id)}
                         >
                           {actionLoadingId === app._id ? 'Approving...' : 'Approve'}
                         </Button>
@@ -537,7 +576,7 @@ const ApplicationsList = () => {
                           variant="outlined" 
                           color="error"
                           disabled={actionLoadingId === app._id} 
-                          onClick={() => rejectApplication(app._id)}
+                          onClick={() => openRejectDialog(app._id)}
                         >
                           {actionLoadingId === app._id ? 'Rejecting...' : 'Reject'}
                         </Button>
@@ -614,6 +653,83 @@ const ApplicationsList = () => {
           View Details
         </MenuItem>
       </Menu>
+
+      {/* Approve Application Dialog */}
+      <Dialog open={approveDialogOpen} onClose={closeApproveDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Typography variant="h6" component="div">
+            Approve Application
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Add any notes for approval (optional). This will be saved with the application record.
+          </Typography>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Approval Notes (Optional)"
+            fullWidth
+            multiline
+            rows={3}
+            variant="outlined"
+            value={approveNotes}
+            onChange={(e) => setApproveNotes(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeApproveDialog} disabled={actionLoadingId === approveApplicationId}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={approveApplication} 
+            variant="contained" 
+            color="success"
+            disabled={actionLoadingId === approveApplicationId}
+          >
+            {actionLoadingId === approveApplicationId ? 'Approving...' : 'Approve Application'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Reject Application Dialog */}
+      <Dialog open={rejectDialogOpen} onClose={closeRejectDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Typography variant="h6" component="div">
+            Reject Application
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Please provide a reason for rejecting this adoption application. This reason will be communicated to the applicant.
+          </Typography>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Rejection Reason"
+            fullWidth
+            multiline
+            rows={4}
+            variant="outlined"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            helperText="Required"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRejectDialog} disabled={actionLoadingId === rejectApplicationId}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={rejectApplication} 
+            variant="contained" 
+            color="error"
+            disabled={!rejectReason.trim() || actionLoadingId === rejectApplicationId}
+          >
+            {actionLoadingId === rejectApplicationId ? 'Rejecting...' : 'Reject Application'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Application Details Dialog */}
       <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="lg" fullWidth>

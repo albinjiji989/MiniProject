@@ -167,17 +167,22 @@ async function generateCertificate(req, res) {
 
     // Optional notify adopter
     try {
-      await sendMail({
-        to: application?.email || '', 
-        subject: 'Adoption Certificate Ready', 
-        html: `
-          <h2>Adoption Certificate Ready</h2>
-          <p>Hello ${application.userId?.name || 'Adopter'},</p>
-          <p>Your adoption certificate for ${application.petId?.name || 'your pet'} is now ready for download.</p>
-          <p>You can download it from your adoption applications page.</p>
-          <p>Thank you for choosing to adopt!</p>
-        `
-      });
+      const userEmail = application?.userId?.email || application?.email || '';
+      if (userEmail) {
+        await sendMail({
+          to: userEmail, 
+          subject: 'Adoption Certificate Ready', 
+          html: `
+            <h2>Adoption Certificate Ready</h2>
+            <p>Hello ${application.userId?.name || 'Adopter'},</p>
+            <p>Your adoption certificate for ${application.petId?.name || 'your pet'} is now ready for download.</p>
+            <p>You can download it from your adoption applications page.</p>
+            <p>Thank you for choosing to adopt!</p>
+          `
+        });
+      } else {
+        console.warn('No email address found for user to send certificate notification');
+      }
     } catch (e) {
       console.warn('Failed to send certificate email:', e.message);
     }
@@ -246,10 +251,22 @@ async function streamCertificateFile(req, res) {
       }
     }
 
-    // For Cloudinary URLs, redirect to the direct URL
+    // For Cloudinary URLs, proxy the request instead of redirecting to avoid authentication issues
     if (fileUrl.includes('cloudinary.com')) {
-      console.log('Redirecting to Cloudinary URL:', fileUrl);
-      return res.redirect(fileUrl);
+      console.log('Proxying Cloudinary URL:', fileUrl);
+      try {
+        const response = await axios.get(fileUrl, { responseType: 'stream', validateStatus: (s)=>s>=200 && s<400 });
+        const contentType = response.headers['content-type'] || 'application/pdf';
+        const disposition = response.headers['content-disposition'];
+        const fallbackName = (new URL(fileUrl)).pathname.split('/').pop() || 'certificate.pdf';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', disposition || `inline; filename="${fallbackName}"`);
+        response.data.pipe(res);
+        return;
+      } catch (proxyError) {
+        console.error('Cloudinary proxy error:', proxyError);
+        return res.status(500).json({ success: false, error: 'Failed to access certificate file' });
+      }
     }
 
     // If relative path (served by our server), stream from disk

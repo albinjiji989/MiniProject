@@ -15,9 +15,9 @@ const adoptionRequestSchema = new mongoose.Schema({
   },
   // Uploaded documents by applicant (e.g., ID proof, address proof)
   documents: [{
-    url: String,
-    name: String,
-    type: String,
+    url: { type: String, required: true },
+    name: { type: String, required: true },
+    type: { type: String, required: true },
     uploadedAt: { type: Date, default: Date.now }
   }],
   status: {

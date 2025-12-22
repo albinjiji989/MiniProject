@@ -55,10 +55,22 @@ async function streamCertificateFile(req, res) {
 
     console.log('User certificate streaming - File URL:', fileUrl);
 
-    // For Cloudinary URLs, redirect to the direct URL
+    // For Cloudinary URLs, proxy the request instead of redirecting to avoid authentication issues
     if (fileUrl.includes('cloudinary.com')) {
-      console.log('Redirecting to Cloudinary URL:', fileUrl);
-      return res.redirect(fileUrl);
+      console.log('Proxying Cloudinary URL:', fileUrl);
+      try {
+        const response = await axios.get(fileUrl, { responseType: 'stream', validateStatus: (s)=>s>=200 && s<400 });
+        const contentType = response.headers['content-type'] || 'application/pdf';
+        const disposition = response.headers['content-disposition'];
+        const fallbackName = (new URL(fileUrl)).pathname.split('/').pop() || 'certificate.pdf';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', disposition || `inline; filename="${fallbackName}"`);
+        response.data.pipe(res);
+        return;
+      } catch (proxyError) {
+        console.error('Cloudinary proxy error:', proxyError);
+        return res.status(500).json({ success: false, error: 'Failed to access certificate file' });
+      }
     }
 
     // If relative path (served by our server), stream from disk

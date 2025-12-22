@@ -65,7 +65,7 @@ const UserPetsList = () => {
       setError('')
       
       // Fetch from PetNew, Pet, adopted pets, purchased pets, and temporary care pets models in parallel
-      const [petNewRes, petRes, adoptedRes, purchasedRes, temporaryCareRes] = await Promise.allSettled([
+      const [petNewRes, petRes, purchasedRes, temporaryCareRes] = await Promise.allSettled([
         userPetsAPI.list({
           page: pageParam,
           limit: 12,
@@ -73,7 +73,6 @@ const UserPetsList = () => {
           status: filters.status || undefined,
         }),
         apiClient.get('/pets/my-pets'),
-        adoptionAPI.getMyAdoptedPets(),
         apiClient.get('/petshop/user/my-purchased-pets'), // Add pet shop purchased pets
         temporaryCareAPI.getPetsInCare() // Add pets in temporary care
       ])
@@ -93,11 +92,8 @@ const UserPetsList = () => {
         corePets = petRes.value.data?.data?.pets || []
       }
       
-      // Process adopted pets
+      // Process adopted pets (now included in registry pets)
       let adoptedPets = []
-      if (adoptedRes.status === 'fulfilled') {
-        adoptedPets = adoptedRes.value.data?.data || []
-      }
       
       // Process purchased pets
       let purchasedPets = []
@@ -112,23 +108,8 @@ const UserPetsList = () => {
       }
       
       // Map adopted pets to pet-like objects
-      const mappedAdoptedPets = adoptedPets.map(pet => ({
-        _id: pet._id,
-        name: pet.name || 'Pet',
-        images: pet.images || [],
-        petCode: pet.petCode,
-        breed: pet.breed,
-        species: pet.species,
-        gender: pet.gender || 'Unknown',
-        status: 'adopted',
-        currentStatus: 'adopted',
-        tags: ['adoption'],
-        adoptionDate: pet.adoptionDate,
-        age: pet.age,
-        ageUnit: pet.ageUnit,
-        color: pet.color,
-        createdAt: pet.adoptionDate
-      }))
+      // No longer needed as adopted pets are included in registry pets
+      const mappedAdoptedPets = []
       
       // Map purchased pets to pet-like objects
       const mappedPurchasedPets = purchasedPets.map(pet => ({
@@ -174,7 +155,7 @@ const UserPetsList = () => {
       }))
       
       // Combine and deduplicate pets
-      const combinedPets = [...petNewPets, ...corePets, ...mappedAdoptedPets, ...mappedPurchasedPets, ...mappedTemporaryCarePets]
+      const combinedPets = [...petNewPets, ...corePets, ...mappedPurchasedPets, ...mappedTemporaryCarePets]
       const uniquePets = combinedPets.filter((pet, index, self) => 
         index === self.findIndex(p => (p.petCode || p._id) === (pet.petCode || pet._id))
       )

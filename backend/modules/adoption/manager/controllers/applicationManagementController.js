@@ -508,7 +508,7 @@ const completeHandover = async (req, res) => {
               name: pet.name || 'Pet',
               species: speciesDoc._id,
               breed: breedDoc._id,
-              images: (pet.images || []).map(img => ({ url: img.url, caption: img.caption || '', isPrimary: !!img.isPrimary })),
+              images: pet.imageIds || [],
               source: 'adoption',
               adoptionPetId: pet._id,
               actorUserId: app.userId,

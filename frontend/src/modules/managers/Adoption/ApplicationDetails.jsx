@@ -47,12 +47,12 @@ const ApplicationDetails = () => {
       // 1) Try to fetch existing contract
       let contractURL = ''
       try {
-        const resGet = await apiClient.get(`/adoption/manager/contracts/${id}`)
+        const resGet = await apiClient.get(`/adoption/manager/certificates/${id}`)
         contractURL = resGet?.data?.data?.contractURL || ''
       } catch (e) {
         // 2) If not found, generate it
         if (e?.response?.status === 404) {
-          const resGen = await apiClient.post(`/adoption/manager/contracts/generate/${id}`)
+          const resGen = await apiClient.post(`/adoption/manager/certificates`, { applicationId: id })
           contractURL = resGen?.data?.data?.contractURL || ''
         } else {
           throw e

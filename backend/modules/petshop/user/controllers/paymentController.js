@@ -215,7 +215,7 @@ const verifyRazorpaySignature = async (req, res) => {
           name: inventoryItem.name,
           species: inventoryItem.speciesId,
           breed: inventoryItem.breedId,
-          imageIds: inventoryItem.imageIds || [], // Fixed: Use imageIds instead of images
+          images: inventoryItem.imageIds || [], // Pass imageIds as the images parameter for PetRegistryService
           source: 'petshop',
           petShopItemId: inventoryItem._id,
           actorUserId: req.user._id,
