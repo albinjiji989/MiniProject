@@ -8,9 +8,16 @@ const getUserAdoptedPets = async (req, res) => {
       status: 'adopted',
       isActive: true
     })
-      .select('name breed species age ageUnit gender color weight healthStatus vaccinationStatus temperament description imageIds adoptionDate')
-      .populate('images')
+      .select('name breed species age ageUnit gender color weight healthStatus vaccinationStatus temperament description imageIds documentIds adoptionDate')
+      .populate('imageIds')
+      .populate('documentIds')
       .sort({ adoptionDate: -1 });
+    
+    // Manually populate the virtual 'images' and 'documents' fields for each pet
+    for (const pet of pets) {
+      await pet.populate('images');
+      await pet.populate('documents');
+    }
 
     res.json({ success: true, data: pets });
   } catch (error) {
@@ -25,11 +32,15 @@ const getUserAdoptedPetDetails = async (req, res) => {
       adopterUserId: req.user.id,
       status: 'adopted',
       isActive: true
-    }).populate('images');
-
+    }).populate('imageIds').populate('documentIds');
+    
     if (!pet) {
       return res.status(404).json({ success: false, error: 'Pet not found' });
     }
+    
+    // Manually populate the virtual 'images' and 'documents' fields
+    await pet.populate('images');
+    await pet.populate('documents');
 
     res.json({ success: true, data: pet });
   } catch (error) {

@@ -154,6 +154,10 @@ const UserLayout = ({ children }) => {
             '& .MuiDrawer-paper': {
               width: DRAWER_WIDTH,
               boxSizing: 'border-box',
+              top: '64px', // Account for fixed navbar height
+              height: 'calc(100vh - 64px)', // Adjust height to account for navbar
+              borderTop: 'none',
+              zIndex: 1100, // Lower than navbar's zIndex (1400)
             },
           }}
         >
@@ -168,8 +172,8 @@ const UserLayout = ({ children }) => {
             width: '100%',
             minHeight: '100vh',
             pt: '64px', // Fixed top navbar height
-            ml: 0, // Remove any margin
-            pl: 0, // Remove padding-left completely
+            pl: !isMobile && sidebarOpen ? `${DRAWER_WIDTH}px` : 0, // Add padding when sidebar is open
+            transition: 'padding-left 0.3s ease',
             bgcolor: 'background.default',
             position: 'relative'
           }}

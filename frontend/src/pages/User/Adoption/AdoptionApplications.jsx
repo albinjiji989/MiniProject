@@ -88,7 +88,7 @@ const AdoptionApplications = () => {
                   // Validate that petId looks like a valid MongoDB ObjectId
                   const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(petId);
                   if (isValidObjectId) {
-                    const petResponse = await adoptionAPI.getPet(petId);
+                    const petResponse = await adoptionAPI.getPetForApplication(petId);
                     if (petResponse?.data?.data) {
                       const petData = petResponse.data.data;
                       return {
@@ -253,7 +253,7 @@ const AdoptionApplications = () => {
               // Validate that petId looks like a valid MongoDB ObjectId
               const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(petId);
               if (isValidObjectId) {
-                const petResponse = await adoptionAPI.getPet(petId);
+                const petResponse = await adoptionAPI.getPetForApplication(petId);
                 if (petResponse?.data?.data) {
                   const updatedApplication = {
                     ...res.data.data,
@@ -804,7 +804,7 @@ const AdoptionApplications = () => {
                               // Extract the actual pet ID - it might be an object or string
                               const petId = res.data.data.petId?._id || res.data.data.petId || '';
                               if (petId) {
-                                const petResponse = await adoptionAPI.getPet(petId);
+                                const petResponse = await adoptionAPI.getPetForApplication(petId);
                                 if (petResponse?.data?.data) {
                                   const updatedApplication = {
                                     ...res.data.data,

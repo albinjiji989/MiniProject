@@ -37,16 +37,18 @@ const getOwnedPets = async (req, res) => {
       .populate('species', 'name displayName')
       .populate('breed', 'name')
       .populate('imageIds') // Populate the imageIds field
+      .populate('documentIds') // Populate the documentIds field
       .sort({ updatedAt: -1 });
     
-    // Manually populate the virtual 'images' field for each pet
+    // Manually populate the virtual 'images' and 'documents' fields for each pet
     // Safer population with error handling
     for (const pet of registryPets) {
       try {
         await pet.populate('images');
+        await pet.populate('documents');
       } catch (populateErr) {
-        logger.warn(`Failed to populate images for pet ${pet._id}:`, populateErr.message);
-        // Continue with the pet even if image population fails
+        logger.warn(`Failed to populate images/documents for pet ${pet._id}:`, populateErr.message);
+        // Continue with the pet even if image/document population fails
       }
     }
     
@@ -103,18 +105,20 @@ const getOwnedPets = async (req, res) => {
           .populate('species', 'name displayName')
           .populate('breed', 'name')
           .populate('imageIds') // Populate the imageIds field
+          .populate('documentIds') // Populate the documentIds field
           .sort({ updatedAt: -1 })
           .lean();
         
-        // Manually populate the virtual 'images' field for each pet
+        // Manually populate the virtual 'images' and 'documents' fields for each pet
         // Safer population with error handling
         for (const pet of legacyPets) {
           if (pet) {
             try {
               await pet.populate('images');
+              await pet.populate('documents');
             } catch (populateErr) {
-              logger.warn(`Failed to populate images for legacy pet ${pet._id}:`, populateErr.message);
-              // Continue with the pet even if image population fails
+              logger.warn(`Failed to populate images/documents for legacy pet ${pet._id}:`, populateErr.message);
+              // Continue with the pet even if image/document population fails
             }
           }
         }
@@ -137,19 +141,22 @@ const getOwnedPets = async (req, res) => {
           populate: [
             { path: 'speciesId', select: 'name displayName' },
             { path: 'breedId', select: 'name' },
-            { path: 'imageIds' }
+            { path: 'imageIds' },
+            { path: 'documentIds' },
+            { path: 'images' }
           ]
         });
         
-        // Manually populate the virtual 'images' field for each item
+        // Manually populate the virtual 'images' and 'documents' fields for each item
         // Safer population with error handling
         for (const reservation of reservations) {
           if (reservation && reservation.itemId) {
             try {
               await reservation.itemId.populate('images');
+              await reservation.itemId.populate('documents');
             } catch (populateErr) {
-              logger.warn(`Failed to populate images for petshop item ${reservation.itemId?._id}:`, populateErr.message);
-              // Continue with the reservation even if image population fails
+              logger.warn(`Failed to populate images/documents for petshop item ${reservation.itemId?._id}:`, populateErr.message);
+              // Continue with the reservation even if image/document population fails
             }
           }
         }
@@ -418,37 +425,52 @@ const getPetById = async (req, res) => {
         // Based on the source, fetch the actual pet data
         let sourcePet = null;
         if (registryPet.source === 'petshop' && registryPet.petShopItemId) {
-          // Fetch from PetInventoryItem
-          const PetInventoryItem = require('../../modules/petshop/manager/models/PetInventoryItem');
-          sourcePet = await PetInventoryItem.findById(registryPet.petShopItemId)
-            .populate('speciesId', 'name displayName')
-            .populate('breedId', 'name')
-            .populate('imageIds');
-          
-          if (sourcePet) {
-            await sourcePet.populate('images');
+          // Validate that petShopItemId is a valid ObjectId before querying
+          if (/^[0-9a-fA-F]{24}$/.test(registryPet.petShopItemId.toString())) {
+            // Fetch from PetInventoryItem
+            const PetInventoryItem = require('../../modules/petshop/manager/models/PetInventoryItem');
+            sourcePet = await PetInventoryItem.findById(registryPet.petShopItemId)
+              .populate('speciesId', 'name displayName')
+              .populate('breedId', 'name')
+              .populate('imageIds');
+            
+            if (sourcePet) {
+              await sourcePet.populate('images');
+            }
+          } else {
+            logger.warn(`Invalid petShopItemId found in registry: ${registryPet.petShopItemId} for petCode: ${registryPet.petCode}`);
           }
         } else if (registryPet.source === 'adoption' && registryPet.adoptionPetId) {
-          // Fetch from AdoptionPet
-          const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet');
-          sourcePet = await AdoptionPet.findById(registryPet.adoptionPetId)
-            .populate('species', 'name displayName')
-            .populate('breed', 'name')
-            .populate('imageIds');
-          
-          if (sourcePet) {
-            await sourcePet.populate('images');
+          // Validate that adoptionPetId is a valid ObjectId before querying
+          if (/^[0-9a-fA-F]{24}$/.test(registryPet.adoptionPetId.toString())) {
+            // Fetch from AdoptionPet
+            const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet');
+            sourcePet = await AdoptionPet.findById(registryPet.adoptionPetId)
+              .populate('species', 'name displayName')
+              .populate('breed', 'name')
+              .populate('imageIds');
+            
+            if (sourcePet) {
+              await sourcePet.populate('images');
+            }
+          } else {
+            logger.warn(`Invalid adoptionPetId found in registry: ${registryPet.adoptionPetId} for petCode: ${registryPet.petCode}`);
           }
         } else if (registryPet.source === 'core' && registryPet.corePetId) {
-          // Fetch from PetNew
-          const Pet = require('../models/Pet');
-          sourcePet = await Pet.findById(registryPet.corePetId)
-            .populate('speciesId', 'name displayName')
-            .populate('breedId', 'name')
-            .populate('imageIds');
-          
-          if (sourcePet) {
-            await sourcePet.populate('images');
+          // Validate that corePetId is a valid ObjectId before querying
+          if (/^[0-9a-fA-F]{24}$/.test(registryPet.corePetId.toString())) {
+            // Fetch from PetNew
+            const Pet = require('../models/Pet');
+            sourcePet = await Pet.findById(registryPet.corePetId)
+              .populate('speciesId', 'name displayName')
+              .populate('breedId', 'name')
+              .populate('imageIds');
+            
+            if (sourcePet) {
+              await sourcePet.populate('images');
+            }
+          } else {
+            logger.warn(`Invalid corePetId found in registry: ${registryPet.corePetId} for petCode: ${registryPet.petCode}`);
           }
         }
 

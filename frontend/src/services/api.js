@@ -240,6 +240,7 @@ export const adoptionAPI = {
   // Use user router mounts
   listPets: (params) => api.get('/adoption/user/public/pets', { params }),
   getPet: (id) => api.get(`/adoption/user/public/pets/${id}`),
+  getPetForApplication: (id) => api.get(`/adoption/user/pets/${id}/for-application`),
   searchPets: (params) => api.get('/adoption/user/public/pets', { params }), // same as list with filters
   // Pets (manager)
   managerCreatePet: (payload) => api.post('/adoption/manager/pets', payload),
@@ -503,7 +504,8 @@ export const temporaryCareAPI = {
   createCaregiver: (data) => api.post('/temporary-care/caregivers', data),
   
   // Payment functions
-  getTemporaryCare: (id) => api.get(`/temporary-care/${id}`),
+  getTemporaryCare: (id) => api.get(`/temporary-care/user/${id}`),
+  getTemporaryCareByManager: (id) => api.get(`/temporary-care/manager/cares/${id}`),
   createPaymentOrder: (data) => api.post('/temporary-care/payments/order', data),
   verifyPayment: (data) => api.post('/temporary-care/payments/verify', data),
   
@@ -518,7 +520,10 @@ export const temporaryCareAPI = {
   verifyPickupOTP: (data) => api.post('/temporary-care/user/otp/verify-pickup', data),
   
   // Pets in temporary care
-  getPetsInCare: () => api.get('/temporary-care/user/pets-in-care')
+  getPetsInCare: () => api.get('/temporary-care/user/pets-in-care'),
+  
+  // Get temporary care details by ID
+  getPetDetails: (id) => api.get(`/temporary-care/user/${id}`)
 }
 
 // Admin API for Temporary Care

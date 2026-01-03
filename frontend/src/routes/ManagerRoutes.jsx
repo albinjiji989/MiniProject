@@ -55,6 +55,10 @@ import RescueManagerDashboard from '../modules/managers/Rescue/RescueManagerDash
 import TemporaryCareManagerDashboard from '../modules/managers/TemporaryCare/TemporaryCareManagerDashboard'
 import TemporaryCareManagerRequests from '../modules/managers/TemporaryCare/Requests'
 import TemporaryCareManagerCaregivers from '../modules/managers/TemporaryCare/Caregivers'
+import TemporaryCareBookings from '../modules/managers/TemporaryCare/Bookings'
+import TemporaryCareFacilities from '../modules/managers/TemporaryCare/Facilities'
+import TemporaryCarePetsInCare from '../modules/managers/TemporaryCare/PetsInCare'
+import TemporaryCareReports from '../modules/managers/TemporaryCare/Reports'
 import VeterinaryManagerDashboard from '../modules/managers/Veterinary/VeterinaryManagerDashboard'
 import VeterinaryWorkerDashboard from '../modules/managers/Veterinary/VeterinaryWorkerDashboard'
 import VeterinaryStaff from '../modules/managers/Veterinary/Staff'
@@ -212,6 +216,10 @@ const ManagerRoutes = () => {
             <Route path="/manage" element={<TemporaryCareManage />} />
             <Route path="/requests" element={<TemporaryCareManagerRequests />} />
             <Route path="/caregivers" element={<TemporaryCareManagerCaregivers />} />
+            <Route path="/bookings" element={<TemporaryCareBookings />} />
+            <Route path="/facilities" element={<TemporaryCareFacilities />} />
+            <Route path="/pets" element={<TemporaryCarePetsInCare />} />
+            <Route path="/reports" element={<TemporaryCareReports />} />
             <Route path="/" element={<Navigate to="/manager/temporary-care/dashboard" replace />} />
           </Routes>
         } />

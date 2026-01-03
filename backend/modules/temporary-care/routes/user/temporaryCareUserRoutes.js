@@ -157,4 +157,25 @@ router.get('/public/centers', async (req, res) => {
   }
 });
 
+// Get details for a specific temporary care record
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const care = await TemporaryCare.findOne({
+      _id: id,
+      'owner.userId': req.user._id
+    }).populate('pet', 'name species breed images age color description gender');
+    
+    if (!care) {
+      return res.status(404).json({ success: false, message: 'Temporary care record not found' });
+    }
+    
+    res.json({ success: true, data: { care } });
+  } catch (e) {
+    console.error('Get temporary care details error:', e);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 module.exports = router;

@@ -1,174 +1,226 @@
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import UserLayout from '../components/Layout/UserLayout'
-import PublicUserDashboard from '../pages/User/PublicUserDashboard'
-import ModernUserDashboard from '../pages/User/ModernUserDashboard'
-import UserPetsList from '../pages/User/Pets/List'
-import AddPet from '../pages/User/Pets/AddPet'
-import AddPetDetails from '../pages/User/Pets/AddPetDetails'
-import AddPetSuccess from '../pages/User/Pets/AddPetSuccess'
-import UserPetDetails from '../pages/User/Pets/Details'
-import EditPet from '../pages/User/Pets/EditPet'
-import EditBasicPet from '../pages/User/Pets/EditBasicPet'
-import UserPetMedicalHistory from '../pages/User/Pets/MedicalHistory'
-import UserPetHistory from '../pages/User/Pets/History'
-import RequestBreed from '../pages/User/Pets/RequestBreed'
-import MyOwnedPets from '../pages/User/MyOwnedPets'
-import AdoptionDashboard from '../pages/User/Adoption/AdoptionDashboard'
-import AdoptionApplications from '../pages/User/Adoption/AdoptionApplications'
-import UserApplicationDetails from '../pages/User/Adoption/ApplicationDetails'
-import MyAdoptedPets from '../pages/User/Adoption/MyAdoptedPets'
-import UserAdoptedPetDetails from '../pages/User/Adoption/UserAdoptedPetDetails'
-import AdoptionDetails from '../pages/User/Adoption/AdoptionDetails'
-import DebugPetCheck from '../pages/User/Adoption/DebugPetCheck'
-import AdoptionApplyLayout from '../pages/User/Adoption/ApplyWizard/ApplyLayout'
-import ApplyStepApplicant from '../pages/User/Adoption/ApplyWizard/StepApplicant'
-import ApplyStepHome from '../pages/User/Adoption/ApplyWizard/StepHome'
-import ApplyStepExperience from '../pages/User/Adoption/ApplyWizard/StepExperience'
-import ApplyStepDocuments from '../pages/User/Adoption/ApplyWizard/StepDocuments'
-import ApplyStepReview from '../pages/User/Adoption/ApplyWizard/StepReview'
-import UserAdoptionAIMLDashboard from '../pages/User/Adoption/AIMLDashboard'
-import PetShopDashboard from '../pages/User/PetShop/PetShopDashboard'
-import BrowsePets from '../pages/User/PetShop/BrowsePets'
-import NewPetDetails from '../pages/User/PetShop/NewPetDetails'
-import NewReservationWizard from '../pages/User/PetShop/NewReservationWizard'
-import PetShopMyReservations from '../pages/User/PetShop/MyReservations'
-import PetShopReservationDetails from '../pages/User/PetShop/ReservationDetails'
-import Wishlist from '../pages/User/PetShop/Wishlist'
-import Payment from '../pages/User/PetShop/Payment'
-import PurchaseDecision from '../pages/User/PetShop/PurchaseDecision'
-import PurchaseConfirmation from '../pages/User/PetShop/PurchaseConfirmation'
-import Handover from '../pages/User/PetShop/Handover'
-import UserAIMLDashboard from '../pages/User/PetShop/AIMLDashboard'
-import Reservations from '../pages/User/PetShop/Reservations'
-import ReservationDetails from '../pages/User/PetShop/ReservationDetails'
-import TemporaryCareDashboard from '../pages/User/TemporaryCare/TemporaryCareDashboard'
-import TemporaryCareRequestForm from '../pages/User/TemporaryCare/RequestForm'
-import VeterinaryDashboard from '../pages/User/Veterinary/VeterinaryDashboard'
-import SimpleVeterinaryBooking from '../pages/User/Veterinary/SimpleVeterinaryBooking'
-import SimpleVeterinaryPetSelection from '../pages/User/Veterinary/SimpleVeterinaryPetSelection'
-import SimpleVeterinaryAppointments from '../pages/User/Veterinary/SimpleVeterinaryAppointments'
-import SimpleVeterinaryAppointmentDetails from '../pages/User/Veterinary/SimpleVeterinaryAppointmentDetails'
-import VeterinaryVaccinations from '../pages/User/Veterinary/VeterinaryVaccinations'
-import VeterinaryMedicalRecords from '../pages/User/Veterinary/VeterinaryMedicalRecords'
-import PetMedicalHistory from '../pages/User/Veterinary/PetMedicalHistory'
-import VeterinaryPetSelection from '../pages/User/Veterinary/VeterinaryPetSelection'
-import VeterinaryPetDashboard from '../pages/User/Veterinary/VeterinaryPetDashboard'
-import VeterinaryAppointmentDetails from '../pages/User/Veterinary/VeterinaryAppointmentDetails'
-import TestVeterinaryAPI from '../pages/User/Veterinary/TestVeterinaryAPI'
-import DebugVeterinaryPets from '../pages/User/Veterinary/DebugVeterinaryPets'
-import DebugAPI from '../pages/User/Veterinary/DebugAPI'
-import TestAPIs from '../pages/User/Veterinary/TestAPIs'
-import PetSpecificVeterinaryDashboard from '../pages/User/Veterinary/PetSpecificVeterinaryDashboard'
-import TestPetSpecificFlow from '../pages/User/Veterinary/TestPetSpecificFlow'
+import UserLayout from '../layouts/UserLayout'
+import UserDashboard from '../pages/User/Dashboard'
 import UserProfile from '../pages/User/Profile'
-import AdminManagement from '../pages/Admin/AdminManagement'
-import NotificationsPage from '../pages/User/Notifications'
-import TemporaryCareDetails from '../pages/User/TemporaryCare/TemporaryCareDetails'
-import OTPVerification from '../pages/User/TemporaryCare/OTPVerification'
-import MyUserPets from '../pages/User/Pets/MyUserPets'
-import BrowseStocks from '../pages/User/PetShop/BrowseStocks'
-import StockDetail from '../pages/User/PetShop/StockDetail'
-import MyPurchasedPets from '../pages/User/PetShop/MyPurchasedPets'
-import PurchasedPetDetails from '../pages/User/PetShop/PurchasedPetDetails'
-import BeautifulPetShopDashboard from '../pages/User/PetShop/BeautifulPetShopDashboard'
-import EnhancedBrowsePets from '../pages/User/PetShop/EnhancedBrowsePets'
-import EnhancedPetDetails from '../pages/User/PetShop/EnhancedPetDetails'
+import UserPets from '../pages/User/Pets'
+import UserAdoptionApplications from '../modules/users/Adoption/Applications'
+import UserAdoptionApplicationDetails from '../modules/users/Adoption/ApplicationDetails'
+import UserPetDetails from '../pages/User/PetDetails'
+import PetAdoptionForm from '../modules/users/Adoption/AdoptionForm'
+import UserAdoptionWizard from '../modules/users/Adoption/Wizard'
+import AdoptionPayment from '../modules/users/Adoption/Payment'
+import AdoptionSuccess from '../modules/users/Adoption/Success'
+import UserAdoptionHistory from '../modules/users/Adoption/History'
+import UserAdoptionPetDetails from '../modules/users/Adoption/PetDetails'
+import UserVetAppointments from '../pages/User/Veterinary/VeterinaryAppointments'
+import PetCareCalendar from '../pages/User/PetCare/Calendar'
+import PetHealthRecords from '../pages/User/PetCare/HealthRecords'
+import PetVaccinationHistory from '../pages/User/PetCare/VaccinationHistory'
+import PetMedicalRecords from '../pages/User/PetCare/MedicalRecords'
+import PetInsurance from '../pages/User/PetCare/Insurance'
+import PetShopUserDashboard from '../modules/users/PetShop/Dashboard'
+import PetShopUserProducts from '../modules/users/PetShop/Products'
+import PetShopUserCart from '../modules/users/PetShop/Cart'
+import PetShopUserCheckout from '../modules/users/PetShop/Checkout'
+import PetShopUserOrders from '../modules/users/PetShop/Orders'
+import PetShopUserOrderDetails from '../modules/users/PetShop/OrderDetails'
+import PetShopUserWishlist from '../modules/users/PetShop/Wishlist'
+import PetShopUserReviews from '../modules/users/PetShop/Reviews'
+import PetShopUserAddress from '../modules/users/PetShop/Address'
+import PetShopUserPaymentMethods from '../modules/users/PetShop/PaymentMethods'
+import PetShopUserProfile from '../modules/users/PetShop/Profile'
+import TemporaryCareUserDashboard from '../modules/users/TemporaryCare/Dashboard'
+import TemporaryCareUserBookings from '../modules/users/TemporaryCare/Bookings'
+import TemporaryCareUserCaregivers from '../modules/users/TemporaryCare/Caregivers'
+import TemporaryCareUserFacilities from '../modules/users/TemporaryCare/Facilities'
+import TemporaryCareUserBookingForm from '../modules/users/TemporaryCare/BookingForm'
+import TemporaryCareUserBookingDetails from '../modules/users/TemporaryCare/BookingDetails'
+import TemporaryCareUserPets from '../modules/users/TemporaryCare/Pets'
+import TemporaryCareUserReviews from '../modules/users/TemporaryCare/Reviews'
+import TemporaryCareUserPayments from '../modules/users/TemporaryCare/Payments'
+import EcommerceUserDashboard from '../modules/users/Ecommerce/Dashboard'
+import EcommerceUserProducts from '../modules/users/Ecommerce/Products'
+import EcommerceUserCart from '../modules/users/Ecommerce/Cart'
+import EcommerceUserCheckout from '../modules/users/Ecommerce/Checkout'
+import EcommerceUserOrders from '../modules/users/Ecommerce/Orders'
+import EcommerceUserOrderDetails from '../modules/users/Ecommerce/OrderDetails'
+import EcommerceUserWishlist from '../modules/users/Ecommerce/Wishlist'
+import EcommerceUserReviews from '../modules/users/Ecommerce/Reviews'
+import EcommerceUserAddress from '../modules/users/Ecommerce/Address'
+import EcommerceUserPaymentMethods from '../modules/users/Ecommerce/PaymentMethods'
+import EcommerceUserProfile from '../modules/users/Ecommerce/Profile'
+import PharmacyUserDashboard from '../modules/users/Pharmacy/Dashboard'
+import PharmacyUserMedications from '../modules/users/Pharmacy/Medications'
+import PharmacyUserPrescriptions from '../modules/users/Pharmacy/Prescriptions'
+import PharmacyUserOrderHistory from '../modules/users/Pharmacy/OrderHistory'
+import PharmacyUserPharmacies from '../modules/users/Pharmacy/Pharmacies'
+import PharmacyUserCart from '../modules/users/Pharmacy/Cart'
+import PharmacyUserCheckout from '../modules/users/Pharmacy/Checkout'
+import PharmacyUserOrderDetails from '../modules/users/Pharmacy/OrderDetails'
+import RescueUserDashboard from '../modules/users/Rescue/Dashboard'
+import RescueUserPets from '../modules/users/Rescue/Pets'
+import RescueUserEvents from '../modules/users/Rescue/Events'
+import RescueUserVolunteer from '../modules/users/Rescue/Volunteer'
+import RescueUserDonations from '../modules/users/Rescue/Donations'
+import RescueUserStories from '../modules/users/Rescue/Stories'
+import RescueUserAdoptionForm from '../modules/users/Rescue/AdoptionForm'
+import RescueUserPetDetails from '../modules/users/Rescue/PetDetails'
+import VeterinaryUserDashboard from '../modules/users/Veterinary/Dashboard'
+import VeterinaryUserAppointments from '../modules/users/Veterinary/Appointments'
+import VeterinaryUserSchedule from '../modules/users/Veterinary/Schedule'
+import VeterinaryUserServices from '../modules/users/Veterinary/Services'
+import VeterinaryUserClinics from '../modules/users/Veterinary/Clinics'
+import VeterinaryUserBooking from '../modules/users/Veterinary/Booking'
+import VeterinaryUserBookingForm from '../modules/users/Veterinary/BookingForm'
+import VeterinaryUserBookingDetails from '../modules/users/Veterinary/BookingDetails'
+import VeterinaryUserMedicalRecords from '../modules/users/Veterinary/MedicalRecords'
+import VeterinaryUserPrescriptions from '../modules/users/Veterinary/Prescriptions'
+import PublicUserDashboard from '../pages/User/PublicUserDashboard'
 
 const UserRoutes = () => {
   return (
     <UserLayout>
       <Routes>
-        <Route index element={<ModernUserDashboard />} />
-        <Route path="/notifications" element={<NotificationsPage />} />
-        <Route path="/pets" element={<UserPetsList />} />
-        <Route path="/pets/add" element={<AddPet />} />
-        <Route path="/pets/add/details" element={<AddPetDetails />} />
-        <Route path="/pets/add/success" element={<AddPetSuccess />} />
-        <Route path="/pets/:id" element={<UserPetDetails />} />
-        <Route path="/pets/:id/edit" element={<EditPet />} />
-        <Route path="/pets/:id/edit-basic" element={<EditBasicPet />} />
-        <Route path="/pets/:id/medical-history" element={<UserPetMedicalHistory />} />
-        <Route path="/pets/:id/history" element={<UserPetHistory />} />
-        <Route path="/pets/request-breed" element={<RequestBreed />} />
-        <Route path="/owned-pets" element={<MyOwnedPets />} />
-        <Route path="/adoption" element={<AdoptionDashboard />} />
-        <Route path="/adoption/applications" element={<AdoptionApplications />} />
-        <Route path="/adoption/applications/:id" element={<UserApplicationDetails />} />
-        <Route path="/adoption/adopted" element={<MyAdoptedPets />} />
-        <Route path="/adoption/adopted/:id" element={<UserAdoptedPetDetails />} />
-        <Route path="/adoption/detail/:id" element={<AdoptionDetails />} />
-        <Route path="/adoption/debug" element={<DebugPetCheck />} />
+        {/* User: Dashboard */}
+        <Route path="/dashboard" element={<UserDashboard />} />
         
-        {/* Adoption Application Wizard */}
-        <Route path="/adoption/apply" element={<AdoptionApplyLayout />}>
-          <Route index element={<ApplyStepApplicant />} />
-          <Route path="home" element={<ApplyStepHome />} />
-          <Route path="experience" element={<ApplyStepExperience />} />
-          <Route path="documents" element={<ApplyStepDocuments />} />
-          <Route path="review" element={<ApplyStepReview />} />
-        </Route>
-        
-        <Route path="/adoption/aiml-dashboard" element={<UserAdoptionAIMLDashboard />} />
-        
-        {/* User PetShop Routes */}
-        <Route path="/petshop/shop" element={<BrowsePets />} />
-        <Route path="/petshop/pet/:id" element={<NewPetDetails />} />
-        <Route path="/petshop/reserve/:petId" element={<NewReservationWizard />} />
-        <Route path="/petshop/reservations" element={<PetShopMyReservations />} />
-        <Route path="/petshop/reservation/:reservationId" element={<PetShopReservationDetails />} />
-        <Route path="/petshop/wishlist" element={<Wishlist />} />
-        <Route path="/petshop/payment/:reservationId" element={<Payment />} />
-        <Route path="/petshop/purchase-decision/:reservationId" element={<PurchaseDecision />} />
-        <Route path="/petshop/purchase-confirmation/:reservationId" element={<PurchaseConfirmation />} />
-        <Route path="/petshop/handover/:reservationId" element={<Handover />} />
-        <Route path="/petshop/aiml-dashboard" element={<UserAIMLDashboard />} />
-        <Route path="/petshop/dashboard" element={<BeautifulPetShopDashboard />} />
-        <Route path="/petshop/browse" element={<EnhancedBrowsePets />} />
-        <Route path="/petshop/detail/:id" element={<EnhancedPetDetails />} />
-        <Route path="/petshop/my-reservations" element={<Reservations />} />
-        <Route path="/petshop/reservation/:reservationId" element={<ReservationDetails />} />
-        <Route path="/petshop/pay/:reservationId" element={<Payment />} />
-        <Route path="/petshop/confirm/:reservationId" element={<PurchaseDecision />} />
-        <Route path="/petshop/confirmed/:reservationId" element={<PurchaseConfirmation />} />
-        <Route path="/petshop/handover/:reservationId" element={<Handover />} />
-        <Route path="/petshop/ml-dashboard" element={<UserAIMLDashboard />} />
-        {/* Stock Routes */}
-        <Route path="/petshop/stocks" element={<BrowseStocks />} />
-        <Route path="/petshop/stock/:id" element={<StockDetail />} />
-        <Route path="/petshop/my-pets" element={<MyPurchasedPets />} />
-        <Route path="/petshop/my-pet/:id" element={<PurchasedPetDetails />} />
-        
-        {/* Temporary Care Routes */}
-        <Route path="/temporary-care" element={<TemporaryCareDashboard />} />
-        <Route path="/temporary-care/request" element={<TemporaryCareRequestForm />} />
-        <Route path="/temporary-care/details/:id" element={<TemporaryCareDetails />} />
-        <Route path="/temporary-care/verify-otp" element={<OTPVerification />} />
-        
-        {/* Veterinary Routes */}
-        <Route path="/veterinary" element={<VeterinaryDashboard />} />
-        <Route path="/veterinary/book" element={<SimpleVeterinaryBooking />} />
-        <Route path="/veterinary/select-pet" element={<SimpleVeterinaryPetSelection />} />
-        <Route path="/veterinary/appointments" element={<SimpleVeterinaryAppointments />} />
-        <Route path="/veterinary/appointment/:id" element={<SimpleVeterinaryAppointmentDetails />} />
-        <Route path="/veterinary/vaccinations" element={<VeterinaryVaccinations />} />
-        <Route path="/veterinary/records" element={<VeterinaryMedicalRecords />} />
-        <Route path="/veterinary/pet/:petId/history" element={<PetMedicalHistory />} />
-        <Route path="/veterinary/select-pet-full" element={<VeterinaryPetSelection />} />
-        <Route path="/veterinary/pet/:petId/dashboard" element={<VeterinaryPetDashboard />} />
-        <Route path="/veterinary/full-appointment/:id" element={<VeterinaryAppointmentDetails />} />
-        <Route path="/veterinary/test-api" element={<TestVeterinaryAPI />} />
-        <Route path="/veterinary/debug-pets" element={<DebugVeterinaryPets />} />
-        <Route path="/veterinary/debug-api" element={<DebugAPI />} />
-        <Route path="/veterinary/test-apis" element={<TestAPIs />} />
-        <Route path="/veterinary/pet-specific/:petId" element={<PetSpecificVeterinaryDashboard />} />
-        <Route path="/veterinary/test-pet-flow/:petId" element={<TestPetSpecificFlow />} />
-        
+        {/* User: Profile */}
         <Route path="/profile" element={<UserProfile />} />
-        <Route path="/admin-management" element={<AdminManagement />} />
         
-        {/* Module Dashboards (Admin and Manager aliases) */}
-        <Route path="/dashboard/public" element={<PublicUserDashboard />} />
+        {/* User: Pets */}
+        <Route path="/pets" element={<UserPets />} />
+        <Route path="/pets/:id" element={<UserPetDetails />} />
+        
+        {/* User: Adoptions */}
+        <Route path="/adoption/*" element={
+          <Routes>
+            <Route path="/applications" element={<UserAdoptionApplications />} />
+            <Route path="/applications/:id" element={<UserAdoptionApplicationDetails />} />
+            <Route path="/apply/:petId" element={<PetAdoptionForm />} />
+            <Route path="/wizard/*" element={<UserAdoptionWizard />} />
+            <Route path="/payment/:applicationId" element={<AdoptionPayment />} />
+            <Route path="/success/:applicationId" element={<AdoptionSuccess />} />
+            <Route path="/history" element={<UserAdoptionHistory />} />
+            <Route path="/pets/:id" element={<UserAdoptionPetDetails />} />
+            <Route path="/" element={<Navigate to="/user/adoption/applications" replace />} />
+          </Routes>
+        } />
+        
+        {/* User: Pet Care */}
+        <Route path="/pet-care/*" element={
+          <Routes>
+            <Route path="/calendar" element={<PetCareCalendar />} />
+            <Route path="/health-records" element={<PetHealthRecords />} />
+            <Route path="/vaccinations" element={<PetVaccinationHistory />} />
+            <Route path="/medical-records" element={<PetMedicalRecords />} />
+            <Route path="/insurance" element={<PetInsurance />} />
+            <Route path="/" element={<Navigate to="/user/pet-care/calendar" replace />} />
+          </Routes>
+        } />
+        
+        {/* User: Vet Services */}
+        <Route path="/veterinary/*" element={
+          <Routes>
+            <Route path="/dashboard" element={<VeterinaryUserDashboard />} />
+            <Route path="/appointments" element={<VeterinaryUserAppointments />} />
+            <Route path="/appointments/schedule" element={<VeterinaryUserSchedule />} />
+            <Route path="/appointments/book" element={<VeterinaryUserBooking />} />
+            <Route path="/appointments/book/:clinicId" element={<VeterinaryUserBookingForm />} />
+            <Route path="/appointments/:id" element={<VeterinaryUserBookingDetails />} />
+            <Route path="/services" element={<VeterinaryUserServices />} />
+            <Route path="/clinics" element={<VeterinaryUserClinics />} />
+            <Route path="/medical-records" element={<VeterinaryUserMedicalRecords />} />
+            <Route path="/prescriptions" element={<VeterinaryUserPrescriptions />} />
+            <Route path="/" element={<Navigate to="/user/veterinary/dashboard" replace />} />
+          </Routes>
+        } />
+        
+        {/* User: Pet Shop */}
+        <Route path="/petshop/*" element={
+          <Routes>
+            <Route path="/dashboard" element={<PetShopUserDashboard />} />
+            <Route path="/products" element={<PetShopUserProducts />} />
+            <Route path="/cart" element={<PetShopUserCart />} />
+            <Route path="/checkout" element={<PetShopUserCheckout />} />
+            <Route path="/orders" element={<PetShopUserOrders />} />
+            <Route path="/orders/:id" element={<PetShopUserOrderDetails />} />
+            <Route path="/wishlist" element={<PetShopUserWishlist />} />
+            <Route path="/reviews" element={<PetShopUserReviews />} />
+            <Route path="/address" element={<PetShopUserAddress />} />
+            <Route path="/payment-methods" element={<PetShopUserPaymentMethods />} />
+            <Route path="/profile" element={<PetShopUserProfile />} />
+            <Route path="/" element={<Navigate to="/user/petshop/dashboard" replace />} />
+          </Routes>
+        } />
+        
+        {/* User: E-commerce */}
+        <Route path="/ecommerce/*" element={
+          <Routes>
+            <Route path="/dashboard" element={<EcommerceUserDashboard />} />
+            <Route path="/products" element={<EcommerceUserProducts />} />
+            <Route path="/cart" element={<EcommerceUserCart />} />
+            <Route path="/checkout" element={<EcommerceUserCheckout />} />
+            <Route path="/orders" element={<EcommerceUserOrders />} />
+            <Route path="/orders/:id" element={<EcommerceUserOrderDetails />} />
+            <Route path="/wishlist" element={<EcommerceUserWishlist />} />
+            <Route path="/reviews" element={<EcommerceUserReviews />} />
+            <Route path="/address" element={<EcommerceUserAddress />} />
+            <Route path="/payment-methods" element={<EcommerceUserPaymentMethods />} />
+            <Route path="/profile" element={<EcommerceUserProfile />} />
+            <Route path="/" element={<Navigate to="/user/ecommerce/dashboard" replace />} />
+          </Routes>
+        } />
+        
+        {/* User: Pharmacy */}
+        <Route path="/pharmacy/*" element={
+          <Routes>
+            <Route path="/dashboard" element={<PharmacyUserDashboard />} />
+            <Route path="/medications" element={<PharmacyUserMedications />} />
+            <Route path="/prescriptions" element={<PharmacyUserPrescriptions />} />
+            <Route path="/order-history" element={<PharmacyUserOrderHistory />} />
+            <Route path="/pharmacies" element={<PharmacyUserPharmacies />} />
+            <Route path="/cart" element={<PharmacyUserCart />} />
+            <Route path="/checkout" element={<PharmacyUserCheckout />} />
+            <Route path="/orders/:id" element={<PharmacyUserOrderDetails />} />
+            <Route path="/" element={<Navigate to="/user/pharmacy/dashboard" replace />} />
+          </Routes>
+        } />
+        
+        {/* User: Temporary Care */}
+        <Route path="/temporary-care/*" element={
+          <Routes>
+            <Route path="/dashboard" element={<TemporaryCareUserDashboard />} />
+            <Route path="/bookings" element={<TemporaryCareUserBookings />} />
+            <Route path="/caregivers" element={<TemporaryCareUserCaregivers />} />
+            <Route path="/facilities" element={<TemporaryCareUserFacilities />} />
+            <Route path="/booking-form" element={<TemporaryCareUserBookingForm />} />
+            <Route path="/booking-form/:facilityId" element={<TemporaryCareUserBookingForm />} />
+            <Route path="/bookings/:id" element={<TemporaryCareUserBookingDetails />} />
+            <Route path="/pets" element={<TemporaryCareUserPets />} />
+            <Route path="/reviews" element={<TemporaryCareUserReviews />} />
+            <Route path="/payments" element={<TemporaryCareUserPayments />} />
+            <Route path="/" element={<Navigate to="/user/temporary-care/dashboard" replace />} />
+          </Routes>
+        } />
+        
+        {/* User: Rescue */}
+        <Route path="/rescue/*" element={
+          <Routes>
+            <Route path="/dashboard" element={<RescueUserDashboard />} />
+            <Route path="/pets" element={<RescueUserPets />} />
+            <Route path="/events" element={<RescueUserEvents />} />
+            <Route path="/volunteer" element={<RescueUserVolunteer />} />
+            <Route path="/donations" element={<RescueUserDonations />} />
+            <Route path="/stories" element={<RescueUserStories />} />
+            <Route path="/adopt/:petId" element={<RescueUserAdoptionForm />} />
+            <Route path="/pets/:id" element={<RescueUserPetDetails />} />
+            <Route path="/" element={<Navigate to="/user/rescue/dashboard" replace />} />
+          </Routes>
+        } />
+        
+        {/* Public User Dashboard */}
+        <Route path="/" element={<PublicUserDashboard />} />
         
         {/* Catch-all route */}
         <Route path="*" element={<Navigate to="/" replace />} />

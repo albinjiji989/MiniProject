@@ -1,4 +1,4 @@
-const Wishlist = require('../models/Wishlist');
+  const Wishlist = require('../models/Wishlist');
 const Review = require('../models/Review');
 const PetInventoryItem = require('../../manager/models/PetInventoryItem');
 
@@ -179,7 +179,11 @@ const getUserPurchasedPets = async (req, res) => {
     })
     .populate({
       path: 'itemId',
-      select: 'name petCode price images speciesId breedId storeId storeName gender age ageUnit color weight status',
+      populate: [
+        { path: 'speciesId', select: 'name displayName' },
+        { path: 'breedId', select: 'name' },
+        { path: 'imageIds' } // Populate imageIds to ensure images virtual field can be populated
+      ]
     })
     .populate('petId')
     .sort({ createdAt: -1 });
@@ -188,17 +192,10 @@ const getUserPurchasedPets = async (req, res) => {
     
     // Manually populate images for inventory items if needed
     for (const reservation of reservations) {
-      if (reservation.itemId && (!reservation.itemId.images || reservation.itemId.images.length === 0)) {
-        try {
-          const PetInventoryItem = require('../../manager/models/PetInventoryItem');
-          const populatedItem = await PetInventoryItem.findById(reservation.itemId._id)
-            .populate('imageIds');
-          if (populatedItem) {
-            await populatedItem.populate('images');
-            reservation.itemId.images = populatedItem.images || [];
-          }
-        } catch (err) {
-          console.warn('Failed to populate images for inventory item:', err.message);
+      if (reservation.itemId) {
+        // Manually populate the virtual 'images' field for the inventory item
+        if (reservation.itemId.populate) {
+          await reservation.itemId.populate('images');
         }
       }
     }
@@ -249,9 +246,9 @@ const getUserPurchasedPets = async (req, res) => {
       let actualPet = null;
       if (r.petId) {
         try {
-          actualPet = await Pet.findById(r.petId);
+          actualPet = await Pet.findById(r.petId)
+            .populate('imageIds');
           if (actualPet) {
-            await actualPet.populate('imageIds');
             await actualPet.populate('images');
           }
         } catch (error) {
@@ -259,41 +256,33 @@ const getUserPurchasedPets = async (req, res) => {
         }
       }
       
-      // If not found, try to get from PetNew
+      // PetNew model doesn't exist, so skip this part
       let newPet = null;
       if (!actualPet && r.itemId.petCode) {
-        try {
-          newPet = await PetNew.findOne({ petCode: r.itemId.petCode });
-          if (newPet) {
-            await newPet.populate('imageIds');
-            await newPet.populate('images');
-          }
-        } catch (error) {
-          console.warn(`Failed to load new pet with petCode ${r.itemId.petCode}:`, error.message);
-        }
+        // PetNew model doesn't exist, so skip this part
       }
       
       // If not found, try to get from PetRegistry
       let registryEntry = null;
-      if (!actualPet && !newPet && r.itemId.petCode) {
+      if (!actualPet && r.itemId.petCode) {
         try {
           registryEntry = registryPets.find(p => p.petCode === r.itemId.petCode);
           if (!registryEntry) {
             registryEntry = await PetRegistry.findOne({ 
               petCode: r.itemId.petCode,
               currentOwnerId: req.user._id
-            });
+            })
+            .populate('imageIds');
             if (registryEntry) {
-              await registryEntry.populate('imageIds');
               await registryEntry.populate('images');
             }
           }
           
           // Try to get the actual pet from the main Pet collection
           if (registryEntry && registryEntry.corePetId) {
-            actualPet = await Pet.findById(registryEntry.corePetId);
+            actualPet = await Pet.findById(registryEntry.corePetId)
+              .populate('imageIds');
             if (actualPet) {
-              await actualPet.populate('imageIds');
               await actualPet.populate('images');
             }
           }
@@ -306,8 +295,6 @@ const getUserPurchasedPets = async (req, res) => {
       let images = [];
       if (actualPet && actualPet.images && actualPet.images.length > 0) {
         images = actualPet.images;
-      } else if (newPet && newPet.images && newPet.images.length > 0) {
-        images = newPet.images;
       } else if (registryEntry && registryEntry.images && registryEntry.images.length > 0) {
         images = registryEntry.images;
       } else if (r.itemId && r.itemId.images && r.itemId.images.length > 0) {

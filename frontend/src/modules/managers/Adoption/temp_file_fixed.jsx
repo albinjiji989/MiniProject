@@ -472,10 +472,18 @@ const ApplicationDetailsImproved = () => {
   const getApplicantDocuments = () => {
     // Debug: Log application data
     console.log('Application data in getApplicantDocuments:', app);
+    
+    // Handle documents from different possible locations
     const d1 = Array.isArray(app?.documents) ? app.documents : []
     const d2 = Array.isArray(app?.applicationData?.documents) ? app.applicationData.documents : []
-    console.log('Documents found:', { d1, d2, combined: [...d1, ...d2] });
-    return [...d1, ...d2]
+    const d3 = Array.isArray(app?.applicationData?.userDocuments) ? app.applicationData.userDocuments : []
+    
+    // Handle case where documents might be stored as a single object
+    const d4 = app?.documents && typeof app.documents === 'object' && !Array.isArray(app.documents) ? [app.documents] : []
+    const d5 = app?.applicationData?.documents && typeof app.applicationData.documents === 'object' && !Array.isArray(app.applicationData.documents) ? [app.applicationData.documents] : []
+    
+    console.log('Documents found:', { d1, d2, d3, d4, d5, combined: [...d1, ...d2, ...d3, ...d4, ...d5] });
+    return [...d1, ...d2, ...d3, ...d4, ...d5]
   }
 
   // Get manager pet documents

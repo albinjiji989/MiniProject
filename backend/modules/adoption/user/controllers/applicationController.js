@@ -78,6 +78,14 @@ const getAvailablePets = async (req, res) => {
 
 const getPetDetails = async (req, res) => {
   try {
+    // Validate that the ID parameter is a valid ObjectId
+    if (!/^[0-9a-fA-F]{24}$/.test(req.params.id)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Invalid pet ID format: ${req.params.id}. Pet ID must be a 24-character hexadecimal string.` 
+      });
+    }
+    
     const pet = await AdoptionPet.findById(req.params.id)
       .populate('images')
       .populate('adopterUserId', 'name')
@@ -552,6 +560,52 @@ const getUserApplicationById = async (req, res) => {
   }
 };
 
+const getUserApplicationPetDetails = async (req, res) => {
+  try {
+    const { petId } = req.params;
+    
+    // Validate that the petId parameter is a valid ObjectId
+    if (!/^[0-9a-fA-F]{24}$/.test(petId)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Invalid pet ID format: ${petId}. Pet ID must be a 24-character hexadecimal string.` 
+      });
+    }
+    
+    // First, verify that the user has an active application for this pet
+    const application = await AdoptionRequest.findOne({
+      userId: req.user.id,
+      petId: petId,
+      isActive: true
+    });
+    
+    if (!application) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'No active application found for this pet. You can only access pet details for pets you have applied to adopt.' 
+      });
+    }
+    
+    // Find the pet regardless of its status since user has an application for it
+    const pet = await AdoptionPet.findById(petId)
+      .populate('images')
+      .populate('adopterUserId', 'name')
+      .select('-createdBy -updatedBy');
+
+    if (!pet || !pet.isActive) {
+      return res.status(404).json({ 
+        success: false, 
+        error: `Pet with ID ${petId} not found or is no longer active.` 
+      });
+    }
+
+    res.json({ success: true, data: pet });
+  } catch (error) {
+    console.error('Error fetching user application pet details:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 const cancelApplication = async (req, res) => {
   try {
     const application = await AdoptionRequest.findOne({
@@ -621,6 +675,7 @@ module.exports = {
   submitApplication,
   getUserApplications,
   getUserApplicationById,
+  getUserApplicationPetDetails,
   cancelApplication,
   uploadDocument
 };

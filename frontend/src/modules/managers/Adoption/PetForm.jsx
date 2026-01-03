@@ -39,7 +39,7 @@ import {
   Wc as GenderIcon
 } from '@mui/icons-material';
 
-const initial = { name: '', breed: '', species: '', age: 0, ageUnit: 'months', gender: 'male', color: '', weight: 0, healthStatus: 'good', vaccinationStatus: 'not_vaccinated', temperament: 'friendly', description: '', adoptionFee: 0, category: '' };
+const initial = { name: '', breed: '', species: '', age: 0, ageUnit: 'months', gender: 'male', color: '', weight: 0, healthStatus: 'good', vaccinationStatus: 'not_vaccinated', description: '', adoptionFee: 0, category: '' };
 
 const PetForm = () => {
   const navigate = useNavigate();
@@ -141,7 +141,6 @@ const PetForm = () => {
           weight: p.weight || 0,
           healthStatus: p.healthStatus || 'good',
           vaccinationStatus: p.vaccinationStatus || 'not_vaccinated',
-          temperament: p.temperament || 'friendly',
           description: p.description || '',
           adoptionFee: p.adoptionFee || 0,
           category: p.category || '',
@@ -283,7 +282,13 @@ const PetForm = () => {
       for (const file of files) {
         if (!file.type.startsWith('image/')) continue;
         const dataUrl = await readAsDataUrl(file);
-        newImages.push({ url: dataUrl, isPrimary: images.length === 0 && newImages.length === 0 });
+        newImages.push({ 
+          url: dataUrl, 
+          isPrimary: images.length === 0 && newImages.length === 0,
+          name: file.name,
+          type: file.type,
+          size: file.size
+        });
       }
       setImages(prev => [...prev, ...newImages]);
     } catch (err) {
@@ -310,6 +315,133 @@ const PetForm = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Direct upload functions for immediate upload (similar to PetDetails)
+  const directUploadImages = async (files) => {
+    if (!files.length || !id) return [];
+    
+    setSaving(true);
+    try {
+      const newImageIds = [];
+      
+      // Upload each image to server
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) continue;
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const res = await apiClient.post('/adoption/manager/pets/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        
+        if (res.data?.data?._id) {
+          newImageIds.push(res.data.data._id);
+        }
+      }
+      
+      // Get current image IDs and link all images to pet
+      const currentImagesRes = await apiClient.get(`/adoption/manager/pets/${id}`);
+      const currentImageIds = (currentImagesRes.data?.data?.imageIds || []).filter(id => typeof id === 'string' && id.length > 0);
+      
+      // Update pet with all image IDs (existing + new)
+      await apiClient.put(`/adoption/manager/pets/${id}`, {
+        imageIds: [...currentImageIds, ...newImageIds]
+      });
+      
+      // Reload pet data to show new images
+      const updatedPetRes = await apiClient.get(`/adoption/manager/pets/${id}`);
+      const updatedPet = updatedPetRes.data?.data;
+      
+      // Update local state to reflect new images
+      if (Array.isArray(updatedPet.images)) {
+        const imageUrls = updatedPet.images.map(img => ({
+          _id: img?._id || (typeof img === 'object' && img?.url ? img.url.split('/').pop().split('.')[0] : null),
+          url: resolveMediaUrl(typeof img === 'string' ? img : (img?.url || '')),
+          isPrimary: img?.isPrimary || false,
+          caption: img?.caption || ''
+        })).filter(img => img.url);
+        setImages(imageUrls);
+      }
+      
+      return newImageIds;
+    } catch (e) {
+      console.error('Direct image upload failed', e);
+      setError('Failed to upload images. Please try again.');
+      return [];
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const directUploadDocuments = async (files) => {
+    if (!files.length || !id) return [];
+    
+    setSaving(true);
+    try {
+      const newDocIds = [];
+      
+      // Upload each document to server
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const res = await apiClient.post('/adoption/manager/pets/upload-document', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        
+        if (res.data?.data?._id) {
+          newDocIds.push(res.data.data._id);
+        }
+      }
+      
+      // Get current document IDs and link all documents to pet
+      const currentPetRes = await apiClient.get(`/adoption/manager/pets/${id}`);
+      const currentDocIds = (currentPetRes.data?.data?.documentIds || []).filter(id => typeof id === 'string' && id.length > 0);
+      
+      // Update pet with all document IDs (existing + new)
+      await apiClient.put(`/adoption/manager/pets/${id}`, {
+        documentIds: [...currentDocIds, ...newDocIds]
+      });
+      
+      // Reload pet data to show new documents
+      const updatedPetRes = await apiClient.get(`/adoption/manager/pets/${id}`);
+      const updatedPet = updatedPetRes.data?.data;
+      
+      // Update local state to reflect new documents
+      if (Array.isArray(updatedPet.documents)) {
+        const docUrls = updatedPet.documents.map(doc => ({
+          _id: doc?._id || (typeof doc === 'object' && doc?.url ? doc.url.split('/').pop().split('.')[0] : null),
+          url: resolveMediaUrl(typeof doc === 'string' ? doc : (doc?.url || '')),
+          name: doc?.name || (typeof doc === 'string' ? doc.split('/').pop() : 'document')
+        })).filter(doc => doc.url);
+        setDocuments(docUrls);
+      }
+      
+      return newDocIds;
+    } catch (e) {
+      console.error('Direct document upload failed', e);
+      setError('Failed to upload documents. Please try again.');
+      return [];
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Direct upload handlers
+  const onDirectImageUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    
+    await directUploadImages(files);
+  };
+
+  const onDirectDocumentUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    
+    await directUploadDocuments(files);
   };
 
   const readAsDataUrl = (file) => new Promise((resolve, reject) => {
@@ -389,7 +521,6 @@ const PetForm = () => {
         weight: Number(form.weight) || 0,
         healthStatus: form.healthStatus || 'good',
         vaccinationStatus: form.vaccinationStatus || 'not_vaccinated',
-        temperament: form.temperament || 'friendly',
         description: form.description || '',
         adoptionFee: Number(form.adoptionFee) || 0,
         category: form.category || ''
@@ -416,24 +547,12 @@ const PetForm = () => {
       
       setDebugInfo(`${isEdit ? 'Updated' : 'Created'} pet with ID: ${petId}`);
       
-      // Handle media uploads for both new and existing pets
-      // For existing pets, we need to distinguish between new uploads and existing media
-      const newImages = images.filter(img => img.url.startsWith('data:'));
-      const existingImages = images.filter(img => !img.url.startsWith('data:'));
-      const newDocuments = documents.filter(doc => doc.url.startsWith('data:'));
-      const existingDocuments = documents.filter(doc => !doc.url.startsWith('data:'));
-      
-      // Collect existing image and document IDs
-      const existingImageIds = existingImages
-        .map(img => img._id)
-        .filter(id => id && typeof id === 'string');
-      
-      const existingDocIds = existingDocuments
-        .map(doc => doc._id)
-        .filter(id => id && typeof id === 'string');
-      
-      if (newImages.length > 0 || newDocuments.length > 0) {
-        setDebugInfo('Uploading new media files...');
+      // For new pets, we need to handle media uploads
+      if (!isEdit) {
+        // For new pets, we need to distinguish between new uploads and existing media
+        const newImages = images.filter(img => img.url.startsWith('data:'));
+        const newDocuments = documents.filter(doc => doc.url.startsWith('data:'));
+        
         const imageIds = [];
         const docIds = [];
         
@@ -442,7 +561,7 @@ const PetForm = () => {
           if (img.url.startsWith('data:')) {
             const blob = await (await fetch(img.url)).blob();
             const formData = new FormData();
-            formData.append('file', blob, 'image.jpg');
+            formData.append('file', blob, img.name || 'image.jpg');
             const uploadRes = await apiClient.post('/adoption/manager/pets/upload', formData, {
               headers: { 'Content-Type': 'multipart/form-data' }
             });
@@ -466,29 +585,21 @@ const PetForm = () => {
             }
           }
         }
-      }
-      
-      // Link all media to pet (existing + new)
-      const allImageIds = [...existingImageIds, ...imageIds];
-      const allDocIds = [...existingDocIds, ...docIds];
-      
-      // Only update media if there are any images or documents
-      if (allImageIds.length > 0 || allDocIds.length > 0) {
-        setDebugInfo('Linking media to pet...');
-        await apiClient.put(`/adoption/manager/pets/${petId}`, {
-          imageIds: allImageIds,
-          documentIds: allDocIds
-        });
+        
+        // Link all media to pet
+        if (imageIds.length > 0 || docIds.length > 0) {
+          setDebugInfo('Linking media to pet...');
+          await apiClient.put(`/adoption/manager/pets/${petId}`, {
+            imageIds: imageIds,
+            documentIds: docIds
+          });
+        }
       }
       
       // Success - redirect to appropriate page based on pet status
-      if (isPending) {
-        // If editing a pending pet, stay on the form to allow adding more media
-        alert('Pet updated successfully! You can continue adding media or navigate back to the pending pets list.');
-      } else {
-        // For regular pets, redirect to pet list
-        navigate('..');
-      }
+      alert(isEdit ? 'Pet updated successfully!' : 'Pet created successfully!');
+      // Redirect to pet list after successful save
+      navigate('..');
     } catch (e2) {
       const errorMsg = e2?.response?.data?.error || e2?.response?.data?.message || e2.message || 'Save failed';
       setError(errorMsg);
@@ -503,20 +614,32 @@ const PetForm = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
-      <Card variant="outlined">
+      <Card variant="outlined" sx={{ border: 'none', boxShadow: 2 }}>
         <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-            <PetsIcon color="primary" />
-            <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
-              {isPending ? 'Complete Pending Pet' : isEdit ? 'Edit Pet' : 'Add New Pet'}
-            </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              width: 56, 
+              height: 56, 
+              borderRadius: '50%', 
+              bgcolor: 'primary.light', 
+              color: 'primary.main'
+            }}>
+              <PetsIcon sx={{ fontSize: 32 }} />
+            </Box>
+            <Box>
+              <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
+                {isPending ? 'Complete Pending Pet' : isEdit ? 'Edit Pet' : 'Add New Pet'}
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                {isPending 
+                  ? 'This pet was imported via CSV and is currently pending. Add images and documents, then publish it to make it available for adoption.' 
+                  : 'You can do a quick intake now and complete details later. Species is required; other fields can be added later.'}
+              </Typography>
+            </Box>
           </Box>
-          
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            {isPending 
-              ? 'This pet was imported via CSV and is currently pending. Add images and documents, then publish it to make it available for adoption.' 
-              : 'You can do a quick intake now and complete details later. Species is required; other fields can be added later.'}
-          </Typography>
           
           {apiErrors.submit && (
             <Alert severity="error" sx={{ mb: 3 }}>
@@ -618,22 +741,7 @@ const PetForm = () => {
               </Grid>
               
               <Grid item xs={12} md={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Temperament</InputLabel>
-                  <Select 
-                    name="temperament" 
-                    value={form.temperament} 
-                    onChange={onChange}
-                    label="Temperament"
-                  >
-                    <MenuItem value="calm">Calm</MenuItem>
-                    <MenuItem value="friendly">Friendly</MenuItem>
-                    <MenuItem value="playful">Playful</MenuItem>
-                    <MenuItem value="shy">Shy</MenuItem>
-                    <MenuItem value="aggressive">Aggressive</MenuItem>
-                    <MenuItem value="energetic">Energetic</MenuItem>
-                  </Select>
-                </FormControl>
+
               </Grid>
               
               <Grid item xs={12} md={6}>
@@ -782,7 +890,7 @@ const PetForm = () => {
                   <input
                     type="file"
                     ref={imgInputRef}
-                    onChange={onImageSelected}
+                    onChange={onDirectImageUpload}
                     accept="image/*"
                     multiple
                     style={{ display: 'none' }}
@@ -881,7 +989,7 @@ const PetForm = () => {
                   <input
                     type="file"
                     ref={docInputRef}
-                    onChange={onDocumentSelected}
+                    onChange={onDirectDocumentUpload}
                     accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
                     multiple
                     style={{ display: 'none' }}

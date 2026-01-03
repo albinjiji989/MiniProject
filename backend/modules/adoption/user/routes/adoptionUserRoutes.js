@@ -16,6 +16,7 @@ router.get('/public/pets/:id', petController.getPublicPetDetails);
 // User Routes - Authenticated users only
 router.get('/pets', auth, applicationController.getAvailablePets);
 router.get('/pets/:id', auth, applicationController.getPetDetails);
+router.get('/pets/:id/for-application', auth, applicationController.getUserApplicationPetDetails);
 router.get('/pets/search', auth, applicationController.searchPets);
 
 // Adoption Applications

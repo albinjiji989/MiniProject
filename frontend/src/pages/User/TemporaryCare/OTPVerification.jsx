@@ -22,7 +22,10 @@ import {
 } from '@mui/icons-material'
 import { temporaryCareAPI } from '../../../services/api'
 
-const OTPVerification = ({ type }) => {
+const OTPVerification = ({ type: propType }) => {
+  // Get type from prop if provided, otherwise from URL params
+  const { type: urlType } = useParams();
+  const effectiveType = propType || urlType;
   const { id } = useParams()
   const navigate = useNavigate()
   const theme = useTheme()
@@ -33,7 +36,7 @@ const OTPVerification = ({ type }) => {
   const [success, setSuccess] = useState(false)
   const [focusedIndex, setFocusedIndex] = useState(0)
 
-  const isDrop = type === 'drop'
+  const isDrop = effectiveType === 'drop'
   const title = isDrop ? 'Drop-off OTP Verification' : 'Pickup OTP Verification'
   const description = isDrop 
     ? 'Enter the 6-digit OTP provided by the care center for pet drop-off' 
@@ -70,16 +73,16 @@ const OTPVerification = ({ type }) => {
       setLoading(true)
       setError('')
       
-      const response = await temporaryCareAPI.verifyOTP(id, { otp: otpString, type })
+      if (isDrop) {
+        await temporaryCareAPI.verifyDropOTP({ temporaryCareId: id, otp: otpString })
+      } else {
+        await temporaryCareAPI.verifyPickupOTP({ temporaryCareId: id, otp: otpString })
+      }
       
-      if (response.data.success) {
         setSuccess(true)
         setTimeout(() => {
           navigate('/User/temporary-care')
         }, 2000)
-      } else {
-        setError(response.data.message || 'Invalid OTP')
-      }
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to verify OTP')
     } finally {
@@ -91,7 +94,11 @@ const OTPVerification = ({ type }) => {
     try {
       setLoading(true)
       setError('')
-      await temporaryCareAPI.resendOTP(id, { type })
+      if (isDrop) {
+        await temporaryCareAPI.generateDropOTP({ temporaryCareId: id })
+      } else {
+        await temporaryCareAPI.generatePickupOTP({ temporaryCareId: id })
+      }
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {

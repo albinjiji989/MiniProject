@@ -868,7 +868,7 @@ const PetsList = () => {
                     sx={{ flex: 1, minWidth: 80 }}
                     onClick={()=>navigate(`/manager/adoption/pets/${pet._id}`)}
                   >
-                    View
+                    Details
                   </Button>
                   <Button 
                     size="small" 
@@ -876,7 +876,7 @@ const PetsList = () => {
                     sx={{ flex: 1, minWidth: 80 }}
                     onClick={()=>navigate(`/manager/adoption/pets/${pet._id}/edit`)}
                   >
-                    {showPending ? 'Add Media' : 'Edit'}
+                    Edit
                   </Button>
                   {showPending ? (
                     <Button 
@@ -1115,14 +1115,14 @@ const PetsList = () => {
               <Stack direction="row" spacing={1} sx={{ pt: 1 }}>
                 <Button 
                   onClick={()=>navigate(`/manager/adoption/pets/${quickView.pet._id}`)} 
-                  variant="contained" 
+                  variant="outlined" 
                   fullWidth
                 >
-                  Open Details
+                  View Details
                 </Button>
                 <Button 
                   onClick={()=>navigate(`/manager/adoption/pets/${quickView.pet._id}/edit`)} 
-                  variant="outlined" 
+                  variant="contained" 
                   fullWidth
                 >
                   Edit

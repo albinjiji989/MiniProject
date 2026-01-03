@@ -26,6 +26,7 @@ import Profile from '../pages/Profile/Profile'
 import TestPage from '../pages/Admin/TestPage'
 import TestDebug from '../pages/Admin/TestDebug'
 import DebugPage from '../pages/Admin/DebugPage'
+import TemporaryCareAdminDashboard from '../pages/Admin/TemporaryCareAdminDashboard'
 
 const AdminRoutes = () => {
   return (
@@ -59,6 +60,7 @@ const AdminRoutes = () => {
         
         {/* Debug route to test if any route matches */}
         <Route path="debug" element={<DebugPage />} />
+        <Route path="temporary-care" element={<TemporaryCareAdminDashboard />} />
         
         {/* Catch-all route */}
         <Route path="*" element={<Navigate to="dashboard" replace />} />

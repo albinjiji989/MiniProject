@@ -73,6 +73,18 @@ const petRegistrySchema = new mongoose.Schema({
   isDeceased: { type: Boolean, default: false },
   deceasedAt: { type: Date },
   deceasedReason: { type: String },
+  
+  // Image and document references
+  imageIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Image'
+  }],
+  
+  documentIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Document'
+  }],
+  
   ownershipHistory: [{
     previousOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     newOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -105,6 +117,14 @@ petRegistrySchema.index({ userPetId: 1 })
 petRegistrySchema.virtual('images', {
   ref: 'Image',
   localField: 'imageIds',
+  foreignField: '_id',
+  justOne: false
+});
+
+// Virtual for populating documents
+petRegistrySchema.virtual('documents', {
+  ref: 'Document',
+  localField: 'documentIds',
   foreignField: '_id',
   justOne: false
 });
@@ -245,6 +265,7 @@ petRegistrySchema.statics.ensureRegistered = async function (petData, state = {}
     species,
     breed,
     imageIds = [],
+    documentIds = [],
     source,
     petShopItemId,
     adoptionPetId,
@@ -263,6 +284,7 @@ petRegistrySchema.statics.ensureRegistered = async function (petData, state = {}
       species,
       breed,
       imageIds: Array.isArray(imageIds) ? imageIds : [],
+      documentIds: Array.isArray(documentIds) ? documentIds : [],
       source: source || 'core',
       sourceLabel: source === 'adoption' ? 'Adoption Center' : 
                   source === 'petshop' ? 'Pet Shop' : 
@@ -302,6 +324,7 @@ petRegistrySchema.statics.ensureRegistered = async function (petData, state = {}
           species,
           breed,
           imageIds: Array.isArray(imageIds) ? imageIds : [],
+          documentIds: Array.isArray(documentIds) ? documentIds : [],
           source: source || 'core',
           updatedBy: firstAddedBy || undefined,
           lastSeenAt: new Date()
@@ -391,7 +414,15 @@ petRegistrySchema.statics.getFullPetDetails = async function (petCode) {
       .populate('speciesId', 'name displayName')
       .populate('breedId', 'name')
       .populate('ownerId', 'name email')
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email')
+      .populate('imageIds')
+      .populate('documentIds');
+    
+    // Manually populate the virtual 'images' and 'documents' fields
+    if (detailedPet) {
+      await detailedPet.populate('images');
+      await detailedPet.populate('documents');
+    }
   } else if (registryEntry.petShopItemId) {
     // Get petshop pet details
     const PetShopItem = mongoose.model('PetInventoryItem');
@@ -399,12 +430,28 @@ petRegistrySchema.statics.getFullPetDetails = async function (petCode) {
       .populate('speciesId', 'name displayName')
       .populate('breedId', 'name')
       .populate('storeId', 'name')
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email')
+      .populate('imageIds')
+      .populate('documentIds');
+    
+    // Manually populate the virtual 'images' and 'documents' fields
+    if (detailedPet) {
+      await detailedPet.populate('images');
+      await detailedPet.populate('documents');
+    }
   } else if (registryEntry.adoptionPetId) {
     // Get adoption pet details
     const AdoptionPet = mongoose.model('AdoptionPet');
     detailedPet = await AdoptionPet.findById(registryEntry.adoptionPetId)
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email')
+      .populate('imageIds')
+      .populate('documentIds');
+    
+    // Manually populate the virtual 'images' and 'documents' fields
+    if (detailedPet) {
+      await detailedPet.populate('images');
+      await detailedPet.populate('documents');
+    }
   }
 
   return {
