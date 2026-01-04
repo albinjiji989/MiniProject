@@ -1,81 +1,80 @@
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import UserLayout from '../layouts/UserLayout'
-import UserDashboard from '../pages/User/Dashboard'
+import UserLayout from '../components/Layout/UserLayout'
+import UserDashboard from '../pages/User/ModernUserDashboard'
 import UserProfile from '../pages/User/Profile'
 import UserPets from '../pages/User/Pets'
-import UserAdoptionApplications from '../modules/users/Adoption/Applications'
-import UserAdoptionApplicationDetails from '../modules/users/Adoption/ApplicationDetails'
-import UserPetDetails from '../pages/User/PetDetails'
-import PetAdoptionForm from '../modules/users/Adoption/AdoptionForm'
-import UserAdoptionWizard from '../modules/users/Adoption/Wizard'
-import AdoptionPayment from '../modules/users/Adoption/Payment'
-import AdoptionSuccess from '../modules/users/Adoption/Success'
-import UserAdoptionHistory from '../modules/users/Adoption/History'
-import UserAdoptionPetDetails from '../modules/users/Adoption/PetDetails'
+import UserAdoptionApplications from '../pages/User/Adoption/AdoptionApplications';
+import UserAdoptionApplicationDetails from '../pages/User/Adoption/AdoptionApplications';
+import UserPetDetails from '../pages/User/Pets/Details';
+import PetAdoptionForm from '../pages/User/Adoption/Adoption';
+import UserAdoptionWizard from '../pages/User/Adoption/ApplyWizard/ApplyLayout';
+import AdoptionApplications from '../pages/User/Adoption/AdoptionApplications'
+import UserAdoptionPetDetails from '../pages/User/Adoption/UserAdoptedPetDetails'
 import UserVetAppointments from '../pages/User/Veterinary/VeterinaryAppointments'
-import PetCareCalendar from '../pages/User/PetCare/Calendar'
-import PetHealthRecords from '../pages/User/PetCare/HealthRecords'
-import PetVaccinationHistory from '../pages/User/PetCare/VaccinationHistory'
-import PetMedicalRecords from '../pages/User/PetCare/MedicalRecords'
-import PetInsurance from '../pages/User/PetCare/Insurance'
-import PetShopUserDashboard from '../modules/users/PetShop/Dashboard'
-import PetShopUserProducts from '../modules/users/PetShop/Products'
-import PetShopUserCart from '../modules/users/PetShop/Cart'
-import PetShopUserCheckout from '../modules/users/PetShop/Checkout'
-import PetShopUserOrders from '../modules/users/PetShop/Orders'
-import PetShopUserOrderDetails from '../modules/users/PetShop/OrderDetails'
-import PetShopUserWishlist from '../modules/users/PetShop/Wishlist'
-import PetShopUserReviews from '../modules/users/PetShop/Reviews'
-import PetShopUserAddress from '../modules/users/PetShop/Address'
-import PetShopUserPaymentMethods from '../modules/users/PetShop/PaymentMethods'
-import PetShopUserProfile from '../modules/users/PetShop/Profile'
-import TemporaryCareUserDashboard from '../modules/users/TemporaryCare/Dashboard'
-import TemporaryCareUserBookings from '../modules/users/TemporaryCare/Bookings'
-import TemporaryCareUserCaregivers from '../modules/users/TemporaryCare/Caregivers'
-import TemporaryCareUserFacilities from '../modules/users/TemporaryCare/Facilities'
-import TemporaryCareUserBookingForm from '../modules/users/TemporaryCare/BookingForm'
-import TemporaryCareUserBookingDetails from '../modules/users/TemporaryCare/BookingDetails'
-import TemporaryCareUserPets from '../modules/users/TemporaryCare/Pets'
-import TemporaryCareUserReviews from '../modules/users/TemporaryCare/Reviews'
-import TemporaryCareUserPayments from '../modules/users/TemporaryCare/Payments'
-import EcommerceUserDashboard from '../modules/users/Ecommerce/Dashboard'
-import EcommerceUserProducts from '../modules/users/Ecommerce/Products'
-import EcommerceUserCart from '../modules/users/Ecommerce/Cart'
-import EcommerceUserCheckout from '../modules/users/Ecommerce/Checkout'
-import EcommerceUserOrders from '../modules/users/Ecommerce/Orders'
-import EcommerceUserOrderDetails from '../modules/users/Ecommerce/OrderDetails'
-import EcommerceUserWishlist from '../modules/users/Ecommerce/Wishlist'
-import EcommerceUserReviews from '../modules/users/Ecommerce/Reviews'
-import EcommerceUserAddress from '../modules/users/Ecommerce/Address'
-import EcommerceUserPaymentMethods from '../modules/users/Ecommerce/PaymentMethods'
-import EcommerceUserProfile from '../modules/users/Ecommerce/Profile'
-import PharmacyUserDashboard from '../modules/users/Pharmacy/Dashboard'
-import PharmacyUserMedications from '../modules/users/Pharmacy/Medications'
-import PharmacyUserPrescriptions from '../modules/users/Pharmacy/Prescriptions'
-import PharmacyUserOrderHistory from '../modules/users/Pharmacy/OrderHistory'
-import PharmacyUserPharmacies from '../modules/users/Pharmacy/Pharmacies'
-import PharmacyUserCart from '../modules/users/Pharmacy/Cart'
-import PharmacyUserCheckout from '../modules/users/Pharmacy/Checkout'
-import PharmacyUserOrderDetails from '../modules/users/Pharmacy/OrderDetails'
-import RescueUserDashboard from '../modules/users/Rescue/Dashboard'
-import RescueUserPets from '../modules/users/Rescue/Pets'
-import RescueUserEvents from '../modules/users/Rescue/Events'
-import RescueUserVolunteer from '../modules/users/Rescue/Volunteer'
-import RescueUserDonations from '../modules/users/Rescue/Donations'
-import RescueUserStories from '../modules/users/Rescue/Stories'
-import RescueUserAdoptionForm from '../modules/users/Rescue/AdoptionForm'
-import RescueUserPetDetails from '../modules/users/Rescue/PetDetails'
-import VeterinaryUserDashboard from '../modules/users/Veterinary/Dashboard'
-import VeterinaryUserAppointments from '../modules/users/Veterinary/Appointments'
-import VeterinaryUserSchedule from '../modules/users/Veterinary/Schedule'
-import VeterinaryUserServices from '../modules/users/Veterinary/Services'
-import VeterinaryUserClinics from '../modules/users/Veterinary/Clinics'
-import VeterinaryUserBooking from '../modules/users/Veterinary/Booking'
-import VeterinaryUserBookingForm from '../modules/users/Veterinary/BookingForm'
-import VeterinaryUserBookingDetails from '../modules/users/Veterinary/BookingDetails'
-import VeterinaryUserMedicalRecords from '../modules/users/Veterinary/MedicalRecords'
-import VeterinaryUserPrescriptions from '../modules/users/Veterinary/Prescriptions'
+import PetCareCalendar from '../pages/User/MyOwnedPets'
+import PetHealthRecords from '../pages/User/MyOwnedPets'
+import PetVaccinationHistory from '../pages/User/MyOwnedPets'
+import PetMedicalRecords from '../pages/User/MyOwnedPets'
+import PetInsurance from '../pages/User/MyOwnedPets'
+import PetShopUserDashboard from '../pages/User/PetShop/PetShopUserDashboard'
+import BatchDetailsPage from '../pages/User/PetShop/BatchDetailsPage'
+import PetShopUserProducts from '../pages/User/PetShop/BrowsePets'
+import PetShopUserCart from '../pages/User/PetShop/Payment'
+import PetShopUserCheckout from '../pages/User/PetShop/PaymentGateway'
+import PetShopUserOrders from '../pages/User/PetShop/MyPurchasedPets'
+import PetShopUserOrderDetails from '../pages/User/PetShop/PurchasedPetDetails'
+import PetShopUserWishlist from '../pages/User/PetShop/Wishlist'
+import PetShopUserReviews from '../pages/User/PetShop/MyPurchasedPets'
+import PetShopUserAddress from '../pages/User/PetShop/Payment'
+import PetShopUserPaymentMethods from '../pages/User/PetShop/Payment'
+import PetShopUserProfile from '../pages/User/PetShop/UserPetShopDashboard'
+import TemporaryCareUserDashboard from '../pages/User/TemporaryCare/TemporaryCareDashboard'
+import TemporaryCareUserBookings from '../pages/User/TemporaryCare/TemporaryCare'
+import TemporaryCareUserCaregivers from '../pages/User/TemporaryCare/TemporaryCare'
+import TemporaryCareUserFacilities from '../pages/User/TemporaryCare/TemporaryCare'
+import TemporaryCareUserBookingForm from '../pages/User/TemporaryCare/RequestForm'
+import TemporaryCareUserBookingDetails from '../pages/User/TemporaryCare/TemporaryCareDetails'
+import TemporaryCareUserPets from '../pages/User/TemporaryCare/TemporaryCare'
+import TemporaryCareUserReviews from '../pages/User/TemporaryCare/TemporaryCare'
+import TemporaryCareUserPayments from '../pages/User/TemporaryCare/Payment'
+import EcommerceUserDashboard from '../pages/User/Ecommerce/EcommerceDashboard'
+import EcommerceUserProducts from '../pages/User/Ecommerce/Ecommerce'
+import EcommerceUserCart from '../pages/User/Ecommerce/Cart'
+import EcommerceUserCheckout from '../pages/User/Ecommerce/Cart'
+import EcommerceUserOrders from '../pages/User/Ecommerce/Orders'
+import EcommerceUserOrderDetails from '../pages/User/Ecommerce/ProductDetails'
+import EcommerceUserWishlist from '../pages/User/Ecommerce/Ecommerce'
+import EcommerceUserReviews from '../pages/User/Ecommerce/Ecommerce'
+import EcommerceUserAddress from '../pages/User/Ecommerce/Ecommerce'
+import EcommerceUserPaymentMethods from '../pages/User/Ecommerce/Cart'
+import EcommerceUserProfile from '../pages/User/Ecommerce/EcommerceDashboard'
+import PharmacyUserDashboard from '../pages/User/Pharmacy/PharmacyDashboard'
+import PharmacyUserMedications from '../pages/User/Pharmacy/Pharmacy'
+import PharmacyUserPrescriptions from '../pages/User/Pharmacy/Pharmacy'
+import PharmacyUserOrderHistory from '../pages/User/Pharmacy/PharmacyDashboard'
+import PharmacyUserPharmacies from '../pages/User/Pharmacy/Pharmacy'
+import PharmacyUserCart from '../pages/User/Pharmacy/Pharmacy'
+import PharmacyUserCheckout from '../pages/User/Pharmacy/Pharmacy'
+import PharmacyUserOrderDetails from '../pages/User/Pharmacy/PharmacyDashboard'
+import RescueUserDashboard from '../pages/User/Rescue/RescueDashboard'
+import RescueUserPets from '../pages/User/Rescue/Rescue'
+import RescueUserEvents from '../pages/User/Rescue/Rescue'
+import RescueUserVolunteer from '../pages/User/Rescue/Rescue'
+import RescueUserDonations from '../pages/User/Rescue/Rescue'
+import RescueUserStories from '../pages/User/Rescue/Rescue'
+import RescueUserAdoptionForm from '../pages/User/Rescue/Rescue'
+import RescueUserPetDetails from '../pages/User/Rescue/Rescue'
+import VeterinaryUserDashboard from '../pages/User/Veterinary/VeterinaryDashboard'
+import VeterinaryUserAppointments from '../pages/User/Veterinary/VeterinaryAppointments'
+import VeterinaryUserSchedule from '../pages/User/Veterinary/VeterinaryDashboard'
+import VeterinaryUserServices from '../pages/User/Veterinary/Veterinary'
+import VeterinaryUserClinics from '../pages/User/Veterinary/Veterinary'
+import VeterinaryUserBooking from '../pages/User/Veterinary/SimpleVeterinaryBooking'
+import VeterinaryUserBookingForm from '../pages/User/Veterinary/VeterinaryBookAppointment'
+import VeterinaryUserBookingDetails from '../pages/User/Veterinary/SimpleVeterinaryAppointmentDetails'
+import VeterinaryUserMedicalRecords from '../pages/User/Veterinary/VeterinaryMedicalRecords'
+import VeterinaryUserPrescriptions from '../pages/User/Veterinary/Veterinary'
 import PublicUserDashboard from '../pages/User/PublicUserDashboard'
 
 const UserRoutes = () => {
@@ -91,6 +90,7 @@ const UserRoutes = () => {
         {/* User: Pets */}
         <Route path="/pets" element={<UserPets />} />
         <Route path="/pets/:id" element={<UserPetDetails />} />
+        <Route path="/pets/centralized/:id" element={<UserPetDetails />} />
         
         {/* User: Adoptions */}
         <Route path="/adoption/*" element={
@@ -99,9 +99,9 @@ const UserRoutes = () => {
             <Route path="/applications/:id" element={<UserAdoptionApplicationDetails />} />
             <Route path="/apply/:petId" element={<PetAdoptionForm />} />
             <Route path="/wizard/*" element={<UserAdoptionWizard />} />
-            <Route path="/payment/:applicationId" element={<AdoptionPayment />} />
-            <Route path="/success/:applicationId" element={<AdoptionSuccess />} />
-            <Route path="/history" element={<UserAdoptionHistory />} />
+            <Route path="/payment/:applicationId" element={<AdoptionApplications />} />
+            <Route path="/success/:applicationId" element={<AdoptionApplications />} />
+            <Route path="/history" element={<AdoptionApplications />} />
             <Route path="/pets/:id" element={<UserAdoptionPetDetails />} />
             <Route path="/" element={<Navigate to="/user/adoption/applications" replace />} />
           </Routes>
@@ -140,6 +140,7 @@ const UserRoutes = () => {
         <Route path="/petshop/*" element={
           <Routes>
             <Route path="/dashboard" element={<PetShopUserDashboard />} />
+            <Route path="/batch/:batchId" element={<BatchDetailsPage />} />
             <Route path="/products" element={<PetShopUserProducts />} />
             <Route path="/cart" element={<PetShopUserCart />} />
             <Route path="/checkout" element={<PetShopUserCheckout />} />

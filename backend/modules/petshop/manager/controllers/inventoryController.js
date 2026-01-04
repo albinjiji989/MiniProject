@@ -6,6 +6,11 @@ const path = require('path');
 // Inventory Management Functions
 const listInventory = async (req, res) => {
   try {
+    // Check if user is authenticated
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Unauthorized', error: 'User not authenticated' });
+    }
+
     const { 
       page = 1, 
       limit = 10, 
@@ -19,7 +24,31 @@ const listInventory = async (req, res) => {
       maxPrice
     } = req.query;
 
-    const filter = { ...getStoreFilter(req.user), isActive: true };
+    // Get store filter early
+    const storeFilter = getStoreFilter(req.user);
+    console.log('listInventory - user:', { id: req.user._id, role: req.user.role, storeId: req.user.storeId });
+    console.log('listInventory - storeFilter:', storeFilter);
+    
+    // Check if store filter indicates no access (only check for _id: null)
+    if (storeFilter && Object.prototype.hasOwnProperty.call(storeFilter, '_id') && storeFilter._id === null) {
+      return res.json({
+        success: true,
+        data: {
+          items: [],
+          pagination: {
+            current: parseInt(page),
+            pages: 0,
+            total: 0
+          }
+        }
+      });
+    }
+
+    // Parse pagination parameters safely
+    const parsedPage = Math.max(1, parseInt(page) || 1);
+    const parsedLimit = Math.min(100, Math.max(1, parseInt(limit) || 10)); // Cap limit at 100
+
+    const filter = { ...storeFilter, isActive: true };
     
     // By default, exclude removed_from_sale items unless specifically requested
     if (status !== 'removed_from_sale') {
@@ -56,13 +85,9 @@ const listInventory = async (req, res) => {
       .populate('breedId', 'name')
       .populate('imageIds') // Populate the imageIds field
       .sort(sort)
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    // Manually populate the virtual 'images' field for each item
-    for (const item of items) {
-      await item.populate('images');
-    }
+      .limit(parsedLimit)
+      .skip((parsedPage - 1) * parsedLimit)
+      .lean(); // Use lean() for better performance
 
     const total = await PetInventoryItem.countDocuments(filter);
 
@@ -71,15 +96,18 @@ const listInventory = async (req, res) => {
       data: {
         items,
         pagination: {
-          current: parseInt(page),
-          pages: Math.ceil(total / limit),
+          current: parsedPage,
+          pages: Math.ceil(total / parsedLimit),
           total
         }
       }
     });
   } catch (error) {
-    console.error('Get inventory error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Get inventory error:', error.message || error);
+    console.error('Stack trace:', error.stack);
+    console.error('User:', req.user ? `${req.user._id} (${req.user.role})` : 'unauthenticated');
+    console.error('Query params:', req.query);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 

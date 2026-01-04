@@ -6,15 +6,17 @@ import {
   Button, 
   Grid, 
   Alert,
+  AlertTitle,
   Card,
   CardContent,
   List,
   ListItem,
   ListItemText,
   Divider,
-  CircularProgress
+  CircularProgress,
+  IconButton
 } from '@mui/material'
-import { Check as CheckIcon } from '@mui/icons-material'
+import { Check as CheckIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material'
 import { apiClient } from '../../../../services/api'
 
 const KEY = 'petshop_wizard'
@@ -23,7 +25,6 @@ export default function StepReviewImproved() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
   const [formData, setFormData] = useState({})
   const [categoryName, setCategoryName] = useState('')
   const [speciesName, setSpeciesName] = useState('')
@@ -35,7 +36,8 @@ export default function StepReviewImproved() {
       const data = JSON.parse(localStorage.getItem(KEY)) || {}
       setFormData(data)
       fetchDisplayNames(data)
-    } catch { 
+    } catch (err) { 
+      console.error('Error loading wizard data:', err)
       setFormData({})
     }
   }, [])
@@ -44,221 +46,128 @@ export default function StepReviewImproved() {
   const fetchDisplayNames = async (data) => {
     if (!data.classification) return;
 
-    // First, try to use names from localStorage if available
-    let hasNamesFromStorage = false;
-
-    if (data.classification.categoryName && data.classification.categoryName !== data.classification.categoryId) {
-      setCategoryName(data.classification.categoryName);
-      hasNamesFromStorage = true;
-    } else if (data.classification.categoryId) {
-      setCategoryName(`Category ID: ${data.classification.categoryId.substring(0, 8)}...`);
+    // Use names from localStorage if available
+    if (data.classification.categoryName) {
+      setCategoryName(data.classification.categoryName)
     }
-
-    if (data.classification.speciesName && data.classification.speciesName !== data.classification.speciesId) {
-      setSpeciesName(data.classification.speciesName);
-      hasNamesFromStorage = true;
-    } else if (data.classification.speciesId) {
-      setSpeciesName(`Species ID: ${data.classification.speciesId.substring(0, 8)}...`);
+    if (data.classification.speciesName) {
+      setSpeciesName(data.classification.speciesName)
     }
-
-    if (data.classification.breedName && data.classification.breedName !== data.classification.breedId) {
-      setBreedName(data.classification.breedName);
-      hasNamesFromStorage = true;
-    } else if (data.classification.breedId) {
-      setBreedName(`Breed ID: ${data.classification.breedId.substring(0, 8)}...`);
-    }
-
-    // If we don't have names from storage, try to fetch them from API
-    if (!hasNamesFromStorage && (data.classification.categoryId || data.classification.speciesId || data.classification.breedId)) {
-      // Fetch category name
-      if (data.classification.categoryId && !data.classification.categoryName) {
-        try {
-          const categoryRes = await apiClient.get(`/admin/pet-categories/${data.classification.categoryId}`);
-          const categoryName = categoryRes.data?.data?.name || categoryRes.data?.data?.displayName;
-          if (categoryName) {
-            setCategoryName(categoryName);
-          }
-        } catch (err) {
-          console.log('Failed to fetch category from admin endpoint, trying alternative');
-          try {
-            // Try a different endpoint if available
-            const categoryRes = await apiClient.get(`/user/pets/categories/${data.classification.categoryId}`);
-            const categoryName = categoryRes.data?.data?.name || categoryRes.data?.data?.displayName;
-            if (categoryName) {
-              setCategoryName(categoryName);
-            }
-          } catch (err2) {
-            console.log('Failed to fetch category from user endpoint');
-          }
-        }
-      }
-
-      // Fetch species name
-      if (data.classification.speciesId && !data.classification.speciesName) {
-        try {
-          const speciesRes = await apiClient.get(`/admin/species/${data.classification.speciesId}`);
-          const speciesName = speciesRes.data?.data?.name || speciesRes.data?.data?.displayName;
-          if (speciesName) {
-            setSpeciesName(speciesName);
-          }
-        } catch (err) {
-          console.log('Failed to fetch species from admin endpoint, trying alternative');
-          try {
-            // Try a different endpoint if available
-            const speciesRes = await apiClient.get(`/user/pets/species/${data.classification.speciesId}`);
-            const speciesName = speciesRes.data?.data?.name || speciesRes.data?.data?.displayName;
-            if (speciesName) {
-              setSpeciesName(speciesName);
-            }
-          } catch (err2) {
-            console.log('Failed to fetch species from user endpoint');
-          }
-        }
-      }
-
-      // Fetch breed name
-      if (data.classification.breedId && !data.classification.breedName) {
-        try {
-          const breedRes = await apiClient.get(`/admin/breeds/${data.classification.breedId}`);
-          const breedName = breedRes.data?.data?.name;
-          if (breedName) {
-            setBreedName(breedName);
-          }
-        } catch (err) {
-          console.log('Failed to fetch breed from admin endpoint, trying alternative');
-          try {
-            // Try a different endpoint if available
-            const breedRes = await apiClient.get(`/user/pets/breeds/${data.classification.breedId}`);
-            const breedName = breedRes.data?.data?.name;
-            if (breedName) {
-              setBreedName(breedName);
-            }
-          } catch (err2) {
-            console.log('Failed to fetch breed from user endpoint');
-          }
-        }
-      }
+    if (data.classification.breedName) {
+      setBreedName(data.classification.breedName)
     }
   }
 
   const handleSubmit = async () => {
     try {
-      setIsSubmitting(true);
-      setError('');
+      setLoading(true)
+      setError('')
       
       // Validation
-      if (!formData.basic?.name?.trim()) {
-        throw new Error('Pet name is required');
+      const maleCount = parseInt(formData.gender?.maleCount) || 0
+      const femaleCount = parseInt(formData.gender?.femaleCount) || 0
+      const totalStock = maleCount + femaleCount
+      
+      if (!formData.basic?.stockName?.trim()) {
+        throw new Error('Stock name is required')
       }
       
       if (!formData.classification?.categoryId || !formData.classification?.speciesId || !formData.classification?.breedId) {
-        throw new Error('Category, species, and breed are required');
+        throw new Error('Category, species, and breed are required')
       }
       
-      if (!formData.pricing?.unitCost || !formData.pricing?.price) {
-        throw new Error('Cost price and selling price are required');
+      if (!formData.pricing?.price) {
+        throw new Error('Selling price is required')
       }
-      
-      // Calculate totals
-      const maleCount = parseInt(formData.gender?.maleCount) || 0;
-      const femaleCount = parseInt(formData.gender?.femaleCount) || 0;
-      const totalStock = maleCount + femaleCount;
       
       if (totalStock <= 0) {
-        throw new Error('At least one pet must be added to stock');
+        throw new Error('At least one pet must be added to stock')
       }
       
-      // Create a single stock record with gender distribution
-      // This matches the requirement: one stock entry with male/female counts
+      // Build complete stock submission data
       const stockData = {
         // Basic info
-        name: formData.basic?.name || `Pet Stock - ${breedName}`,
+        stockName: formData.basic?.stockName,
         age: formData.basic?.age ? Number(formData.basic.age) : 0,
         ageUnit: formData.basic?.ageUnit || 'months',
         color: formData.basic?.color || '',
-        coatType: formData.basic?.coatType || '',
+        size: formData.basic?.size || '',
         
         // Classification
         categoryId: formData.classification?.categoryId,
         speciesId: formData.classification?.speciesId,
         breedId: formData.classification?.breedId,
         
-        // Pricing & Stock
-        unitCost: formData.pricing?.unitCost ? Number(formData.pricing.unitCost) : 0,
-        price: formData.pricing?.price ? Number(formData.pricing.price) : 0,
-        quantity: totalStock,
-        maleCount: maleCount,
-        femaleCount: femaleCount,
-        source: formData.pricing?.source || 'Other',
-        arrivalDate: formData.pricing?.arrivalDate || new Date().toISOString().split('T')[0],
+        // Pricing
+        price: Number(formData.pricing?.price),
+        discountPrice: formData.pricing?.discountPrice ? Number(formData.pricing.discountPrice) : null,
+        tags: formData.pricing?.tags || [],
         
-        // Notes
-        notes: formData.basic?.notes || '',
-        
-        // No images at this stage - will be added in separate step
-        maleImageIds: [],
-        femaleImageIds: []
-      };
+        // Gender & Images
+        maleCount,
+        femaleCount,
+        maleImages: formData.gender?.maleImages || [],
+        femaleImages: formData.gender?.femaleImages || []
+      }
       
-      console.log('🚀 Creating stock with data:', stockData);
+      console.log('📤 Submitting wizard data:', stockData)
       
-      // Submit to API
-      const response = await petShopStockAPI.createStock(stockData);
-      console.log('✅ Stock creation response:', response);
+      // Submit to the new wizard endpoint
+      const response = await apiClient.post('/petshop/manager/wizard/submit', stockData)
       
       if (response?.data?.success) {
-        const createdStock = response.data.data.stock;
-        
-        // Show success message
-        showSnackbar(
-          `Successfully created stock "${createdStock.name}" with ${totalStock} pets (${maleCount} male, ${femaleCount} female)!`,
-          'success'
-        );
-        
         // Clear form data
-        localStorage.removeItem('petShopWizardData');
+        localStorage.removeItem(KEY)
         
-        // Navigate to stock images management page
-        setTimeout(() => {
-          navigate(`/manager/petshop/manage-stock-images/${createdStock._id}`);
-        }, 2000);
+        // Show success and navigate to inventory
+        alert(`✅ Stock created successfully! ${response.data.data.generatedPetsCount} pets generated.`)
+        navigate('/manager/petshop/inventory')
       } else {
-        throw new Error(response?.data?.message || 'Failed to create stock');
+        throw new Error(response?.data?.message || 'Failed to create stock')
       }
     } catch (err) {
-      console.error('❌ Stock creation error:', err);
-      const errorMsg = err.response?.data?.message || err.message || 'An unexpected error occurred';
-      setError(errorMsg);
-      showSnackbar(`Error: ${errorMsg}`, 'error');
+      console.error('❌ Submission error:', err)
+      
+      // Extract meaningful error message
+      let errorMsg = 'Failed to create stock. Please try again.'
+      
+      if (err.response?.data?.message) {
+        errorMsg = err.response.data.message
+      } else if (err.response?.status === 401) {
+        errorMsg = 'Your session has expired. Please log in again.'
+      } else if (err.response?.status === 403) {
+        errorMsg = 'You do not have permission to create stocks. Please contact your administrator.'
+      } else if (err.response?.status === 400) {
+        errorMsg = err.response.data?.message || 'Invalid data. Please check all fields and try again.'
+      } else if (err.response?.status === 413) {
+        errorMsg = 'Images are too large. Please use smaller images or reduce the number of images.'
+      } else if (err.response?.status === 500) {
+        errorMsg = 'Server error: ' + (err.response.data?.message || 'Please try again later or contact support.')
+      } else if (err.code === 'ERR_NETWORK') {
+        errorMsg = 'Connection failed. Make sure the server is running and accessible.'
+      } else if (err.message === 'Network Error') {
+        errorMsg = err.response?.data?.message || 'Server connection failed. Please check if backend is running on http://localhost:5000'
+      }
+      
+      setError(errorMsg)
+      alert(errorMsg)
     } finally {
-      setIsSubmitting(false);
+      setLoading(false)
     }
-  };
+  }
 
-  const back = () => {
+  const handleBack = () => {
     navigate('/manager/petshop/wizard/gender')
   }
 
-  // Helper function to get display value or placeholder
+  // Helper function to format display values
   const displayValue = (value, placeholder = 'Not provided') => {
-    // If the value is already a formatted display (contains "ID:" or "Invalid")
-    if (value && typeof value === 'string' && (value.includes('ID:') || value.includes('Invalid'))) {
-      return value;
-    }
-    
-    // If the value looks like an unformatted ID (long string starting with alphanumeric characters)
-    if (value && typeof value === 'string' && value.length > 10 && /^[a-f0-9]/.test(value)) {
-      // Format it as a short ID display
-      return `${value.substring(0, 8)}...`;
-    }
-    
-    return value || <span style={{ color: '#999' }}>{placeholder}</span>;
-  };
+    return value || <span style={{ color: '#999' }}>{placeholder}</span>
+  }
 
-  const totalStock = formData.pricing?.quantity ? parseInt(formData.pricing.quantity) : 1
-  const genderData = formData.genderClassification || {}
-  const maleCount = genderData.maleQuantity || 0
-  const femaleCount = genderData.femaleQuantity || 0
+  const maleCount = parseInt(formData.gender?.maleCount) || 0
+  const femaleCount = parseInt(formData.gender?.femaleCount) || 0
+  const totalStock = maleCount + femaleCount
 
   return (
     <Box sx={{ p: 3 }}>
@@ -266,8 +175,8 @@ export default function StepReviewImproved() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <IconButton 
-            onClick={onBack} 
-            disabled={isSubmitting}
+            onClick={handleBack} 
+            disabled={loading}
             sx={{ mr: 2 }}
           >
             <ArrowBackIcon />
@@ -278,29 +187,68 @@ export default function StepReviewImproved() {
         </Box>
       </Box>
 
+      {/* Error Alert */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
+
       {/* Info Alert */}
       <Alert severity="info" sx={{ mb: 3 }}>
-        <AlertTitle>Stock-Based Workflow</AlertTitle>
+        <AlertTitle>Bulk Pet Stock Creation</AlertTitle>
         <Typography variant="body2">
-          You're creating a stock record for similar pets. After creation, you'll be able to:
+          You're creating a stock record for similar pets. This will:
         </Typography>
         <ul>
-          <li>Add one image for all male pets in this stock</li>
-          <li>Add one image for all female pets in this stock</li>
-          <li>Generate individual pets with unique codes when purchased</li>
+          <li>Create one stock entry for bulk pet management</li>
+          <li>Generate {totalStock} individual pets with unique codes ({maleCount} male, {femaleCount} female)</li>
+          <li>Associate shared images for all pets in this stock</li>
         </ul>
-        <Typography variant="body2">
-          <strong>Note:</strong> Only 2 images are needed for this stock (one male, one female). 
-          Individual pets will be generated with these images when purchased.
-        </Typography>
       </Alert>
 
-      {/* Classification */}
-      <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Classification</Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+      {/* Summary Cards */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        {/* Basic Info Card */}
+        <Grid item xs={12} sm={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2 }}>Basic Information</Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText 
+                    primary="Stock Name" 
+                    secondary={displayValue(formData.basic?.stockName)} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Age" 
+                    secondary={formData.basic?.age ? `${formData.basic.age} ${formData.basic.ageUnit || 'months'}` : 'Not provided'} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Color" 
+                    secondary={displayValue(formData.basic?.color)} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Size" 
+                    secondary={displayValue(formData.basic?.size)} 
+                  />
+                </ListItem>
+              </List>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Classification Card */}
+        <Grid item xs={12} sm={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2 }}>Classification</Typography>
               <List dense>
                 <ListItem>
                   <ListItemText 
@@ -314,10 +262,6 @@ export default function StepReviewImproved() {
                     secondary={displayValue(speciesName, 'Not selected')} 
                   />
                 </ListItem>
-              </List>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <List dense>
                 <ListItem>
                   <ListItemText 
                     primary="Breed" 
@@ -325,93 +269,38 @@ export default function StepReviewImproved() {
                   />
                 </ListItem>
               </List>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
-      
-      {/* Basic Information */}
-      <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Basic Information</Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Pricing Card */}
+        <Grid item xs={12} sm={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2 }}>Pricing</Typography>
               <List dense>
                 <ListItem>
                   <ListItemText 
-                    primary="Age" 
-                    secondary={formData.basic?.age ? `${formData.basic.age} ${formData.basic.ageUnit || 'months'}` : 'Not provided'} 
-                  />
-                </ListItem>
-              </List>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <List dense>
-                <ListItem>
-                  <ListItemText 
-                    primary="Notes" 
-                    secondary={displayValue(formData.basic?.notes)} 
-                  />
-                </ListItem>
-              </List>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
-      
-      {/* Pricing & Stock */}
-      <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Pricing & Stock</Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <List dense>
-                <ListItem>
-                  <ListItemText 
-                    primary="Unit Cost" 
-                    secondary={formData.pricing?.unitCost ? `₹${Number(formData.pricing.unitCost).toFixed(2)}` : 'Not provided'} 
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText 
-                    primary="Selling Price" 
+                    primary="Price" 
                     secondary={formData.pricing?.price ? `₹${Number(formData.pricing.price).toFixed(2)}` : 'Not provided'} 
                   />
                 </ListItem>
-              </List>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <List dense>
                 <ListItem>
                   <ListItemText 
-                    primary="Quantity" 
-                    secondary={totalStock} 
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText 
-                    primary="Source" 
-                    secondary={displayValue(formData.pricing?.source)} 
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText 
-                    primary="Arrival Date" 
-                    secondary={displayValue(formData.pricing?.arrivalDate)} 
+                    primary="Discount Price" 
+                    secondary={formData.pricing?.discountPrice ? `₹${Number(formData.pricing.discountPrice).toFixed(2)}` : 'N/A'} 
                   />
                 </ListItem>
               </List>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
-      
-      {/* Gender Distribution */}
-      <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Gender Distribution</Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Gender Distribution Card */}
+        <Grid item xs={12} sm={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2 }}>Gender Distribution</Typography>
               <List dense>
                 <ListItem>
                   <ListItemText 
@@ -425,40 +314,31 @@ export default function StepReviewImproved() {
                     secondary={femaleCount} 
                   />
                 </ListItem>
-              </List>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <List dense>
+                <Divider sx={{ my: 1 }} />
                 <ListItem>
                   <ListItemText 
-                    primary="Total" 
-                    secondary={totalStock} 
+                    primary="Total Pets to Generate" 
+                    secondary={<Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>{totalStock}</Typography>} 
                   />
                 </ListItem>
               </List>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
-      
-      {/* Stock Information */}
-      <Card>
-        <CardContent>
-          <Typography variant="h6" sx={{ mb: 2 }}>Stock Information</Typography>
-          <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-            This stock will be added to your inventory. Individual pets will be generated with unique pet codes when customers purchase from this stock.
-          </Typography>
-          <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-            Note: Only 2 images are needed for this stock (one male, one female). Individual pets will be generated with these images when purchased.
-          </Typography>
-        </CardContent>
-      </Card>
-      
-      {/* Actions */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Final Confirmation */}
+      <Alert severity="warning" sx={{ mb: 3 }}>
+        <Typography variant="body2">
+          <strong>Before confirming:</strong> Please verify all details above are correct. Once submitted, {totalStock} individual pets will be generated with unique codes.
+        </Typography>
+      </Alert>
+
+      {/* Action Buttons */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
         <Button 
           variant="outlined" 
-          onClick={back}
+          onClick={handleBack}
           size="large"
           disabled={loading}
         >
@@ -466,12 +346,13 @@ export default function StepReviewImproved() {
         </Button>
         <Button 
           variant="contained" 
+          color="success"
           onClick={handleSubmit}
           size="large"
-          disabled={loading}
+          disabled={loading || totalStock === 0}
           startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
         >
-          {loading ? 'Submitting...' : 'Submit Stock'}
+          {loading ? 'Creating Stock...' : `Create Stock & Generate ${totalStock} Pets`}
         </Button>
       </Box>
     </Box>

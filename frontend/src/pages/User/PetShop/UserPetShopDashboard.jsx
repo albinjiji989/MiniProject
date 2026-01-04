@@ -28,7 +28,8 @@ import {
   TrendingUp as TrendingIcon,
   LocationOn as LocationIcon,
   Star as StarIcon,
-  Insights
+  Insights,
+  Event as EventIcon
 } from '@mui/icons-material'
 import { petShopAPI } from '../../../services/api'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -199,11 +200,11 @@ const UserPetShopDashboard = () => {
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       {action.icon}
                       <Typography variant="h6" sx={{ ml: 1, fontWeight: 'bold' }}>
-                        {action.label}
+                        {action.title}
                       </Typography>
                     </Box>
                     <Typography variant="body2">
-                      Access your {action.label.toLowerCase()} quickly
+                      Access your {action.title.toLowerCase()} quickly
                     </Typography>
                   </CardContent>
                 </Card>

@@ -463,25 +463,28 @@ router.post('/verify-module-admin', [
     if (invite.expiresAt < new Date()) return res.status(400).json({ success: false, message: 'OTP expired' });
     if (invite.otp !== otp) return res.status(400).json({ success: false, message: 'Invalid OTP' });
 
-    // Create user with temp password
+    // Generate temp password
     const tempPassword = Math.random().toString(36).slice(-10) + '1A';
     const name = invite.name;
     const phone = invite.phone || '';
+    
+    // Create user with temp password
     const user = new User({
       name,
       email,
       phone,
-      password: tempPassword,
       role: `${module}_manager`,
       authProvider: 'local',
-      mustChangePassword: true
+      mustChangePassword: true,
+      password: tempPassword
     });
+    
     await user.save();
 
     invite.verified = true;
     await invite.save();
 
-    // Email login credentials
+    // Send credentials email ONLY after OTP verification
     const subject = `Your ${module} manager account details`;
     const html = `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;background:#0b0f1a;padding:24px;color:#e6e9ef;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:rgba(255,255,255,0.06);backdrop-filter: blur(10px); border-radius:16px; overflow:hidden;">
@@ -491,7 +494,13 @@ router.post('/verify-module-admin', [
         <tr><td style="padding:24px 28px;">Use the credentials below to sign in and you will be asked to change your password immediately.</td></tr>
         <tr><td style="padding:0 28px 24px;"><b>Email:</b> ${email}<br/><b>Temporary Password:</b> ${tempPassword}</td></tr>
       </table></div>`;
-    await sendMail({ to: email, subject, html });
+    
+    try {
+      await sendMail({ to: email, subject, html });
+    } catch (emailError) {
+      console.error('Failed to send credentials email:', emailError);
+      // Continue even if email fails - user can still attempt login
+    }
 
     res.json({ success: true, message: 'Module manager created and credentials emailed' });
   } catch (error) {
@@ -523,20 +532,24 @@ router.post('/verify-module-manager', [
     const tempPassword = Math.random().toString(36).slice(-10) + '1A';
     const name = invite.name;
     const phone = invite.phone || '';
+    
+    // Create user with temp password
     const user = new User({
       name,
       email,
       phone,
-      password: tempPassword,
       role: `${module}_manager`,
       authProvider: 'local',
-      mustChangePassword: true
+      mustChangePassword: true,
+      password: tempPassword
     });
+    
     await user.save();
 
     invite.verified = true;
     await invite.save();
 
+    // Send credentials email ONLY after OTP verification
     const subject = `Your ${module} manager account details`;
     const html = `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;background:#0b0f1a;padding:24px;color:#e6e9ef;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:rgba(255,255,255,0.06);backdrop-filter: blur(10px); border-radius:16px; overflow:hidden;">
@@ -546,7 +559,13 @@ router.post('/verify-module-manager', [
         <tr><td style="padding:24px 28px;">Use the credentials below to sign in and you will be asked to change your password immediately.</td></tr>
         <tr><td style="padding:0 28px 24px;"><b>Email:</b> ${email}<br/><b>Temporary Password:</b> ${tempPassword}</td></tr>
       </table></div>`;
-    await sendMail({ to: email, subject, html });
+    
+    try {
+      await sendMail({ to: email, subject, html });
+    } catch (emailError) {
+      console.error('Failed to send credentials email:', emailError);
+      // Continue even if email fails - user can still attempt login
+    }
 
     res.json({ success: true, message: 'Module manager created and credentials emailed' });
   } catch (error) {
@@ -611,12 +630,14 @@ router.post('/managers', [
     const user = new User({
       name,
       email,
-      password,
       phone: phone || '',
       authProvider: 'local',
       role: `${assignedModule}_manager`,
       assignedModule
     });
+    
+    // Set password explicitly to ensure it gets hashed by pre-save hook
+    user.password = password;
     await user.save();
 
     const moduleCount = await UserDetails.countDocuments({ assignedModule });

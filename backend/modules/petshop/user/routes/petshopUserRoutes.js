@@ -13,6 +13,8 @@ const storeController = require('../../manager/controllers/storeController');
 const enhancedReservationController = require('../../manager/controllers/enhancedReservationController');
 const petHistoryController = require('../controllers/petHistoryController');
 const stockController = require('../controllers/stockController'); // Added stock controller
+// Batch controller (reused from manager; provides public list & details)
+const batchController = require('../../manager/controllers/batchController');
 
 // User dashboard stats (auth required but no module permission)
 router.get('/stats', auth, storeController.getUserPetShopStats);
@@ -20,6 +22,10 @@ router.get('/stats', auth, storeController.getUserPetShopStats);
 // Public listings (no auth)
 router.get('/public/listings', publicController.listPublicListings);
 router.get('/public/listings/:id', publicController.getPublicListingById);
+// Public batches (no auth) - user-facing wrapper for manager batch endpoints
+router.get('/public/batches', batchController.listBatches);
+router.get('/public/batches/:id', batchController.getBatchDetails);
+router.get('/public/batches/:id/inventory', batchController.getBatchInventory);
 // Authenticated listing access (user can view if they have reservation/bought it)
 router.get('/user/listings/:id', auth, publicController.getUserAccessibleItemById);
 // Public pet shops (no auth)

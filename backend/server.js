@@ -13,10 +13,11 @@ connectDB();
 
 const app = express();
 
-// Body parser middleware
-app.use(express.json());
+// Body parser middleware - increase limit for image uploads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Enable CORS
+// Enable CORS - MUST be before helmet
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true,
@@ -30,8 +31,10 @@ app.use(require('cookie-parser')());
 // Sanitize data
 app.use(require('express-mongo-sanitize')());
 
-// Set security headers
-app.use(require('helmet')());
+// Set security headers (configured to allow CORS)
+app.use(require('helmet')({
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
 
 // Prevent XSS attacks
 app.use(require('xss-clean')());
@@ -78,6 +81,8 @@ app.use('/api/user/pets', require('./core/routes/user/user/pets'));
 app.use('/api/user-dashboard', require('./core/routes/user/userDashboard'));
 app.use('/api/user/ownership-history', require('./core/routes/user/user/ownership-history'));
 app.use('/api/pets', require('./core/routes/pet/petRoutes'));
+app.use('/api/pet-age', require('./core/routes/petAgeRoutes'));
+app.use('/api/pet-audit', require('./core/routes/petAuditRoutes'));
 
 // Management System Routes
 app.use('/api/adoption', require('./modules/adoption/routes'));

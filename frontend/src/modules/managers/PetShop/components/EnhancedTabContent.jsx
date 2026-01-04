@@ -543,9 +543,10 @@ const EnhancedTabContent = ({
               </TableCell>
               <TableCell>
                 <Box>
-                  <Typography variant="body2">
-                    <PetAgeDisplay petCode={pet.petCode} initialAge={pet.age} initialAgeUnit={pet.ageUnit} /> • {pet.gender}
-                  </Typography>
+                  <Box display="flex" alignItems="center" gap={0.5}>
+                    <PetAgeDisplay petCode={pet.petCode} initialAge={pet.age} initialAgeUnit={pet.ageUnit} />
+                    <Typography variant="body2" component="span">• {pet.gender}</Typography>
+                  </Box>
                   {pet.ageGroup && (
                     <Chip 
                       label={pet.ageGroup}

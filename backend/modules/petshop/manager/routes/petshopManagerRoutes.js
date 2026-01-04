@@ -18,6 +18,8 @@ const storeNameChangeController = require('../controllers/storeNameChangeControl
 const inventoryManagementController = require('../controllers/inventoryManagementController') // Added missing import
 const handoverController = require('../controllers/handoverController') // Added handover controller
 const stockController = require('../controllers/stockController') // Added stock controller
+const wizardController = require('../controllers/wizardController') // Added wizard controller
+const batchController = require('../controllers/batchController') // Added batch controller
 // const pricingController = require('../controllers/pricingController') // Removed pricing controller
 
 // Manager routes - require manager role
@@ -171,4 +173,27 @@ router.post('/stocks/generate-pets', auth, authorizeModule('petshop'), stockCont
 router.post('/stocks/:id/images', auth, authorizeModule('petshop'), upload.single('file'), stockController.uploadStockImages);
 router.delete('/stocks/:stockId/images/:imageId', auth, authorizeModule('petshop'), stockController.removeStockImage);
 
-module.exports = router;
+// Wizard Routes - for creating pet stocks with bulk generation
+router.post('/wizard/submit', auth, authorizeModule('petshop'), wizardController.submitWizard);
+router.get('/wizard/state', auth, wizardController.getWizardState);
+router.post('/wizard/step', auth, wizardController.saveWizardStep);
+
+// ============= BATCH ROUTES (New batch system) =============
+// Public list batches (no auth required)
+router.get('/batches', batchController.listBatches);
+router.get('/batches/:id', batchController.getBatchDetails);
+router.get('/batches/:id/inventory', batchController.getBatchInventory);
+
+// User reserve pet from batch
+router.post('/batches/:id/reserve', auth, batchController.reservePetFromBatch);
+
+// Manager batch operations
+router.post('/batches', auth, authorizeModule('petshop'), batchController.createBatch);
+router.put('/batches/:id', auth, authorizeModule('petshop'), batchController.updateBatch);
+router.post('/batches/:id/publish', auth, authorizeModule('petshop'), batchController.publishBatch);
+router.post('/batches/:id/archive', auth, authorizeModule('petshop'), batchController.archiveBatch);
+router.post('/batches/:batchId/confirm-reservation/:petId', auth, authorizeModule('petshop'), batchController.confirmReservation);
+router.post('/batches/:batchId/release-reservation/:petId', auth, authorizeModule('petshop'), batchController.releaseReservation);
+router.post('/batches/:batchId/mark-sold/:petId', auth, authorizeModule('petshop'), batchController.markPetAsSold);
+
+module.exports = router;module.exports = router;

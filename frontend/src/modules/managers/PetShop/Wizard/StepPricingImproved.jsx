@@ -4,14 +4,11 @@ import {
   Box, 
   Typography, 
   TextField, 
-  FormControl, 
-  InputLabel, 
-  Select, 
-  MenuItem, 
   Button, 
   Grid, 
   Alert,
-  Divider
+  Divider,
+  Paper
 } from '@mui/material'
 
 const KEY = 'petshop_wizard'
@@ -37,52 +34,20 @@ export default function StepPricingImproved() {
   const onChange = (e) => {
     const { name, value } = e.target
     save({ [name]: value })
+    if (error) setError('')
   }
 
-  const next = async () => {
-    // Validate numeric values if provided
-    if (form.unitCost && (isNaN(form.unitCost) || form.unitCost < 0)) {
-      setError('Unit cost must be a valid positive number')
-      return
-    }
-    if (form.price && (isNaN(form.price) || form.price < 0)) {
-      setError('Selling price must be a valid positive number')
+  const next = () => {
+    // Price is required
+    if (!form.price || isNaN(form.price) || form.price <= 0) {
+      setError('Selling price is required and must be a positive number')
       return
     }
     
-    // At least one of unitCost or price must be provided
-    if (!form.unitCost && !form.price) {
-      setError('Please provide either unit cost or selling price')
+    // Discount price validation (optional)
+    if (form.discountPrice && (isNaN(form.discountPrice) || form.discountPrice < 0)) {
+      setError('Discount price must be a valid positive number')
       return
-    }
-    
-    // Quantity is required
-    if (!form.quantity || isNaN(form.quantity) || parseInt(form.quantity) < 1) {
-      setError('Please provide a valid quantity (at least 1)')
-      return
-    }
-    
-    // Validate arrival date - must be within past 3 days to today, no future dates
-    if (form.arrivalDate) {
-      const arrivalDate = new Date(form.arrivalDate)
-      const today = new Date()
-      const threeDaysAgo = new Date()
-      threeDaysAgo.setDate(today.getDate() - 3)
-      
-      // Reset time parts for comparison
-      arrivalDate.setHours(0, 0, 0, 0)
-      today.setHours(0, 0, 0, 0)
-      threeDaysAgo.setHours(0, 0, 0, 0)
-      
-      if (arrivalDate > today) {
-        setError('Arrival date cannot be in the future')
-        return
-      }
-      
-      if (arrivalDate < threeDaysAgo) {
-        setError('Arrival date must be within the last 3 days')
-        return
-      }
     }
     
     navigate('/manager/petshop/wizard/gender')
@@ -92,107 +57,67 @@ export default function StepPricingImproved() {
 
   return (
     <Box className="space-y-6">
-      <Typography variant="h6" sx={{ mb: 2 }}>Pricing & Stock</Typography>
+      <Typography variant="h6" sx={{ mb: 2 }}>Pricing</Typography>
+      <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+        Set the pricing for your pet stock.
+      </Typography>
       
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>
       )}
       
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
-          <Typography variant="h6" sx={{ mb: 2 }}>Cost Information</Typography>
-        </Grid>
-        
-        <Grid item xs={12} md={6}>
-          <TextField
-            fullWidth
-            type="number"
-            label="Unit Cost (₹)"
-            name="unitCost"
-            value={form.unitCost || ''}
-            onChange={onChange}
-            placeholder="0.00"
-            InputProps={{
-              inputProps: { min: 0, step: 0.01 }
-            }}
-            helperText="Optional - The cost you paid for this pet"
-          />
-        </Grid>
-        
-        <Grid item xs={12} md={6}>
-          <TextField
-            fullWidth
-            type="number"
-            label="Selling Price (₹)"
-            name="price"
-            value={form.price || ''}
-            onChange={onChange}
-            placeholder="0.00"
-            InputProps={{
-              inputProps: { min: 0, step: 0.01 }
-            }}
-            helperText="Optional - The price you want to sell this pet for"
-          />
-        </Grid>
-        
-        <Grid item xs={12}>
-          <Divider sx={{ my: 2 }} />
-        </Grid>
-        
-        <Grid item xs={12}>
-          <Typography variant="h6" sx={{ mb: 2 }}>Stock Information</Typography>
-        </Grid>
-        
-        <Grid item xs={12} md={6}>
-          <TextField
-            fullWidth
-            type="number"
-            label="Quantity *"
-            name="quantity"
-            value={form.quantity || '1'}
-            onChange={onChange}
-            InputProps={{
-              inputProps: { min: 1 }
-            }}
-            helperText="Required - Number of pets in this stock"
-          />
-        </Grid>
-        
-        <Grid item xs={12} md={6}>
-          <FormControl fullWidth>
-            <InputLabel>Source</InputLabel>
-            <Select
-              name="source"
-              value={form.source || 'Other'}
+      <Paper sx={{ p: 3 }}>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Price (₹) *"
+              name="price"
+              value={form.price || ''}
               onChange={onChange}
-              label="Source"
-            >
-              <MenuItem value="Breeder">Breeder</MenuItem>
-              <MenuItem value="Rescue">Rescue</MenuItem>
-              <MenuItem value="Previous Owner">Previous Owner</MenuItem>
-              <MenuItem value="Other">Other</MenuItem>
-            </Select>
-          </FormControl>
+              placeholder="0.00"
+              InputProps={{
+                inputProps: { min: 0, step: 0.01 }
+              }}
+              helperText="Required - Selling price per pet"
+              required
+            />
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Discount Price (₹)"
+              name="discountPrice"
+              value={form.discountPrice || ''}
+              onChange={onChange}
+              placeholder="0.00"
+              InputProps={{
+                inputProps: { min: 0, step: 0.01 }
+              }}
+              helperText="Optional - Discount price if applicable"
+            />
+          </Grid>
+
+          <Grid item xs={12}>
+            <Divider />
+          </Grid>
+
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Tags"
+              name="tags"
+              value={form.tags || ''}
+              onChange={onChange}
+              placeholder="e.g., vaccinated, healthy, purebred"
+              helperText="Optional - Comma-separated tags for this stock"
+            />
+          </Grid>
         </Grid>
-        
-        <Grid item xs={12} md={6}>
-          <TextField
-            fullWidth
-            type="date"
-            label="Arrival Date"
-            name="arrivalDate"
-            value={form.arrivalDate || ''}
-            onChange={onChange}
-            InputLabelProps={{
-              shrink: true
-            }}
-            helperText="Date must be within the last 3 days (no future dates allowed)"
-            inputProps={{
-              max: new Date().toISOString().split('T')[0]
-            }}
-          />
-        </Grid>
-      </Grid>
+      </Paper>
       
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
         <Button 
@@ -207,7 +132,7 @@ export default function StepPricingImproved() {
           onClick={next}
           size="large"
         >
-          Next: Gender Classification
+          Next: Gender & Images
         </Button>
       </Box>
     </Box>

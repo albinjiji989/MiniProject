@@ -68,7 +68,7 @@ function getTransporter() {
 }
 
 // Add retry mechanism for sending emails
-async function sendMailWithRetry({ to, subject, html }, maxRetries = 3) {
+async function sendMailWithRetry({ to, subject, html, attachments = [] }, maxRetries = 3) {
   // Use the admin email as the sender for all emails if configured
   const fromEmail = process.env.ADMIN_EMAIL || process.env.FROM_EMAIL || process.env.SMTP_EMAIL || process.env.EMAIL_USER || 'noreply@example.com';
   const fromName = process.env.FROM_NAME || 'Pet Adoption Center';
@@ -87,7 +87,11 @@ async function sendMailWithRetry({ to, subject, html }, maxRetries = 3) {
       const usingOAuth2 = tx.options?.auth?.type === 'OAuth2';
       const via = usingOAuth2 ? 'gmail-oauth2' : `${tx.options.host}:${tx.options.port}`;
       console.log(`[EMAIL] Sending to:"${to}" subject:"${subject}" via ${via} (attempt ${attempt}/${maxRetries})`);
-      const info = await tx.sendMail({ from, to, subject, html });
+      const mailOptions = { from, to, subject, html };
+      if (attachments.length > 0) {
+        mailOptions.attachments = attachments;
+      }
+      const info = await tx.sendMail(mailOptions);
       console.log(`[EMAIL] Success messageId:${info.messageId}`);
       return { success: true, messageId: info.messageId };
     } catch (err) {
@@ -112,9 +116,9 @@ async function sendMailWithRetry({ to, subject, html }, maxRetries = 3) {
   throw lastError;
 }
 
-async function sendMail({ to, subject, html }) {
+async function sendMail({ to, subject, html, attachments = [] }) {
   try {
-    return await sendMailWithRetry({ to, subject, html });
+    return await sendMailWithRetry({ to, subject, html, attachments });
   } catch (error) {
     // If OAuth2 failed, try falling back to SMTP
     if (error.code === 'EAUTH' && process.env.EMAIL_OAUTH2 === 'true') {
@@ -129,7 +133,7 @@ async function sendMail({ to, subject, html }) {
       
       try {
         // Try sending with SMTP
-        const result = await sendMailWithRetry({ to, subject, html });
+        const result = await sendMailWithRetry({ to, subject, html, attachments });
         
         // Restore original setting
         process.env.EMAIL_OAUTH2 = originalOAuth2;

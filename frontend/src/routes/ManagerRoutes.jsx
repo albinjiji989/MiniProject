@@ -11,11 +11,10 @@ import PetsList from '../modules/managers/Adoption/PetsList'
 import PetDetailsManager from '../modules/managers/Adoption/PetDetails'
 import AdoptionPetForm from '../modules/managers/Adoption/PetForm'
 import ApplicationsList from '../modules/managers/Adoption/ApplicationsList'
-import ApplicationDetailsImproved from '../modules/managers/Adoption/ApplicationDetailsImproved'
+import ApplicationDetailsImproved from '../modules/managers/Adoption/ApplicationDetails'
 import ImportPets from '../modules/managers/Adoption/ImportPets'
 import PostImportProcessing from '../modules/managers/Adoption/PostImportProcessing'
 import Reports from '../modules/managers/Adoption/Reports'
-import AIMLDashboard from '../modules/managers/Adoption/AIMLDashboard'
 import PetProfile from '../modules/managers/Adoption/PetProfile'
 import PaymentHistory from '../modules/managers/Adoption/PaymentHistory'
 import AdoptionWizardLayout from '../modules/managers/Adoption/Wizard/WizardLayout'
@@ -24,7 +23,6 @@ import AdoptionStepHealth from '../modules/managers/Adoption/Wizard/StepHealthMe
 import AdoptionStepAvailability from '../modules/managers/Adoption/Wizard/StepAvailability'
 import AdoptionStepReview from '../modules/managers/Adoption/Wizard/StepReview'
 import PetShopManagerDashboard from '../modules/managers/PetShop/PetShopManagerDashboard'
-import PetShopAIMLDashboard from '../modules/managers/PetShop/AIMLDashboard'
 import PetShopOrders from '../modules/managers/PetShop/Orders'
 import PetShopInventory from '../modules/managers/PetShop/Inventory'
 import PetShopInvoice from '../modules/managers/PetShop/Invoice'
@@ -135,7 +133,6 @@ const ManagerRoutes = () => {
             <Route path="/import" element={<ImportPets />} />
             <Route path="/post-import-processing" element={<PostImportProcessing />} />
             <Route path="/reports" element={<Reports />} />
-            <Route path="/aiml-dashboard" element={<AIMLDashboard />} />
             <Route path="/manage" element={<AdoptionManage />} />
             <Route path="/" element={<Navigate to="/manager/adoption/dashboard" replace />} />
           </Routes>
@@ -201,7 +198,6 @@ const ManagerRoutes = () => {
             <Route path="/pets/:petId/history" element={<PetShopPetHistory />} />
             <Route path="/handover/:reservationId" element={<HandoverManagement />} />
             <Route path="/delivery" element={<PetShopDeliveryManagement />} />
-            <Route path="/aiml-dashboard" element={<PetShopAIMLDashboard />} />
             {/* Stock Management Routes */}
             <Route path="/stocks" element={<StockManagement />} />
             <Route path="/stocks/add" element={<StockManagement />} />

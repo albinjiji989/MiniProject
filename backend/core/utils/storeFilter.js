@@ -8,13 +8,18 @@
  * @returns {Object} - MongoDB filter object
  */
 const getStoreFilter = (user) => {
+  // Handle null/undefined user
+  if (!user) {
+    return { _id: null }; // No access
+  }
+
   // Admin can see all data
   if (user.role === 'admin') {
     return {};
   }
 
   // Module managers can only see their store's data
-  if (user.role && user.role.includes('_manager') && user.storeId) {
+  if (user.role && (user.role.includes('_manager') || user.role.includes('manager')) && user.storeId) {
     return { storeId: user.storeId };
   }
 

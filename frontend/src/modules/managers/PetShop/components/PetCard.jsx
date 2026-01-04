@@ -162,9 +162,15 @@ const PetCard = ({ item, isSelected, onSelect, onAction, isPending = false }) =>
           <Typography variant="body2" color="textSecondary" noWrap sx={{ mb: 0.5 }}>
             <strong>{item.speciesId?.displayName || item.speciesId?.name || 'Unknown Species'}</strong> • {item.breedId?.name || 'Unknown Breed'}
           </Typography>
-          <Typography variant="body2" color="textSecondary">
-            <strong>Age:</strong> <PetAgeDisplay petCode={item.petCode} initialAge={item.age} initialAgeUnit={item.ageUnit} /> • <strong>Gender:</strong> {item.gender}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography variant="body2" color="textSecondary" component="span">
+              <strong>Age:</strong>
+            </Typography>
+            <PetAgeDisplay petCode={item.petCode} initialAge={item.age} initialAgeUnit={item.ageUnit} />
+            <Typography variant="body2" color="textSecondary" component="span">
+              • <strong>Gender:</strong> {item.gender}
+            </Typography>
+          </Box>
         </Box>
         
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1, pt: 1, borderTop: '1px solid #eee' }}>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTheme, alpha } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import {
@@ -46,8 +46,9 @@ import {
 } from '@mui/icons-material';
 import { apiClient, petsAPI, userPetsAPI, petShopAPI, resolveMediaUrl } from '../../../services/api';
 
-const PetDetails = () => {
+const UserPetDetails = () => {
   const { id } = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
@@ -76,30 +77,13 @@ const PetDetails = () => {
       
       console.log(`🔍 Fetching pet with ID: ${id} for user: ${localStorage.getItem('userId') || 'unknown'}`)
       
-      // First try to load from centralized registry (for pets from petshop/adoption)
-      try {
-        const res = await petsAPI.getPet(id)
-        const petData = res.data?.data?.pet || res.data?.data || res.data
-        console.log('✅ Pet data received from centralized registry:', {
-          petData,
-          images: petData?.images,
-          imagesCount: petData?.images?.length || 0,
-          imageIds: petData?.imageIds,
-          imageIdsCount: petData?.imageIds?.length || 0
-        })
-        setPet(petData)
-        setPetType('centralized')
-        
-        // Load medical history
-        loadMedicalHistory()
-        return
-      } catch (centralizedError) {
-        console.log('❌ Failed to load from centralized registry, trying registry by ID:', centralizedError.message)
-        // If that fails, try to get from registry by ID
+      // Check if the ID is a petCode format (3 letters + 5 digits)
+      if (/^[A-Z]{3}\d{5}$/.test(id)) {
+        // If ID looks like a petCode, try centralized registry first
         try {
-          const res = await petsAPI.getRegistryPet(id)
+          const res = await apiClient.get(`/pets/centralized/${id}`)
           const petData = res.data?.data?.pet || res.data?.data || res.data
-          console.log('✅ Pet data received from registry by ID:', {
+          console.log('✅ Pet data received from centralized registry by petCode:', {
             petData,
             images: petData?.images,
             imagesCount: petData?.images?.length || 0,
@@ -112,13 +96,70 @@ const PetDetails = () => {
           // Load medical history
           loadMedicalHistory()
           return
-        } catch (registryError) {
-          console.log('❌ Failed to load from registry by ID, trying userPetsAPI:', registryError.message)
-          // If that fails, try userPetsAPI (for user-created pets)
+        } catch (centralizedError) {
+          console.log('❌ Pet not found in centralized registry by petCode:', centralizedError.message)
+        }
+      }
+      
+      // Try to get the pet from the core Pet table first
+      try {
+        const res = await apiClient.get(`/pets/${id}`)
+        const petData = res.data?.data?.pet || res.data?.data || res.data
+        console.log('✅ Pet data received from core Pet table:', {
+          petData,
+          images: petData?.images,
+          imagesCount: petData?.images?.length || 0,
+          imageIds: petData?.imageIds,
+          imageIdsCount: petData?.imageIds?.length || 0
+        })
+        setPet(petData)
+        setPetType('user')
+        
+        // Load medical history
+        loadMedicalHistory()
+        return
+      } catch (corePetError) {
+        console.log('❌ Pet not found in core Pet table, trying other sources:', corePetError.message)
+        
+        // Check if this might be an adoption pet that has been transferred
+        // Try to get the adoption pet to see if it was transferred
+        try {
+          const adoptionRes = await apiClient.get(`/adoption/user/pets/${id}`)
+          const adoptionPetData = adoptionRes.data?.data?.pet || adoptionRes.data?.data || adoptionRes.data
+          console.log('🔍 Found adoption pet, checking if transferred:', adoptionPetData)
+          
+          // If adoption pet exists but is marked as adopted, redirect to the corresponding core pet
+          if (adoptionPetData && adoptionPetData.status === 'adopted' && adoptionPetData.adopterUserId) {
+            // Try to find the corresponding pet in the centralized registry using the petCode
+            if (adoptionPetData.petCode) {
+              try {
+                const corePetRes = await apiClient.get(`/pets/centralized/${adoptionPetData.petCode}`)
+                const corePetData = corePetRes.data?.data?.pet || corePetRes.data?.data || corePetRes.data
+                if (corePetData) {
+                  console.log('✅ Found corresponding centralized pet, redirecting...')
+                  // Update the URL to use the new pet ID
+                  navigate(`/User/pets/${corePetData._id}`, { replace: true })
+                  return
+                }
+              } catch (corePetError) {
+                console.log('⚠️ No corresponding centralized pet found for petCode:', adoptionPetData.petCode)
+              }
+            }
+          }
+          
+          // If we have adoption pet data but it's not transferred, use it
+          setPet(adoptionPetData)
+          setPetType('adoption')
+          loadMedicalHistory()
+          return
+        } catch (adoptionError) {
+          console.log('❌ Not an adoption pet, trying centralized registry:', adoptionError.message)
+          
+          // First try to load from centralized registry (for pets from petshop/adoption)
           try {
-            const res = await userPetsAPI.get(id)
-            const petData = res.data?.data || res.data?.pet || res.data
-            console.log('✅ Pet data received from userPetsAPI:', {
+            const res = await apiClient.get(`/pets/centralized/${id}`)
+            const petData = res.data?.data?.pet || res.data?.data || res.data
+            console.log('✅ Pet data received from centralized registry:', {
               petData,
               images: petData?.images,
               imagesCount: petData?.images?.length || 0,
@@ -126,77 +167,95 @@ const PetDetails = () => {
               imageIdsCount: petData?.imageIds?.length || 0
             })
             setPet(petData)
-            setPetType('user')
+            setPetType('centralized')
             
             // Load medical history
             loadMedicalHistory()
             return
-          } catch (userError) {
-            console.log('❌ Failed to load from userPetsAPI:', userError.message);
-            // Last resort: check if this might be a petshop item ID
+          } catch (centralizedError) {
+            console.log('❌ Failed to load from centralized registry, trying registry by ID:', centralizedError.message)
+            // If that fails, try to get from registry by ID
             try {
-              const listingRes = await petShopAPI.getPublicListing(id);
-              const listing = listingRes.data?.data?.item || listingRes.data?.data || listingRes.data;
-              if (listing && listing._id) {
-                console.log('💡 Found petshop listing, using listing data directly');
-                // Use the listing data directly
-                setPet(listing);
-                setPetType('centralized');
-                
-                // Load medical history
-                loadMedicalHistory();
-                return;
-              }
-            } catch (listingError) {
-              console.log('Petshop listing check failed:', listingError.message);
-            }
-            
-            // Check if this is a purchased pet from petshop
-            try {
-              const purchasedPetsRes = await petShopAPI.getMyPurchasedPets();
-              const purchasedPets = purchasedPetsRes.data?.data?.pets || [];
-              const purchasedPet = purchasedPets.find(pet => pet._id === id || pet.petCode === id);
+              const res = await apiClient.get(`/pets/registry/${id}`)
+              const petData = res.data?.data?.pet || res.data?.data || res.data
+              console.log('✅ Pet data received from registry by ID:', {
+                petData,
+                images: petData?.images,
+                imagesCount: petData?.images?.length || 0,
+                imageIds: petData?.imageIds,
+                imageIdsCount: petData?.imageIds?.length || 0
+              })
+              setPet(petData)
+              setPetType('centralized')
               
-              if (purchasedPet) {
-                console.log('💡 Found purchased pet, using purchased pet data directly');
-                // Use the purchased pet data directly
-                setPet(purchasedPet);
-                setPetType('centralized');
-                
-                // Load medical history
-                loadMedicalHistory();
-                return;
-              }
-            } catch (purchasedError) {
-              console.log('Purchased pet check failed:', purchasedError.message);
-            }
-            
-            // Try to get pet by petCode from centralized registry
-            try {
-              // If id looks like a petCode (3 letters + 5 digits), try that
-              if (/^[A-Z]{3}\d{5}$/.test(id)) {
-                const res = await petsAPI.getPet(id);
-                const petData = res.data?.data?.pet || res.data?.data || res.data;
-                console.log('✅ Pet data received from centralized registry by petCode:', {
+              // Load medical history
+              loadMedicalHistory()
+              return
+            } catch (registryError) {
+              console.log('❌ Failed to load from registry by ID, trying userPetsAPI:', registryError.message)
+              // If that fails, try userPetsAPI (for user-created pets)
+              try {
+                const res = await userPetsAPI.get(id)
+                const petData = res.data?.data || res.data?.pet || res.data
+                console.log('✅ Pet data received from userPetsAPI:', {
                   petData,
                   images: petData?.images,
                   imagesCount: petData?.images?.length || 0,
                   imageIds: petData?.imageIds,
                   imageIdsCount: petData?.imageIds?.length || 0
-                });
-                setPet(petData);
-                setPetType('centralized');
+                })
+                setPet(petData)
+                setPetType('user')
                 
                 // Load medical history
-                loadMedicalHistory();
-                return;
+                loadMedicalHistory()
+                return
+              } catch (userError) {
+                console.log('❌ Failed to load from userPetsAPI:', userError.message);
+                // Last resort: check if this might be a petshop item ID
+                try {
+                  const listingRes = await petShopAPI.getPublicListing(id);
+                  const listing = listingRes.data?.data?.item || listingRes.data?.data || listingRes.data;
+                  if (listing && listing._id) {
+                    console.log('💡 Found petshop listing, using listing data directly');
+                    // Use the listing data directly
+                    setPet(listing);
+                    setPetType('centralized');
+                    
+                    // Load medical history
+                    loadMedicalHistory();
+                    return;
+                  }
+                } catch (listingError) {
+                  console.log('Petshop listing check failed:', listingError.message);
+                }
+                
+                // Check if this is a purchased pet from petshop
+                try {
+                  const purchasedPetsRes = await petShopAPI.getMyPurchasedPets();
+                  const purchasedPets = purchasedPetsRes.data?.data?.pets || [];
+                  const purchasedPet = purchasedPets.find(pet => pet._id === id || pet.petCode === id);
+                  
+                  if (purchasedPet) {
+                    console.log('💡 Found purchased pet, using purchased pet data directly');
+                    // Use the purchased pet data directly
+                    setPet(purchasedPet);
+                    setPetType('centralized');
+                    
+                    // Load medical history
+                    loadMedicalHistory();
+                    return;
+                  }
+                } catch (purchasedError) {
+                  console.log('Purchased pet check failed:', purchasedError.message);
+                }
+                
+                // Pet code lookup already attempted at the beginning of this function
+                
+                console.log('❌ Pet not found for ID:', id)
+                throw new Error('Pet not found in any system. Please check the ID or contact support.')
               }
-            } catch (petCodeError) {
-              console.log('Pet code lookup failed:', petCodeError.message);
             }
-            
-            console.log('❌ Pet not found for ID:', id)
-            throw new Error('Pet not found in any system. Please check the ID or contact support.')
           }
         }
       }
@@ -223,7 +282,7 @@ const PetDetails = () => {
       } else {
         // For centralized pets (including petshop), try centralized registry first
         try {
-          const res = await petsAPI.getHistory(id)
+          const res = await apiClient.get(`/pets/history/${id}`)
           setMedicalHistory(res.data?.data?.history || res.data?.data?.medicalHistory || [])
         } catch (centralizedError) {
           // For petshop pets, try the petshop specific endpoint
@@ -269,10 +328,18 @@ const PetDetails = () => {
 
   const handleEdit = () => {
     handleMenuClose()
-    // Determine which edit route to use based on pet type
-    if (petType === 'user') {
-      // User-created pet
-      navigate(`/User/pets/${id}/edit`)
+    // Determine which edit route to use based on pet type and URL path
+    if (petType === 'user' || location.pathname.includes('/pets/centralized/')) {
+      // User-created pet or centralized pet (no edit available)
+      // For centralized pets, we don't allow direct editing since they come from other sources
+      if (location.pathname.includes('/pets/centralized/')) {
+        // For centralized pets, we might want to redirect to a different view or show a message
+        // For now, let's just show a message or do nothing
+        console.log('Cannot edit centralized pet directly');
+        return;
+      } else {
+        navigate(`/User/pets/${id}/edit`)
+      }
     } else {
       // Pet from petshop or adoption
       navigate(`/User/pets/${id}/edit-basic`)
@@ -288,6 +355,12 @@ const PetDetails = () => {
     try {
       setDeleting(true)
       setDeleteError('')
+      
+      // Check if pet is accessed via centralized route
+      if (location.pathname.includes('/pets/centralized/')) {
+        setDeleteError('Centralized pets cannot be deleted directly. They are managed in their respective systems.');
+        return;
+      }
       
       // Only user-created pets can be deleted
       if (pet?.source === 'core' || !pet?.source) {
@@ -664,17 +737,118 @@ const PetDetails = () => {
                   </Box>
                 </Box>
               )}
+                              
+              {/* Documents Section for Adoption Pets */}
+              {pet.source === 'adoption' && pet.documents && Array.isArray(pet.documents) && pet.documents.length > 0 && (
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>Documents</Typography>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    {pet.documents.map((doc, index) => {
+                      if (!doc?.url) return null;
+                      return (
+                        <Box
+                          key={index}
+                          sx={{
+                            p: 1,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            borderRadius: 1,
+                            minWidth: 120,
+                            textAlign: 'center'
+                          }}
+                        >
+                          <Typography variant="caption" display="block" sx={{ mb: 0.5 }}>
+                            {doc.type || `Document ${index + 1}`}
+                          </Typography>
+                          <Button 
+                            variant="outlined" 
+                            size="small"
+                            onClick={() => window.open(resolveMediaUrl(doc.url), '_blank')}
+                            sx={{ fontSize: '0.7rem' }}
+                          >
+                            View
+                          </Button>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                </Box>
+              )}
+                              
+              {/* Source-specific Additional Information */}
+              {pet.source === 'adoption' && (
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>Adoption Information</Typography>
+                  <Grid container spacing={2}>
+                    {pet.adoptionDate && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Adoption Date</Typography>
+                        <Typography variant="h6">{new Date(pet.adoptionDate).toLocaleDateString()}</Typography>
+                      </Grid>
+                    )}
+                    {pet.adoptionFee && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Adoption Fee</Typography>
+                        <Typography variant="h6">${pet.adoptionFee}</Typography>
+                      </Grid>
+                    )}
+                    {pet.adoptionStatus && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Adoption Status</Typography>
+                        <Typography variant="h6">{pet.adoptionStatus}</Typography>
+                      </Grid>
+                    )}
+                  </Grid>
+                </Box>
+              )}
+                              
+              {pet.source === 'petshop' && (
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>Pet Shop Information</Typography>
+                  <Grid container spacing={2}>
+                    {pet.purchaseDate && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Purchase Date</Typography>
+                        <Typography variant="h6">{new Date(pet.purchaseDate).toLocaleDateString()}</Typography>
+                      </Grid>
+                    )}
+                    {pet.purchasePrice && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Purchase Price</Typography>
+                        <Typography variant="h6">${pet.purchasePrice}</Typography>
+                      </Grid>
+                    )}
+                    {pet.petShopName && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Pet Shop</Typography>
+                        <Typography variant="h6">{pet.petShopName}</Typography>
+                      </Grid>
+                    )}
+                  </Grid>
+                </Box>
+              )}
             </Grid>
           </Grid>
         </CardContent>
       </Card>
+      
+      {/* Source-specific Additional Details */}
+      {pet.source === 'adoption' && pet.description && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>About This Pet</Typography>
+            <Typography variant="body1">{pet.description}</Typography>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Action Buttons */}
       <Box sx={{ 
         display: 'flex', 
         gap: 2, 
         mb: 3,
-        flexDirection: { xs: 'column', sm: 'row' }
+        flexDirection: { xs: 'column', sm: 'row' },
+        flexWrap: 'wrap'
       }}>
         <Button 
           variant="contained"
@@ -712,6 +886,22 @@ const PetDetails = () => {
         >
           View Full History
         </Button>
+        
+        {/* Source-specific actions */}
+        {pet.source === 'adoption' && (
+          <Button 
+            variant="outlined"
+            startIcon={<PetsIcon />}
+            onClick={() => {
+              // Navigate to adoption application details
+              navigate(`/user/adoption/applications/${pet.adoptionApplicationId || pet._id}`);
+            }}
+            size="large"
+            fullWidth={isMobile}
+          >
+            View Adoption Application
+          </Button>
+        )}
       </Box>
 
       {/* Medical History Section */}
@@ -923,4 +1113,4 @@ const PetDetails = () => {
   )
 }
 
-export default PetDetails
+export default UserPetDetails

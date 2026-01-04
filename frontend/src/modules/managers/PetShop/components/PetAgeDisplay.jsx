@@ -7,33 +7,39 @@ import { petAgeAPI } from '../../../../services/api';
  * Pet Age Display Component
  * Displays current age of a pet with automatic updates
  */
-const PetAgeDisplay = ({ petCode, initialAge, initialAgeUnit, variant = 'standard' }) => {
+const PetAgeDisplay = ({ petCode, initialAge, initialAgeUnit, variant = 'standard', fetchDynamic = false }) => {
   const [currentAge, setCurrentAge] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchCurrentAge = async () => {
-      if (!petCode) return;
-      
-      setLoading(true);
-      setError(null);
-      
-      try {
-        const ageData = await petAgeAPI.getCurrentAge(petCode);
-        setCurrentAge(ageData.data.currentAge);
-      } catch (err) {
-        console.warn(`Failed to fetch current age for pet ${petCode}:`, err);
-        // Fallback to initial age if API fails
-        setCurrentAge({ value: initialAge, unit: initialAgeUnit });
-        setError(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+    // Use initial values directly from inventory (new logic)
+    // Only fetch from API if explicitly requested (fetchDynamic = true)
+    if (fetchDynamic && petCode) {
+      const fetchCurrentAge = async () => {
+        setLoading(true);
+        setError(null);
+        
+        try {
+          const ageData = await petAgeAPI.getCurrentAge(petCode);
+          setCurrentAge(ageData.data.currentAge);
+        } catch (err) {
+          console.debug(`Could not fetch dynamic age for pet ${petCode}, using inventory values`);
+          // Fallback to initial age if API fails
+          setCurrentAge({ value: initialAge, unit: initialAgeUnit });
+          setError(err);
+        } finally {
+          setLoading(false);
+        }
+      };
 
-    fetchCurrentAge();
-  }, [petCode, initialAge, initialAgeUnit]);
+      fetchCurrentAge();
+    } else {
+      // Use initial values from inventory
+      setCurrentAge({ value: initialAge, unit: initialAgeUnit });
+      setLoading(false);
+    }
+  }, [petCode, initialAge, initialAgeUnit, fetchDynamic]);
 
   // Format age for display
   const formatAge = (ageObj) => {
@@ -72,7 +78,7 @@ const PetAgeDisplay = ({ petCode, initialAge, initialAgeUnit, variant = 'standar
     return 'secondary'; // Senior
   };
 
-  if (loading) {
+  if (loading && fetchDynamic) {
     return (
       <Box display="flex" alignItems="center" gap={1}>
         <TimeIcon fontSize="small" />

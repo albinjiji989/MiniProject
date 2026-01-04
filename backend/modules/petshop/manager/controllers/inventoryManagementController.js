@@ -254,17 +254,52 @@ const bulkPublishInventoryItems = async (req, res) => {
 const listPublicListings = async (req, res) => {
   try {
     const { page = 1, limit = 12, speciesId, breedId, minPrice, maxPrice } = req.query;
-    const filter = { isActive: true, status: 'available_for_sale' };
+    // Primary filter: only active and published items
+    let filter = { isActive: true, status: 'available_for_sale' };
     if (speciesId) filter.speciesId = speciesId;
     if (breedId) filter.breedId = breedId;
     if (minPrice || maxPrice) filter.price = {};
     if (minPrice) filter.price.$gte = Number(minPrice);
     if (maxPrice) filter.price.$lte = Number(maxPrice);
-    const items = await PetInventoryItem.find(filter)
+
+    let items = await PetInventoryItem.find(filter)
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
-    const total = await PetInventoryItem.countDocuments(filter);
+
+    let total = await PetInventoryItem.countDocuments(filter);
+
+    // Dev-friendly fallback: if no published items are found on first page,
+    // broaden to include 'in_petshop' items so manager-added pets become visible
+    // to users for quick local testing. This behavior only triggers on page=1
+    // and is purposely conservative.
+    if ((Array.isArray(items) && items.length === 0) && parseInt(page) === 1) {
+      try {
+        const fallbackFilter = { isActive: true, status: { $in: ['available_for_sale', 'in_petshop'] } };
+        if (speciesId) fallbackFilter.speciesId = speciesId;
+        if (breedId) fallbackFilter.breedId = breedId;
+        if (minPrice || maxPrice) fallbackFilter.price = {};
+        if (minPrice) fallbackFilter.price.$gte = Number(minPrice);
+        if (maxPrice) fallbackFilter.price.$lte = Number(maxPrice);
+
+        const fallbackItems = await PetInventoryItem.find(fallbackFilter)
+          .sort({ createdAt: -1 })
+          .limit(limit * 1)
+          .skip(0);
+
+        const fallbackTotal = await PetInventoryItem.countDocuments(fallbackFilter);
+
+        if (Array.isArray(fallbackItems) && fallbackItems.length > 0) {
+          items = fallbackItems;
+          total = fallbackTotal;
+          // Attach a hint so client can log or show an informational banner if needed
+          res.set('X-Public-Listings-Fallback', 'in_petshop_included');
+        }
+      } catch (fallbackErr) {
+        console.warn('Fallback public listings query failed:', fallbackErr.message);
+      }
+    }
+
     res.json({ success: true, data: { items, pagination: { current: parseInt(page), pages: Math.ceil(total / limit), total } } });
   } catch (e) {
     console.error('Public listings error:', e);

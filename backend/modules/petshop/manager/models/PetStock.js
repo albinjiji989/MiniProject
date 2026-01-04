@@ -38,8 +38,8 @@ const petStockSchema = new mongoose.Schema({
   },
   size: {
     type: String,
-    enum: ['tiny', 'small', 'medium', 'large', 'giant'],
-    default: 'medium'
+    enum: ['tiny', 'small', 'medium', 'large', 'giant', ''],
+    default: ''
   },
   
   // Gender-specific stock quantities
@@ -86,7 +86,7 @@ const petStockSchema = new mongoose.Schema({
   
   // Store Information
   storeId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.Mixed, // Accept both ObjectId and String (store codes like "PSP138250")
     ref: 'PetShop',
     required: true
   },
@@ -130,6 +130,15 @@ const petStockSchema = new mongoose.Schema({
   timestamps: true,
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
+});
+
+// Sanitize size field before saving
+petStockSchema.pre('save', function(next) {
+  // Convert empty string to null for size field
+  if (this.size === '' || !this.size) {
+    this.size = 'medium'; // Default to medium if not specified
+  }
+  next();
 });
 
 // Virtuals for populating images

@@ -137,7 +137,7 @@ const petInventoryItemSchema = new mongoose.Schema({
   
   // Store Information
   storeId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.Mixed, // Accept both ObjectId and String (store codes like "PSP138250")
     ref: 'PetShop',
     required: true
   },
@@ -178,6 +178,38 @@ const petInventoryItemSchema = new mongoose.Schema({
   generatedFromStock: {
     type: Boolean,
     default: false
+  },
+
+  // Relationship to batch (new batch system)
+  batchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'PetBatch',
+    index: true,
+    sparse: true
+  },
+
+  // Batch reservation tracking
+  reservedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    sparse: true
+  },
+  reservedAt: {
+    type: Date,
+    sparse: true
+  },
+  reservationExpiresAt: {
+    type: Date,
+    sparse: true
+  },
+  confirmedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    sparse: true
+  },
+  confirmedAt: {
+    type: Date,
+    sparse: true
   }
 }, {
   timestamps: true,

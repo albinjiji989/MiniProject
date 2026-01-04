@@ -17,26 +17,14 @@ import {
   CardMedia,
   CardActions,
   Chip,
-  AppBar,
-  Toolbar,
-  IconButton,
   useTheme,
   useMediaQuery,
-  Drawer,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemButton,
 } from '@mui/material'
 import {
-  ArrowBack as ArrowBackIcon,
   Favorite as AdoptionIcon,
   Search as SearchIcon,
   FilterList as FilterIcon,
   Add as AddIcon,
-  Menu as MenuIcon,
-  Close as CloseIcon,
-  Logout as LogoutIcon,
   Pets as PetsIcon,
 } from '@mui/icons-material'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -47,7 +35,6 @@ const Adoption = () => {
   const navigate = useNavigate()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
-  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [pets, setPets] = React.useState([])
   const [page, setPage] = React.useState(1)
@@ -55,17 +42,8 @@ const Adoption = () => {
   const [total, setTotal] = React.useState(0)
   const [filters, setFilters] = React.useState({ species: '', breed: '', gender: '', age: '' })
 
-  const handleMobileMenuToggle = () => {
-    setMobileMenuOpen(!mobileMenuOpen)
-  }
-
-  const handleLogout = () => {
-    logout()
-    navigate('/')
-  }
-
   const handleBackToDashboard = () => {
-    navigate('/dashboard')
+    navigate('/user/dashboard')
   }
 
   const loadPets = React.useCallback(async () => {
@@ -120,94 +98,7 @@ const Adoption = () => {
 
   const applyFilters = () => { setPage(1); loadPets() }
 
-  const Navbar = () => (
-    <AppBar 
-      position="sticky" 
-      elevation={0} 
-      sx={{ 
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(10px)',
-        boxShadow: '0 2px 20px rgba(0,0,0,0.1)',
-        color: '#333'
-      }}
-    >
-      <Toolbar>
-        <IconButton
-          edge="start"
-          color="inherit"
-          onClick={handleBackToDashboard}
-          sx={{ mr: 2 }}
-        >
-          <ArrowBackIcon />
-        </IconButton>
-        
-        <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
-          <AdoptionIcon sx={{ fontSize: 32, color: '#4caf50', mr: 1 }} />
-          <Typography variant="h5" sx={{ fontWeight: 700, color: '#333' }}>
-            Adoption Management
-          </Typography>
-        </Box>
 
-        {isMobile ? (
-          <IconButton
-            edge="start"
-            color="inherit"
-            aria-label="menu"
-            onClick={handleMobileMenuToggle}
-          >
-            <MenuIcon />
-          </IconButton>
-        ) : (
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-            <Typography variant="body1" sx={{ color: '#333', mr: 2 }}>
-              {user?.name || 'User'}
-            </Typography>
-            <IconButton onClick={handleLogout} color="inherit">
-              <LogoutIcon />
-            </IconButton>
-          </Box>
-        )}
-      </Toolbar>
-    </AppBar>
-  )
-
-  const MobileMenu = () => (
-    <Drawer
-      anchor="right"
-      open={mobileMenuOpen}
-      onClose={handleMobileMenuToggle}
-      sx={{
-        '& .MuiDrawer-paper': {
-          width: 280,
-          backgroundColor: '#f8f9fa'
-        }
-      }}
-    >
-      <Box sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Menu
-          </Typography>
-          <IconButton onClick={handleMobileMenuToggle}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
-        
-        <List>
-          <ListItem disablePadding>
-            <ListItemButton onClick={handleBackToDashboard}>
-              <ListItemText primary="Back to Dashboard" />
-            </ListItemButton>
-          </ListItem>
-          <ListItem disablePadding>
-            <ListItemButton onClick={handleLogout}>
-              <ListItemText primary="Logout" />
-            </ListItemButton>
-          </ListItem>
-        </List>
-      </Box>
-    </Drawer>
-  )
 
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
@@ -220,11 +111,7 @@ const Adoption = () => {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: '#f8f9fa' }}>
-      <Navbar />
-      <MobileMenu />
-
-      <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Container maxWidth="xl" sx={{ py: 4, mt: 4 }}>
         {/* Header */}
         <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Box>
@@ -431,7 +318,6 @@ const Adoption = () => {
           <Pagination count={Math.max(1, Math.ceil(total/limit))} page={page} onChange={(_,p)=>setPage(p)} size="small" />
         </Box>
       </Container>
-    </Box>
   )
 }
 

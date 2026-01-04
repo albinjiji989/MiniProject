@@ -415,43 +415,6 @@ const AdoptionApplications = () => {
     }
   }
 
-  const handleDownloadCertificate = async (application) => {
-    try {
-      // Use the new API method for downloading user certificates
-      const resp = await adoptionAPI.getUserCertificate(application.id);
-      const blob = new Blob([resp.data], { type: resp.headers['content-type'] || 'application/pdf' });
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const dispo = resp.headers['content-disposition'] || '';
-      const match = dispo.match(/filename="?([^";]+)"?/i);
-      const fname = (match && match[1]) ? match[1] : `certificate_${application.id}.pdf`;
-      a.href = blobUrl;
-      a.download = fname;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(blobUrl);
-    } catch (e) {
-      // Fallback to the existing method if the new endpoint fails
-      try {
-        const res = await adoptionAPI.getCertificate(application.id);
-        const url = res?.data?.data?.agreementFile || res?.data?.data?.certificate?.agreementFile || res?.data?.data?.contractURL
-        if (url) {
-          const resolvedUrl = resolveMediaUrl(url)
-          const a = document.createElement('a')
-          a.href = resolvedUrl
-          a.download = `certificate_${application.id}.pdf`
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
-        } else {
-          alert('Certificate not available')
-        }
-      } catch (fallbackError) {
-        alert(e?.response?.data?.error || 'Failed to download certificate')
-      }
-    }
-  }
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>
@@ -755,17 +718,7 @@ const AdoptionApplications = () => {
                         Pay Now
                       </Button>
                     )}
-                    {['payment_completed', 'certificate_generated', 'handover_scheduled', 'handed_over', 'completed'].includes(application.status) && (
-                      <Button 
-                        size="small" 
-                        variant="outlined"
-                        startIcon={<DownloadIcon />}
-                        onClick={() => handleDownloadCertificate(application)}
-                        sx={{ minWidth: 120 }}
-                      >
-                        Certificate
-                      </Button>
-                    )}
+
                     {['approved','payment_completed','certificate_generated','handover_scheduled','handed_over','completed'].includes(application.status) && (
                       <Button 
                         size="small" 

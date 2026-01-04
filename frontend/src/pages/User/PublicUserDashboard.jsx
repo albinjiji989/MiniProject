@@ -65,11 +65,12 @@ const PublicUserDashboard = () => {
       setActivityError('')
       
       // Load all data in parallel to reduce loading time
-      const [petsRes, ownedRes, activityRes, purchasedRes] = await Promise.allSettled([
+      const [petsRes, ownedRes, activityRes, purchasedRes, adoptedRes] = await Promise.allSettled([
         userPetsAPI.list(),
         apiClient.get('/pets/my-pets'),
         apiClient.get('/user-dashboard/activities'),
-        apiClient.get('/petshop/user/my-purchased-pets') // Add pet shop purchased pets
+        apiClient.get('/petshop/user/my-purchased-pets'), // Add pet shop purchased pets
+        apiClient.get('/adoption/user/my-adopted-pets') // Add adopted pets
       ])
       
 
@@ -86,19 +87,18 @@ const PublicUserDashboard = () => {
         const corePets = ownedRes.value.data?.data?.pets || []
         allPets = [...allPets, ...corePets]
       }
-
-      // Process adopted pets (now included in registry pets)
-      let adoptedPets = []
       
       // Process purchased pets - EXACT SAME CODE AS PETS LIST PAGE
       let purchasedPets = []
       if (purchasedRes.status === 'fulfilled') {
         purchasedPets = purchasedRes.value.data?.data?.pets || []
       }
-
-      // Map adopted pets to pet-like objects - EXACT SAME CODE AS PETS LIST PAGE
-      // No longer needed as adopted pets are included in registry pets
-      const mappedAdoptedPets = []
+      
+      // Process adopted pets
+      let adoptedPets = []
+      if (adoptedRes.status === 'fulfilled') {
+        adoptedPets = adoptedRes.value.data?.data || []
+      }
       
       // Map purchased pets to pet-like objects - EXACT SAME CODE AS PETS LIST PAGE
       const mappedPurchasedPets = purchasedPets.map(pet => ({
@@ -121,9 +121,31 @@ const PublicUserDashboard = () => {
         sourceLabel: pet.sourceLabel,
         petShopItemId: pet._id  // Add this for cross-source image fetching
       }))
+      
+      // Map adopted pets to pet-like objects
+      const mappedAdoptedPets = adoptedPets.map(pet => ({
+        _id: pet._id,
+        name: pet.name || 'Pet',
+        images: pet.images || [],
+        petCode: pet.petCode,
+        breed: pet.breed,
+        species: pet.species,
+        gender: pet.gender || 'Unknown',
+        status: 'adopted',
+        currentStatus: 'adopted',
+        tags: ['adoption'],
+        adoptionDate: pet.adoptionDate,
+        age: pet.age,
+        ageUnit: pet.ageUnit,
+        color: pet.color,
+        createdAt: pet.adoptionDate,
+        source: 'adoption',
+        sourceLabel: 'Adoption',
+        adoptionPetId: pet._id  // Add this for cross-source image fetching
+      }))
 
       // Combine all pets and remove duplicates - EXACT SAME CODE AS PETS LIST PAGE
-      const combinedPets = [...allPets, ...mappedPurchasedPets]
+      const combinedPets = [...allPets, ...mappedPurchasedPets, ...mappedAdoptedPets]
       
       // More robust deduplication based on petCode first, then _id
       const uniquePets = combinedPets.filter((pet, index, self) => {
@@ -315,11 +337,11 @@ const PublicUserDashboard = () => {
     // 4. QUATERNARY: Cross-source image fetching (INDUSTRY STANDARD APPROACH)
     // This is the key fix - fetch images directly from source models when registry population fails
     
-    // For adoption pets - fetch directly from AdoptionPet model
+    // For adoption pets - fetch directly from AdoptionPet model using user endpoint
     if (pet.source === 'adoption' && pet.adoptionPetId) {
       // Actually fetch images from the source
       try {
-        const res = await apiClient.get(`/adoption/manager/pets/${pet.adoptionPetId}`);
+        const res = await apiClient.get(`/adoption/user/my-adopted-pets/${pet.adoptionPetId}`);
         const adoptionPet = res.data?.data;
         
         if (adoptionPet && adoptionPet.images && adoptionPet.images.length > 0) {
@@ -402,12 +424,12 @@ const PublicUserDashboard = () => {
     // Production-ready implementation to fetch images from source models
     
     try {
-      // Adoption pets - fetch directly from AdoptionPet model
+      // Adoption pets - fetch directly from AdoptionPet model using user endpoint
       if (pet.source === 'adoption' && pet.adoptionPetId) {
         
         try {
           // Fetch adoption pet details with populated images
-          const res = await apiClient.get(`/adoption/manager/pets/${pet.adoptionPetId}`);
+          const res = await apiClient.get(`/adoption/user/my-adopted-pets/${pet.adoptionPetId}`);
           const adoptionPet = res.data?.data;
           
           if (adoptionPet && adoptionPet.images && adoptionPet.images.length > 0) {
@@ -637,8 +659,13 @@ const PublicUserDashboard = () => {
                       onClick={() => {
                         // Check if this is an adopted pet by looking for the 'adoption' tag
                         if (pet?.tags?.includes('adoption')) {
-                          // For adopted pets, navigate to the adoption details page
-                          navigate(`/User/adoption/my-adopted-pets/${pet._id}`)
+                          // For adopted pets, navigate to the centralized pet details page using petCode
+                          if (pet.petCode) {
+                            navigate(`/pets/centralized/${pet.petCode}`)
+                          } else {
+                            // Fallback to regular pet details if no petCode
+                            navigate(`/User/pets/${pet._id}`)
+                          }
                         } 
                         // Check if this is a purchased pet by looking for the 'purchased' tag
                         else if (pet?.tags?.includes('purchased')) {
@@ -651,8 +678,13 @@ const PublicUserDashboard = () => {
                           }
                         }
                         else {
-                          // For regular user pets, use the existing navigation
-                          navigate(`/User/pets/${pet._id}`)
+                          // For regular user pets, try centralized route first if petCode exists
+                          if (pet.petCode) {
+                            navigate(`/pets/centralized/${pet.petCode}`)
+                          } else {
+                            // Fallback to regular pet details if no petCode
+                            navigate(`/User/pets/${pet._id}`)
+                          }
                         }
                       }}
                     >

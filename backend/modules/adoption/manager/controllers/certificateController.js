@@ -165,21 +165,47 @@ async function generateCertificate(req, res) {
       await application.save();
     }
 
-    // Optional notify adopter
+    // Optional notify adopter with certificate attachment
     try {
       const userEmail = application?.userId?.email || application?.email || '';
       if (userEmail) {
-        await sendMail({
-          to: userEmail, 
-          subject: 'Adoption Certificate Ready', 
-          html: `
-            <h2>Adoption Certificate Ready</h2>
-            <p>Hello ${application.userId?.name || 'Adopter'},</p>
-            <p>Your adoption certificate for ${application.petId?.name || 'your pet'} is now ready for download.</p>
-            <p>You can download it from your adoption applications page.</p>
-            <p>Thank you for choosing to adopt!</p>
-          `
-        });
+        try {
+          // Use the pdfBuffer that was already created in memory before uploading to Cloudinary
+          // Send email with PDF attachment
+          await sendMail({
+            to: userEmail, 
+            subject: 'Adoption Certificate - Download Attached', 
+            html: `
+              <h2>Adoption Certificate Ready</h2>
+              <p>Hello ${application.userId?.name || 'Adopter'},</p>
+              <p>Your adoption certificate for ${application.petId?.name || 'your pet'} is now ready.</p>
+              <p>The certificate is attached to this email. Please download and save it for your records.</p>
+              <p>Thank you for choosing to adopt!</p>
+            `,
+            attachments: [{
+              filename: `adoption_certificate_${application._id}.pdf`,
+              content: pdfBuffer, // Use the pdfBuffer that was already created
+              contentType: 'application/pdf'
+            }]
+          });
+          
+          console.log('Certificate email sent successfully with PDF attachment');
+        } catch (pdfError) {
+          console.warn('Failed to send email with PDF attachment:', pdfError.message);
+          
+          // Send email without attachment as fallback
+          await sendMail({
+            to: userEmail, 
+            subject: 'Adoption Certificate - Download Required', 
+            html: `
+              <h2>Adoption Certificate Ready</h2>
+              <p>Hello ${application.userId?.name || 'Adopter'},</p>
+              <p>Your adoption certificate for ${application.petId?.name || 'your pet'} is now ready.</p>
+              <p>Please download your certificate from this email attachment.</p>
+              <p>Thank you for choosing to adopt!</p>
+            `
+          });
+        }
       } else {
         console.warn('No email address found for user to send certificate notification');
       }
@@ -255,7 +281,14 @@ async function streamCertificateFile(req, res) {
     if (fileUrl.includes('cloudinary.com')) {
       console.log('Proxying Cloudinary URL:', fileUrl);
       try {
-        const response = await axios.get(fileUrl, { responseType: 'stream', validateStatus: (s)=>s>=200 && s<400 });
+        const response = await axios.get(fileUrl, { 
+          responseType: 'stream', 
+          validateStatus: (s) => s >= 200 && s < 400,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; PetAdoptionBot/1.0)',
+            'Accept': 'application/pdf, */*'
+          }
+        });
         const contentType = response.headers['content-type'] || 'application/pdf';
         const disposition = response.headers['content-disposition'];
         const fallbackName = (new URL(fileUrl)).pathname.split('/').pop() || 'certificate.pdf';
@@ -265,7 +298,8 @@ async function streamCertificateFile(req, res) {
         return;
       } catch (proxyError) {
         console.error('Cloudinary proxy error:', proxyError);
-        return res.status(500).json({ success: false, error: 'Failed to access certificate file' });
+        console.error('Error details:', proxyError.code, proxyError.response?.status, proxyError.response?.data);
+        return res.status(500).json({ success: false, error: 'Failed to access certificate file. ' + proxyError.message });
       }
     }
 

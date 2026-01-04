@@ -43,6 +43,12 @@ export default function StepBasicInfoImproved() {
   }
 
   const next = () => {
+    // Stock name is required
+    if (!form.stockName || !form.stockName.trim()) {
+      setError('Stock name is required')
+      return
+    }
+    
     // Age is optional but if provided should be a positive number
     if (form.age && (isNaN(form.age) || form.age < 0)) {
       setError('Age must be a positive number')
@@ -56,7 +62,7 @@ export default function StepBasicInfoImproved() {
     <Box className="space-y-6">
       <Typography variant="h6" sx={{ mb: 2 }}>Basic Information</Typography>
       <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-        Enter the basic details for the new pet stock. All fields are optional except where marked.
+        Enter the basic details for the new pet stock. Stock name is required.
       </Typography>
       
       {error && (
@@ -64,6 +70,19 @@ export default function StepBasicInfoImproved() {
       )}
       
       <Grid container spacing={3}>
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            label="Stock Name *"
+            name="stockName"
+            value={form.stockName || ''}
+            onChange={onChange}
+            placeholder="e.g., Golden Retriever Puppies Batch 1"
+            helperText="Required - A name to identify this stock"
+            required
+          />
+        </Grid>
+
         <Grid item xs={12} md={6}>
           <TextField
             fullWidth
@@ -96,6 +115,30 @@ export default function StepBasicInfoImproved() {
             </Select>
             <FormHelperText>Unit for the age entered above</FormHelperText>
           </FormControl>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label="Color"
+            name="color"
+            value={form.color || ''}
+            onChange={onChange}
+            placeholder="e.g., Golden, Black, White"
+            helperText="Optional - Color of the pets"
+          />
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label="Size"
+            name="size"
+            value={form.size || ''}
+            onChange={onChange}
+            placeholder="e.g., Small, Medium, Large"
+            helperText="Optional - Size of the pets"
+          />
         </Grid>
         
         <Grid item xs={12}>

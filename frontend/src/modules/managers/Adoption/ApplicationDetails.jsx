@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { apiClient, adoptionAPI, resolveMediaUrl } from '../../../services/api'
+import apiClient from '../../../core/api/client'
+import { adoptionAPI, resolveMediaUrl } from '../../../services/api'
 import OTPInputModal from './OTPInputModal'
 
 const ApplicationDetails = () => {
@@ -18,6 +19,164 @@ const ApplicationDetails = () => {
   })
   const [saving, setSaving] = useState(false)
   const [showOTPModal, setShowOTPModal] = useState(false)
+
+  const handleOTPSubmit = async (otp) => {
+    try {
+      setSaving(true)
+      const response = await apiClient.post(`/adoption/manager/applications/${id}/handover/complete`, {
+        otp
+      })
+      await load()
+      setShowOTPModal(false)
+      alert(response?.data?.message || 'Handover completed successfully')
+    } catch (e) {
+      alert(e?.response?.data?.error || 'Failed to complete handover')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleOTPRegenerate = async () => {
+    if (!window.confirm('Are you sure you want to regenerate the OTP? The adopter will receive a new OTP via email.')) {
+      return
+    }
+    
+    try {
+      setSaving(true)
+      const response = await apiClient.post(`/adoption/manager/applications/${id}/handover/regenerate-otp`)
+      await load()
+      const message = response?.data?.message || 'New OTP generated successfully'
+      alert(message)
+      
+      // If email failed to send, show additional warning
+      if (response?.data?.emailError) {
+        alert(`Warning: ${response.data.emailError}\n\nPlease inform the adopter about their new OTP manually.`)
+      }
+    } catch (e) {
+      alert(e?.response?.data?.error || 'Failed to regenerate OTP')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Helper functions
+  const getStatusBadge = (status) => {
+    const statusColors = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      approved: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
+      completed: 'bg-blue-100 text-blue-800'
+    }
+    return (
+      <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[status] || 'bg-gray-100 text-gray-800'}`}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    )
+  }
+
+  const getPaymentBadge = (status) => {
+    const paymentColors = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      completed: 'bg-green-100 text-green-800',
+      failed: 'bg-red-100 text-red-800',
+      processing: 'bg-blue-100 text-blue-800'
+    }
+    return (
+      <span className={`px-3 py-1 rounded-full text-sm font-medium ${paymentColors[status] || 'bg-gray-100 text-gray-800'}`}>
+        {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Not Set'}
+      </span>
+    )
+  }
+
+  const getHandoverBadge = (status) => {
+    if (!status || status === 'none') {
+      return (
+        <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+          Not Scheduled
+        </span>
+      )
+    }
+    
+    const handoverColors = {
+      scheduled: 'bg-blue-100 text-blue-800',
+      completed: 'bg-green-100 text-green-800'
+    }
+    return (
+      <span className={`px-3 py-1 rounded-full text-sm font-medium ${handoverColors[status] || 'bg-gray-100 text-gray-800'}`}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    )
+  }
+
+  const getApplicantDocuments = () => {
+    // Handle different document formats
+    const docs = app.documents || app.applicationData?.documents || []
+    return Array.isArray(docs) ? docs : []
+  }
+
+  const canScheduleHandover = () => {
+    const prereqs = getHandoverPrerequisites()
+    return prereqs.isApproved && prereqs.isPaymentCompleted && prereqs.isContractGenerated
+  }
+
+  const getHandoverPrerequisites = () => {
+    return {
+      isApproved: app.status === 'approved' || app.status === 'payment_completed' || app.status === 'completed',
+      isPaymentCompleted: app.paymentStatus === 'completed',
+      isContractGenerated: !!app.contractURL
+    }
+  }
+
+  const completeHandover = () => {
+    setShowOTPModal(true)
+  }
+
+  const updateHandover = async () => {
+    if (!handover.scheduledAt) {
+      return alert('Please provide date/time for handover')
+    }
+    
+    setSaving(true)
+    try {
+      const response = await apiClient.post(`/adoption/manager/applications/${id}/handover/schedule`, {
+        scheduledAt: handover.scheduledAt,
+        notes: handover.notes || ''
+      })
+      await load()
+      const message = response?.data?.message || 'Handover updated successfully'
+      alert(message)
+      
+      // If email failed to send, show additional warning
+      if (response?.data?.emailError) {
+        alert(`Warning: ${response.data.emailError}\n\nPlease inform the adopter about their handover details manually.`)
+      }
+    } catch (e) {
+      const errorMessage = e?.response?.data?.error || 'Failed to update handover'
+      alert(errorMessage)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const downloadCertificate = async () => {
+    try {
+      setSaving(true);
+      const response = await apiClient.get(`/adoption/manager/certificates/${id}/file`, { responseType: 'blob' });
+      const blob = new Blob([response.data], { type: response.headers['content-type'] || 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `certificate_${id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e?.response?.data?.error || 'Failed to download certificate');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true)
@@ -44,31 +203,20 @@ const ApplicationDetails = () => {
   const generateCertificate = async () => {
     try {
       setSaving(true)
-      // 1) Try to fetch existing contract
-      let contractURL = ''
-      try {
-        const resGet = await apiClient.get(`/adoption/manager/certificates/${id}`)
-        contractURL = resGet?.data?.data?.contractURL || ''
-      } catch (e) {
-        // 2) If not found, generate it
-        if (e?.response?.status === 404) {
-          const resGen = await apiClient.post(`/adoption/manager/certificates`, { applicationId: id })
-          contractURL = resGen?.data?.data?.contractURL || ''
-        } else {
-          throw e
-        }
+      
+      // Check if payment is completed before generating certificate
+      if (app.paymentStatus !== 'completed') {
+        throw new Error('Payment must be completed before generating certificate')
       }
-
-      if (!contractURL) {
-        throw new Error('Contract URL not available')
-      }
-
-      // 3) Generate certificate with agreementFile
-      const res = await adoptionAPI.generateCertificate(id, contractURL)
-      const url = res?.data?.data?.agreementFile || res?.data?.data?.contractURL
+      
+      // Generate certificate
+      const resGen = await apiClient.post(`/adoption/manager/certificates`, { applicationId: id })
+      const url = resGen?.data?.data?.fileUrl || resGen?.data?.data?.agreementFile || resGen?.data?.data?.contractURL
       if (url) {
         await load()
-        alert('Certificate generated successfully')
+        alert('Certificate generated successfully and sent to user email')
+      } else {
+        throw new Error('Certificate generation failed')
       }
     } catch (e) {
       alert(e?.response?.data?.error || e?.message || 'Failed to generate certificate')
@@ -489,6 +637,20 @@ const ApplicationDetails = () => {
                     </svg>
                     {saving ? 'Regenerating...' : 'Regenerate Certificate'}
                   </button>
+                  {app.contractURL && (
+                    <button 
+                      className={`px-4 py-2 rounded-lg font-medium flex items-center justify-center ${
+                        saving ? 'bg-gray-400' : 'bg-purple-600 text-white hover:bg-purple-700'
+                      }`} 
+                      disabled={saving} 
+                      onClick={downloadCertificate}
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      {saving ? 'Downloading...' : 'Download Certificate'}
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (

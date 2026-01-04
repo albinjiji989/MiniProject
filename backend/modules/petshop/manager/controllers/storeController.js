@@ -259,34 +259,95 @@ const addService = async (req, res) => {
 // Get pet shop stats
 const getPetShopStats = async (req, res) => {
   try {
+    // Check if user is authenticated
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Unauthorized', error: 'User not authenticated' });
+    }
+
     const storeFilter = getStoreFilter(req.user);
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    console.log('getPetShopStats - storeFilter:', storeFilter);
+    console.log('getPetShopStats - user:', req.user ? { id: req.user._id, role: req.user.role, storeId: req.user.storeId } : 'none');
+    
+    // If no access (storeFilter has _id: null), return zeros
+    if (storeFilter && Object.prototype.hasOwnProperty.call(storeFilter, '_id') && storeFilter._id === null) {
+      console.log('getPetShopStats - returning zeros due to invalid storeFilter');
+      return res.json({ 
+        success: true, 
+        data: { 
+          totalAnimals: 0, 
+          availableForSale: 0, 
+          staffMembers: 0, 
+          totalProducts: 0, 
+          totalServices: 0,
+          monthlyRevenue: 0
+        } 
+      });
+    }
 
-    const [totalAnimals, availableForSale, staffMembers, totalProducts, totalServices] = await Promise.all([
-      Pet.countDocuments({ ...storeFilter, currentStatus: 'in_petshop' }),
-      Pet.countDocuments({ ...storeFilter, currentStatus: 'available_for_sale' }),
-      PetShop.aggregate([
-        { $match: storeFilter },
-        { $unwind: '$staff' },
-        { $count: 'count' }
-      ]).then(r => r[0]?.count || 0),
-      PetShop.aggregate([
-        { $match: storeFilter },
-        { $project: { productCount: { $size: '$products' } } },
-        { $group: { _id: null, total: { $sum: '$productCount' } } }
-      ]).then(r => r[0]?.total || 0),
-      PetShop.aggregate([
-        { $match: storeFilter },
-        { $project: { serviceCount: { $size: '$services' } } },
-        { $group: { _id: null, total: { $sum: '$serviceCount' } } }
-      ]).then(r => r[0]?.total || 0)
-    ]);
+    // Simple count queries without complex aggregation
+    let totalAnimals = 0;
+    let availableForSale = 0;
+    
+    try {
+      totalAnimals = await PetInventoryItem.countDocuments({ ...storeFilter, isActive: true }).catch(err => {
+        console.warn('Error counting totalAnimals:', err.message);
+        return 0;
+      });
+    } catch (err) {
+      console.warn('Exception counting totalAnimals:', err.message);
+    }
+    
+    try {
+      availableForSale = await PetInventoryItem.countDocuments({ ...storeFilter, isActive: true, status: 'available_for_sale' }).catch(err => {
+        console.warn('Error counting availableForSale:', err.message);
+        return 0;
+      });
+    } catch (err) {
+      console.warn('Exception counting availableForSale:', err.message);
+    }
+    
+    // Get staff and products from PetShop
+    let staffMembers = 0;
+    let totalProducts = 0;
+    let totalServices = 0;
+    
+    try {
+      const petShop = await PetShop.findOne(storeFilter).select('staff products services').catch(err => {
+        console.warn('Error fetching PetShop:', err.message);
+        return null;
+      });
+      
+      if (petShop) {
+        staffMembers = (petShop.staff && Array.isArray(petShop.staff)) ? petShop.staff.length : 0;
+        totalProducts = (petShop.products && Array.isArray(petShop.products)) ? petShop.products.length : 0;
+        totalServices = (petShop.services && Array.isArray(petShop.services)) ? petShop.services.length : 0;
+        console.log('getPetShopStats - petShop found with staff:', staffMembers, 'products:', totalProducts, 'services:', totalServices);
+      } else {
+        console.log('getPetShopStats - no PetShop found for filter:', storeFilter);
+      }
+    } catch (err) {
+      console.error('Exception fetching PetShop:', err.message);
+    }
 
-    res.json({ success: true, data: { totalAnimals, availableForSale, staffMembers, totalProducts, totalServices } });
+    console.log('getPetShopStats - returning stats:', { totalAnimals, availableForSale, staffMembers, totalProducts, totalServices });
+    
+    res.json({ 
+      success: true, 
+      data: { 
+        totalAnimals, 
+        availableForSale, 
+        staffMembers, 
+        totalProducts, 
+        totalServices,
+        monthlyRevenue: 0
+      } 
+    });
   } catch (e) {
-    console.error('Pet shop stats error:', e);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Pet shop stats error:', e.message);
+    console.error('Stack:', e.stack);
+    console.error('User:', req.user ? `${req.user._id} (${req.user.role})` : 'unauthenticated');
+    res.status(500).json({ success: false, message: 'Server error', error: e.message });
   }
 };
 

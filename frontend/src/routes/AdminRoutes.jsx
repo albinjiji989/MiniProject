@@ -2,7 +2,6 @@ import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import AdminDashboard from '../pages/Admin/AdminDashboard'
-import AdminAIMLDashboard from '../pages/Admin/AIMLDashboard'
 import ManagerManagement from '../pages/Admin/ManagerManagement'
 import UserManagement from '../pages/Admin/UserManagement'
 import RoleManagement from '../pages/Admin/RoleManagement'
@@ -34,7 +33,6 @@ const AdminRoutes = () => {
       <Route path="/" element={<AdminLayout />}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<AdminDashboard />} />
-        <Route path="aiml-dashboard" element={<AdminAIMLDashboard />} />
         <Route path="profile" element={<Profile />} />
         <Route path="managers" element={<ManagerManagement />} />
         <Route path="users" element={<UserManagement />} />

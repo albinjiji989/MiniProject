@@ -562,8 +562,12 @@ const getUserApplicationById = async (req, res) => {
 
 const getUserApplicationPetDetails = async (req, res) => {
   try {
-    const { petId } = req.params;
-    
+    // Pull `id` from params — route defines the param as `:id`
+    const petId = req.params.id;
+
+    // Debug: log incoming params for easier troubleshooting
+    console.log('getUserApplicationPetDetails - petId:', petId, 'user:', req.user?.id);
+
     // Validate that the petId parameter is a valid ObjectId
     if (!/^[0-9a-fA-F]{24}$/.test(petId)) {
       return res.status(400).json({ 
