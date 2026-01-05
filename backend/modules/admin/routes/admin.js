@@ -351,7 +351,7 @@ router.post('/invite-module-admin', [
   body('name').notEmpty(),
   body('email').isEmail(),
   body('phone').optional(),
-  body('module').isIn(['adoption','petshop','temporary-care','veterinary'])
+  body('module').isIn(['adoption','petshop','temporary-care','veterinary','ecommerce','pharmacy'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -392,7 +392,7 @@ router.post('/invite-module-manager', [
   body('name').notEmpty(),
   body('email').isEmail(),
   body('phone').optional(),
-  body('module').isIn(['adoption','petshop','temporary-care','veterinary'])
+  body('module').isIn(['adoption','petshop','temporary-care','veterinary','ecommerce','pharmacy'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -449,7 +449,7 @@ router.post('/verify-module-admin', [
   auth,
   authorize('admin'),
   body('email').isEmail(),
-  body('module').isString().isIn(['adoption','petshop','temporary-care','veterinary']),
+  body('module').isString().isIn(['adoption','petshop','temporary-care','veterinary','ecommerce','pharmacy']),
   body('otp').matches(/^\d{6}$/)
 ], async (req, res) => {
   try {
@@ -515,7 +515,7 @@ router.post('/verify-module-manager', [
   auth,
   authorize('admin'),
   body('email').isEmail(),
-  body('module').isString().isIn(['adoption','petshop','temporary-care','veterinary']),
+  body('module').isString().isIn(['adoption','petshop','temporary-care','veterinary','ecommerce','pharmacy']),
   body('otp').matches(/^\d{6}$/)
 ], async (req, res) => {
   try {
@@ -609,7 +609,7 @@ router.post('/managers', [
   body('name').notEmpty(),
   body('email').isEmail(),
   body('password').isLength({ min: 6 }),
-  body('assignedModule').isString().notEmpty().isIn(['adoption','petshop','temporary-care','veterinary']),
+  body('assignedModule').isString().notEmpty().isIn(['adoption','petshop','temporary-care','veterinary','ecommerce','pharmacy']),
   body('phone').optional()
 ], async (req, res) => {
   try {
@@ -672,7 +672,7 @@ router.post('/managers', [
 router.put('/managers/:id', [
   auth,
   authorize('admin'),
-  body('assignedModule').optional().isString().isIn(['adoption','petshop','temporary-care','veterinary']),
+  body('assignedModule').optional().isString().isIn(['adoption','petshop','temporary-care','veterinary','ecommerce','pharmacy']),
   body('name').optional().isString(),
   body('phone').optional().isString(),
 ], async (req, res) => {
@@ -754,7 +754,7 @@ router.post('/resend-invite', [
   auth,
   authorize('admin'),
   body('email').isEmail(),
-  body('module').isString().isIn(['adoption','petshop','temporary-care','veterinary'])
+  body('module').isString().isIn(['adoption','petshop','temporary-care','veterinary','ecommerce','pharmacy'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);

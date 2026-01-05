@@ -1,164 +1,344 @@
-import React, { useEffect, useState } from 'react'
-import ModuleDashboardLayout from '../../../components/Module/ModuleDashboardLayout'
-import { useNavigate } from 'react-router-dom'
-import { ecommerceAPI, shopAPI } from '../../../services/api'
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Container,
+  Paper,
+  TextField,
+  Button,
+  Typography,
+  Grid,
+  Card,
+  CardContent,
+  CircularProgress,
+  Alert,
+  Stepper,
+  Step,
+  StepLabel,
+  Divider,
+  FormControlLabel,
+  Checkbox
+} from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../contexts/AuthContext';
+import apiClient from '../../../services/api';
 
-export default function EcommerceDashboard() {
-  const navigate = useNavigate()
-  const [products, setProducts] = useState([])
-  const [cartItems, setCartItems] = useState([])
-  const [orders, setOrders] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState('shop')
+const Checkout = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [activeStep, setActiveStep] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [cart, setCart] = useState(null);
+  const [sameBilling, setSameBilling] = useState(true);
+
+  const [shippingAddress, setShippingAddress] = useState({
+    addressLine1: '',
+    addressLine2: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    country: 'India'
+  });
+
+  const [billingAddress, setBillingAddress] = useState({
+    addressLine1: '',
+    addressLine2: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    country: 'India'
+  });
+
+  const [paymentInfo, setPaymentInfo] = useState({
+    method: 'razorpay',
+    cardName: '',
+    upiId: ''
+  });
 
   useEffect(() => {
-    loadData()
-  }, [])
+    loadCart();
+  }, []);
 
-  const loadData = async () => {
-    setLoading(true)
+  const loadCart = async () => {
     try {
-      // Load products
-      const productsRes = await shopAPI.listProducts()
-      setProducts(productsRes.data?.data?.products || [])
-      
-      // Load cart items
-      const cartRes = await shopAPI.getCart()
-      setCartItems(cartRes.data?.data?.items || [])
-      
-      // Load orders
-      const ordersRes = await ecommerceAPI.listOrders()
-      setOrders(ordersRes.data?.data?.orders || [])
-    } catch (error) {
-      console.error('Error loading ecommerce data:', error)
-      setProducts([])
-      setCartItems([])
-      setOrders([])
-    } finally {
-      setLoading(false)
+      const response = await apiClient.get('/api/ecommerce/cart');
+      setCart(response.data.cart);
+    } catch (err) {
+      setError('Failed to load cart');
     }
+  };
+
+  const calculateTotals = () => {
+    if (!cart?.items) return { subtotal: 0, tax: 0, shipping: 0, total: 0 };
+    const subtotal = cart.items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    const tax = subtotal * 0.18;
+    const shipping = subtotal > 500 ? 0 : 50;
+    return { subtotal, tax, shipping, total: subtotal + tax + shipping };
+  };
+
+  const handleShippingChange = (field, value) => {
+    setShippingAddress({ ...shippingAddress, [field]: value });
+    if (sameBilling) {
+      setBillingAddress({ ...billingAddress, [field]: value });
+    }
+  };
+
+  const handlePlaceOrder = async () => {
+    try {
+      setLoading(true);
+      const totals = calculateTotals();
+      const response = await apiClient.post('/api/ecommerce/orders', {
+        shippingAddress,
+        billingAddress: sameBilling ? shippingAddress : billingAddress,
+        paymentMethod: paymentInfo.method,
+        totalAmount: totals.total,
+        taxAmount: totals.tax,
+        shippingAmount: totals.shipping
+      });
+
+      // Redirect to payment or order confirmation
+      navigate(`/ecommerce/orders/${response.data.order._id}`);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to place order');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const { subtotal, tax, shipping, total } = calculateTotals();
+  const steps = ['Shipping', 'Billing', 'Payment'];
+
+  if (!cart) {
+    return <CircularProgress />;
   }
 
-  const actions = [
-    { label: 'Shop Now', onClick: () => setTab('shop'), color: 'bg-emerald-600' },
-    { label: 'My Cart', onClick: () => setTab('cart'), color: 'bg-blue-600' },
-    { label: 'My Orders', onClick: () => setTab('orders'), color: 'bg-indigo-600' },
-  ]
-
-  const stats = [
-    { label: 'Products', value: products.length, icon: '🛍️' },
-    { label: 'Cart Items', value: cartItems.length, icon: '🛒' },
-    { label: 'Orders', value: orders.length, icon: '📦' },
-  ]
-
-  const tabs = [
-    { key: 'shop', label: 'Shop' },
-    { key: 'cart', label: 'Cart' },
-    { key: 'orders', label: 'Orders' },
-  ]
-
-  const Shop = () => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {products.map((p, i)=> (
-        <div key={i} className="bg-white border rounded p-4">
-          <div className="font-semibold">{p.name || 'Product'}</div>
-          <div className="text-gray-600 text-sm">{p.category || '-'}</div>
-          <div className="mt-1 font-medium">₹{p.price || 0}</div>
-          <div className="mt-2">
-            <button 
-              className="px-3 py-1 bg-emerald-600 text-white rounded"
-              onClick={() => shopAPI.addToCart(p._id)}
-            >
-              Add to Cart
-            </button>
-          </div>
-        </div>
-      ))}
-      {products.length===0 && <div className="text-gray-500">No products available.</div>}
-    </div>
-  )
-
-  const Cart = () => (
-    <div className="bg-white border rounded">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="text-left border-b">
-            <th className="py-2 px-3">Item</th>
-            <th className="py-2 px-3">Qty</th>
-            <th className="py-2 px-3">Price</th>
-            <th className="py-2 px-3">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cartItems.map((c,i)=> (
-            <tr key={i} className="border-b">
-              <td className="py-2 px-3">{c.name || 'Item'}</td>
-              <td className="py-2 px-3">{c.qty || 1}</td>
-              <td className="py-2 px-3">₹{c.price || 0}</td>
-              <td className="py-2 px-3">₹{(c.qty||1)*(c.price||0)}</td>
-            </tr>
-          ))}
-          {cartItems.length===0 && (
-            <tr><td className="py-3 px-3 text-gray-500" colSpan={4}>Your cart is empty.</td></tr>
-          )}
-        </tbody>
-      </table>
-      <div className="p-3 flex justify-end">
-        <button className="px-4 py-2 bg-indigo-600 text-white rounded" onClick={()=>navigate('/User/cart')}>Go to Cart</button>
-      </div>
-    </div>
-  )
-
-  const Orders = () => (
-    <div className="bg-white border rounded">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="text-left border-b">
-            <th className="py-2 px-3">Order #</th>
-            <th className="py-2 px-3">Date</th>
-            <th className="py-2 px-3">Status</th>
-            <th className="py-2 px-3">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((o,i)=> (
-            <tr key={i} className="border-b">
-              <td className="py-2 px-3">{o.orderNo || o._id}</td>
-              <td className="py-2 px-3">{o.createdAt ? new Date(o.createdAt).toLocaleDateString() : '-'}</td>
-              <td className="py-2 px-3">{o.status || '-'}</td>
-              <td className="py-2 px-3">₹{o.amount || 0}</td>
-            </tr>
-          ))}
-          {orders.length===0 && <tr><td className="py-3 px-3 text-gray-500" colSpan={4}>No orders found.</td></tr>}
-        </tbody>
-      </table>
-      <div className="p-3 flex justify-end">
-        <button className="px-4 py-2 bg-indigo-600 text-white rounded" onClick={()=>navigate('/User/orders')}>Go to Orders</button>
-      </div>
-    </div>
-  )
-
   return (
-    <ModuleDashboardLayout
-      title="Ecommerce"
-      description="Shop products and manage your cart and orders"
-      actions={actions}
-      stats={stats}
-      tabs={tabs}
-      activeTab={tab}
-      onTabChange={setTab}
-    >
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-        </div>
-      ) : (
-        <>
-          {tab === 'shop' && <Shop />}
-          {tab === 'cart' && <Cart />}
-          {tab === 'orders' && <Orders />}
-        </>
-      )}
-    </ModuleDashboardLayout>
-  )
-}
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Typography variant="h4" sx={{ mb: 4, fontWeight: 'bold' }}>
+        Checkout
+      </Typography>
+
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+
+      <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+        {steps.map((label) => (
+          <Step key={label}>
+            <StepLabel>{label}</StepLabel>
+          </Step>
+        ))}
+      </Stepper>
+
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={8}>
+          <Paper sx={{ p: 3 }}>
+            {activeStep === 0 && (
+              <Box>
+                <Typography variant="h6" sx={{ mb: 3 }}>Shipping Address</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <TextField
+                      label="Address Line 1"
+                      value={shippingAddress.addressLine1}
+                      onChange={(e) => handleShippingChange('addressLine1', e.target.value)}
+                      fullWidth
+                      required
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      label="Address Line 2 (Optional)"
+                      value={shippingAddress.addressLine2}
+                      onChange={(e) => handleShippingChange('addressLine2', e.target.value)}
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      label="City"
+                      value={shippingAddress.city}
+                      onChange={(e) => handleShippingChange('city', e.target.value)}
+                      fullWidth
+                      required
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      label="State"
+                      value={shippingAddress.state}
+                      onChange={(e) => handleShippingChange('state', e.target.value)}
+                      fullWidth
+                      required
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      label="Zip Code"
+                      value={shippingAddress.zipCode}
+                      onChange={(e) => handleShippingChange('zipCode', e.target.value)}
+                      fullWidth
+                      required
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      label="Country"
+                      value={shippingAddress.country}
+                      disabled
+                      fullWidth
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+            )}
+
+            {activeStep === 1 && (
+              <Box>
+                <Typography variant="h6" sx={{ mb: 3 }}>Billing Address</Typography>
+                <FormControlLabel
+                  control={<Checkbox checked={sameBilling} onChange={(e) => setSameBilling(e.target.checked)} />}
+                  label="Same as shipping address"
+                  sx={{ mb: 2 }}
+                />
+                {!sameBilling && (
+                  <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                      <TextField
+                        label="Address Line 1"
+                        value={billingAddress.addressLine1}
+                        onChange={(e) => setBillingAddress({ ...billingAddress, addressLine1: e.target.value })}
+                        fullWidth
+                        required
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        label="Address Line 2 (Optional)"
+                        value={billingAddress.addressLine2}
+                        onChange={(e) => setBillingAddress({ ...billingAddress, addressLine2: e.target.value })}
+                        fullWidth
+                      />
+                    </Grid>
+                    <Grid item xs={6}>
+                      <TextField
+                        label="City"
+                        value={billingAddress.city}
+                        onChange={(e) => setBillingAddress({ ...billingAddress, city: e.target.value })}
+                        fullWidth
+                        required
+                      />
+                    </Grid>
+                    <Grid item xs={6}>
+                      <TextField
+                        label="State"
+                        value={billingAddress.state}
+                        onChange={(e) => setBillingAddress({ ...billingAddress, state: e.target.value })}
+                        fullWidth
+                        required
+                      />
+                    </Grid>
+                    <Grid item xs={6}>
+                      <TextField
+                        label="Zip Code"
+                        value={billingAddress.zipCode}
+                        onChange={(e) => setBillingAddress({ ...billingAddress, zipCode: e.target.value })}
+                        fullWidth
+                        required
+                      />
+                    </Grid>
+                  </Grid>
+                )}
+              </Box>
+            )}
+
+            {activeStep === 2 && (
+              <Box>
+                <Typography variant="h6" sx={{ mb: 3 }}>Payment Method</Typography>
+                <Typography variant="body2" sx={{ mb: 2, color: 'textSecondary' }}>
+                  We accept payment via Razorpay (credit card, debit card, UPI, etc.)
+                </Typography>
+                <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1, mb: 2 }}>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    <strong>Total Amount: ₹{total.toFixed(2)}</strong>
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    You will be redirected to Razorpay gateway to complete payment
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+              <Button
+                disabled={activeStep === 0}
+                onClick={() => setActiveStep(activeStep - 1)}
+              >
+                Back
+              </Button>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  if (activeStep < 2) {
+                    setActiveStep(activeStep + 1);
+                  } else {
+                    handlePlaceOrder();
+                  }
+                }}
+                disabled={loading}
+              >
+                {activeStep === 2 ? (loading ? <CircularProgress size={24} /> : 'Place Order') : 'Next'}
+              </Button>
+            </Box>
+          </Paper>
+        </Grid>
+
+        {/* Order Summary */}
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
+                Order Summary
+              </Typography>
+
+              {cart.items.map((item) => (
+                <Box key={item.product._id} sx={{ mb: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography variant="body2">{item.product.name} x{item.quantity}</Typography>
+                    <Typography variant="body2">₹{(item.product.price * item.quantity).toFixed(2)}</Typography>
+                  </Box>
+                </Box>
+              ))}
+
+              <Divider sx={{ my: 2 }} />
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography>Subtotal:</Typography>
+                <Typography>₹{subtotal.toFixed(2)}</Typography>
+              </Box>
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography>Tax (18%):</Typography>
+                <Typography>₹{tax.toFixed(2)}</Typography>
+              </Box>
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                <Typography>Shipping:</Typography>
+                <Typography>{shipping === 0 ? 'FREE' : `₹${shipping.toFixed(2)}`}</Typography>
+              </Box>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Total:</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                  ₹{total.toFixed(2)}
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Container>
+  );
+};
+
+export default Checkout;

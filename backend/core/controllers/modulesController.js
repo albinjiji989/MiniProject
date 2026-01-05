@@ -5,18 +5,23 @@ const path = require('path');
 function getFilesystemModules() {
   try {
     // Define actual service modules only (not backend organizational folders)
-    const actualModules = ['adoption', 'petshop', 'veterinary', 'temporary-care'];
+    // 3 separate modules: Ecommerce, Pharmacy, TemporaryCare + existing modules
+    const actualModules = ['adoption', 'petshop', 'veterinary', 'ecommerce', 'pharmacy', 'temporary-care'];
     
     const knownIconByKey = {
       adoption: 'Pets',
       petshop: 'ShoppingCart',
       veterinary: 'LocalHospital',
+      ecommerce: 'ShoppingCart',
+      pharmacy: 'LocalPharmacy',
       'temporary-care': 'Home',
     };
     const colorByKey = {
       adoption: '#10b981',
       petshop: '#3b82f6',
       veterinary: '#64748b',
+      ecommerce: '#ef4444',
+      pharmacy: '#f59e0b',
       'temporary-care': '#06b6d4',
     };
     const toDisplayName = (key) => {
@@ -30,10 +35,12 @@ function getFilesystemModules() {
         _id: key, // virtual id for frontend rendering only
         key,
         name: toDisplayName(key),
-        description: '',
+        description: key === 'ecommerce' ? 'Pet supplies and accessories shopping' :
+                     key === 'pharmacy' ? 'Pet medicines with prescription support' :
+                     key === 'temporary-care' ? 'Pet boarding and daycare services' : '',
         icon: knownIconByKey[key] || 'Business',
         color: colorByKey[key] || '#64748b',
-        status: 'coming_soon',
+        status: 'active',
         hasManagerDashboard: true,
         isCoreModule: true,
         maintenanceMessage: null,

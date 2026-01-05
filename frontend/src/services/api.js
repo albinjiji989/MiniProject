@@ -744,3 +744,5 @@ export const petShopStockAPI = {
   createRazorpayOrderForStock: (orderData) => apiClient.post('/petshop/user/create-order-for-stock', orderData)
 }
 
+export default apiClient;
+
