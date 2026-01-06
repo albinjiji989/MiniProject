@@ -35,6 +35,7 @@ import ManageStockImages from '../modules/managers/PetShop/ManageStockImages'
 import ReservedPets from '../modules/managers/PetShop/ReservedPets'
 import PurchasedPets from '../modules/managers/PetShop/PurchasedPets'
 import PurchasePet from '../modules/managers/PetShop/PurchasePet'
+import PurchaseApplications from '../modules/managers/PetShop/PurchaseApplications'
 import PetShopDeliveryManagement from '../pages/Manager/PetShopDeliveryManagement'
 import PetShopPetHistory from '../modules/managers/PetShop/PetHistory'
 import HandoverManagement from '../modules/managers/PetShop/HandoverManagement'
@@ -184,6 +185,7 @@ const ManagerRoutes = () => {
             </Route>
             <Route path="/orders" element={<PetShopOrders />} />
             <Route path="/orders/:id/invoice" element={<PetShopInvoice />} />
+            <Route path="/purchase-applications" element={<PurchaseApplications />} />
             <Route path="/inventory" element={<PetShopInventory />} />
             <Route path="/manage-inventory" element={<PetShopManageInventory />} />
             <Route path="/manage-stock-images/:id" element={<ManageStockImages />} />

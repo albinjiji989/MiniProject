@@ -11,6 +11,7 @@ import PetAdoptionForm from '../pages/User/Adoption/Adoption';
 import UserAdoptionWizard from '../pages/User/Adoption/ApplyWizard/ApplyLayout';
 import AdoptionApplications from '../pages/User/Adoption/AdoptionApplications'
 import UserAdoptionPetDetails from '../pages/User/Adoption/UserAdoptedPetDetails'
+import AdoptionDashboard from '../pages/User/Adoption/AdoptionDashboard'
 import UserVetAppointments from '../pages/User/Veterinary/VeterinaryAppointments'
 import PetCareCalendar from '../pages/User/MyOwnedPets'
 import PetHealthRecords from '../pages/User/MyOwnedPets'
@@ -19,6 +20,8 @@ import PetMedicalRecords from '../pages/User/MyOwnedPets'
 import PetInsurance from '../pages/User/MyOwnedPets'
 import PetShopUserDashboard from '../pages/User/PetShop/PetShopUserDashboard'
 import BatchDetailsPage from '../pages/User/PetShop/BatchDetailsPage'
+import StockDetail from '../pages/User/PetShop/StockDetail'
+import Shop from '../pages/User/PetShop/Shop'
 import PetShopUserProducts from '../pages/User/PetShop/BrowsePets'
 import PetShopUserCart from '../pages/User/PetShop/Payment'
 import PetShopUserCheckout from '../pages/User/PetShop/PaymentGateway'
@@ -29,6 +32,7 @@ import PetShopUserReviews from '../pages/User/PetShop/MyPurchasedPets'
 import PetShopUserAddress from '../pages/User/PetShop/Payment'
 import PetShopUserPaymentMethods from '../pages/User/PetShop/Payment'
 import PetShopUserProfile from '../pages/User/PetShop/UserPetShopDashboard'
+import MyApplications from '../pages/User/PetShop/MyApplications'
 import TemporaryCareUserDashboard from '../pages/User/TemporaryCare/TemporaryCareDashboard'
 import TemporaryCareUserBookings from '../pages/User/TemporaryCare/TemporaryCare'
 import TemporaryCareUserCaregivers from '../pages/User/TemporaryCare/TemporaryCare'
@@ -95,6 +99,7 @@ const UserRoutes = () => {
         {/* User: Adoptions */}
         <Route path="/adoption/*" element={
           <Routes>
+            <Route path="/" element={<AdoptionDashboard />} />
             <Route path="/applications" element={<UserAdoptionApplications />} />
             <Route path="/applications/:id" element={<UserAdoptionApplicationDetails />} />
             <Route path="/apply/:petId" element={<PetAdoptionForm />} />
@@ -103,7 +108,8 @@ const UserRoutes = () => {
             <Route path="/success/:applicationId" element={<AdoptionApplications />} />
             <Route path="/history" element={<AdoptionApplications />} />
             <Route path="/pets/:id" element={<UserAdoptionPetDetails />} />
-            <Route path="/" element={<Navigate to="/user/adoption/applications" replace />} />
+            <Route path="/detail/:id" element={<UserAdoptionPetDetails />} />
+            <Route path="/adopted" element={<AdoptionDashboard />} />
           </Routes>
         } />
         
@@ -140,7 +146,10 @@ const UserRoutes = () => {
         <Route path="/petshop/*" element={
           <Routes>
             <Route path="/dashboard" element={<PetShopUserDashboard />} />
+            <Route path="/shop" element={<Shop />} />
             <Route path="/batch/:batchId" element={<BatchDetailsPage />} />
+            <Route path="/stock/:id" element={<StockDetail />} />
+            <Route path="/my-applications" element={<MyApplications />} />
             <Route path="/products" element={<PetShopUserProducts />} />
             <Route path="/cart" element={<PetShopUserCart />} />
             <Route path="/checkout" element={<PetShopUserCheckout />} />

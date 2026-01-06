@@ -16,7 +16,7 @@ const imageSchema = new mongoose.Schema({
   entityType: {
     type: String,
     required: true,
-    enum: ['Pet', 'PetRegistry', 'AdoptionPet', 'PetInventoryItem', 'PetNew', 'PetShop', 'PetStock', 'Product', 'InventoryItem', 'VeterinaryMedicalRecord']
+    enum: ['Pet', 'PetRegistry', 'AdoptionPet', 'PetInventoryItem', 'PetNew', 'PetShop', 'PetStock', 'Product', 'InventoryItem', 'VeterinaryMedicalRecord', 'purchase_application']
   },
   entityId: {
     type: mongoose.Schema.Types.ObjectId,

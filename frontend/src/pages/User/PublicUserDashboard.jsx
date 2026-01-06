@@ -92,6 +92,15 @@ const PublicUserDashboard = () => {
       let purchasedPets = []
       if (purchasedRes.status === 'fulfilled') {
         purchasedPets = purchasedRes.value.data?.data?.pets || []
+        console.log('📦 Purchased pets from API:', purchasedPets.length)
+        if (purchasedPets.length > 0) {
+          console.log('📦 First purchased pet sample:', {
+            name: purchasedPets[0].name,
+            hasImages: !!purchasedPets[0].images,
+            imagesCount: purchasedPets[0].images?.length || 0,
+            firstImage: purchasedPets[0].images?.[0]
+          })
+        }
       }
       
       // Process adopted pets
@@ -101,26 +110,36 @@ const PublicUserDashboard = () => {
       }
       
       // Map purchased pets to pet-like objects - EXACT SAME CODE AS PETS LIST PAGE
-      const mappedPurchasedPets = purchasedPets.map(pet => ({
-        _id: pet._id,
-        name: pet.name || 'Pet',
-        images: pet.images || [],
-        petCode: pet.petCode,
-        breed: pet.breed,
-        species: pet.species,
-        gender: pet.gender || 'Unknown',
-        status: 'purchased',
-        currentStatus: 'purchased',
-        tags: ['purchased'],
-        purchaseDate: pet.acquiredDate,
-        age: pet.age,
-        ageUnit: pet.ageUnit,
-        color: pet.color,
-        createdAt: pet.acquiredDate,
-        source: pet.source,
-        sourceLabel: pet.sourceLabel,
-        petShopItemId: pet._id  // Add this for cross-source image fetching
-      }))
+      const mappedPurchasedPets = purchasedPets.map(pet => {
+        console.log('🔍 MAPPING PURCHASED PET:', {
+          petCode: pet.petCode,
+          hasImages: !!pet.images,
+          imagesArray: pet.images,
+          imagesLength: pet.images?.length,
+          firstImageUrl: pet.images?.[0]?.url
+        });
+        
+        return {
+          _id: pet._id,
+          name: pet.name || 'Pet',
+          images: pet.images || [],
+          petCode: pet.petCode,
+          breed: pet.breed,
+          species: pet.species,
+          gender: pet.gender || 'Unknown',
+          status: 'purchased',
+          currentStatus: 'purchased',
+          tags: ['purchased'],
+          purchaseDate: pet.acquiredDate,
+          age: pet.age,
+          ageUnit: pet.ageUnit,
+          color: pet.color,
+          createdAt: pet.acquiredDate,
+          source: pet.source,
+          sourceLabel: pet.sourceLabel,
+          petShopItemId: pet._id  // Add this for cross-source image fetching
+        };
+      });
       
       // Map adopted pets to pet-like objects
       const mappedAdoptedPets = adoptedPets.map(pet => ({
@@ -143,19 +162,124 @@ const PublicUserDashboard = () => {
         sourceLabel: 'Adoption',
         adoptionPetId: pet._id  // Add this for cross-source image fetching
       }))
+      
+      console.log('🐕 ALL PETS (from /pets):', allPets.map(p => ({ 
+        _id: p._id, 
+        petCode: p.petCode, 
+        name: p.name, 
+        source: p.source,
+        adoptionPetId: p.adoptionPetId,
+        petShopItemId: p.petShopItemId
+      })));
+      
+      console.log('🎁 ADOPTED PETS (from /adoption):', mappedAdoptedPets.map(p => ({ 
+        _id: p._id, 
+        petCode: p.petCode, 
+        name: p.name, 
+        source: p.source,
+        adoptionPetId: p.adoptionPetId
+      })));
+      
+      console.log('🐕 ADOPTION PETS IN ALL PETS:', allPets.filter(p => p.source === 'adoption').map(p => ({ 
+        _id: p._id, 
+        petCode: p.petCode, 
+        name: p.name, 
+        source: p.source,
+        adoptionPetId: p.adoptionPetId
+      })));
+      
+      // DETAILED LOG - Copy this to see the issue
+      console.log('📋 FULL ADOPTION DATA:');
+      console.log('  From /adoption API:', JSON.stringify(mappedAdoptedPets.map(p => ({ 
+        _id: p._id, 
+        petCode: p.petCode,
+        adoptionPetId: p.adoptionPetId
+      }))));
+      console.log('  From /pets API:', JSON.stringify(allPets.filter(p => p.source === 'adoption').map(p => ({ 
+        _id: p._id, 
+        petCode: p.petCode,
+        adoptionPetId: p.adoptionPetId
+      }))));
+      
+      console.log('🛒 PURCHASED PETS (from /petshop):', mappedPurchasedPets.map(p => ({ 
+        _id: p._id, 
+        petCode: p.petCode, 
+        name: p.name, 
+        source: p.source,
+        petShopItemId: p.petShopItemId
+      })));
 
       // Combine all pets and remove duplicates - EXACT SAME CODE AS PETS LIST PAGE
-      const combinedPets = [...allPets, ...mappedPurchasedPets, ...mappedAdoptedPets]
+      // PUT PURCHASED/ADOPTED PETS FIRST - they have complete data including images
+      // allPets from /pets endpoint may have duplicates without images
+      const combinedPets = [...mappedPurchasedPets, ...mappedAdoptedPets, ...allPets]
+      
+      console.log('🔍 BEFORE DEDUP - Total pets:', combinedPets.length, {
+        petshop: combinedPets.filter(p => p.source === 'petshop').length,
+        adoption: combinedPets.filter(p => p.source === 'adoption').length,
+        core: combinedPets.filter(p => p.source === 'core').length
+      });
+      
+      console.log('🔍 COMBINED PETS - First petshop pet:', combinedPets.find(p => p.source === 'petshop'));
       
       // More robust deduplication based on petCode first, then _id
+      // This will keep the FIRST occurrence (which is now from purchased/adopted with images)
       const uniquePets = combinedPets.filter((pet, index, self) => {
-        // If pet has a petCode, deduplicate based on that
-        if (pet.petCode) {
-          return index === self.findIndex(p => p.petCode === pet.petCode);
+        // Strategy 1: For adoption pets, ALWAYS use adoptionPetId (even if they have petCode)
+        if (pet.source === 'adoption' && pet.adoptionPetId) {
+          const firstIndexWithAdoptionId = self.findIndex(p => 
+            p.source === 'adoption' && p.adoptionPetId === pet.adoptionPetId
+          );
+          if (firstIndexWithAdoptionId !== index) {
+            console.log('🗑️ REMOVING DUPLICATE (adoptionPetId):', pet.adoptionPetId, 'name:', pet.name);
+          }
+          return index === firstIndexWithAdoptionId;
         }
-        // If no petCode, deduplicate based on _id
-        return index === self.findIndex(p => p._id === pet._id);
+        
+        // Strategy 2: For petshop pets, use petShopItemId first
+        if (pet.source === 'petshop' && pet.petShopItemId) {
+          const firstIndexWithItemId = self.findIndex(p => 
+            p.source === 'petshop' && p.petShopItemId === pet.petShopItemId
+          );
+          if (firstIndexWithItemId !== index) {
+            console.log('🗑️ REMOVING DUPLICATE (petShopItemId):', pet.petShopItemId);
+          }
+          return index === firstIndexWithItemId;
+        }
+        
+        // Strategy 3: If pet has a petCode, deduplicate based on that
+        if (pet.petCode) {
+          const firstIndexWithCode = self.findIndex(p => p.petCode === pet.petCode);
+          if (firstIndexWithCode !== index) {
+            console.log('🗑️ REMOVING DUPLICATE (petCode):', pet.petCode, 'source:', pet.source);
+          }
+          return index === firstIndexWithCode;
+        }
+        
+        // Strategy 4: Fallback to _id for unique pets
+        const firstIndexWithId = self.findIndex(p => p._id === pet._id);
+        if (firstIndexWithId !== index) {
+          console.log('🗑️ REMOVING DUPLICATE (_id):', pet._id, 'name:', pet.name);
+        }
+        return index === firstIndexWithId;
       })
+      
+      console.log('🔍 AFTER DEDUP - Total pets:', uniquePets.length, {
+        petshop: uniquePets.filter(p => p.source === 'petshop').length,
+        adoption: uniquePets.filter(p => p.source === 'adoption').length,
+        core: uniquePets.filter(p => p.source === 'core').length
+      });
+      
+      console.log('🔍 UNIQUE PETS - First petshop pet:', uniquePets.find(p => p.source === 'petshop'));
+      console.log('🔍 UNIQUE PETS - First petshop pet images:', uniquePets.find(p => p.source === 'petshop')?.images);
+      
+      console.log('📋 ALL UNIQUE PETS WITH KEY FIELDS:', uniquePets.map(p => ({
+        _id: p._id,
+        petCode: p.petCode,
+        name: p.name,
+        source: p.source,
+        hasImages: !!p.images?.length
+      })));
       
       setMyPets(uniquePets)
       setOwnedPets(uniquePets)
@@ -303,6 +427,13 @@ const PublicUserDashboard = () => {
   // Industry-standard function to get the primary image for a pet with proper cross-source resolution
   const getPetImageUrl = async (pet) => {
 
+    console.log('🖼️ Getting image for pet:', { 
+      name: pet.name, 
+      source: pet.source,
+      hasImages: !!pet.images,
+      imagesLength: pet.images?.length,
+      firstImageSample: pet.images?.[0] 
+    })
     
     // Industry-standard image resolution pipeline
     
@@ -310,8 +441,10 @@ const PublicUserDashboard = () => {
     if (pet.images && pet.images.length > 0) {
       // Find primary image or use first image
       const primaryImage = pet.images.find(img => img.isPrimary) || pet.images[0];
+      console.log('🖼️ Found primary image:', primaryImage)
       if (primaryImage && primaryImage.url) {
         const imageUrl = resolveMediaUrl(primaryImage.url);
+        console.log('✅ Resolved image URL:', imageUrl)
         return imageUrl;
       }
     }
@@ -357,23 +490,12 @@ const PublicUserDashboard = () => {
       // Continue to other methods if this one fails
     }
     
-    // For petshop pets - fetch directly from PetShopItem model
-    if (pet.source === 'petshop' && pet.petShopItemId) {
-      try {
-        const res = await apiClient.get(`/petshop/manager/inventory/${pet.petShopItemId}`);
-        const petshopItem = res.data?.data;
-              
-        if (petshopItem && petshopItem.images && petshopItem.images.length > 0) {
-          const primaryImage = petshopItem.images.find(img => img.isPrimary) || petshopItem.images[0];
-          if (primaryImage && primaryImage.url) {
-            const imageUrl = resolveMediaUrl(primaryImage.url);
-            return imageUrl;
-          }
-        }
-      } catch (err) {
-        console.error(`❌ FAILED: Could not fetch petshop item ${pet.petShopItemId}:`, err.message);
-      }
-      // Continue to other methods if this one fails
+    // For petshop pets - images should already be in the pet data from my-purchased-pets endpoint
+    // If we reach here, it means images weren't populated properly in the backend
+    // Just use fallback placeholder instead of making another API call
+    if (pet.source === 'petshop') {
+      console.warn(`⚠️ Petshop pet ${pet.petCode || pet._id} has no images in data. Using placeholder.`)
+      return '/placeholder-pet.svg'
     }
     
     // For user pets - fetch directly from Pet model
@@ -651,65 +773,71 @@ const PublicUserDashboard = () => {
               </Box>
             ) : (
               <Box sx={{ overflowX: 'auto', pb: 1 }}>
-                <Box sx={{ display: 'flex', gap: 2, minWidth: '100%' }}>
-                  {allMyPets.slice(0, 4).map((pet) => (
-                    <Card 
-                      key={pet._id || pet.petCode} 
-                      sx={{ minWidth: 240, flex: '0 0 auto', cursor: 'pointer', '&:hover': { boxShadow: 4 } }} 
-                      onClick={() => {
-                        // Check if this is an adopted pet by looking for the 'adoption' tag
-                        if (pet?.tags?.includes('adoption')) {
-                          // For adopted pets, navigate to the centralized pet details page using petCode
+                <Box sx={{ display: 'flex', gap: 3, minWidth: '100%' }}>
+                  {allMyPets.slice(0, 4).map((pet) => {
+                    const isAdopted = pet?.tags?.includes('adoption') || pet?.status === 'adopted';
+                    const isPurchased = pet?.tags?.includes('purchased') || pet?.source === 'petshop';
+                    
+                    // Color scheme based on pet type
+                    const cardColor = isAdopted 
+                      ? { main: '#10b981', light: '#d1fae5', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }
+                      : isPurchased 
+                      ? { main: '#3b82f6', light: '#dbeafe', gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' }
+                      : { main: '#8b5cf6', light: '#ede9fe', gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' };
+                    
+                    return (
+                      <Card 
+                        key={pet._id || pet.petCode} 
+                        sx={{ 
+                          minWidth: 280,
+                          maxWidth: 320,
+                          flex: '0 0 auto',
+                          cursor: 'pointer',
+                          position: 'relative',
+                          overflow: 'visible',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          '&:hover': { 
+                            transform: 'translateY(-8px)',
+                            boxShadow: `0 12px 24px ${alpha(cardColor.main, 0.3)}`
+                          }
+                        }} 
+                        onClick={() => {
+                          console.log('🖱️ CLICKED PET:', { _id: pet._id, petCode: pet.petCode, name: pet.name, source: pet.source });
+                          // ALWAYS use petCode for navigation - it's the universal identifier
                           if (pet.petCode) {
-                            navigate(`/pets/centralized/${pet.petCode}`)
+                            console.log('✅ Using petCode route:', `/User/pets/centralized/${pet.petCode}`);
+                            navigate(`/User/pets/centralized/${pet.petCode}`)
                           } else {
-                            // Fallback to regular pet details if no petCode
+                            console.log('⚠️ No petCode, using _id route:', `/User/pets/${pet._id}`);
+                            // Fallback to _id only for user pets without petCode
                             navigate(`/User/pets/${pet._id}`)
                           }
-                        } 
-                        // Check if this is a purchased pet by looking for the 'purchased' tag
-                        else if (pet?.tags?.includes('purchased')) {
-                          // For purchased pets, navigate to the centralized pet details page using petCode
-                          if (pet.petCode) {
-                            navigate(`/pets/centralized/${pet.petCode}`)
-                          } else {
-                            // Fallback to regular pet details if no petCode
-                            navigate(`/User/pets/${pet._id}`)
-                          }
-                        }
-                        else {
-                          // For regular user pets, try centralized route first if petCode exists
-                          if (pet.petCode) {
-                            navigate(`/pets/centralized/${pet.petCode}`)
-                          } else {
-                            // Fallback to regular pet details if no petCode
-                            navigate(`/User/pets/${pet._id}`)
-                          }
-                        }
-                      }}
-                    >
-                      <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
+                        }}
+                      >
+                        {/* Color Band at Top */}
+                        <Box sx={{ 
+                          height: 6,
+                          background: cardColor.gradient,
+                          borderTopLeftRadius: 'inherit',
+                          borderTopRightRadius: 'inherit'
+                        }} />
+                        
+                        {/* Pet Image */}
+                        <Box sx={{ position: 'relative', pt: 2, px: 2 }}>
                           <Box
                             component="img"
-                            src={'/placeholder-pet.svg'} // Will be updated after component mounts
+                            src={'/placeholder-pet.svg'}
                             alt={pet.name || 'Pet'}
                             sx={{
-                              width: 56,
-                              height: 56,
+                              width: '100%',
+                              height: 180,
                               objectFit: 'cover',
-                              borderRadius: '8px',
-                              border: '1px solid',
+                              borderRadius: 2,
+                              border: '2px solid',
                               borderColor: 'divider',
-                              // Add loading effect
-                              opacity: 0.8,
-                              transition: 'opacity 0.3s',
-                              '&:hover': {
-                                opacity: 1
-                              }
+                              bgcolor: 'grey.100'
                             }}
                             ref={(el) => {
-                              // Dynamically set the image source after component mounts
                               if (el) {
                                 getPetImageUrl(pet).then(url => {
                                   el.src = url;
@@ -722,75 +850,85 @@ const PublicUserDashboard = () => {
                               e.currentTarget.src = '/placeholder-pet.svg';
                             }}
                           />
-                          {/* INDUSTRY STANDARD: Certificate badge for adopted pets */}
-                          {pet.source === 'adoption' && (
-                            <Box 
-                              sx={{ 
-                                position: 'absolute', 
-                                top: -8, 
-                                right: -8, 
-                                bgcolor: 'success.main', 
-                                color: 'white', 
-                                borderRadius: '50%', 
-                                width: 24, 
-                                height: 24, 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center',
-                                fontSize: '0.7rem',
-                                fontWeight: 'bold',
-                                boxShadow: 2
-                              }}
-                            >
-                              📜
-                            </Box>
-                          )}
-                          <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, overflow: 'hidden' }}>
-                              <Typography variant="h6" noWrap sx={{ fontWeight: 'bold' }}>
-                                {pet.name || 'Unnamed Pet'}
-                              </Typography>
-                              {(pet.petCode || pet.code) && (
-                                <Chip 
-                                  label={pet.petCode || pet.code} 
-                                  size="small" 
-                                  variant="outlined"
-                                  sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}
-                                />
-                              )}
-                            </Box>
-                            <Typography variant="body2" color="text.secondary" noWrap>
-                              {(pet.breedId?.name || pet.breed?.name || pet.breed || 'Breed not specified')} • {(pet.gender || 'Gender not set')}
+                          
+                          {/* Status Badge */}
+                          <Box 
+                            sx={{ 
+                              position: 'absolute', 
+                              top: 24, 
+                              right: 24,
+                              bgcolor: 'white',
+                              borderRadius: 2,
+                              px: 1.5,
+                              py: 0.5,
+                              boxShadow: 2,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 0.5
+                            }}
+                          >
+                            <Box sx={{ 
+                              width: 8, 
+                              height: 8, 
+                              borderRadius: '50%', 
+                              bgcolor: cardColor.main 
+                            }} />
+                            <Typography variant="caption" sx={{ fontWeight: 600, color: cardColor.main }}>
+                              {isAdopted ? 'Adopted' : isPurchased ? 'Purchased' : 'My Pet'}
                             </Typography>
-                            <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-                              <Chip 
-                                label={pet.status || pet.currentStatus || 'Owned'} 
-                                size="small" 
-                                color="primary" 
-                                variant="outlined"
-                              />
-                              {pet.tags?.includes('adoption') && (
-                                <Chip label="Adopted" size="small" color="success" variant="outlined" />
-                              )}
-                              {pet.tags?.includes('purchased') && (
-                                <Chip label="Purchased" size="small" color="info" variant="outlined" />
-                              )}
-                              {/* Show source for registry pets without tags */}
-                              {!pet.tags && pet.source && (
-                                <Chip 
-                                  label={pet.sourceLabel || pet.source} 
-                                  size="small" 
-                                  color="secondary" 
-                                  variant="outlined"
-                                />
-                              )}
-
-                            </Box>
                           </Box>
                         </Box>
-                      </CardContent>
-                    </Card>
-                  ))}
+
+                        <CardContent sx={{ pt: 2 }}>
+                          {/* Pet Name & Code */}
+                          <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {pet.name || 'Unnamed Pet'}
+                          </Typography>
+                          
+                          {pet.petCode && (
+                            <Chip 
+                              label={pet.petCode} 
+                              size="small" 
+                              sx={{ 
+                                fontFamily: 'monospace',
+                                fontSize: '0.7rem',
+                                bgcolor: alpha(cardColor.main, 0.1),
+                                color: cardColor.main,
+                                fontWeight: 600,
+                                mb: 1.5
+                              }}
+                            />
+                          )}
+                          
+                          {/* Pet Details */}
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <PetIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                              <Typography variant="body2" color="text.secondary">
+                                {pet.breedId?.name || pet.breed?.name || pet.breed || 'Breed not specified'}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="body2" sx={{ 
+                                fontWeight: 600,
+                                color: pet.gender === 'Male' ? '#3b82f6' : pet.gender === 'Female' ? '#ec4899' : 'text.secondary'
+                              }}>
+                                {pet.gender || 'Gender not set'}
+                              </Typography>
+                              {pet.age && (
+                                <>
+                                  <Typography variant="body2" color="text.secondary">•</Typography>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {pet.age} {pet.ageUnit || 'months'}
+                                  </Typography>
+                                </>
+                              )}
+                            </Box>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </Box>
               </Box>
             )}

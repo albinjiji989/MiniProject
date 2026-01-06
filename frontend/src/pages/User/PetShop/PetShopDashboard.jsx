@@ -160,17 +160,20 @@ const PetShopDashboard = () => {
       setLoading(true)
       
       // Fetch all data in parallel
-      const [statsRes, petsRes, shopsRes, wishlistRes, reservationsRes] = await Promise.all([
+      // Using stocks endpoint which returns gender-separated entries
+      const [statsRes, stocksRes, shopsRes, wishlistRes, reservationsRes] = await Promise.all([
         apiClient.get('/petshop/user/stats'),
-        apiClient.get('/petshop/user/public/listings?limit=50'),
+        apiClient.get('/petshop/user/public/stocks?limit=100'),
         apiClient.get('/petshop/user/public/shops?limit=8'),
         apiClient.get('/petshop/user/public/wishlist'),
         apiClient.get('/petshop/user/public/reservations')
       ])
       
       setStats(statsRes.data.data)
-      setFeaturedPets(petsRes.data.data.items?.slice(0, 12) || [])
-      setAllPets(petsRes.data.data.items || [])
+      // Stocks are now returned as gender-separated entries
+      const stocks = stocksRes.data.data.stocks || []
+      setFeaturedPets(stocks.slice(0, 12))
+      setAllPets(stocks)
       setPetShops(shopsRes.data.data.petShops || [])
       setWishlistItems(wishlistRes.data.data.wishlist || [])
       setReservations(reservationsRes.data.data.reservations || [])
@@ -451,21 +454,43 @@ const PetShopDashboard = () => {
                         <Typography variant="h6" component="div">
                           {pet.name || 'Unnamed Pet'}
                         </Typography>
-                        {pet.petCode && (
-                          <Chip 
-                            label={pet.petCode} 
-                            size="small" 
-                            color="primary" 
-                            variant="outlined"
-                          />
-                        )}
+                        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                          {pet.gender === 'male' && (
+                            <Chip 
+                              icon={<MaleIcon />}
+                              label="Male" 
+                              size="small" 
+                              color="primary" 
+                              variant="outlined"
+                            />
+                          )}
+                          {pet.gender === 'female' && (
+                            <Chip 
+                              icon={<FemaleIcon />}
+                              label="Female" 
+                              size="small" 
+                              color="secondary" 
+                              variant="outlined"
+                            />
+                          )}
+                        </Box>
                       </Box>
                       <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
                         {pet.storeName || 'Pet Shop'} • {formatAge(pet.age, pet.ageUnit)}
                       </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        <StarIcon sx={{ color: 'gold', fontSize: 16, mr: 0.5 }} />
-                        <Typography variant="body2">{pet.rating || 'No rating'}</Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <StarIcon sx={{ color: 'gold', fontSize: 16, mr: 0.5 }} />
+                          <Typography variant="body2">{pet.rating || 'No rating'}</Typography>
+                        </Box>
+                        {pet.availableCount && (
+                          <Chip 
+                            label={`${pet.availableCount} available`} 
+                            size="small" 
+                            color="success"
+                            variant="outlined"
+                          />
+                        )}
                       </Box>
                       <Typography variant="h6" color="primary" sx={{ fontWeight: 'bold' }}>
                         ₹{pet.price ? pet.price.toLocaleString() : 'Price not set'}
@@ -597,36 +622,47 @@ const PetShopDashboard = () => {
                           <Typography variant="subtitle1" component="div" sx={{ fontWeight: 'bold' }}>
                             {pet.name || 'Unnamed Pet'}
                           </Typography>
-                          {pet.petCode && (
+                          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexDirection: 'column' }}>
+                            {pet.gender === 'male' && (
+                              <Chip 
+                                icon={<MaleIcon />}
+                                label="Male" 
+                                size="small" 
+                                color="primary" 
+                                variant="outlined"
+                              />
+                            )}
+                            {pet.gender === 'female' && (
+                              <Chip 
+                                icon={<FemaleIcon />}
+                                label="Female" 
+                                size="small" 
+                                color="secondary" 
+                                variant="outlined"
+                              />
+                            )}
+                          </Box>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <Typography variant="body2" color="textSecondary">
+                            {pet.breed?.name || pet.breedId?.name || 'Breed'} • {formatAge(pet.age, pet.ageUnit)}
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <StarIcon sx={{ color: 'gold', fontSize: 16, mr: 0.5 }} />
+                            <Typography variant="body2">{pet.rating || 'No rating'}</Typography>
+                          </Box>
+                          {pet.availableCount && (
                             <Chip 
-                              label={pet.petCode} 
+                              label={`${pet.availableCount} left`} 
                               size="small" 
-                              color="primary" 
+                              color="success"
                               variant="outlined"
                             />
                           )}
-                        </Box>
-                        
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                          <Typography variant="body2" color="textSecondary">
-                            {pet.breedId?.name || 'Breed'} • {formatAge(pet.age, pet.ageUnit)}
-                          </Typography>
-                        </Box>
-                        
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                          {pet.gender === 'male' ? (
-                            <MaleIcon sx={{ fontSize: 16, color: 'primary.main', mr: 0.5 }} />
-                          ) : pet.gender === 'female' ? (
-                            <FemaleIcon sx={{ fontSize: 16, color: 'secondary.main', mr: 0.5 }} />
-                          ) : null}
-                          <Typography variant="body2" color="textSecondary">
-                            {pet.gender || 'Gender not specified'}
-                          </Typography>
-                        </Box>
-                        
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                          <StarIcon sx={{ color: 'gold', fontSize: 16, mr: 0.5 }} />
-                          <Typography variant="body2">{pet.rating || 'No rating'}</Typography>
                         </Box>
                         
                         <Typography variant="h6" color="primary" sx={{ fontWeight: 'bold' }}>

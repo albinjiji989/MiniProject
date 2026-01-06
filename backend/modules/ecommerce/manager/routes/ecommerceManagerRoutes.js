@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../../../../core/middleware/auth');
-const { authorizeModule } = require('../../../../core/middleware/authorizeModule');
+const { auth, authorizeModule } = require('../../../../core/middleware/auth');
 const ecommerceManagerController = require('../controllers/ecommerceManagerController');
 
 // All routes require auth and ecommerce module authorization

@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { auth } = require('../../../../core/middleware/auth');
 const { body } = require('express-validator');
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/temp/' });
 
 // Import user controllers
 const publicController = require('../controllers/publicController');
@@ -12,7 +14,9 @@ const userAddressController = require('../controllers/userAddressController');
 const storeController = require('../../manager/controllers/storeController');
 const enhancedReservationController = require('../../manager/controllers/enhancedReservationController');
 const petHistoryController = require('../controllers/petHistoryController');
-const stockController = require('../controllers/stockController'); // Added stock controller
+const stockController = require('../controllers/stockController');
+const purchaseApplicationController = require('../controllers/purchaseApplicationController');
+const purchasePaymentController = require('../controllers/purchasePaymentController');
 // Batch controller (reused from manager; provides public list & details)
 const batchController = require('../../manager/controllers/batchController');
 
@@ -49,6 +53,8 @@ router.post('/public/reservations/:id/cancel', auth, reservationController.cance
 router.post('/reservations/:id/confirm-purchase', auth, paymentController.confirmPurchaseDecision);
 
 // Payment routes
+// Direct buy now (bypasses reservation/approval)
+router.post('/payments/buy-now', auth, paymentController.createDirectBuyOrder);
 router.post('/payments/razorpay/order', auth, paymentController.createRazorpayOrder);
 router.post('/payments/razorpay/verify', auth, paymentController.verifyRazorpaySignature);
 
@@ -81,5 +87,19 @@ router.post('/public/stocks/reserve', auth, stockController.reservePetsFromStock
 // Stock payment routes
 router.post('/payments/razorpay/order/stock', auth, paymentController.createRazorpayOrderForStock);
 router.post('/payments/razorpay/verify/stock', auth, paymentController.verifyRazorpaySignatureForStock);
+
+// Purchase Application routes
+router.post('/purchase-applications', auth, upload.fields([
+  { name: 'userPhoto', maxCount: 1 },
+  { name: 'documents', maxCount: 10 }
+]), purchaseApplicationController.submitPurchaseApplication);
+router.get('/purchase-applications', auth, purchaseApplicationController.getMyApplications);
+router.get('/purchase-applications/:id', auth, purchaseApplicationController.getApplicationDetails);
+router.post('/purchase-applications/:id/cancel', auth, purchaseApplicationController.cancelApplication);
+
+// Purchase payment routes
+router.post('/purchase-applications/payment/create-order', auth, purchasePaymentController.createPurchasePaymentOrder);
+router.post('/purchase-applications/payment/verify', auth, purchasePaymentController.verifyPurchasePayment);
+router.post('/purchase-applications/payment/failure', auth, purchasePaymentController.handlePaymentFailure);
 
 module.exports = router;

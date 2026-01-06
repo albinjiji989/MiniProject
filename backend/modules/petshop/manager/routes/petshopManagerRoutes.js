@@ -16,10 +16,11 @@ const petHistoryController = require('../controllers/petHistoryController')
 const storeController = require('../controllers/storeController') // Added missing import
 const storeNameChangeController = require('../controllers/storeNameChangeController') // Added missing import
 const inventoryManagementController = require('../controllers/inventoryManagementController') // Added missing import
-const handoverController = require('../controllers/handoverController') // Added handover controller
-const stockController = require('../controllers/stockController') // Added stock controller
-const wizardController = require('../controllers/wizardController') // Added wizard controller
-const batchController = require('../controllers/batchController') // Added batch controller
+const handoverController = require('../controllers/handoverController'); // Added handover controller
+const stockController = require('../controllers/stockController'); // Added stock controller
+const wizardController = require('../controllers/wizardController'); // Added wizard controller
+const batchController = require('../controllers/batchController'); // Added batch controller
+const purchaseApplicationController = require('../controllers/purchaseApplicationController'); // Purchase application controller
 // const pricingController = require('../controllers/pricingController') // Removed pricing controller
 
 // Manager routes - require manager role
@@ -196,4 +197,12 @@ router.post('/batches/:batchId/confirm-reservation/:petId', auth, authorizeModul
 router.post('/batches/:batchId/release-reservation/:petId', auth, authorizeModule('petshop'), batchController.releaseReservation);
 router.post('/batches/:batchId/mark-sold/:petId', auth, authorizeModule('petshop'), batchController.markPetAsSold);
 
-module.exports = router;module.exports = router;
+// Purchase Application Management routes
+router.get('/purchase-applications', requireManager, purchaseApplicationController.getPurchaseApplications);
+router.post('/purchase-applications/:id/approve', requireManager, purchaseApplicationController.approveApplication);
+router.post('/purchase-applications/:id/reject', requireManager, purchaseApplicationController.rejectApplication);
+router.post('/purchase-applications/:id/schedule-handover', requireManager, purchaseApplicationController.scheduleHandover);
+router.post('/purchase-applications/:id/verify-otp', requireManager, purchaseApplicationController.verifyOTPAndCompleteHandover);
+router.post('/purchase-applications/:id/regenerate-otp', requireManager, purchaseApplicationController.regenerateOTP);
+
+module.exports = router;

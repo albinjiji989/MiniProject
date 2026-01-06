@@ -21,17 +21,19 @@ const getAvailablePets = async (req, res) => {
     const { page = 1, limit = 12, breed, species, age, gender } = req.query;
     
     // First, find pets with pending or approved applications for other users
+    // Also exclude pets that are already adopted or reserved
     const reservedPetIds = await AdoptionRequest.distinct('petId', {
-      status: { $in: ['pending', 'approved', 'payment_pending'] },
+      status: { $in: ['pending', 'approved', 'payment_pending', 'completed'] },
       isActive: true,
       userId: { $ne: req.user.id } // Exclude current user's applications
     });
     
-    // Build query to exclude reserved pets
+    // Build query to exclude reserved pets and already adopted pets
     const query = { 
       status: 'available', 
       isActive: true,
-      _id: { $nin: reservedPetIds } // Exclude pets with active applications by other users
+      _id: { $nin: reservedPetIds }, // Exclude pets with active applications by other users
+      adopterUserId: null // Ensure pet is not already adopted
     };
 
     if (breed) query.breed = { $regex: breed, $options: 'i' };

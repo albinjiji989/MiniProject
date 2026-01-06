@@ -93,8 +93,9 @@ const UserPetDetails = () => {
           setPet(petData)
           setPetType('centralized')
           
-          // Load medical history
-          loadMedicalHistory()
+          // Skip medical history for centralized pets for now
+          // (would need the actual _id from the source table)
+          setMedicalHistory([])
           return
         } catch (centralizedError) {
           console.log('❌ Pet not found in centralized registry by petCode:', centralizedError.message)
@@ -1055,13 +1056,13 @@ const UserPetDetails = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowBirthdayDialog(false)} disabled={birthdayLoading || birthdaySuccess}>
+          <Button onClick={() => setShowBirthdayDialog(false)} disabled={birthdayLoading || !!birthdaySuccess}>
             Cancel
           </Button>
           <Button 
             onClick={handleSubmitPreference} 
             variant="contained" 
-            disabled={birthdayLoading || !preferredBirthday || birthdaySuccess}
+            disabled={birthdayLoading || !preferredBirthday || !!birthdaySuccess}
             startIcon={birthdayLoading ? <CircularProgress size={20} /> : null}
           >
             {birthdayLoading ? 'Setting...' : birthdaySuccess ? 'Done' : 'Set Birthday'}

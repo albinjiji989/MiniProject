@@ -114,34 +114,76 @@ const CentralizedPetService = {
    * @returns {Promise<Object>} Pet data with all source information
    */
   async getCentralizedPet(petCode) {
+    console.log('🔍 Centralized Service - Looking for pet with petCode:', petCode);
+    
     const registryEntry = await PetRegistry.findOne({ petCode })
       .populate('species', 'name displayName')
       .populate('breed', 'name')
-      .populate('currentOwnerId', 'name email')
-      .populate('images');
+      .populate('currentOwnerId', 'name email');
 
     if (!registryEntry) {
+      console.log('❌ Centralized Service - Pet not found in registry with petCode:', petCode);
       throw new Error(`Pet with code ${petCode} not found in registry`);
     }
 
-    // Populate the source-specific data based on the source
+    console.log('✅ Centralized Service - Found registry entry:', {
+      petCode: registryEntry.petCode,
+      source: registryEntry.source,
+      corePetId: registryEntry.corePetId,
+      petShopItemId: registryEntry.petShopItemId,
+      adoptionPetId: registryEntry.adoptionPetId
+    });
+
+    // Populate the source-specific data based on the source AND fetch images from source
     let sourceData = null;
+    let images = [];
+    
     switch (registryEntry.source) {
       case 'core':
         // Find in Pet
-        sourceData = await Pet.findById(registryEntry.corePetId);
+        console.log('📦 Fetching from core Pet with ID:', registryEntry.corePetId);
+        sourceData = await Pet.findById(registryEntry.corePetId).populate('imageIds');
+        if (sourceData?.imageIds) {
+          images = sourceData.imageIds.map(img => ({
+            _id: img._id,
+            url: img.url,
+            caption: img.caption,
+            isPrimary: img.isPrimary
+          }));
+        }
         break;
       case 'petshop':
-        sourceData = await PetInventoryItem.findById(registryEntry.petShopItemId);
+        console.log('📦 Fetching from PetInventoryItem with ID:', registryEntry.petShopItemId);
+        sourceData = await PetInventoryItem.findById(registryEntry.petShopItemId).populate('imageIds');
+        if (sourceData?.imageIds) {
+          images = sourceData.imageIds.map(img => ({
+            _id: img._id,
+            url: img.url,
+            caption: img.caption,
+            isPrimary: img.isPrimary
+          }));
+        }
         break;
       case 'adoption':
-        sourceData = await AdoptionPet.findById(registryEntry.adoptionPetId);
+        console.log('📦 Fetching from AdoptionPet with ID:', registryEntry.adoptionPetId);
+        sourceData = await AdoptionPet.findById(registryEntry.adoptionPetId).populate('imageIds');
+        if (sourceData?.imageIds) {
+          images = sourceData.imageIds.map(img => ({
+            _id: img._id,
+            url: img.url,
+            caption: img.caption,
+            isPrimary: img.isPrimary
+          }));
+        }
         break;
     }
 
+    console.log('✅ Centralized Service - Returning pet with', images.length, 'images');
+
     return {
       ...registryEntry.toObject(),
-      sourceData
+      sourceData,
+      images  // Add images from source data
     };
   },
 

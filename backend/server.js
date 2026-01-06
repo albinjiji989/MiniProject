@@ -73,6 +73,7 @@ app.use('/api/admin/pets', require('./core/routes/admin/pets'));
 app.use('/api/admin/pet-registry', require('./core/routes/admin/pet-registry'));
 app.use('/api/admin', require('./modules/admin/routes/admin'));
 app.use('/api/user/pets', require('./core/routes/user/user/pets'));
+app.use('/api/user/unified', require('./core/routes/user/userPets')); // Unified user pets endpoint
 
 // Removed unused routes
 // app.use('/api/admin/medical-records', require('./core/routes/admin/medical-records'));
@@ -80,7 +81,7 @@ app.use('/api/user/pets', require('./core/routes/user/user/pets'));
 
 app.use('/api/user-dashboard', require('./core/routes/user/userDashboard'));
 app.use('/api/user/ownership-history', require('./core/routes/user/user/ownership-history'));
-app.use('/api/pets', require('./core/routes/pet/petRoutes'));
+app.use('/api/pets', require('./core/routes/pet'));  // Use index.js to include centralized routes
 app.use('/api/pet-age', require('./core/routes/petAgeRoutes'));
 app.use('/api/pet-audit', require('./core/routes/petAuditRoutes'));
 

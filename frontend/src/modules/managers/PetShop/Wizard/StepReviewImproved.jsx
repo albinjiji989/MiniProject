@@ -119,8 +119,11 @@ export default function StepReviewImproved() {
         // Clear form data
         localStorage.removeItem(KEY)
         
-        // Show success and navigate to inventory
-        alert(`✅ Stock created successfully! ${response.data.data.generatedPetsCount} pets generated.`)
+        // Use server message if available so generation errors are visible
+        const serverMessage = response.data?.message || `✅ Stock created successfully! ${response.data.data.generatedPetsCount} pets generated.`
+        alert(serverMessage)
+        
+        // Navigate to inventory
         navigate('/manager/petshop/inventory')
       } else {
         throw new Error(response?.data?.message || 'Failed to create stock')

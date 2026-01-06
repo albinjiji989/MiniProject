@@ -1,5 +1,5 @@
 const { Medicine, Prescription, PharmacyOrder } = require('../../models/Pharmacy');
-const UserDetails = require('../../../core/models/UserDetails');
+const UserDetails = require('../../../../core/models/UserDetails');
 
 // Get all medicines (manager view)
 const getMedicines = async (req, res) => {

@@ -40,16 +40,32 @@ exports.listBatches = async (req, res) => {
       .populate('shopId', 'name code address')
       .populate('speciesId', 'name displayName')
       .populate('breedId', 'name')
+      .populate('imageIds', 'url caption isPrimary') // Populate images
+      .populate({
+        path: 'samplePets.petId',
+        select: 'name petCode gender age ageUnit imageIds',
+        populate: {
+          path: 'imageIds',
+          select: 'url caption isPrimary'
+        }
+      })
       .sort(sort)
       .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
+      .limit(parseInt(limit));
+    
+    // Manually populate virtual 'images' field for each batch
+    for (const batch of batches) {
+      await batch.populate('images');
+    }
+    
+    // Convert to plain objects after population
+    const batchesPlain = batches.map(batch => batch.toObject({ virtuals: true }));
 
     const total = await PetBatch.countDocuments(filter);
 
     res.json({
       success: true,
-      data: batches,
+      data: batchesPlain,
       pagination: {
         total,
         page: parseInt(page),
@@ -251,7 +267,9 @@ exports.createBatch = async (req, res) => {
       category,
       description,
       images,
-      tags
+      tags,
+      color,
+      size
     } = req.body;
 
     // Validate required fields
@@ -262,27 +280,63 @@ exports.createBatch = async (req, res) => {
       });
     }
 
+    // Validate counts
+    if (!counts.male && !counts.female) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one male or female pet must be specified'
+      });
+    }
+
+    // Calculate total count
+    const totalCount = (counts.male || 0) + (counts.female || 0) + (counts.unknown || 0);
+    if (totalCount === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Total count must be greater than 0'
+      });
+    }
+
     const batch = new PetBatch({
       shopId,
       speciesId,
       breedId,
       ageRange,
-      counts,
+      counts: {
+        total: totalCount,
+        male: counts.male || 0,
+        female: counts.female || 0,
+        unknown: counts.unknown || 0
+      },
       price,
       category,
       description,
       images,
       tags,
+      color,
+      size,
       createdBy: req.user._id,
       managerId: req.user._id,
-      status: 'draft'
+      status: 'draft',
+      availability: {
+        available: totalCount,
+        reserved: 0,
+        sold: 0
+      }
     });
 
     const savedBatch = await batch.save();
 
+    // Populate the response with related data
+    const populatedBatch = await PetBatch.findById(savedBatch._id)
+      .populate('shopId', 'name code')
+      .populate('speciesId', 'name displayName')
+      .populate('breedId', 'name')
+      .populate('createdBy', 'name email');
+
     res.status(201).json({
       success: true,
-      data: savedBatch,
+      data: populatedBatch,
       message: 'Batch created successfully'
     });
   } catch (error) {
@@ -507,6 +561,103 @@ exports.markPetAsSold = async (req, res) => {
     });
   } catch (error) {
     logger.error('Mark sold error:', error);
+    ErrorHandler.sendError(res, error, 500);
+  }
+};
+
+/**
+ * Purchase pets from batch (user action)
+ * POST /api/petshop/batches/:id/purchase
+ * body: { gender: 'male'|'female', quantity: 1 }
+ */
+exports.purchasePetsFromBatch = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { gender, quantity = 1 } = req.body;
+    const userId = req.user._id;
+
+    const batch = await PetBatch.findById(id)
+      .populate('speciesId', 'name displayName')
+      .populate('breedId', 'name')
+      .populate('shopId', 'name code');
+
+    if (!batch) {
+      return res.status(404).json({
+        success: false,
+        message: 'Batch not found'
+      });
+    }
+
+    // Check if batch is published and available
+    if (batch.status !== 'published') {
+      return res.status(400).json({
+        success: false,
+        message: 'This batch is not available for purchase'
+      });
+    }
+
+    // Check availability
+    const availableByGender = batch.availableByGender;
+    const requestedGender = gender.toLowerCase();
+    
+    if (requestedGender === 'male' && availableByGender.male < quantity) {
+      return res.status(400).json({
+        success: false,
+        message: `Only ${availableByGender.male} male pets available`
+      });
+    }
+    
+    if (requestedGender === 'female' && availableByGender.female < quantity) {
+      return res.status(400).json({
+        success: false,
+        message: `Only ${availableByGender.female} female pets available`
+      });
+    }
+
+    // Create individual pet records for purchased pets
+    const purchasedPets = [];
+    for (let i = 0; i < quantity; i++) {
+      const pet = new PetInventoryItem({
+        name: `${batch.speciesId.displayName || batch.speciesId.name} - ${batch.breedId.name}`,
+        speciesId: batch.speciesId._id,
+        breedId: batch.breedId._id,
+        gender: gender.charAt(0).toUpperCase() + gender.slice(1),
+        age: batch.ageRange.min,
+        ageUnit: batch.ageRange.unit,
+        color: batch.color,
+        size: batch.size,
+        price: batch.price.basePrice,
+        storeId: batch.shopId._id,
+        storeName: batch.shopId.name,
+        createdBy: batch.createdBy,
+        batchId: batch._id,
+        status: 'sold',
+        soldTo: userId,
+        soldAt: new Date(),
+        imageIds: batch.images || []
+      });
+
+      await pet.save();
+      purchasedPets.push(pet);
+    }
+
+    // Update batch availability
+    await batch.markSold(quantity);
+
+    res.json({
+      success: true,
+      data: {
+        purchasedPets,
+        batch: {
+          _id: batch._id,
+          availability: batch.availability,
+          availableByGender: batch.availableByGender
+        }
+      },
+      message: `Successfully purchased ${quantity} ${gender} pet(s)`
+    });
+  } catch (error) {
+    logger.error('Purchase pets from batch error:', error);
     ErrorHandler.sendError(res, error, 500);
   }
 };

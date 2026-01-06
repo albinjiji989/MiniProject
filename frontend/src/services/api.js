@@ -308,6 +308,15 @@ export const petShopAPI = {
   },
   // Manager: Reservations
   listReservations: (params) => api.get('/petshop/manager/reservations/enhanced', { params }),
+
+  // Manager: Batches
+  listBatches: (params) => api.get('/petshop/manager/batches', { params }),
+  createBatch: (batchData) => api.post('/petshop/manager/batches', batchData),
+  getBatch: (id) => api.get(`/petshop/manager/batches/${id}`),
+  updateBatch: (id, batchData) => api.put(`/petshop/manager/batches/${id}`, batchData),
+  publishBatch: (id) => api.post(`/petshop/manager/batches/${id}/publish`),
+  archiveBatch: (id) => api.post(`/petshop/manager/batches/${id}/archive`),
+
   // Public listings (mounted under /petshop/user/... on backend)
   listPublicListings: (params) => api.get('/petshop/user/public/listings', { params }),
   getPublicListing: (id) => api.get(`/petshop/user/public/listings/${id}`),
@@ -328,6 +337,12 @@ export const petShopAPI = {
   // Wishlist
   addToWishlist: (itemId) => api.post('/petshop/user/public/wishlist', { itemId }),
   listMyWishlist: () => api.get('/petshop/user/public/wishlist'),
+
+  // User: Batch operations
+  listPublicBatches: (params) => api.get('/petshop/batches', { params }),
+  getBatchDetails: (id) => api.get(`/petshop/batches/${id}`),
+  getBatchInventory: (id, params) => api.get(`/petshop/batches/${id}/inventory`, { params }),
+  purchaseFromBatch: (id, purchaseData) => api.post(`/petshop/batches/${id}/purchase`, purchaseData),
   removeFromWishlist: (itemId) => api.delete(`/petshop/user/public/wishlist/${itemId}`),
   // Reviews (mounted under user/public)
   createReview: (payload) => api.post('/petshop/user/public/reviews', payload),
@@ -680,6 +695,11 @@ export const customBreedRequestsAPI = {
 }
 
 export const userPetsAPI = {
+  // NEW: Unified endpoint - replaces 4 separate API calls
+  getAllPets: () => api.get('/user/all-pets'),
+  getPetStats: () => api.get('/user/pet-stats'),
+  
+  // Legacy endpoints (keep for backward compatibility)
   list: (params = {}) => api.get('/user/pets', { params }),
   get: (id) => api.get(`/user/pets/${id}`),
   getById: (id) => api.get(`/user/pets/${id}`),
@@ -740,9 +760,18 @@ export const petShopStockAPI = {
   // User Stock APIs
   listPublicStocks: (params = {}) => apiClient.get('/petshop/user/public/stocks', { params }),
   getPublicStockById: (id) => apiClient.get(`/petshop/user/public/stocks/${id}`),
-  reservePetsFromStock: (reservationData) => apiClient.post('/petshop/user/reserve-stock', reservationData),
-  createRazorpayOrderForStock: (orderData) => apiClient.post('/petshop/user/create-order-for-stock', orderData)
+  reservePetsFromStock: (reservationData) => apiClient.post('/petshop/user/public/stocks/reserve', reservationData),
+  createRazorpayOrderForStock: (orderData) => apiClient.post('/petshop/user/payments/razorpay/order/stock', orderData),
+  verifyRazorpayPayment: (verifyData) => apiClient.post('/petshop/user/payments/razorpay/verify/stock', verifyData)
 }
+
+// Unified User Pets API (Single endpoint replacing 4 calls)
+export const unifiedPetsAPI = {
+  // Get all user's pets from all sources (replaces: userPetsAPI.list + petsAPI.getMyPets + adoptionAPI.getMyAdoptedPets + petShopAPI.getMyPurchasedPets)
+  getAllPets: () => apiClient.get('/user/unified/all-pets'),
+  // Get pet statistics
+  getPetStats: () => apiClient.get('/user/unified/pet-stats')
+};
 
 export default apiClient;
 

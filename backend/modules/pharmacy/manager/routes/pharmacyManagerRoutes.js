@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth, authorize } = require('../../../core/middleware/auth');
+const { auth, authorize } = require('../../../../core/middleware/auth');
 const pharmacyManagerController = require('../controllers/pharmacyManagerController');
 
 // Get medicines (manager view)

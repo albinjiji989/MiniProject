@@ -145,7 +145,12 @@ const createStock = async (req, res) => {
     delete stockData.maleImages;
     delete stockData.femaleImages;
     
-    // Create the stock
+    // Create the stock (this represents ONE batch of pets)
+    // Each stock entry is a batch containing:
+    // - Total pets: maleCount + femaleCount
+    // - Male pets count: maleCount
+    // - Female pets count: femaleCount
+    // - All pets in this batch share: category, species, breed, age, color, size
     const stock = new PetStock({
       ...stockData,
       maleImageIds,
@@ -154,16 +159,87 @@ const createStock = async (req, res) => {
     
     await stock.save();
     
+    console.log(`✅ Stock batch created: ${stock.maleCount + stock.femaleCount} total pets (${stock.maleCount} male, ${stock.femaleCount} female) - Age: ${stock.age} ${stock.ageUnit}`);
+    
+    // Mark stock as released immediately so it appears on user dashboard
+    // even if pet generation fails
+    stock.isReleased = true;
+    stock.releasedAt = new Date();
+    await stock.save();
+    
+    // Automatically generate individual pets from stock
+    // This creates PetInventoryItem records and registers them in PetRegistry
+    let generatedPets = [];
+    let generationError = null;
+    
+    try {
+      const UnifiedPetService = require('../../../../core/services/UnifiedPetService');
+      const totalToGenerate = (stock.maleCount || 0) + (stock.femaleCount || 0);
+      
+      if (totalToGenerate > 0) {
+        console.log(`🔄 Auto-generating ${totalToGenerate} pets from stock (${stock.maleCount} male, ${stock.femaleCount} female)`);
+        
+        const result = await UnifiedPetService.generatePetsFromStock(
+          stock._id,
+          stock.maleCount || 0,
+          stock.femaleCount || 0,
+          req.user
+        );
+        
+        generatedPets = result.generatedPets || [];
+        
+        // Reload stock to get updated state
+        await stock.populate('speciesId', 'name displayName');
+        await stock.populate('breedId', 'name');
+        
+        // Update stock with generated pets tracking
+        for (const pet of generatedPets) {
+          await stock.addGeneratedPet(pet._id);
+        }
+        
+        // Stock counts remain as set by manager - they represent available inventory
+        // The generated PetInventoryItems are the actual individual pets
+        
+        await stock.save();
+        
+        console.log(`✅ Successfully generated ${generatedPets.length} pets from stock`);
+      } else {
+        console.log('⚠️ No pets to generate (maleCount and femaleCount are both 0)');
+      }
+    } catch (genErr) {
+      console.error('❌ Failed to auto-generate pets from stock:', genErr);
+      generationError = genErr.message;
+      // Don't fail the entire operation - stock was created successfully
+      // Manager can manually generate pets later if needed
+    }
+    
     // Populate for response
     await stock.populate('speciesId', 'name displayName');
     await stock.populate('breedId', 'name');
     await stock.populate('maleImageIds');
     await stock.populate('femaleImageIds');
     
+    const totalGenerated = generatedPets.length;
+    const message = totalGenerated > 0 
+      ? `Stock created successfully! ${totalGenerated} pets generated and registered in inventory.`
+      : generationError
+        ? `Stock created successfully! However, pet generation failed: ${generationError}. You can generate pets manually later.`
+        : 'Stock created successfully! 0 pets generated (no pets in stock).';
+    
     res.status(201).json({
       success: true,
-      data: { stock },
-      message: 'Stock created successfully'
+      data: { 
+        stock,
+        generatedPets: generatedPets.map(p => ({
+          _id: p._id,
+          name: p.name,
+          petCode: p.petCode,
+          gender: p.gender,
+          status: p.status
+        })),
+        generatedPetsCount: totalGenerated
+      },
+      message
     });
   } catch (error) {
     console.error('Create stock error:', error);

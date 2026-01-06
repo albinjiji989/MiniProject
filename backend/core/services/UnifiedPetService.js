@@ -6,6 +6,7 @@ const PetInventoryItem = require('../../modules/petshop/manager/models/PetInvent
 const PetStock = require('../../modules/petshop/manager/models/PetStock');
 const PetAuditService = require('./PetAuditService');
 const PetAgeService = require('./PetAgeService');
+const mongoose = require('mongoose');
 
 /**
  * Unified Pet Service
@@ -361,7 +362,62 @@ class UnifiedPetService {
         throw new Error('Not enough pets in stock');
       }
 
-      // Generate individual pets
+      // Create a PetBatch for this generation so similar pets are grouped and visible to users
+      const PetBatch = require('../../modules/petshop/manager/models/PetBatch');
+
+      const batchCounts = {
+        total: maleCount + femaleCount,
+        male: maleCount,
+        female: femaleCount,
+        unknown: 0
+      };
+
+      // Ensure shopId is in an acceptable format for PetBatch: prefer ObjectId when possible
+      let shopIdForBatch = stock.storeId;
+      if (typeof shopIdForBatch === 'string' && mongoose.Types.ObjectId.isValid(shopIdForBatch)) {
+        shopIdForBatch = mongoose.Types.ObjectId(shopIdForBatch);
+      }
+
+      const batch = new PetBatch({
+        shopId: shopIdForBatch,
+        stockId: stock._id,
+        category: stock.tags?.[0] || 'general',
+        speciesId: stock.speciesId,
+        breedId: stock.breedId,
+        ageRange: {
+          min: stock.age || 0,
+          max: stock.age || (stock.age || 12),
+          unit: stock.ageUnit || 'months'
+        },
+        counts: batchCounts,
+        samplePets: [],
+        price: {
+          min: stock.discountPrice || stock.price,
+          max: stock.price,
+          basePrice: stock.price
+        },
+        images: (stock.maleImageIds || []).concat(stock.femaleImageIds || []),
+        status: stock.isReleased ? 'published' : 'published', // generation implies publish
+        description: `Batch generated from stock ${stock.name}`,
+        createdBy: userData.id,
+        managerId: userData.id,
+        publishedAt: new Date(),
+        attributes: {
+          color: stock.color,
+          size: stock.size,
+          originalStockName: stock.name
+        },
+        tags: stock.tags || [],
+        availability: {
+          available: batchCounts.total,
+          reserved: 0,
+          sold: 0
+        }
+      });
+
+      await batch.save();
+
+      // Generate individual pets (linked to the batch)
       const generatedPets = [];
 
       // Generate male pets
@@ -387,6 +443,7 @@ class UnifiedPetService {
           imageIds: stock.maleImageIds, // Share the same image for all male pets in this stock
           status: 'available_for_sale',
           stockId: stockId, // Link to the stock
+          batchId: batch._id, // Link to the created batch
           generatedFromStock: true
         });
 
@@ -468,6 +525,7 @@ class UnifiedPetService {
           imageIds: stock.femaleImageIds, // Share the same image for all female pets in this stock
           status: 'available_for_sale',
           stockId: stockId, // Link to the stock
+          batchId: batch._id, // Link to the created batch
           generatedFromStock: true
         });
 
@@ -526,19 +584,41 @@ class UnifiedPetService {
         }
       }
 
-      // Update stock counts
-      stock.maleCount -= maleCount;
-      stock.femaleCount -= femaleCount;
-
+      // DON'T decrement stock counts - they represent available inventory
+      // Stock counts should remain as the manager set them, showing total available
+      // The individual PetInventoryItems track the actual pets generated
+      
       // Mark stock as released if this is the first generation
       if (!stock.isReleased) {
         stock.isReleased = true;
         stock.releasedAt = new Date();
+        await stock.save();
+      }
+      
+      // No need to save if already released - counts weren't modified
+
+      // Update batch samplePets (first 3 pets) and adjust availability
+      try {
+        const samplePets = generatedPets.slice(0, 3).map(pet => ({
+          petId: pet._id,
+          name: pet.name,
+          petCode: pet.petCode,
+          gender: pet.gender,
+          age: pet.age,
+          ageUnit: pet.ageUnit,
+          imageIds: pet.imageIds || []
+        }));
+
+        batch.samplePets = samplePets;
+        // Ensure availability is consistent with counts (may change later)
+        batch.availability = batch.availability || { available: batch.counts.total, reserved: 0, sold: 0 };
+        batch.availability.available = Math.max(0, (batch.counts.total || 0) - (batch.availability.reserved || 0) - (batch.availability.sold || 0));
+        await batch.save();
+      } catch (err) {
+        console.warn('Failed to update batch samplePets:', err.message);
       }
 
-      await stock.save();
-
-      return { generatedPets, stock };
+      return { generatedPets, stock, batch };
     } catch (error) {
       console.error('Error generating pets from stock:', error);
       throw error;

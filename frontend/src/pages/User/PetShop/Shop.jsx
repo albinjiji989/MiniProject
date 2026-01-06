@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Container, Typography, Grid, Card, CardContent, CardMedia, Chip, Button, CircularProgress, Alert, FormControl, InputLabel, Select, MenuItem, TextField } from '@mui/material'
-import { petShopAPI } from '../../../services/api'
+import { petShopStockAPI } from '../../../services/api'
 import { speciesAPI, breedsAPI } from '../../../services/petSystemAPI'
 import { useNavigate } from 'react-router-dom'
-import { Pets as PetsIcon } from '@mui/icons-material'
+import { Pets as PetsIcon, Male, Female } from '@mui/icons-material'
+import { resolveMediaUrl } from '../../../services/api'
 
 const Shop = () => {
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
   const [error, setError] = useState('')
-  const [items, setItems] = useState([])
+  const [batches, setBatches] = useState([])
   const [species, setSpecies] = useState([])
   const [breedsBySpecies, setBreedsBySpecies] = useState({})
   const [filters, setFilters] = useState({ speciesId: '', breedId: '', minPrice: '', maxPrice: '' })
@@ -22,10 +23,11 @@ const Shop = () => {
       if (filters.breedId) params.breedId = filters.breedId
       if (filters.minPrice) params.minPrice = filters.minPrice
       if (filters.maxPrice) params.maxPrice = filters.maxPrice
-      const res = await petShopAPI.listPublicListings(params)
-      setItems(res.data.data.items || [])
+      const res = await petShopStockAPI.listPublicStocks(params)
+      // Support both batches and stocks for backward compatibility
+      setBatches(res.data.data.batches || res.data.data.stocks || [])
     } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to load pets for sale')
+      setError(e?.response?.data?.message || 'Failed to load pet batches')
     } finally { setLoading(false) }
   }
 
@@ -58,7 +60,7 @@ const Shop = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Typography variant="h4" sx={{ fontWeight: 700, mb: 3, color: 'primary.main' }}>
-        Pets for Sale
+        Pet Batches
       </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -94,38 +96,101 @@ const Shop = () => {
       </Box>
 
       <Grid container spacing={3}>
-        {items.map((it) => (
-          <Grid item xs={12} sm={6} md={4} key={it._id}>
-            <Card sx={{ height: '100%' }}>
-              <CardMedia component="div" sx={{ height: 180, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <PetsIcon sx={{ fontSize: 60, color: 'white', opacity: 0.85 }} />
-              </CardMedia>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  {it.name || 'Pet'}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-                  <Chip label={`Price: ${it.price || 0}`} size="small" color="success" variant="outlined" />
-                  <Chip label={it.status} size="small" color="primary" variant="outlined" />
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Button variant="contained" size="small" onClick={() => navigate(`/User/petshop/pet/${it._id}`)}>
-                    View Details
+        {batches.map((batch) => {
+          const displayImage = batch.images && batch.images.length > 0 
+            ? resolveMediaUrl(batch.images[0]?.url || batch.images[0]) 
+            : null
+          const categoryName = batch.category || batch.tags?.[0] || 'Pet'
+          const speciesName = batch.species?.displayName || batch.species?.name || 'Species'
+          const breedName = batch.breed?.name || 'Breed'
+          const ageDisplay = batch.age ? `${batch.age} ${batch.ageUnit || 'months'}` : 'Age not specified'
+          
+          return (
+            <Grid item xs={12} sm={6} md={4} key={batch._id}>
+              <Card 
+                sx={{ 
+                  height: '100%',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 6
+                  }
+                }}
+                onClick={() => navigate(`/User/petshop/stock/${batch._id}`)}
+              >
+                <CardMedia 
+                  component="img"
+                  sx={{ height: 200, objectFit: 'cover' }}
+                  image={displayImage || '/placeholder-pet.svg'}
+                  alt={batch.name || 'Pet Batch'}
+                />
+                <CardContent>
+                  {batch.category && (
+                    <Chip 
+                      label={categoryName} 
+                      size="small" 
+                      color="primary" 
+                      variant="outlined"
+                      sx={{ mb: 1 }}
+                    />
+                  )}
+                  <Typography variant="h6" gutterBottom>
+                    {batch.name || `${breedName} ${speciesName}`}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    {speciesName} • {breedName}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Age: {ageDisplay}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+                    {batch.maleCount > 0 && (
+                      <Chip 
+                        icon={<Male fontSize="small" />}
+                        label={`${batch.maleCount} Male`} 
+                        size="small" 
+                        color="info" 
+                        variant="outlined"
+                      />
+                    )}
+                    {batch.femaleCount > 0 && (
+                      <Chip 
+                        icon={<Female fontSize="small" />}
+                        label={`${batch.femaleCount} Female`} 
+                        size="small" 
+                        color="secondary" 
+                        variant="outlined"
+                      />
+                    )}
+                    <Chip 
+                      label={`₹${batch.price || 0}`} 
+                      size="small" 
+                      color="success" 
+                      variant="filled"
+                    />
+                  </Box>
+                  <Button 
+                    variant="contained" 
+                    fullWidth
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigate(`/User/petshop/stock/${batch._id}`)
+                    }}
+                  >
+                    View Batch Details
                   </Button>
-                  <Button size="small" disabled>
-                    Buy (Coming Soon)
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
+                </CardContent>
+              </Card>
+            </Grid>
+          )
+        })}
       </Grid>
 
-      {items.length === 0 && (
+      {batches.length === 0 && !loading && (
         <Box sx={{ textAlign: 'center', py: 10 }}>
           <PetsIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary">No pets available right now</Typography>
+          <Typography variant="h6" color="text.secondary">No pet batches available right now</Typography>
         </Box>
       )}
     </Container>

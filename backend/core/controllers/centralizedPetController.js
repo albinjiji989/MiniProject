@@ -1,5 +1,5 @@
-const CentralizedPetService = require('../../../core/services/centralizedPetService');
-const PetRegistry = require('../../../core/models/PetRegistry');
+const CentralizedPetService = require('../services/centralizedPetService');
+const PetRegistry = require('../models/PetRegistry');
 
 // Get all centralized pets with pagination
 const getAllCentralizedPets = async (req, res) => {
@@ -40,14 +40,18 @@ const getAllCentralizedPets = async (req, res) => {
 const getCentralizedPet = async (req, res) => {
   try {
     const { petCode } = req.params;
+    console.log('🔍 Centralized Controller - Fetching pet with petCode:', petCode);
     
     const pet = await CentralizedPetService.getCentralizedPet(petCode);
+    
+    console.log('✅ Centralized Controller - Pet found:', pet?.petCode, 'with', pet?.images?.length || 0, 'images');
     
     res.json({
       success: true,
       data: pet
     });
   } catch (error) {
+    console.error('❌ Centralized Controller - Error:', error.message);
     if (error.message.includes('not found')) {
       return res.status(404).json({
         success: false,

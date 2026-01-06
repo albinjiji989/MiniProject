@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { petsAPI, adoptionAPI, petShopAPI, userPetsAPI } from '../../../services/api';
+import { unifiedPetsAPI } from '../../../services/api';
 import UserLayout from '../../../components/Layout/UserLayout';
 import LoadingSpinner from '../../../components/UI/LoadingSpinner';
 
@@ -20,118 +20,21 @@ export default function VeterinaryPetSelection() {
       setLoading(true);
       setError(null);
       
-      // Load pets from different sources like the dashboard does
-      console.log('Loading user pets from all sources...');
+      console.log('🔄 Loading all user pets via unified endpoint...');
       
-      // Load all data in parallel like the dashboard
-      const [petsRes, ownedRes, adoptedRes, purchasedRes] = await Promise.allSettled([
-        userPetsAPI.list(), // PetNew model pets
-        petsAPI.getMyPets(), // Core owned pets
-        adoptionAPI.getMyAdoptedPets(), // Adopted pets
-        petShopAPI.getMyPurchasedPets() // Purchased pets
-      ]);
-
-      console.log('API responses:', { petsRes, ownedRes, adoptedRes, purchasedRes });
+      // NEW: Single API call replaces 4 separate calls
+      const response = await unifiedPetsAPI.getAllPets();
       
-      // Log detailed error information
-      if (petsRes.status === 'rejected') {
-        console.error('Failed to load PetNew pets:', petsRes.reason);
-      }
-      if (ownedRes.status === 'rejected') {
-        console.error('Failed to load core owned pets:', ownedRes.reason);
-      }
-      if (adoptedRes.status === 'rejected') {
-        console.error('Failed to load adopted pets:', adoptedRes.reason);
-      }
-      if (purchasedRes.status === 'rejected') {
-        console.error('Failed to load purchased pets:', purchasedRes.reason);
-      }
-
-      const allPets = [];
-
-      // Process pets from PetNew model
-      if (petsRes.status === 'fulfilled') {
-        const petNewPets = petsRes.value.data?.data || [];
-        console.log('PetNew pets loaded:', petNewPets.length);
-        petNewPets.forEach(pet => {
-          allPets.push({
-            ...pet,
-            source: 'owned',
-            sourceLabel: 'Owned Pet'
-          });
-        });
-      }
-
-      // Process core owned pets
-      if (ownedRes.status === 'fulfilled') {
-        let corePets = [];
-        if (ownedRes.value.data?.data?.pets) {
-          corePets = Array.isArray(ownedRes.value.data.data.pets) ? ownedRes.value.data.data.pets : [];
-        } else if (ownedRes.value.data?.data) {
-          corePets = Array.isArray(ownedRes.value.data.data) ? ownedRes.value.data.data : [];
-        } else if (Array.isArray(ownedRes.value.data)) {
-          corePets = ownedRes.value.data;
-        }
-        console.log('Core owned pets loaded:', corePets.length);
-        corePets.forEach(pet => {
-          allPets.push({
-            ...pet,
-            source: 'owned',
-            sourceLabel: 'Owned Pet'
-          });
-        });
-      }
-
-      // Process adopted pets
-      if (adoptedRes.status === 'fulfilled') {
-        let adoptedPets = [];
-        if (adoptedRes.value.data?.data) {
-          adoptedPets = Array.isArray(adoptedRes.value.data.data) ? adoptedRes.value.data.data : [];
-        } else if (Array.isArray(adoptedRes.value.data)) {
-          adoptedPets = adoptedRes.value.data;
-        }
-        console.log('Adopted pets loaded:', adoptedPets.length);
-        adoptedPets.forEach(pet => {
-          allPets.push({
-            ...pet,
-            source: 'adopted',
-            sourceLabel: 'Adopted Pet'
-          });
-        });
-      }
-
-      // Process purchased pets
-      if (purchasedRes.status === 'fulfilled') {
-        let purchasedPets = [];
-        if (purchasedRes.value.data?.data) {
-          purchasedPets = Array.isArray(purchasedRes.value.data.data) ? purchasedRes.value.data.data : [];
-        } else if (Array.isArray(purchasedRes.value.data)) {
-          purchasedPets = purchasedRes.value.data;
-        }
-        console.log('Purchased pets loaded:', purchasedPets.length);
-        purchasedPets.forEach(pet => {
-          allPets.push({
-            ...pet,
-            source: 'purchased',
-            sourceLabel: 'Purchased Pet'
-          });
-        });
-      }
-
-      // Remove duplicates based on _id
-      const uniquePets = allPets.filter((pet, index, self) => 
-        index === self.findIndex(p => p._id === pet._id)
-      );
-
-      console.log('All unique pets:', uniquePets.length, uniquePets);
-      setPets(uniquePets);
+      const petsData = response.data?.data || [];
+      console.log('✅ Loaded pets:', petsData.length, petsData);
       
-      // Show a message if no pets were found
-      if (uniquePets.length === 0) {
-        console.log('No pets found from any source');
+      setPets(petsData);
+      
+      if (petsData.length === 0) {
+        console.log('ℹ️ No pets found from any source');
       }
     } catch (error) {
-      console.error('Failed to load pets:', error);
+      console.error('❌ Failed to load pets:', error);
       setError(`Failed to load your pets. Please try again later. Error: ${error.message || 'Unknown error'}`);
       setPets([]);
     } finally {
@@ -166,40 +69,30 @@ export default function VeterinaryPetSelection() {
     // Find primary image first
     const primaryImage = pet.images.find(img => img.isPrimary);
     if (primaryImage && primaryImage.url) {
-      // Handle relative URLs
-      if (primaryImage.url.startsWith('http') || primaryImage.url.startsWith('/')) {
-        return primaryImage.url;
-      }
-      // For relative paths, prepend the API origin
-      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      return `${apiOrigin}${primaryImage.url.startsWith('/') ? '' : '/'}${primaryImage.url}`;
+      return primaryImage.url.startsWith('http') ? primaryImage.url : 
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${primaryImage.url.startsWith('/') ? '' : '/'}${primaryImage.url}`;
     }
     
     // Fallback to first image
     const firstImage = pet.images[0];
     if (firstImage && firstImage.url) {
-      // Handle relative URLs
-      if (firstImage.url.startsWith('http') || firstImage.url.startsWith('/')) {
-        return firstImage.url;
-      }
-      // For relative paths, prepend the API origin
-      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      return `${apiOrigin}${firstImage.url.startsWith('/') ? '' : '/'}${firstImage.url}`;
+      return firstImage.url.startsWith('http') ? firstImage.url : 
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${firstImage.url.startsWith('/') ? '' : '/'}${firstImage.url}`;
     }
     
     return '/placeholder-pet.svg';
   };
 
-  const getSourceBadge = (source) => {
-    switch (source) {
-      case 'owned':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Owned</span>;
-      case 'adopted':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Adopted</span>;
-      case 'purchased':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">Purchased</span>;
-      default:
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Pet</span>;
+  const getSourceBadge = (sourceLabel) => {
+    // Map sourceLabel to appropriate badge color
+    if (sourceLabel?.includes('Adopted')) {
+      return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">{sourceLabel}</span>;
+    } else if (sourceLabel?.includes('Purchased')) {
+      return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">{sourceLabel}</span>;
+    } else if (sourceLabel?.includes('My Pet')) {
+      return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{sourceLabel}</span>;
+    } else {
+      return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{sourceLabel || 'Owned Pet'}</span>;
     }
   };
 
@@ -325,7 +218,7 @@ export default function VeterinaryPetSelection() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {pets.map((pet) => (
                     <div
-                      key={`${pet._id}-${pet.source}`}
+                      key={pet._id}
                       onClick={() => handlePetSelect(pet)}
                       className={`border rounded-lg p-4 cursor-pointer transition-all duration-200 ${
                         selectedPet && selectedPet._id === pet._id
@@ -336,7 +229,6 @@ export default function VeterinaryPetSelection() {
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                            {/* Display pet image or default icon */}
                             {pet.images && pet.images.length > 0 ? (
                               <img 
                                 src={getPetImageUrl(pet)} 
@@ -356,17 +248,17 @@ export default function VeterinaryPetSelection() {
                           <div className="ml-3">
                             <h3 className="text-sm font-medium text-gray-900">{pet.name}</h3>
                             <p className="text-xs text-gray-500">
-                              {(pet.breed?.name || pet.breed || 'Unknown Breed')} • 
-                              {(pet.species?.name || pet.species?.displayName || pet.species || 'Unknown Species')}
+                              {pet.breed?.name || 'Unknown Breed'} • {pet.species?.displayName || pet.species?.name || 'Unknown Species'}
                             </p>
                           </div>
                         </div>
-                        {getSourceBadge(pet.source)}
+                        {getSourceBadge(pet.sourceLabel)}
                       </div>
-                      <div className="text-xs text-gray-500 mt-2">
-                        <div>Age: {pet.ageDisplay || `${pet.age} ${pet.ageUnit || 'years'}`}</div>
-                        <div>ID: {pet._id}</div>
-                        <div>Source: {pet.source}</div>
+                      <div className="text-xs text-gray-500 mt-2 space-y-1">
+                        <div>Age: {pet.age} {pet.ageUnit || 'years'}</div>
+                        {pet.gender && <div>Gender: {pet.gender}</div>}
+                        {pet.color && <div>Color: {pet.color}</div>}
+                        {pet.petCode && <div className="font-mono">Code: {pet.petCode}</div>}
                       </div>
                     </div>
                   ))}
@@ -388,8 +280,8 @@ export default function VeterinaryPetSelection() {
                       <div className="mt-2 text-sm text-blue-700">
                         <p>
                           You've selected {selectedPet.name} (
-                          {selectedPet.breed?.name || selectedPet.breed || 'Unknown Breed'}, 
-                          {selectedPet.species?.name || selectedPet.species?.displayName || selectedPet.species || 'Unknown Species'}) 
+                          {selectedPet.breed?.name || 'Unknown Breed'}, 
+                          {selectedPet.species?.displayName || selectedPet.species?.name || 'Unknown Species'}) 
                           for veterinary services.
                         </p>
                       </div>

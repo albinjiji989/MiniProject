@@ -168,6 +168,7 @@ const getUserPurchasedPets = async (req, res) => {
     const PetReservation = require('../models/PetReservation');
     const Pet = require('../../../../core/models/Pet');
     const PetRegistry = require('../../../../core/models/PetRegistry');
+    const PetInventoryItem = require('../../manager/models/PetInventoryItem');
     
     console.log('Fetching purchased pets for user:', req.user._id);
     
@@ -190,50 +191,77 @@ const getUserPurchasedPets = async (req, res) => {
     
     console.log('Found reservations:', reservations.length);
     
+    // Log actual database data for debugging
+    if (reservations.length > 0) {
+      const firstRes = reservations[0];
+      console.log('🔍 DATABASE CHECK - First reservation itemId data:', {
+        _id: firstRes.itemId?._id,
+        petCode: firstRes.itemId?.petCode,
+        name: firstRes.itemId?.name,
+        imageIds: firstRes.itemId?.imageIds,
+        imageIdsLength: firstRes.itemId?.imageIds?.length,
+        imageIdsType: typeof firstRes.itemId?.imageIds,
+        hasImagesVirtual: firstRes.itemId?.images !== undefined,
+        imagesVirtualLength: firstRes.itemId?.images?.length
+      });
+    }
+    
     // Manually populate images for inventory items if needed
     for (const reservation of reservations) {
-      if (reservation.itemId) {
+      if (reservation.itemId && reservation.itemId.imageIds) {
+        console.log('📸 Before populate - imageIds:', reservation.itemId.imageIds);
         // Manually populate the virtual 'images' field for the inventory item
-        if (reservation.itemId.populate) {
-          await reservation.itemId.populate('images');
+        await reservation.itemId.populate('images');
+        console.log('📸 After populate - images:', reservation.itemId.images?.length || 0, 'images');
+        if (reservation.itemId.images?.length > 0) {
+          console.log('📸 First image data:', {
+            _id: reservation.itemId.images[0]._id,
+            url: reservation.itemId.images[0].url,
+            isPrimary: reservation.itemId.images[0].isPrimary,
+            entityType: reservation.itemId.images[0].entityType
+          });
         }
       }
     }
     
     // Get pets directly from PetRegistry that belong to this user only
-    // Include pets that are paid for but not yet transferred (in case registry update failed)
+    // PetRegistry stores routing info, not full pet data
+    // We need to populate the actual pet data from PetInventoryItem
     const registryPets = await PetRegistry.find({
-      $and: [
-        {
-          $or: [
-            {
-              currentOwnerId: req.user._id,
-              currentLocation: 'at_owner'
-            },
-            {
-              petCode: { $in: reservations.filter(r => r.itemId).map(r => r.itemId.petCode) }
-            }
-          ]
-        },
-        {
-          currentOwnerId: req.user._id
-        }
+      currentOwnerId: req.user._id,
+      currentLocation: 'at_owner',
+      source: 'petshop'
+    })
+    .populate({
+      path: 'petShopItemId',
+      populate: [
+        { path: 'speciesId', select: 'name displayName' },
+        { path: 'breedId', select: 'name' },
+        { path: 'imageIds' }
       ]
     });
 
     console.log('Found registry pets:', registryPets.length);
-
+    
     // Manually populate images for registry pets
     for (const registryPet of registryPets) {
-      if (!registryPet.images || registryPet.images.length === 0) {
-        try {
-          await registryPet.populate('imageIds');
-          await registryPet.populate('images');
-        } catch (err) {
-          console.warn('Failed to populate images for registry pet:', err.message);
+      if (registryPet.petShopItemId && registryPet.petShopItemId.imageIds) {
+        console.log('📸 REGISTRY - Before populate - imageIds:', registryPet.petShopItemId.imageIds);
+        await registryPet.petShopItemId.populate('images');
+        console.log('📸 REGISTRY - After populate - images:', registryPet.petShopItemId.images?.length || 0, 'images');
+        if (registryPet.petShopItemId.images?.length > 0) {
+          console.log('📸 REGISTRY - First image data:', {
+            _id: registryPet.petShopItemId.images[0]._id,
+            url: registryPet.petShopItemId.images[0].url,
+            isPrimary: registryPet.petShopItemId.images[0].isPrimary,
+            entityType: registryPet.petShopItemId.images[0].entityType
+          });
         }
       }
     }
+
+    // DO NOT populate images from registry - they don't have imageIds
+    // Images are stored in PetInventoryItem, not PetRegistry
     
     // Combine both sources and deduplicate
     const allPetsMap = new Map();
@@ -242,137 +270,121 @@ const getUserPurchasedPets = async (req, res) => {
     for (const r of reservations.filter(r => r.itemId)) {
       console.log('Processing reservation:', r._id, 'with item:', r.itemId?.petCode, 'status:', r.status);
       
-      // Try to get the actual pet from the Pet model first
-      let actualPet = null;
-      if (r.petId) {
-        try {
-          actualPet = await Pet.findById(r.petId)
-            .populate('imageIds');
-          if (actualPet) {
-            await actualPet.populate('images');
-          }
-        } catch (error) {
-          console.warn(`Failed to load pet with ID ${r.petId}:`, error.message);
-        }
-      }
+      // Convert itemId to plain object to get all virtuals including images
+      const itemData = r.itemId.toObject();
       
-      // PetNew model doesn't exist, so skip this part
-      let newPet = null;
-      if (!actualPet && r.itemId.petCode) {
-        // PetNew model doesn't exist, so skip this part
-      }
+      console.log('📦 PETSHOP - Item data:', {
+        _id: itemData._id,
+        petCode: itemData.petCode,
+        name: itemData.name,
+        imageIds: itemData.imageIds,
+        imageIdsLength: itemData.imageIds?.length,
+        images: itemData.images?.length || 0,
+        hasImagesArray: Array.isArray(itemData.images),
+        firstImageUrl: itemData.images?.[0]?.url
+      });
       
-      // If not found, try to get from PetRegistry
-      let registryEntry = null;
-      if (!actualPet && r.itemId.petCode) {
-        try {
-          registryEntry = registryPets.find(p => p.petCode === r.itemId.petCode);
-          if (!registryEntry) {
-            registryEntry = await PetRegistry.findOne({ 
-              petCode: r.itemId.petCode,
-              currentOwnerId: req.user._id
-            })
-            .populate('imageIds');
-            if (registryEntry) {
-              await registryEntry.populate('images');
-            }
-          }
-          
-          // Try to get the actual pet from the main Pet collection
-          if (registryEntry && registryEntry.corePetId) {
-            actualPet = await Pet.findById(registryEntry.corePetId)
-              .populate('imageIds');
-            if (actualPet) {
-              await actualPet.populate('images');
-            }
-          }
-        } catch (error) {
-          console.warn(`Failed to load registry entry for petCode ${r.itemId.petCode}:`, error.message);
-        }
-      }
-      
-      // Get images from the best available source
-      let images = [];
-      if (actualPet && actualPet.images && actualPet.images.length > 0) {
-        images = actualPet.images;
-      } else if (registryEntry && registryEntry.images && registryEntry.images.length > 0) {
-        images = registryEntry.images;
-      } else if (r.itemId && r.itemId.images && r.itemId.images.length > 0) {
-        images = r.itemId.images;
-      }
-      
-      // Use the best available ID for the _id field
-      let petId = r.itemId._id; // Default to inventory item ID
-      if (actualPet) {
-        petId = actualPet._id;
-      } else if (newPet) {
-        petId = newPet._id;
-      } else if (registryEntry) {
-        petId = registryEntry._id;
-      }
+      // Extract clean image data to avoid serialization issues
+      const cleanImages = (itemData.images || []).map(img => ({
+        _id: img._id,
+        url: img.url,
+        caption: img.caption,
+        isPrimary: img.isPrimary
+      }));
       
       const petData = {
-        _id: petId,
-        petCode: r.itemId.petCode,
-        name: r.itemId.name || 'Pet', // Use default name if empty
-        images: images || [],
-        species: r.itemId.speciesId ? {
-          _id: r.itemId.speciesId._id,
-          name: r.itemId.speciesId.name,
-          displayName: r.itemId.speciesId.displayName
+        _id: itemData._id,
+        petCode: itemData.petCode,
+        name: itemData.name || 'Pet',
+        images: cleanImages, // Clean image objects
+        species: itemData.speciesId ? {
+          _id: itemData.speciesId._id,
+          name: itemData.speciesId.name,
+          displayName: itemData.speciesId.displayName
         } : null,
-        breed: r.itemId.breedId ? {
-          _id: r.itemId.breedId._id,
-          name: r.itemId.breedId.name
+        breed: itemData.breedId ? {
+          _id: itemData.breedId._id,
+          name: itemData.breedId.name
         } : null,
-        gender: r.itemId.gender || 'Unknown', // Use default gender if empty
-        age: r.itemId.age,
-        ageUnit: r.itemId.ageUnit,
-        color: r.itemId.color || 'Unknown', // Use default color if empty
-        weight: r.itemId.weight || { value: 0, unit: 'kg' },
-        currentStatus: r.itemId.status || 'purchased', // Use actual inventory item status
+        gender: itemData.gender || 'Unknown',
+        age: itemData.age,
+        ageUnit: itemData.ageUnit,
+        color: itemData.color || 'Unknown',
+        weight: itemData.weight || { value: 0, unit: 'kg' },
+        currentStatus: itemData.status || 'purchased',
         source: 'petshop',
         sourceLabel: 'Purchased from Pet Shop',
         acquiredDate: r.updatedAt
       };
       
-      console.log('Adding pet to map:', petData.petCode, 'with status:', petData.currentStatus);
+      console.log('Adding pet to map:', petData.petCode, 'with', petData.images?.length || 0, 'images');
       
       // Add to map to avoid duplicates
-      allPetsMap.set(r.itemId.petCode || r.itemId._id.toString(), petData);
+      allPetsMap.set(itemData.petCode || itemData._id.toString(), petData);
     }
     
     // Add pets directly from registry that aren't in reservations
+    // Registry pets have petShopItemId which we already populated with full data
     for (const registryPet of registryPets) {
       // Skip if already added from reservations
       if (allPetsMap.has(registryPet.petCode)) continue;
       
-      console.log('Adding registry pet:', registryPet.petCode, 'with status:', registryPet.currentStatus);
+      // Skip if no petShopItemId (shouldn't happen for petshop source)
+      if (!registryPet.petShopItemId) {
+        console.warn('Registry pet has no petShopItemId:', registryPet.petCode);
+        continue;
+      }
+      
+      console.log('Adding registry pet:', registryPet.petCode);
+      
+      // Convert to plain object to get virtuals
+      const itemData = registryPet.petShopItemId.toObject();
+      
+      console.log('📦 REGISTRY - Item data:', {
+        _id: itemData._id,
+        petCode: itemData.petCode,
+        name: itemData.name,
+        imageIds: itemData.imageIds,
+        imageIdsLength: itemData.imageIds?.length,
+        images: itemData.images?.length || 0,
+        hasImagesArray: Array.isArray(itemData.images),
+        firstImageUrl: itemData.images?.[0]?.url
+      });
+      
+      // Extract clean image data to avoid serialization issues
+      const cleanImages = (itemData.images || []).map(img => ({
+        _id: img._id,
+        url: img.url,
+        caption: img.caption,
+        isPrimary: img.isPrimary
+      }));
       
       const petData = {
         _id: registryPet._id,
         petCode: registryPet.petCode,
-        name: registryPet.name || 'Pet', // Use default name if empty
-        images: registryPet.images || [],
-        species: registryPet.speciesId ? {
-          _id: registryPet.speciesId._id,
-          name: registryPet.speciesId.name,
-          displayName: registryPet.speciesId.displayName
+        name: itemData.name || registryPet.name || 'Pet',
+        images: cleanImages, // Clean image objects
+        species: itemData.speciesId ? {
+          _id: itemData.speciesId._id,
+          name: itemData.speciesId.name,
+          displayName: itemData.speciesId.displayName
         } : null,
-        breed: registryPet.breedId ? {
-          _id: registryPet.breedId._id,
-          name: registryPet.breedId.name
+        breed: itemData.breedId ? {
+          _id: itemData.breedId._id,
+          name: itemData.breedId.name
         } : null,
-        gender: registryPet.gender || 'Unknown', // Use default gender if empty
-        age: registryPet.age,
-        ageUnit: registryPet.ageUnit,
-        color: registryPet.color || 'Unknown', // Use default color if empty
-        weight: registryPet.weight || { value: 0, unit: 'kg' },
-        currentStatus: registryPet.currentStatus || 'purchased', // Use actual registry status
+        gender: itemData.gender || 'Unknown',
+        age: itemData.age,
+        ageUnit: itemData.ageUnit,
+        color: itemData.color || 'Unknown',
+        weight: itemData.weight || { value: 0, unit: 'kg' },
+        currentStatus: registryPet.currentStatus || 'purchased',
         source: 'petshop',
         sourceLabel: 'Purchased from Pet Shop',
-        acquiredDate: registryPet.lastTransferAt
+        acquiredDate: registryPet.lastTransferAt || registryPet.createdAt
       };
+      
+      console.log('Registry pet data:', petData.petCode, 'has', petData.images?.length || 0, 'images');
       
       allPetsMap.set(registryPet.petCode, petData);
     }
@@ -381,6 +393,18 @@ const getUserPurchasedPets = async (req, res) => {
     const purchasedPets = Array.from(allPetsMap.values());
     
     console.log('Returning purchased pets:', purchasedPets.length);
+    if (purchasedPets.length > 0) {
+      console.log('Sample purchased pet being returned:', {
+        name: purchasedPets[0].name,
+        petCode: purchasedPets[0].petCode,
+        imagesCount: purchasedPets[0].images?.length || 0,
+        hasImages: !!purchasedPets[0].images?.length,
+        firstImageUrl: purchasedPets[0].images?.[0]?.url,
+        species: purchasedPets[0].species?.name,
+        breed: purchasedPets[0].breed?.name
+      });
+      console.log('🚀 ACTUAL IMAGES ARRAY BEING SENT:', JSON.stringify(purchasedPets[0].images));
+    }
     
     res.json({ success: true, data: { pets: purchasedPets } });
   } catch (e) {

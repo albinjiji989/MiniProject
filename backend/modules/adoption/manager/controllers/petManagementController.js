@@ -273,6 +273,11 @@ const createPet = async (req, res) => {
   try {
     const petData = { ...req.body, createdBy: req.user.id };
     
+    // If status is not explicitly set, default to 'available' so pets are visible to users
+    if (!petData.status) {
+      petData.status = 'available';
+    }
+    
     // Use UnifiedPetService to create adoption pet and register in PetRegistry
     const UnifiedPetService = require('../../../../core/services/UnifiedPetService');
     
@@ -1054,7 +1059,7 @@ const importPetsCSV = async (req, res) => {
           category, // Add category to processed data
           createdBy: req.user.id,
           images: [],
-          status: 'pending' // Default to pending, requires post-processing before becoming available
+          status: 'available' // Default to available so pets are visible to users immediately
         };
 
         // Gender handling (REQUIRED)

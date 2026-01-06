@@ -36,7 +36,8 @@ import {
   ExpandMore,
   ChevronLeft as ChevronLeftIcon,
   TrendingUp as AnalyticsIcon,
-  Notifications as NotificationsIcon
+  Notifications as NotificationsIcon,
+  ShoppingCart
 } from '@mui/icons-material'
 import { useNavigate, useLocation } from 'react-router-dom'
 
@@ -298,6 +299,12 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
             icon: <InvoiceIcon />,
             path: `/manager/${type}/invoices`,
             active: location.pathname.includes('/invoices')
+          },
+          {
+            title: 'Purchase Applications',
+            icon: <ShoppingCart />,
+            path: `/manager/${type}/purchase-applications`,
+            active: location.pathname.includes('/purchase-applications')
           },
           {
             title: 'Delivery',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -55,10 +55,10 @@ import BatchCard from './components/BatchCard';
 const PetShopUserDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  
+
   // Tab state
   const [tabValue, setTabValue] = useState(0); // 0: Batches, 1: Wishlist, 2: My Orders
-  
+
   // Batch browsing
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,12 +66,12 @@ const PetShopUserDashboard = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [limit] = useState(12);
-  
+
   // Search & filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedShop, setSelectedShop] = useState('');
   const [shops, setShops] = useState([]);
-  
+
   // Wishlist & orders
   const [wishlist, setWishlist] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -82,7 +82,7 @@ const PetShopUserDashboard = () => {
   const [selectedPet, setSelectedPet] = useState(null);
   const [purchaseStep, setPurchaseStep] = useState(0);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
-  
+
   // Purchase form state
   const [purchaseData, setPurchaseData] = useState({
     contactInfo: {
@@ -112,6 +112,85 @@ const PetShopUserDashboard = () => {
     severity: 'success'
   });
 
+  const loadShops = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/petshop/user/public/shops', { params: { limit: 100 } });
+      setShops(response.data.data?.petShops || response.data.data?.items || response.data.data || []);
+    } catch (err) {
+      console.error('Error loading shops:', err);
+    }
+  }, []);
+
+  const loadBatches = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError('');
+
+      const params = {
+        page,
+        limit
+      };
+
+      if (searchQuery) params.search = searchQuery;
+      if (selectedShop) params.shopId = selectedShop;
+
+      // Fetch combined stocks for user dashboard
+      const response = await apiClient.get('/petshop/user/public/stocks', { params });
+
+      const stockItems = response.data.data?.stocks || response.data.data?.batches || [];
+
+      // Each stock from backend represents ONE BATCH
+      // A batch contains pets of same category, species, breed, and age
+      // Only gender differs within a batch (male/female counts)
+      // Display each batch as ONE card showing both male and female counts
+      
+      const batches = stockItems.map(stock => ({
+        ...stock,
+        // Ensure batch-style counts exist
+        counts: stock.counts || {
+          total: (stock.maleCount || 0) + (stock.femaleCount || 0),
+          male: stock.maleCount || 0,
+          female: stock.femaleCount || 0,
+          unknown: 0
+        },
+        availableCount: (stock.maleCount || 0) + (stock.femaleCount || 0),
+        isBatch: true
+      }));
+
+      setBatches(batches);
+      setTotal(response.data.pagination?.total || batches.length);
+    } catch (err) {
+      console.error('Error loading batches:', err);
+      setError('Failed to load pet inventory');
+      setBatches([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, limit, searchQuery, selectedShop]);
+
+  const loadWishlist = useCallback(async () => {
+    try {
+      // TODO: Load from backend wishlist endpoint
+      // For now, using localStorage
+      const saved = localStorage.getItem('petshop_favorites');
+      if (saved) {
+        setFavorites(new Set(JSON.parse(saved)));
+      }
+    } catch (err) {
+      console.error('Error loading wishlist:', err);
+    }
+  }, []);
+
+  const loadOrders = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/petshop/user/my-orders', { params: { limit: 100 } });
+      setOrders(response.data.data || []);
+    } catch (err) {
+      console.error('Error loading orders:', err);
+    }
+  }, []);
+
   useEffect(() => {
     loadShops();
     loadWishlist();
@@ -125,109 +204,7 @@ const PetShopUserDashboard = () => {
     } else if (tabValue === 2) {
       loadOrders();
     }
-  }, [tabValue, searchQuery, selectedShop, page]);
-
-  const loadShops = async () => {
-    try {
-      const response = await apiClient.get('/petshop/user/public/shops', { params: { limit: 100 } });
-      setShops(response.data.data?.petShops || response.data.data?.items || response.data.data || []);
-    } catch (err) {
-      console.error('Error loading shops:', err);
-    }
-  };
-
-  const loadBatches = async () => {
-    try {
-      setLoading(true);
-      setError('');
-
-      const params = {
-        page,
-        limit,
-        status: 'published'
-      };
-
-      if (searchQuery) params.search = searchQuery;
-      if (selectedShop) params.shopId = selectedShop;
-
-      // For user dashboard, fetch both public batches and public listings and merge them
-      // so users see all pets regardless of whether they came from batches or individual inventory.
-      const fetches = [
-        apiClient.get('/petshop/user/public/batches', { params }).catch(e => ({ error: e })),
-        apiClient.get('/petshop/user/public/listings', { params }).catch(e => ({ error: e }))
-      ];
-
-      // If the current user is a manager, also include manager inventory (scoped to their store)
-      if (user && (Array.isArray(user.role) ? user.role.some(r => typeof r === 'string' && r.toLowerCase().includes('manager')) : (typeof user.role === 'string' && user.role.toLowerCase().includes('manager')))) {
-        fetches.push(apiClient.get('/petshop/manager/inventory', { params }).catch(e => ({ error: e })));
-      }
-
-      const [batchesRes, listingsRes, managerRes] = await Promise.all(fetches);
-
-      const batchItems = Array.isArray(batchesRes?.data?.data) ? batchesRes.data.data : [];
-      const listingItems = Array.isArray(listingsRes?.data?.data?.items) ? listingsRes.data.data.items : (Array.isArray(listingsRes?.data?.data) ? listingsRes.data.data : []);
-      const managerItems = managerRes && Array.isArray(managerRes?.data?.data) ? managerRes.data.data : [];
-
-      // Merge unique items. We'll keep the batch objects first, then listings, then manager items.
-      const merged = [];
-      const ids = new Set();
-
-      const pushIfNew = (item, id) => {
-        if (!id) {
-          merged.push(item);
-          return;
-        }
-        if (!ids.has(String(id))) {
-          ids.add(String(id));
-          merged.push(item);
-        }
-      };
-
-      // Batches: they represent groups - use their _id
-      for (const b of batchItems) pushIfNew(b, b._id);
-
-      // Listings: individual inventory items - use their _id
-      for (const l of listingItems) pushIfNew(l, l._id);
-
-      // Manager items (if present) - de-duplicate as well
-      for (const m of managerItems) pushIfNew(m, m._id);
-
-      setBatches(merged);
-
-      // Approximate total as sum of sources (UI shows pagination by client-side slicing)
-      const totalCount = (batchItems.length || 0) + (listingItems.length || 0) + (managerItems.length || 0);
-      setTotal(totalCount);
-    } catch (err) {
-      console.error('Error loading batches:', err);
-      setError(err.response?.data?.message || 'Failed to load batches');
-      setBatches([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadWishlist = async () => {
-    try {
-      // TODO: Load from backend wishlist endpoint
-      // For now, using localStorage
-      const saved = localStorage.getItem('petshop_favorites');
-      if (saved) {
-        setFavorites(new Set(JSON.parse(saved)));
-      }
-    } catch (err) {
-      console.error('Error loading wishlist:', err);
-    }
-  };
-
-  const loadOrders = async () => {
-    try {
-      const response = await apiClient.get('/petshop/user/my-orders', { params: { limit: 100 } });
-      setOrders(response.data.data || []);
-    } catch (err) {
-      console.error('Error loading orders:', err);
-    }
-  };
+  }, [tabValue, loadBatches, loadWishlist, loadOrders]);
 
   const handleFavoriteToggle = (batchId) => {
     const newFavorites = new Set(favorites);
@@ -241,7 +218,17 @@ const PetShopUserDashboard = () => {
   };
 
   const handleReserve = (pet) => {
-    // Open purchase dialog with selected pet
+    // Check if this is a batch/stock (has maleCount/femaleCount or counts) vs individual listing
+    const isBatchOrStock = pet.maleCount !== undefined || pet.femaleCount !== undefined || pet.counts !== undefined;
+
+    if (isBatchOrStock) {
+      // For batches/stocks, navigate to stock detail page where user can select gender and purchase
+      const stockUrl = `/User/petshop/stock/${pet._id}${pet.gender ? `?gender=${pet.gender.toLowerCase()}` : ''}`;
+      navigate(stockUrl);
+      return;
+    }
+
+    // For individual listings (PetInventoryItem), open purchase dialog
     setSelectedPet(pet);
     setPurchaseData({
       contactInfo: {
@@ -298,7 +285,7 @@ const PetShopUserDashboard = () => {
         return;
       }
     }
-    
+
     if (purchaseStep < 3) {
       setPurchaseStep(purchaseStep + 1);
     }
@@ -325,20 +312,31 @@ const PetShopUserDashboard = () => {
         notes: purchaseData.notes
       });
 
-      if (response.data?.reservation?.reservationCode) {
+      const reservation = response.data?.data?.reservation || response.data?.reservation;
+      if (reservation?.reservationCode) {
         setSnackbar({
           open: true,
-          message: `Reservation created! Code: ${response.data.reservation.reservationCode}`,
+          message: `Reservation created! Code: ${reservation.reservationCode}`,
           severity: 'success'
         });
-        
+
         // Close dialog and refresh data
         setTimeout(() => {
           handlePurchaseDialogClose();
           loadBatches(); // Refresh to show updated status
         }, 2000);
       } else {
-        throw new Error('No reservation code in response');
+        // Fallback: still show success but with generic message
+        setSnackbar({
+          open: true,
+          message: response.data?.message || 'Reservation created successfully!',
+          severity: 'success'
+        });
+
+        setTimeout(() => {
+          handlePurchaseDialogClose();
+          loadBatches();
+        }, 2000);
       }
     } catch (error) {
       console.error('Purchase error:', error);
@@ -379,10 +377,10 @@ const PetShopUserDashboard = () => {
           sx={{ borderBottom: '1px solid #e0e0e0' }}
         >
           <Tab label="Browse Batches" icon={<PetsIcon />} iconPosition="start" />
-          <Tab 
-            label={`Wishlist${favorites.size > 0 ? ` (${favorites.size})` : ''}`} 
-            icon={<FavoriteIcon />} 
-            iconPosition="start" 
+          <Tab
+            label={`Wishlist${favorites.size > 0 ? ` (${favorites.size})` : ''}`}
+            icon={<FavoriteIcon />}
+            iconPosition="start"
           />
           <Tab label="My Orders" icon={<CartIcon />} iconPosition="start" />
         </Tabs>
@@ -461,12 +459,12 @@ const PetShopUserDashboard = () => {
               {/* Batches Grid */}
               <Grid container spacing={3} sx={{ mb: 4 }}>
                 {batches.map((batch) => (
-                  <Grid item xs={12} sm={6} md={4} key={batch._id}>
+                  <Grid item xs={12} sm={6} md={4} key={batch._cardId || batch._id}>
                     <BatchCard
                       batch={batch}
-                      onSelect={() => navigate(`/user/petshop/batch/${batch._id}`, { state: { batch } })}
+                      onSelect={() => navigate(`/user/petshop/batch/${batch._id}`, { state: { batch, gender: batch.gender } })}
                       onReserve={() => handleReserve(batch)}
-                      isFavorite={favorites.has(batch._id)}
+                      isFavorite={favorites.has(batch._id) || favorites.has(batch._cardId)}
                       onFavoriteToggle={handleFavoriteToggle}
                     />
                   </Grid>

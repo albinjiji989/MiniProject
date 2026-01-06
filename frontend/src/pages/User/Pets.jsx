@@ -89,21 +89,12 @@ const Pets = () => {
         }
       }
       
-      // For petshop pets - fetch directly from PetShopItem model
-      if (pet.source === 'petshop' && pet.petShopItemId) {
-        try {
-          const res = await apiClient.get(`/petshop/manager/inventory/${pet.petShopItemId}`);
-          const petshopItem = res.data?.data;
-                
-          if (petshopItem && petshopItem.images && petshopItem.images.length > 0) {
-            const primaryImage = petshopItem.images.find(img => img.isPrimary) || petshopItem.images[0];
-            if (primaryImage && primaryImage.url) {
-              return resolveMediaUrl(primaryImage.url);
-            }
-          }
-        } catch (err) {
-          console.error(`❌ FAILED: Could not fetch petshop item ${pet.petShopItemId}:`, err.message);
-        }
+      // For petshop pets - images should already be in the pet data from my-purchased-pets endpoint
+      // If we reach here, it means images weren't populated properly in the backend
+      // Just use fallback placeholder instead of making another API call
+      if (pet.source === 'petshop') {
+        console.warn(`⚠️ Petshop pet ${pet.petCode || pet._id} has no images in data. Using placeholder.`)
+        return '/placeholder-pet.svg'
       }
       
       // For user pets - fetch directly from Pet model
@@ -152,29 +143,48 @@ const Pets = () => {
         
         let allPets = [];
         
-        // Process user pets
+        // CRITICAL: Add purchased and adopted pets FIRST
+        // They have complete data with images from source tables
+        // The /pets/my-pets endpoint returns registry data without images
+        
+        // Process purchased pets FIRST
+        if (purchasedPetsRes.status === 'fulfilled') {
+          console.log('📦 RAW API RESPONSE:', purchasedPetsRes.value.data);
+          const purchasedPets = purchasedPetsRes.value.data?.data?.pets || [];
+          console.log('📦 EXTRACTED PURCHASED PETS:', purchasedPets.length);
+          if (purchasedPets.length > 0) {
+            console.log('📦 FIRST PETSHOP PET FULL DATA:', purchasedPets[0]);
+          }
+          // Add purchased pets FIRST - they have images from PetInventoryItem
+          allPets = [...purchasedPets];
+        }
+        
+        // Process adopted pets SECOND
+        if (adoptedPetsRes.status === 'fulfilled') {
+          console.log('🏠 RAW API RESPONSE:', adoptedPetsRes.value.data);
+          const adoptedPets = adoptedPetsRes.value.data?.data || [];
+          console.log('🏠 EXTRACTED ADOPTED PETS:', adoptedPets.length);
+          if (adoptedPets.length > 0) {
+            console.log('🏠 FIRST ADOPTED PET FULL DATA:', adoptedPets[0]);
+          }
+          // Add adopted pets SECOND - they have images from AdoptionPet
+          allPets = [...allPets, ...adoptedPets];
+        }
+        
+        // Process user pets LAST (these may be duplicates without images)
         if (userPetsRes.status === 'fulfilled') {
           const userPets = userPetsRes.value.data?.data || [];
           allPets = [...allPets, ...userPets];
         }
         
-        // Process owned pets
+        // Process owned pets LAST (these may be duplicates without images)
         if (ownedPetsRes.status === 'fulfilled') {
           const ownedPets = ownedPetsRes.value.data?.data?.pets || [];
           allPets = [...allPets, ...ownedPets];
         }
         
-        // Process purchased pets
-        if (purchasedPetsRes.status === 'fulfilled') {
-          const purchasedPets = purchasedPetsRes.value.data?.data?.pets || [];
-          allPets = [...allPets, ...purchasedPets];
-        }
-        
-        // Process adopted pets
-        if (adoptedPetsRes.status === 'fulfilled') {
-          const adoptedPets = adoptedPetsRes.value.data?.data || [];
-          allPets = [...allPets, ...adoptedPets];
-        }
+        console.log('🔍 ALL PETS BEFORE DEDUP:', allPets.length);
+        console.log('🔍 SAMPLE PET FROM ALL:', allPets[0]);
         
         // Remove duplicates based on petCode or _id
         const uniquePets = allPets.filter((pet, index, self) => {
@@ -185,6 +195,16 @@ const Pets = () => {
           // If no petCode, deduplicate based on _id
           return index === self.findIndex(p => p._id === pet._id);
         });
+        
+        console.log('🔍 UNIQUE PETS AFTER DEDUP:', uniquePets.length);
+        console.log('🔍 ALL UNIQUE PETS:', uniquePets.map(p => ({
+          name: p.name,
+          petCode: p.petCode,
+          source: p.source,
+          hasImages: !!p.images,
+          imagesLength: p.images?.length,
+          firstImageUrl: p.images?.[0]?.url
+        })));
         
         setPets(uniquePets);
       } catch (e) {
@@ -235,29 +255,33 @@ const Pets = () => {
               <Grid item xs={12} sm={6} md={4} key={pet._id || pet.petCode}>
                 <Box
                   onClick={() => {
-                    console.log('Pet card clicked:', pet);
-                    // Navigate to the appropriate pet details page
-                    // Prioritize petCode-based navigation for centralized registry
+                    console.log('🖱️ CLICKED PET:', { _id: pet._id, petCode: pet.petCode, name: pet.name, source: pet.source });
+                    // ALWAYS use petCode for navigation - it's the universal identifier
                     if (pet.petCode) {
-                      console.log('Navigating to centralized pet:', `/pets/centralized/${pet.petCode}`);
-                      navigate(`/pets/centralized/${pet.petCode}`);
-                    } else if (pet._id) {
-                      console.log('Navigating to user pet:', `/User/pets/${pet._id}`);
-                      navigate(`/User/pets/${pet._id}`);
+                      console.log('✅ Using petCode route:', `/User/pets/centralized/${pet.petCode}`);
+                      navigate(`/User/pets/centralized/${pet.petCode}`);
                     } else {
-                      console.log('No valid ID found for pet');
-                      // If no valid ID found, try to use the original logic
-                      navigate(`/User/pets/${pet._id || pet.petCode}`);
+                      console.log('⚠️ No petCode, using _id route:', `/User/pets/${pet._id}`);
+                      // Fallback to _id only for user pets without petCode
+                      navigate(`/User/pets/${pet._id}`);
                     }
                   }}
                   sx={{
+                    minWidth: 280,
+                    maxWidth: 320,
                     cursor: 'pointer',
-                    height: '100%',
+                    position: 'relative',
+                    overflow: 'visible',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     '&:hover': { 
-                      transform: 'translateY(-4px)',
-                      boxShadow: 4,
-                    },
-                    transition: 'all 0.3s ease-in-out',
+                      transform: 'translateY(-8px)',
+                      boxShadow: (theme) => {
+                        const isAdopted = pet?.tags?.includes('adoption') || pet?.status === 'adopted';
+                        const isPurchased = pet?.tags?.includes('purchased') || pet?.source === 'petshop';
+                        const color = isAdopted ? '#10b981' : isPurchased ? '#3b82f6' : '#8b5cf6';
+                        return `0 12px 24px rgba(${parseInt(color.slice(1,3),16)}, ${parseInt(color.slice(3,5),16)}, ${parseInt(color.slice(5,7),16)}, 0.3)`;
+                      }
+                    }
                   }}
                 >
                   <Card 
@@ -265,41 +289,62 @@ const Pets = () => {
                       height: '100%', 
                       display: 'flex', 
                       flexDirection: 'column',
-                      border: 1,
-                      borderColor: 'divider',
                     }}
                   >
+                    {/* Color Band at Top */}
+                    <Box sx={{ 
+                      height: 6,
+                      background: (() => {
+                        const isAdopted = pet?.tags?.includes('adoption') || pet?.status === 'adopted';
+                        const isPurchased = pet?.tags?.includes('purchased') || pet?.source === 'petshop';
+                        return isAdopted 
+                          ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                          : isPurchased 
+                          ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'
+                          : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
+                      })(),
+                      borderTopLeftRadius: 'inherit',
+                      borderTopRightRadius: 'inherit'
+                    }} />
+                    
                     {/* Pet Image */}
                     <Box
                       component="img"
-                      src={'/placeholder-pet.svg'} // Will be updated after component mounts
+                      src={'/placeholder-pet.svg'}
                       alt={pet.name || 'Pet'}
                       sx={{
                         width: '100%',
-                        height: 220,
+                        height: 180,
                         objectFit: 'cover',
-                        borderRadius: '8px 8px 0 0',
-                        border: '1px solid',
+                        borderRadius: 2,
+                        border: '2px solid',
                         borderColor: 'divider',
+                        bgcolor: 'grey.100'
                       }}
                       ref={(el) => {
                         if (el) {
-                          // First try the basic image resolution
-                          const basicImageUrl = getPetImageUrl(pet);
-                          if (basicImageUrl && !basicImageUrl.includes('placeholder')) {
-                            el.src = basicImageUrl;
-                            return;
-                          }
-                                          
-                          // If basic resolution fails, try cross-source fetching
-                          fetchPetImageFromSource(pet).then(url => {
-                            if (url && !url.includes('placeholder')) {
-                              el.src = url;
-                            }
-                          }).catch(err => {
-                            console.error('Failed to fetch pet image from source:', err);
-                            // Keep the placeholder if all attempts fail
+                          console.log('🖼️ IMAGE REF CALLBACK:', {
+                            petName: pet.name,
+                            hasImages: !!pet.images,
+                            isArray: Array.isArray(pet.images),
+                            imagesLength: pet.images?.length,
+                            images: pet.images,
+                            firstImage: pet.images?.[0]
                           });
+                          
+                          if (pet.images && Array.isArray(pet.images) && pet.images.length > 0) {
+                            const primaryImage = pet.images.find(img => img.isPrimary) || pet.images[0];
+                            console.log('🖼️ PRIMARY IMAGE FOUND:', primaryImage);
+                            if (primaryImage && primaryImage.url) {
+                              const resolvedUrl = resolveMediaUrl(primaryImage.url);
+                              console.log('✅ SETTING IMAGE URL:', resolvedUrl);
+                              el.src = resolvedUrl;
+                            } else {
+                              console.log('❌ NO URL IN PRIMARY IMAGE');
+                            }
+                          } else {
+                            console.log('❌ NO IMAGES ARRAY OR EMPTY');
+                          }
                         }
                       }}
                       onError={(e) => {
@@ -324,7 +369,7 @@ const Pets = () => {
                           </Typography>
                                           
                           <Typography variant="body2" color="text.secondary" gutterBottom>
-                            {pet.species?.name || pet.species || 'Unknown Species'} • {pet.breed || 'Unknown Breed'}
+                            {pet.species?.displayName || pet.species?.name || pet.species || 'Unknown Species'} • {pet.breed?.name || pet.breed || 'Unknown Breed'}
                           </Typography>
                         </Box>
                                         
@@ -378,7 +423,7 @@ const Pets = () => {
                           )}
                         </Stack>
                                         
-                        {pet.description && (
+                        {pet.description && pet.description !== 'N/A' && pet.description.trim() !== '' && (
                           <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontSize: '0.8rem' }}>
                             {pet.description.length > 80 ? pet.description.substring(0, 80) + '...' : pet.description}
                           </Typography>
@@ -386,7 +431,9 @@ const Pets = () => {
                                         
                         <Box sx={{ mt: 'auto', pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
                           <Typography variant="caption" color="text.secondary">
-                            Added: {pet.createdAt ? new Date(pet.createdAt).toLocaleDateString() : 'Unknown'}
+                            Added: {pet.createdAt || pet.acquiredDate || pet.adoptionDate || pet.purchaseDate ? 
+                              new Date(pet.createdAt || pet.acquiredDate || pet.adoptionDate || pet.purchaseDate).toLocaleDateString() : 
+                              'Unknown'}
                           </Typography>
                         </Box>
                       </Stack>

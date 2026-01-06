@@ -8,15 +8,38 @@ const getUserAdoptedPets = async (req, res) => {
       status: 'adopted',
       isActive: true
     })
-      .select('name breed species age ageUnit gender color weight healthStatus vaccinationStatus temperament description imageIds documentIds adoptionDate')
+      .select('petCode name breed species age ageUnit gender color weight healthStatus vaccinationStatus temperament description imageIds documentIds adoptionDate')
       .populate('imageIds')
       .populate('documentIds')
       .sort({ adoptionDate: -1 });
     
+    // Log actual database data for debugging
+    if (pets.length > 0) {
+      console.log('🔍 DATABASE CHECK - First adoption pet data:', {
+        _id: pets[0]._id,
+        name: pets[0].name,
+        imageIds: pets[0].imageIds,
+        imageIdsLength: pets[0].imageIds?.length,
+        imageIdsType: typeof pets[0].imageIds,
+        hasImagesVirtual: pets[0].images !== undefined,
+        imagesVirtualLength: pets[0].images?.length
+      });
+    }
+    
     // Manually populate the virtual 'images' and 'documents' fields for each pet
     for (const pet of pets) {
+      console.log('📸 ADOPTION - Before populate - imageIds:', pet.imageIds?.map(id => id._id || id));
       await pet.populate('images');
       await pet.populate('documents');
+      console.log('📸 ADOPTION - After populate - images:', pet.images?.length || 0, 'images');
+      if (pet.images?.length > 0) {
+        console.log('📸 ADOPTION - First image data:', {
+          _id: pet.images[0]._id,
+          url: pet.images[0].url,
+          isPrimary: pet.images[0].isPrimary,
+          entityType: pet.images[0].entityType
+        });
+      }
     }
 
     res.json({ success: true, data: pets });
@@ -116,9 +139,11 @@ const getPublicPets = async (req, res) => {
     
     // Only show pets that are available and active
     // These pets are only created by adoption managers
+    // Exclude pets that are already adopted
     const pets = await AdoptionPet.find({ 
       status: 'available', 
-      isActive: true 
+      isActive: true,
+      adopterUserId: null // Ensure pet is not already adopted
     })
       .select('name breed species age ageUnit gender color weight healthStatus vaccinationStatus temperament description imageIds documentIds adoptionFee petCode createdBy')
       .populate('images')
@@ -133,7 +158,8 @@ const getPublicPets = async (req, res) => {
 
     const total = await AdoptionPet.countDocuments({ 
       status: 'available', 
-      isActive: true 
+      isActive: true,
+      adopterUserId: null // Ensure pet is not already adopted
     });
 
     res.json({

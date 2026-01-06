@@ -1,10 +1,9 @@
 const mongoose = require('mongoose');
 
 const petBatchSchema = new mongoose.Schema({
-  // Shop Reference
+  // Shop Reference (accept either ObjectId or store code string like "PSP138250")
   shopId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'PetShop',
+    type: mongoose.Schema.Types.Mixed, // Accept both ObjectId and string codes
     required: [true, 'Shop ID is required'],
     index: true
   },

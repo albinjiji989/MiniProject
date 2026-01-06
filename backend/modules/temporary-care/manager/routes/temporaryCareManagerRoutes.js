@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../../../../core/middleware/auth');
-const { authorizeModule } = require('../../../../core/middleware/authorizeModule');
+const { auth, authorizeModule } = require('../../../../core/middleware/auth');
 
 // Import controllers when ready
 // const temporaryCareManagerController = require('../controllers/temporaryCareManagerController');

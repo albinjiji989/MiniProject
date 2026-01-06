@@ -168,14 +168,25 @@ const submitWizard = async (req, res) => {
 
     console.log('Stock created successfully:', stock._id);
 
+    // Mark stock as released immediately so it appears on user dashboard
+    // even if pet generation fails
+    stock.isReleased = true;
+    stock.releasedAt = new Date();
+    await stock.save();
+
     // Now generate individual pets from the stock
     let generatedPets = [];
+    let generationError = null;
     
     try {
       const UnifiedPetService = require('../../../../core/services/UnifiedPetService');
       
       const totalToGenerate = (maleCount || 0) + (femaleCount || 0);
       console.log(`Generating ${totalToGenerate} pets from stock`);
+      
+      // Save original counts before generation (since generatePetsFromStock decrements them)
+      const originalMaleCount = maleCount || 0;
+      const originalFemaleCount = femaleCount || 0;
       
       const result = await UnifiedPetService.generatePetsFromStock(
         stock._id,
@@ -191,19 +202,27 @@ const submitWizard = async (req, res) => {
         await stock.addGeneratedPet(pet._id);
       }
       
-      stock.maleCount -= (maleCount || 0);
-      stock.femaleCount -= (femaleCount || 0);
-      stock.isReleased = true;
-      stock.releasedAt = new Date();
+      // Restore original counts since pets are generated but not yet sold
+      // Stock counts represent available inventory until users purchase
+      stock.maleCount = originalMaleCount;
+      stock.femaleCount = originalFemaleCount;
       
       await stock.save();
       
       console.log(`Generated ${generatedPets.length} pets from stock`);
     } catch (genErr) {
       console.error('Pet generation failed:', genErr);
+      generationError = genErr.message || String(genErr);
       // Stock was created, pets generation failed - this is acceptable
       // User can try generating pets later from the stock management page
     }
+
+    const totalGenerated = generatedPets.length;
+    const message = totalGenerated > 0 
+      ? `Stock "${stockName}" created successfully with ${totalGenerated} pets generated` 
+      : generationError 
+        ? `Stock created successfully! However, pet generation failed: ${generationError}. You can generate pets manually later.` 
+        : `Stock "${stockName}" created successfully with 0 pets generated (no pets in stock).`;
 
     res.status(201).json({
       success: true,
@@ -216,9 +235,10 @@ const submitWizard = async (req, res) => {
           gender: p.gender,
           status: p.status
         })),
-        generatedPetsCount: generatedPets.length
+        generatedPetsCount: totalGenerated,
+        generationError
       },
-      message: `Stock "${stockName}" created successfully with ${generatedPets.length} pets generated`
+      message
     });
 
   } catch (error) {

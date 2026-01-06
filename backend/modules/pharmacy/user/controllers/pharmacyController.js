@@ -1,5 +1,5 @@
 const { Medicine, Prescription, PharmacyCart, PharmacyOrder } = require('../../models/Pharmacy');
-const User = require('../../../core/models/User');
+const User = require('../../../../core/models/User');
 
 // Get medicines with search/filter
 const getMedicines = async (req, res) => {
