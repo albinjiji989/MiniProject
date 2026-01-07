@@ -92,14 +92,29 @@ const submitPurchaseApplication = async (req, res) => {
       });
     }
 
-    // Handle user photo upload
+    // Handle user photo upload - Direct to Cloudinary from memory buffer
     let userPhotoId = null;
     if (req.files && req.files.userPhoto) {
       const photoFile = req.files.userPhoto[0];
-      const photoResult = await cloudinary.uploader.upload(photoFile.path, {
-        folder: 'petshop/applications/photos',
-        resource_type: 'auto'
-      });
+      
+      // Upload from buffer directly to Cloudinary (no local file storage)
+      const uploadStream = () => {
+        return new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            {
+              folder: 'petshop/applications/photos',
+              resource_type: 'auto'
+            },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+          stream.end(photoFile.buffer);
+        });
+      };
+      
+      const photoResult = await uploadStream();
       
       const userPhoto = await Image.create({
         url: photoResult.secure_url,
@@ -112,14 +127,28 @@ const submitPurchaseApplication = async (req, res) => {
       userPhotoId = userPhoto._id;
     }
 
-    // Handle document uploads
+    // Handle document uploads - Direct to Cloudinary from memory buffer
     const documentIds = [];
     if (req.files && req.files.documents) {
       for (const docFile of req.files.documents) {
-        const docResult = await cloudinary.uploader.upload(docFile.path, {
-          folder: 'petshop/applications/documents',
-          resource_type: 'auto'
-        });
+        // Upload from buffer directly to Cloudinary (no local file storage)
+        const uploadStream = () => {
+          return new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              {
+                folder: 'petshop/applications/documents',
+                resource_type: 'auto'
+              },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            );
+            stream.end(docFile.buffer);
+          });
+        };
+        
+        const docResult = await uploadStream();
         
         const document = await Document.create({
           name: docFile.originalname,
@@ -151,6 +180,20 @@ const submitPurchaseApplication = async (req, res) => {
 
     application.addStatusHistory('pending', req.user._id, 'Application submitted');
     await application.save();
+
+    // Mark pet as reserved and update stock count
+    petItem.status = 'reserved';
+    petItem.reservedBy = req.user._id;
+    petItem.reservedDate = new Date();
+    await petItem.save();
+
+    // Update stock available count
+    const PetStock = require('../../manager/models/PetStock');
+    if (petItem.stockId) {
+      await PetStock.findByIdAndUpdate(petItem.stockId, {
+        $inc: { availableCount: -1 }
+      });
+    }
 
     // TODO: Send email notification to user and manager
 
@@ -185,7 +228,8 @@ const getMyApplications = async (req, res) => {
         path: 'petInventoryItemId',
         populate: [
           { path: 'speciesId', select: 'name displayName' },
-          { path: 'breedId', select: 'name' }
+          { path: 'breedId', select: 'name' },
+          { path: 'images' }
         ]
       })
       .populate('userPhoto')
@@ -213,7 +257,7 @@ const getApplicationDetails = async (req, res) => {
         populate: [
           { path: 'speciesId', select: 'name displayName' },
           { path: 'breedId', select: 'name' },
-          { path: 'imageIds' }
+          { path: 'images' }
         ]
       })
       .populate('userPhoto')

@@ -3,7 +3,8 @@ const router = express.Router();
 const { auth } = require('../../../../core/middleware/auth');
 const { body } = require('express-validator');
 const multer = require('multer');
-const upload = multer({ dest: 'uploads/temp/' });
+// Use memory storage - no local file storage, upload directly to Cloudinary
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Import user controllers
 const publicController = require('../controllers/publicController');

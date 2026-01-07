@@ -17,177 +17,26 @@ const { validate, createPetSchema, updatePetSchema, searchNearbyPetsSchema } = r
 // @desc    Get owned pets (pets that user purchased and received)
 const getOwnedPets = async (req, res) => {
   try {
-    // Query PetRegistry for all pets owned by current user
-    const PetRegistry = require('../models/PetRegistry');
+    // Use the centralized pet service which handles proper enrichment
+    const result = await PetRegistryService.getAllCentralizedPets(
+      { currentOwnerId: req.user._id },
+      { page: 1, limit: 100, sort: { updatedAt: -1 } }
+    );
     
-    // Include pets with status 'owned', 'sold', 'adopted' or location 'at_owner' AND owned by current user
-    let registryPets = await PetRegistry.find({ 
-      $and: [
-        {
-          currentOwnerId: req.user._id
-        },
-        {
-          $or: [
-            { currentStatus: { $in: ['owned', 'sold', 'adopted'] } },
-            { currentLocation: 'at_owner' }
-          ]
-        }
-      ]
-    })
-      .populate('species', 'name displayName')
-      .populate('breed', 'name')
-      .populate('imageIds') // Populate the imageIds field
-      .populate('documentIds') // Populate the documentIds field
-      .sort({ updatedAt: -1 });
-    
-    // Manually populate the virtual 'images' and 'documents' fields for each pet
-    // Safer population with error handling
-    for (const pet of registryPets) {
-      try {
-        await pet.populate('images');
-        await pet.populate('documents');
-      } catch (populateErr) {
-        logger.warn(`Failed to populate images/documents for pet ${pet._id}:`, populateErr.message);
-        // Continue with the pet even if image/document population fails
+    res.json({
+      success: true,
+      data: {
+        pets: result.pets,
+        total: result.pagination.total
       }
-    }
-    
-    logger.debug(`Registry pets found: ${registryPets.length}`);
-    
-    // Convert to plain objects AFTER population
-    const registryPetsPlain = registryPets.map(p => {
-      const plain = p.toObject({ virtuals: true });
-      // Ensure images are properly included
-      plain.images = plain.images || plain.imageIds || [];
-      return plain;
     });
-    
-    // Map registry pets to include source information
-    const pets = registryPetsPlain.map(regPet => {
-      return {
-        _id: regPet.corePetId || regPet.petShopItemId || regPet.adoptionPetId || regPet._id,
-        name: regPet.name,
-        petCode: regPet.petCode,
-        images: regPet.images || regPet.imageIds || [], // Ensure images are properly included
-        species: regPet.species,
-        speciesId: regPet.species,
-        breed: regPet.breed,
-        breedId: regPet.breed,
-        currentStatus: regPet.currentStatus,
-        source: regPet.source,
-        sourceLabel: regPet.sourceLabel,
-        firstAddedSource: regPet.firstAddedSource,
-        firstAddedAt: regPet.firstAddedAt,
-        acquiredDate: regPet.lastTransferAt || regPet.updatedAt,
-        gender: regPet.gender,
-        age: regPet.age,
-        ageUnit: regPet.ageUnit,
-        color: regPet.color,
-        // Include source IDs for reference
-        corePetId: regPet.corePetId,
-        petShopItemId: regPet.petShopItemId,
-        adoptionPetId: regPet.adoptionPetId
-      };
-    });
-    
-    logger.debug(`Mapped pets to return: ${pets.length}`);
-    
-    // Fallback: if none found in registry, show legacy Pet model data
-    if (!pets || pets.length === 0) {
-      try {
-        const Pet = require('../models/Pet');
-        let legacyPets = await Pet.find({ 
-          $or: [
-            { owner: req.user._id },          // new schema field
-            { currentOwnerId: req.user._id }  // legacy field
-          ]
-        })
-          .populate('species', 'name displayName')
-          .populate('breed', 'name')
-          .populate('imageIds') // Populate the imageIds field
-          .populate('documentIds') // Populate the documentIds field
-          .sort({ updatedAt: -1 })
-          .lean();
-        
-        // Manually populate the virtual 'images' and 'documents' fields for each pet
-        // Safer population with error handling
-        for (const pet of legacyPets) {
-          if (pet) {
-            try {
-              await pet.populate('images');
-              await pet.populate('documents');
-            } catch (populateErr) {
-              logger.warn(`Failed to populate images/documents for legacy pet ${pet._id}:`, populateErr.message);
-              // Continue with the pet even if image/document population fails
-            }
-          }
-        }
-        
-        if (legacyPets && legacyPets.length > 0) {
-          return ErrorHandler.sendSuccess(res, { pets: legacyPets });
-        }
-      } catch (petErr) {
-        logger.warn('Failed to query legacy Pet model:', petErr);
-      }
-      
-      // Second fallback: show completed petshop reservations
-      try {
-        const PetReservation = require('../../modules/petshop/user/models/PetReservation');
-        const reservations = await PetReservation.find({
-          userId: req.user._id,
-          status: { $in: ['completed', 'at_owner', 'paid'] }
-        }).populate({
-          path: 'itemId',
-          populate: [
-            { path: 'speciesId', select: 'name displayName' },
-            { path: 'breedId', select: 'name' },
-            { path: 'imageIds' },
-            { path: 'documentIds' },
-            { path: 'images' }
-          ]
-        });
-        
-        // Manually populate the virtual 'images' and 'documents' fields for each item
-        // Safer population with error handling
-        for (const reservation of reservations) {
-          if (reservation && reservation.itemId) {
-            try {
-              await reservation.itemId.populate('images');
-              await reservation.itemId.populate('documents');
-            } catch (populateErr) {
-              logger.warn(`Failed to populate images/documents for petshop item ${reservation.itemId?._id}:`, populateErr.message);
-              // Continue with the reservation even if image/document population fails
-            }
-          }
-        }
-        
-        const fallbackPets = (reservations || [])
-          .filter(r => r.itemId)
-          .map(r => ({
-            _id: r.itemId._id,
-            name: r.itemId.name,
-            petCode: r.itemId.petCode,
-            images: r.itemId.images || r.itemId.imageIds || [], // Ensure images are properly included
-            species: r.itemId.speciesId,
-            breed: r.itemId.breedId,
-            gender: r.itemId.gender,
-            age: r.itemId.age,
-            color: r.itemId.color,
-            currentStatus: r.itemId.status || 'sold', // Use actual inventory item status
-            source: 'petshop',
-            acquiredDate: r.updatedAt
-          }));
-        
-        return ErrorHandler.sendSuccess(res, { pets: fallbackPets });
-      } catch (e) {
-        // All fallbacks failed; return empty list
-        return ErrorHandler.sendSuccess(res, { pets: [] });
-      }
-    }
-
-    ErrorHandler.sendSuccess(res, { pets });
   } catch (error) {
-    ErrorHandler.handleControllerError(res, error, 'get_owned_pets');
+    logger.error('Error getting owned pets:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error getting pets',
+      error: error.message
+    });
   }
 };
 

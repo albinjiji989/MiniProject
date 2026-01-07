@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { adoptionAPI, resolveMediaUrl } from '../../../../services/api'
 
 const KEY = 'adopt_apply_wizard'
 
 export default function StepReview() {
   const navigate = useNavigate()
-  const [params] = useSearchParams()
+  const { petId } = useParams()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [data, setData] = useState(() => { 
@@ -36,16 +36,15 @@ export default function StepReview() {
 
   // Always sync petId from URL if present to avoid stale localStorage
   useEffect(() => {
-    const pid = params.get('petId')
-    if (!pid) return
+    if (!petId) return
     const applicant = data.applicant || {}
-    if (applicant.petId !== pid) {
-      const next = { ...data, applicant: { ...applicant, petId: pid } }
+    if (applicant.petId !== petId) {
+      const next = { ...data, applicant: { ...applicant, petId: petId } }
       localStorage.setItem(KEY, JSON.stringify(next))
       setData(next)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [petId])
   
   // Fetch pet data to display pet code
   useEffect(() => {
@@ -68,7 +67,7 @@ export default function StepReview() {
     fetchPetData();
   }, [data.applicant?.petId]);
 
-  const back = () => navigate('/User/adoption/apply/documents')
+  const back = () => navigate(`/User/adoption/wizard/${petId}/documents`)
 
   const submit = async () => {
     setSubmitting(true)
@@ -161,16 +160,16 @@ export default function StepReview() {
           email: applicant.email,
           phone: applicant.phone,
           address: home.address || {},
-          homeType: home.homeType,
+          homeType: home.homeType || 'apartment',
           hasGarden: !!home.hasGarden,
           hasOtherPets: !!home.hasOtherPets,
           otherPetsDetails: home.otherPetsDetails || '',
           workSchedule,
           timeAtHome,
           petExperience,
-          previousPets: exp.previousPets,
-          adoptionReason: exp.adoptionReason,
-          expectations: exp.expectations,
+          previousPets: exp.previousPets || '',
+          adoptionReason: exp.adoptionReason || '',
+          expectations: exp.expectations || '',
         }
       }
 

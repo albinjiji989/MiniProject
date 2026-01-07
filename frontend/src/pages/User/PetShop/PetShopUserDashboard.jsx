@@ -30,7 +30,16 @@ import {
   Stepper,
   Step,
   StepLabel,
-  Snackbar
+  Snackbar,
+  Avatar,
+  Divider,
+  IconButton,
+  TableContainer,
+  Table,
+  TableBody,
+  TableRow,
+  TableCell,
+  Badge
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -45,7 +54,17 @@ import {
   CalendarToday as AgeIcon,
   AttachMoney as PriceIcon,
   Check as CheckIcon,
-  Error as ErrorIcon
+  Error as ErrorIcon,
+  Visibility as VisibilityIcon,
+  Payment as PaymentIcon,
+  Schedule as ScheduleIcon,
+  Email as EmailIcon,
+  Phone as PhoneIcon,
+  Home as AddressIcon,
+  Description as DocumentIcon,
+  Image as ImageIcon,
+  Close as CloseIcon,
+  ContentCopy as CopyIcon
 } from '@mui/icons-material';
 import { apiClient, resolveMediaUrl } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -76,6 +95,9 @@ const PetShopUserDashboard = () => {
   const [wishlist, setWishlist] = useState([]);
   const [orders, setOrders] = useState([]);
   const [favorites, setFavorites] = useState(new Set());
+  const [orderFilterStatus, setOrderFilterStatus] = useState('all');
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [orderDetailsOpen, setOrderDetailsOpen] = useState(false);
 
   // Purchase/Reservation Modal State
   const [purchaseDialog, setPurchaseDialog] = useState(false);
@@ -184,8 +206,8 @@ const PetShopUserDashboard = () => {
 
   const loadOrders = useCallback(async () => {
     try {
-      const response = await apiClient.get('/petshop/user/my-orders', { params: { limit: 100 } });
-      setOrders(response.data.data || []);
+      const response = await apiClient.get('/petshop/user/purchase-applications');
+      setOrders(response.data.data?.applications || []);
     } catch (err) {
       console.error('Error loading orders:', err);
     }
@@ -517,54 +539,133 @@ const PetShopUserDashboard = () => {
         </Box>
       )}
 
-      {/* TAB 2: My Orders */}
+      {/* TAB 2: My Orders/Applications */}
       {tabValue === 2 && (
         <Box>
+          {/* Status Filter Tabs */}
+          <Paper sx={{ mb: 3 }}>
+            <Tabs
+              value={orderFilterStatus}
+              onChange={(e, newValue) => setOrderFilterStatus(newValue)}
+              variant="scrollable"
+              scrollButtons="auto"
+            >
+              <Tab label={`All (${orders.length})`} value="all" />
+              <Tab label={`Pending (${orders.filter(o => o.status === 'pending' || o.status === 'under_review').length})`} value="pending" />
+              <Tab label={`Approved (${orders.filter(o => o.status === 'approved' || o.status === 'payment_pending').length})`} value="approved" />
+              <Tab label={`Paid (${orders.filter(o => o.status === 'paid' || o.status === 'scheduled').length})`} value="paid" />
+              <Tab label={`Completed (${orders.filter(o => o.status === 'completed').length})`} value="completed" />
+              <Tab label={`Rejected (${orders.filter(o => o.status === 'rejected' || o.status === 'cancelled').length})`} value="rejected" />
+            </Tabs>
+          </Paper>
+
           {loading ? (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
               <CircularProgress />
             </Box>
-          ) : orders.length === 0 ? (
+          ) : orders.filter(o => {
+            if (orderFilterStatus === 'all') return true;
+            if (orderFilterStatus === 'pending') return o.status === 'pending' || o.status === 'under_review';
+            if (orderFilterStatus === 'approved') return o.status === 'approved' || o.status === 'payment_pending';
+            if (orderFilterStatus === 'paid') return o.status === 'paid' || o.status === 'scheduled';
+            if (orderFilterStatus === 'completed') return o.status === 'completed';
+            if (orderFilterStatus === 'rejected') return o.status === 'rejected' || o.status === 'cancelled';
+            return true;
+          }).length === 0 ? (
             <Alert severity="info">
-              You haven't placed any orders yet. <Button onClick={() => setTabValue(0)}>Start shopping</Button>
+              You haven't placed any applications yet. <Button onClick={() => setTabValue(0)}>Start shopping</Button>
             </Alert>
           ) : (
             <Grid container spacing={2}>
-              {orders.map((order) => (
+              {orders.filter(o => {
+                if (orderFilterStatus === 'all') return true;
+                if (orderFilterStatus === 'pending') return o.status === 'pending' || o.status === 'under_review';
+                if (orderFilterStatus === 'approved') return o.status === 'approved' || o.status === 'payment_pending';
+                if (orderFilterStatus === 'paid') return o.status === 'paid' || o.status === 'scheduled';
+                if (orderFilterStatus === 'completed') return o.status === 'completed';
+                if (orderFilterStatus === 'rejected') return o.status === 'rejected' || o.status === 'cancelled';
+                return true;
+              }).map((order) => (
                 <Grid item xs={12} key={order._id}>
-                  <Card>
+                  <Card sx={{ '&:hover': { boxShadow: 4 }, transition: 'box-shadow 0.3s' }}>
                     <CardContent>
                       <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} md={6}>
+                        {/* Pet Image */}
+                        <Grid item xs={12} sm={2}>
+                          <Avatar
+                            src={resolveMediaUrl(order.petInventoryItemId?.images?.[0]?.url)}
+                            variant="rounded"
+                            sx={{ width: 80, height: 80 }}
+                          >
+                            <PetsIcon sx={{ fontSize: 40 }} />
+                          </Avatar>
+                        </Grid>
+
+                        {/* Application Info */}
+                        <Grid item xs={12} sm={6}>
                           <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                            Order #{order._id.substring(0, 8)}
+                            {order.petInventoryItemId?.name || 'Pet'}
                           </Typography>
                           <Typography variant="body2" color="textSecondary">
-                            {order.petName} - {order.breedName}
+                            {order.petInventoryItemId?.speciesId?.displayName || order.petInventoryItemId?.speciesId?.name || 'N/A'} - {order.petInventoryItemId?.breedId?.name || 'N/A'}
+                          </Typography>
+                          <Typography variant="caption" color="textSecondary" display="block">
+                            Gender: {order.selectedGender} • Age: {order.petInventoryItemId?.age || 'N/A'}
                           </Typography>
                           <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                             <Chip
-                              label={order.status}
-                              color={order.status === 'delivered' ? 'success' : 'primary'}
+                              label={order.status === 'pending' ? 'Pending Review' : 
+                                     order.status === 'approved' ? 'Approved' :
+                                     order.status === 'payment_pending' ? 'Payment Pending' :
+                                     order.status === 'paid' ? 'Paid' :
+                                     order.status === 'scheduled' ? 'Handover Scheduled' :
+                                     order.status === 'completed' ? 'Completed' :
+                                     order.status === 'rejected' ? 'Rejected' :
+                                     order.status}
+                              color={order.status === 'completed' ? 'success' : 
+                                     order.status === 'approved' || order.status === 'paid' || order.status === 'scheduled' ? 'success' :
+                                     order.status === 'rejected' ? 'error' :
+                                     'warning'}
                               size="small"
                             />
                             <Typography variant="caption" color="textSecondary">
-                              Ordered: {new Date(order.createdAt).toLocaleDateString()}
+                              Applied: {new Date(order.createdAt).toLocaleDateString()}
                             </Typography>
                           </Stack>
                         </Grid>
-                        <Grid item xs={12} md={6}>
-                          <Stack direction="row" justifyContent="flex-end" spacing={1}>
-                            <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                              ₹{order.totalPrice?.toLocaleString()}
+
+                        {/* Price & Actions */}
+                        <Grid item xs={12} sm={4}>
+                          <Stack spacing={1}>
+                            <Typography variant="h5" sx={{ fontWeight: 700, color: 'success.main' }}>
+                              ₹{order.paymentAmount?.toLocaleString() || '0'}
                             </Typography>
                             <Button
-                              variant="outlined"
+                              variant="contained"
                               size="small"
-                              onClick={() => handleViewOrder(order._id)}
+                              startIcon={<VisibilityIcon />}
+                              onClick={() => {
+                                setSelectedOrder(order);
+                                setOrderDetailsOpen(true);
+                              }}
+                              fullWidth
                             >
                               View Details
                             </Button>
+                            {order.status === 'approved' || order.status === 'payment_pending' ? (
+                              <Button
+                                variant="contained"
+                                color="success"
+                                size="small"
+                                startIcon={<PaymentIcon />}
+                                onClick={() => {
+                                  navigate(`/User/petshop/my-applications`);
+                                }}
+                                fullWidth
+                              >
+                                Pay Now
+                              </Button>
+                            ) : null}
                           </Stack>
                         </Grid>
                       </Grid>
@@ -576,6 +677,348 @@ const PetShopUserDashboard = () => {
           )}
         </Box>
       )}
+
+      {/* ORDER DETAILS DIALOG */}
+      <Dialog
+        open={orderDetailsOpen}
+        onClose={() => setOrderDetailsOpen(false)}
+        maxWidth="md"
+        fullWidth
+        scroll="paper"
+      >
+        {selectedOrder && (
+          <>
+            <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', pr: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Typography variant="h6" fontWeight={700}>Application #{selectedOrder._id?.slice(-8)}</Typography>
+                  <Typography variant="caption">Submitted on {new Date(selectedOrder.createdAt).toLocaleString()}</Typography>
+                </Box>
+                <IconButton onClick={() => setOrderDetailsOpen(false)} sx={{ color: 'white' }}>
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+            </DialogTitle>
+
+            <DialogContent sx={{ mt: 3 }}>
+              <Grid container spacing={3}>
+                {/* Status */}
+                <Grid item xs={12}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', borderLeft: 4, borderColor: selectedOrder.status === 'completed' ? 'success.main' : selectedOrder.status === 'rejected' ? 'error.main' : 'warning.main' }}>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                      <Chip 
+                        label={selectedOrder.status === 'pending' ? 'Pending Review' : 
+                               selectedOrder.status === 'approved' ? 'Approved' :
+                               selectedOrder.status === 'payment_pending' ? 'Payment Pending' :
+                               selectedOrder.status === 'paid' ? 'Paid' :
+                               selectedOrder.status === 'scheduled' ? 'Handover Scheduled' :
+                               selectedOrder.status === 'completed' ? 'Completed' :
+                               selectedOrder.status === 'rejected' ? 'Rejected' :
+                               selectedOrder.status} 
+                        color={selectedOrder.status === 'completed' ? 'success' : selectedOrder.status === 'rejected' ? 'error' : 'warning'} 
+                        size="large" 
+                        sx={{ fontWeight: 700 }} 
+                      />
+                      <Divider orientation="vertical" flexItem />
+                      <Typography variant="body2" color="text.secondary">
+                        Last Updated: {new Date(selectedOrder.updatedAt || selectedOrder.createdAt).toLocaleString()}
+                      </Typography>
+                    </Stack>
+                  </Paper>
+                </Grid>
+
+                {/* Pet Information */}
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      🐾 Pet Details
+                    </Typography>
+                    <Stack spacing={2}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar
+                          src={resolveMediaUrl(selectedOrder.petInventoryItemId?.images?.[0]?.url)}
+                          variant="rounded"
+                          sx={{ width: 100, height: 100 }}
+                        >
+                          <ImageIcon sx={{ fontSize: 48 }} />
+                        </Avatar>
+                        <Box flex={1}>
+                          <Typography variant="h6" fontWeight={600}>{selectedOrder.petInventoryItemId?.name || 'N/A'}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {selectedOrder.petInventoryItemId?.speciesId?.displayName || selectedOrder.petInventoryItemId?.speciesId?.name || 'N/A'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Divider />
+                      <Grid container spacing={2}>
+                        <Grid item xs={6}>
+                          <Typography variant="caption" color="text.secondary">Breed</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedOrder.petInventoryItemId?.breedId?.name || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Typography variant="caption" color="text.secondary">Gender</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedOrder.selectedGender}</Typography>
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Typography variant="caption" color="text.secondary">Age</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedOrder.petInventoryItemId?.age || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Typography variant="caption" color="text.secondary">Pet Code</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedOrder.petInventoryItemId?.petCode || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Typography variant="caption" color="text.secondary">Price</Typography>
+                          <Typography variant="h5" fontWeight={700} color="success.main">₹{selectedOrder.paymentAmount?.toLocaleString() || '0'}</Typography>
+                        </Grid>
+                      </Grid>
+                    </Stack>
+                  </Paper>
+                </Grid>
+
+                {/* Your Information */}
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      👤 Your Information
+                    </Typography>
+                    <Stack spacing={2}>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary">Full Name</Typography>
+                        <Typography variant="body1" fontWeight={600}>{selectedOrder.personalDetails?.fullName || selectedOrder.userId?.name}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <EmailIcon fontSize="small" color="action" />
+                        <Box flex={1}>
+                          <Typography variant="caption" color="text.secondary">Email</Typography>
+                          <Typography variant="body2">{selectedOrder.personalDetails?.email || selectedOrder.userId?.email}</Typography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <PhoneIcon fontSize="small" color="action" />
+                        <Box flex={1}>
+                          <Typography variant="caption" color="text.secondary">Phone</Typography>
+                          <Typography variant="body2">{selectedOrder.personalDetails?.phone || selectedOrder.userId?.phone}</Typography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <AddressIcon fontSize="small" color="action" sx={{ mt: 0.5 }} />
+                        <Box flex={1}>
+                          <Typography variant="caption" color="text.secondary">Address</Typography>
+                          <Typography variant="body2">
+                            {selectedOrder.personalDetails?.address?.street}<br />
+                            {selectedOrder.personalDetails?.address?.city}, {selectedOrder.personalDetails?.address?.state}<br />
+                            {selectedOrder.personalDetails?.address?.pincode}, {selectedOrder.personalDetails?.address?.country || 'India'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Stack>
+                  </Paper>
+                </Grid>
+
+                {/* Your Photo */}
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3 }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      📸 Your Photo
+                    </Typography>
+                    {selectedOrder.userPhoto?.url ? (
+                      <Box sx={{ textAlign: 'center' }}>
+                        <img 
+                          src={resolveMediaUrl(selectedOrder.userPhoto.url)} 
+                          alt="Your Photo" 
+                          style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, objectFit: 'contain' }}
+                        />
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                          {selectedOrder.userPhoto.name || 'Your Photo'}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Alert severity="info">No photo uploaded</Alert>
+                    )}
+                  </Paper>
+                </Grid>
+
+                {/* Your Documents */}
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3 }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      📄 Your Documents ({selectedOrder.documents?.length || 0})
+                    </Typography>
+                    {selectedOrder.documents && selectedOrder.documents.length > 0 ? (
+                      <Stack spacing={1}>
+                        {selectedOrder.documents.map((doc, idx) => (
+                          <Paper key={idx} elevation={0} sx={{ p: 2, bgcolor: 'grey.50', display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <DocumentIcon color="primary" />
+                            <Box flex={1}>
+                              <Typography variant="body2" fontWeight={600}>{doc.name || `Document ${idx + 1}`}</Typography>
+                              <Typography variant="caption" color="text.secondary">{doc.type || 'Unknown type'}</Typography>
+                            </Box>
+                            <Button size="small" href={resolveMediaUrl(doc.url)} target="_blank" rel="noopener">View</Button>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Alert severity="info">No documents uploaded</Alert>
+                    )}
+                  </Paper>
+                </Grid>
+
+                {/* Payment Information */}
+                {(selectedOrder.status === 'paid' || selectedOrder.status === 'scheduled' || selectedOrder.status === 'completed') && (
+                  <Grid item xs={12}>
+                    <Paper elevation={2} sx={{ p: 3, bgcolor: 'success.lighter', borderLeft: 4, borderColor: 'success.main' }}>
+                      <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'success.dark', mb: 2 }}>
+                        💳 Payment Confirmation
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Payment Status</Typography>
+                          <Typography variant="body2" fontWeight={600} color="success.dark">✓ {selectedOrder.paymentStatus || 'Paid'}</Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Payment ID</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedOrder.paymentId || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Amount Paid</Typography>
+                          <Typography variant="h6" fontWeight={700} color="success.dark">₹{selectedOrder.paymentAmount?.toLocaleString()}</Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Payment Date</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedOrder.paymentDate ? new Date(selectedOrder.paymentDate).toLocaleDateString() : 'N/A'}</Typography>
+                        </Grid>
+                      </Grid>
+                    </Paper>
+                  </Grid>
+                )}
+
+                {/* Handover Status - Not Yet Scheduled */}
+                {(selectedOrder.status === 'approved' || selectedOrder.status === 'payment_pending' || selectedOrder.status === 'paid') && 
+                 selectedOrder.status !== 'scheduled' && selectedOrder.status !== 'completed' && (
+                  <Grid item xs={12}>
+                    <Paper elevation={2} sx={{ p: 3, bgcolor: 'warning.lighter', borderLeft: 4, borderColor: 'warning.main' }}>
+                      <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'warning.dark', mb: 2 }}>
+                        🗓️ Handover Status
+                      </Typography>
+                      <Stack spacing={2}>
+                        <Alert severity="info" icon={<ScheduleIcon />}>
+                          <Typography variant="body2" fontWeight={600}>Handover Not Yet Scheduled</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {selectedOrder.status === 'payment_pending' || selectedOrder.status === 'approved' 
+                              ? 'Please complete the payment first. After payment, our team will schedule the handover.'
+                              : 'Our team will schedule your handover appointment soon. You will receive an OTP via email when scheduled.'}
+                          </Typography>
+                        </Alert>
+                        {selectedOrder.status === 'paid' && (
+                          <Alert severity="success" icon={<CheckIcon />}>
+                            <Typography variant="body2" fontWeight={600}>✓ Payment Completed</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              We will contact you within 24-48 hours to schedule the handover. You will receive the OTP via email.
+                            </Typography>
+                          </Alert>
+                        )}
+                      </Stack>
+                    </Paper>
+                  </Grid>
+                )}
+
+                {/* Handover Schedule */}
+                {(selectedOrder.status === 'scheduled' || selectedOrder.status === 'completed') && (
+                  <Grid item xs={12}>
+                    <Paper elevation={2} sx={{ p: 3, bgcolor: 'info.lighter', borderLeft: 4, borderColor: 'info.main' }}>
+                      <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'info.dark', mb: 2 }}>
+                        🗓️ Handover Schedule
+                      </Typography>
+                      <Grid container spacing={3}>
+                        <Grid item xs={12} md={4}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <ScheduleIcon color="info" />
+                            <Box>
+                              <Typography variant="caption" color="text.secondary">Scheduled Date</Typography>
+                              <Typography variant="body1" fontWeight={600}>{selectedOrder.scheduledHandoverDate ? new Date(selectedOrder.scheduledHandoverDate).toLocaleDateString() : 'N/A'}</Typography>
+                            </Box>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="caption" color="text.secondary">Scheduled Time</Typography>
+                          <Typography variant="body1" fontWeight={600}>{selectedOrder.scheduledHandoverTime || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="caption" color="text.secondary">Location</Typography>
+                          <Typography variant="body1" fontWeight={600}>{selectedOrder.handoverLocation || 'Pet Shop Store'}</Typography>
+                        </Grid>
+                        {selectedOrder.status === 'scheduled' && (
+                          <Grid item xs={12}>
+                            <Paper elevation={0} sx={{ p: 3, bgcolor: 'warning.lighter', textAlign: 'center', borderRadius: 2 }}>
+                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>Your Handover OTP</Typography>
+                              {selectedOrder.otpCode ? (
+                                <>
+                                  <Typography variant="h3" fontWeight={700} color="warning.dark" letterSpacing={4} sx={{ my: 2 }}>
+                                    {selectedOrder.otpCode}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                                    📧 This OTP was sent to your email. Show it at the pet shop during handover.
+                                  </Typography>
+                                  <Button 
+                                    size="small" 
+                                    startIcon={<CopyIcon />} 
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(selectedOrder.otpCode);
+                                      alert('OTP copied to clipboard!');
+                                    }}
+                                    sx={{ mt: 1 }}
+                                  >
+                                    Copy OTP
+                                  </Button>
+                                </>
+                              ) : (
+                                <Alert severity="info" sx={{ mt: 2 }}>
+                                  OTP will be sent to your email ({selectedOrder.personalDetails?.email || selectedOrder.userId?.email}) soon. 
+                                  Please check your inbox and spam folder.
+                                </Alert>
+                              )}
+                            </Paper>
+                          </Grid>
+                        )}
+                      </Grid>
+                    </Paper>
+                  </Grid>
+                )}
+
+                {/* Rejection Reason */}
+                {selectedOrder.status === 'rejected' && selectedOrder.rejectionReason && (
+                  <Grid item xs={12}>
+                    <Alert severity="error">
+                      <Typography variant="subtitle2" fontWeight={600}>Rejection Reason:</Typography>
+                      <Typography variant="body2">{selectedOrder.rejectionReason}</Typography>
+                    </Alert>
+                  </Grid>
+                )}
+              </Grid>
+            </DialogContent>
+
+            <DialogActions sx={{ p: 2, gap: 1 }}>
+              <Button onClick={() => setOrderDetailsOpen(false)} variant="outlined">
+                Close
+              </Button>
+              {(selectedOrder.status === 'approved' || selectedOrder.status === 'payment_pending') && (
+                <Button 
+                  variant="contained" 
+                  color="success"
+                  startIcon={<PaymentIcon />}
+                  onClick={() => {
+                    setOrderDetailsOpen(false);
+                    navigate('/User/petshop/my-applications');
+                  }}
+                >
+                  Proceed to Payment
+                </Button>
+              )}
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
 
       {/* PURCHASE/RESERVATION MODAL */}
       <Dialog

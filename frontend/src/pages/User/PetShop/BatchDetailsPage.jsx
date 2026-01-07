@@ -10,84 +10,122 @@ import {
   Typography,
   Button,
   Chip,
-  CircularProgress,
   Alert,
   Stack,
   Divider,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  IconButton,
+  Skeleton,
+  Avatar,
+  useMediaQuery,
+  useTheme,
+  Breadcrumbs,
+  Link,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  Paper,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Rating,
-  Skeleton
+  Rating
 } from '@mui/material';
 import {
   ArrowBack as BackIcon,
-  ExpandMore as ExpandMoreIcon,
   ShoppingCart as CartIcon,
-  Info as InfoIcon,
-  LocalShipping as ShippingIcon,
-  VerifiedUser as VerifiedIcon,
   Favorite as FavoriteIcon,
   FavoriteBorder as FavoriteBorderIcon,
-  StarRate as StarIcon
+  Male as MaleIcon,
+  Female as FemaleIcon,
+  Share as ShareIcon,
+  Schedule as ScheduleIcon,
+  Pets as PetsIcon,
+  LocalOffer as PriceIcon,
+  CheckCircle as CheckIcon,
+  Info as InfoIcon,
+  NavigateNext as NextIcon,
+  Verified as VerifiedIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { apiClient, resolveMediaUrl } from '../../../services/api';
+
+// Helper to extract URL from image object or string
+const getImageUrl = (img) => {
+  if (!img) return '/placeholder-pet.svg';
+  if (typeof img === 'string') return img;
+  if (img.url) return img.url;
+  return '/placeholder-pet.svg';
+};
 
 const BatchDetailsPage = () => {
   const { batchId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   const [batch, setBatch] = useState(location.state?.batch || null);
-  const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(!batch);
   const [error, setError] = useState('');
-  const [selectedPet, setSelectedPet] = useState(null);
-  const [reserveDialogOpen, setReserveDialogOpen] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
-  const [quantity, setQuantity] = useState(1);
+  const [selectedImage, setSelectedImage] = useState(0);
+  const [inventory, setInventory] = useState([]);
+  const [reserveDialogOpen, setReserveDialogOpen] = useState(false);
+  const [selectedPet, setSelectedPet] = useState(null);
   const [notes, setNotes] = useState('');
+  const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     if (!batch) {
       loadBatchDetails();
     } else {
-      loadInventory();
+      // Set first image
+      initializeImages();
     }
-  }, []);
+    
+    // Check if already favorited
+    const favorites = JSON.parse(localStorage.getItem('petshop_favorites') || '[]');
+    setIsFavorite(favorites.includes(batchId));
+  }, [batchId]);
+
+  const initializeImages = () => {
+    // Priority: male images, then female, then general images
+    if (batch?.maleImages?.length > 0 || batch?.femaleImages?.length > 0 || batch?.images?.length > 0) {
+      setSelectedImage(0);
+    }
+  };
 
   const loadBatchDetails = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get(`/petshop/manager/batches/${batchId}`);
-      setBatch(response.data.data);
-      loadInventory(response.data.data._id);
+      setError('');
+      
+      // Try to fetch from public stocks endpoint
+      const response = await apiClient.get(`/petshop/user/public/stocks/${batchId}`);
+      const stockData = response.data.data;
+      
+      setBatch(stockData);
+      initializeImages();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load batch details');
+      console.error('Error loading batch:', err);
+      setError(err.response?.data?.message || 'Failed to load pet details');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadInventory = async (id = batchId) => {
-    try {
-      const response = await apiClient.get(`/petshop/manager/batches/${id}/inventory`);
-      setInventory(response.data.data || []);
-    } catch (err) {
-      console.error('Error loading inventory:', err);
+  const handleFavoriteToggle = () => {
+    const favorites = JSON.parse(localStorage.getItem('petshop_favorites') || '[]');
+    if (isFavorite) {
+      const index = favorites.indexOf(batchId);
+      if (index > -1) favorites.splice(index, 1);
+    } else {
+      if (!favorites.includes(batchId)) favorites.push(batchId);
     }
+    localStorage.setItem('petshop_favorites', JSON.stringify(favorites));
+    setIsFavorite(!isFavorite);
+  };
+
+  const handleBuyNow = () => {
+    // Navigate to application page or show purchase dialog
+    navigate('/user/petshop/apply', { state: { batch } });
   };
 
   const handleReservePet = (pet) => {
@@ -96,323 +134,475 @@ const BatchDetailsPage = () => {
   };
 
   const confirmReservation = async () => {
-    try {
-      if (!selectedPet) return;
-
-      const payload = {
-        petId: selectedPet._id,
-        quantity,
-        notes,
-        reservedUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
-      };
-
-      const response = await apiClient.post(
-        `/petshop/manager/batches/${batch._id}/reserve`,
-        payload
-      );
-
-      // Success - redirect to checkout
-      navigate('/user/petshop/checkout', {
-        state: { reservation: response.data.data }
-      });
-
-      setReserveDialogOpen(false);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to reserve pet');
-    }
+    // TODO: Implement reservation logic with backend
+    console.log('Reserving pet:', selectedPet, 'Notes:', notes);
+    // For now, just close the dialog
+    setReserveDialogOpen(false);
+    setSelectedPet(null);
+    setNotes('');
   };
 
-  const handleFavoritToggle = () => {
-    const favorites = JSON.parse(localStorage.getItem('petshop_favorites') || '[]');
-    if (isFavorite) {
-      const index = favorites.indexOf(batch._id);
-      if (index > -1) favorites.splice(index, 1);
-    } else {
-      if (!favorites.includes(batch._id)) favorites.push(batch._id);
+  // Get all images for gallery
+  const getAllImages = () => {
+    const images = [];
+    
+    if (batch?.maleImages?.length > 0) {
+      batch.maleImages.forEach(img => images.push({ src: img, gender: 'male' }));
     }
-    localStorage.setItem('petshop_favorites', JSON.stringify(favorites));
-    setIsFavorite(!isFavorite);
+    
+    if (batch?.femaleImages?.length > 0) {
+      batch.femaleImages.forEach(img => images.push({ src: img, gender: 'female' }));
+    }
+    
+    if (batch?.images?.length > 0 && images.length === 0) {
+      batch.images.forEach(img => images.push({ src: img, gender: null }));
+    }
+    
+    return images;
   };
+
+  const imageGallery = getAllImages();
+  const currentImage = imageGallery[selectedImage] || { src: '/placeholder-pet.svg', gender: null };
 
   if (loading) {
     return (
-      <Container sx={{ py: 4 }}>
-        <Skeleton variant="rectangular" height={400} sx={{ mb: 2 }} />
-        <Skeleton variant="text" sx={{ mb: 1 }} />
-        <Skeleton variant="text" sx={{ mb: 4 }} />
+      <Container maxWidth="lg" sx={{ py: 3 }}>
+        <Skeleton variant="rectangular" height={60} sx={{ mb: 2, borderRadius: 1 }} />
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={7}>
+            <Skeleton variant="rectangular" height={500} sx={{ borderRadius: 2 }} />
+          </Grid>
+          <Grid item xs={12} md={5}>
+            <Skeleton variant="rectangular" height={500} sx={{ borderRadius: 2 }} />
+          </Grid>
+        </Grid>
       </Container>
     );
   }
 
   if (error || !batch) {
     return (
-      <Container sx={{ py: 4 }}>
-        <Alert severity="error">{error || 'Batch not found'}</Alert>
-        <Button
-          startIcon={<BackIcon />}
-          onClick={() => navigate('/user/petshop/dashboard')}
-          sx={{ mt: 2 }}
-        >
-          Back to PetShop
+      <Container maxWidth="lg" sx={{ py: 3 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>{error || 'Pet batch not found'}</Alert>
+        <Button startIcon={<BackIcon />} onClick={() => navigate('/user/petshop/dashboard')}>
+          Back to Dashboard
         </Button>
       </Container>
     );
   }
 
+  const maleCount = batch.counts?.male || batch.maleCount || 0;
+  const femaleCount = batch.counts?.female || batch.femaleCount || 0;
+  const totalAvailable = batch.availableCount || batch.counts?.total || (maleCount + femaleCount);
+  const price = batch.price?.min || batch.price || 0;
+  const discountPrice = batch.discountPrice;
+  const hasDiscount = discountPrice && discountPrice < price;
+  const originalPrice = hasDiscount ? price : 0;
+  const discount = hasDiscount ? Math.round(((price - discountPrice) / price) * 100) : 0;
+  const breedName = batch.breedId?.name || batch.breed?.name || 'Unknown Breed';
+  const speciesName = batch.speciesId?.displayName || batch.speciesId?.name || batch.species?.displayName || 'Unknown Species';
+
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Header */}
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
-        <Button
-          startIcon={<BackIcon />}
-          onClick={() => navigate('/user/petshop/dashboard')}
-        >
-          Back
-        </Button>
-        <Typography variant="h4" sx={{ fontWeight: 700, flex: 1 }}>
-          {batch.breedId?.name || 'Pet Batch'}
-        </Typography>
-        <Button
-          startIcon={isFavorite ? <FavoriteIcon /> : <FavoriteBorderIcon />}
-          color={isFavorite ? 'error' : 'inherit'}
-          onClick={handleFavoritToggle}
-        >
-          {isFavorite ? 'Saved' : 'Save'}
-        </Button>
-      </Stack>
+    <Box sx={{ backgroundColor: '#f8f9fa', minHeight: '100vh', pb: 4 }}>
+      <Container maxWidth="lg" sx={{ pt: 2 }}>
+        {/* Breadcrumbs */}
+        <Breadcrumbs separator={<NextIcon fontSize="small" />} sx={{ mb: 2 }}>
+          <Link
+            underline="hover"
+            color="inherit"
+            sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            onClick={() => navigate('/user/petshop/dashboard')}
+          >
+            Pet Shop
+          </Link>
+          <Typography color="text.primary">{breedName}</Typography>
+        </Breadcrumbs>
 
-      <Grid container spacing={4}>
-        {/* Left: Images & Info */}
-        <Grid item xs={12} md={6}>
-          {/* Main Image */}
-          <Card sx={{ mb: 3 }}>
-            <CardMedia
-              component="img"
-              image={
-                batch.images?.[0]
-                  ? resolveMediaUrl(batch.images[0])
-                  : batch.samplePets?.[0]?.imageIds?.[0]
-                  ? resolveMediaUrl(batch.samplePets[0].imageIds[0])
-                  : '/placeholder-pet.svg'
-              }
-              alt={batch.breedId?.name}
-              sx={{ height: 400, objectFit: 'cover' }}
-            />
-          </Card>
-
-          {/* Gallery Thumbnails */}
-          {batch.images?.length > 1 && (
-            <Stack direction="row" spacing={1} sx={{ mb: 3 }}>
-              {batch.images.map((image, idx) => (
-                <Card
-                  key={idx}
+        {/* Main Content */}
+        <Grid container spacing={3}>
+          {/* Left: Image Gallery */}
+          <Grid item xs={12} md={7}>
+            <Card sx={{ borderRadius: 2, overflow: 'hidden', boxShadow: 2 }}>
+              {/* Main Image */}
+              <Box sx={{ position: 'relative', backgroundColor: '#f5f5f5' }}>
+                <Box
+                  component="img"
+                  src={resolveMediaUrl(getImageUrl(currentImage.src))}
+                  alt={breedName}
+                  onError={(e) => { e.target.src = '/placeholder-pet.svg'; }}
                   sx={{
-                    width: 80,
-                    height: 80,
-                    cursor: 'pointer',
-                    border: '2px solid #e0e0e0'
+                    width: '100%',
+                    height: { xs: 300, sm: 400, md: 500 },
+                    objectFit: 'cover',
+                    display: 'block'
+                  }}
+                />
+                
+                {/* Gender Badge on Main Image */}
+                {currentImage.gender && (
+                  <Chip
+                    icon={currentImage.gender === 'male' ? <MaleIcon /> : <FemaleIcon />}
+                    label={currentImage.gender === 'male' ? 'Male' : 'Female'}
+                    sx={{
+                      position: 'absolute',
+                      top: 16,
+                      left: 16,
+                      backgroundColor: currentImage.gender === 'male' ? '#2196f3' : '#e91e63',
+                      color: 'white',
+                      fontWeight: 600
+                    }}
+                  />
+                )}
+
+                {/* Favorite Button */}
+                <IconButton
+                  onClick={handleFavoriteToggle}
+                  sx={{
+                    position: 'absolute',
+                    top: 16,
+                    right: 16,
+                    backgroundColor: 'white',
+                    '&:hover': { backgroundColor: 'white' }
                   }}
                 >
-                  <CardMedia
-                    component="img"
-                    image={resolveMediaUrl(image)}
-                    alt={`Gallery ${idx + 1}`}
-                    sx={{ height: '100%', objectFit: 'cover' }}
-                  />
-                </Card>
-              ))}
-            </Stack>
-          )}
+                  {isFavorite ? (
+                    <FavoriteIcon sx={{ color: '#e91e63' }} />
+                  ) : (
+                    <FavoriteBorderIcon />
+                  )}
+                </IconButton>
+              </Box>
 
-          {/* Batch Info */}
-          <Accordion defaultExpanded>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <InfoIcon sx={{ mr: 1 }} />
-              <Typography variant="h6">Batch Information</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Stack spacing={2}>
-                <Box>
-                  <Typography variant="caption" color="textSecondary">
-                    Species
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {batch.speciesId?.displayName}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="textSecondary">
-                    Category
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {batch.category}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="textSecondary">
-                    Age Range
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {batch.ageRange?.min}-{batch.ageRange?.max} {batch.ageRange?.unit}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="textSecondary">
-                    Gender Distribution
-                  </Typography>
-                  <Stack direction="row" spacing={3} sx={{ mt: 1 }}>
-                    <Typography variant="body2">
-                      👨 Male: {batch.counts?.male || 0}
-                    </Typography>
-                    <Typography variant="body2">
-                      👩 Female: {batch.counts?.female || 0}
-                    </Typography>
-                    <Typography variant="body2">
-                      ❓ Unknown: {batch.counts?.unknown || 0}
-                    </Typography>
+              {/* Thumbnail Gallery */}
+              {imageGallery.length > 1 && (
+                <Box sx={{ p: 2, backgroundColor: 'white', borderTop: '1px solid #e0e0e0' }}>
+                  <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: 1 }}>
+                    {imageGallery.map((img, idx) => (
+                      <Box
+                        key={idx}
+                        onClick={() => setSelectedImage(idx)}
+                        sx={{
+                          position: 'relative',
+                          flexShrink: 0,
+                          cursor: 'pointer',
+                          border: selectedImage === idx ? '3px solid' : '2px solid',
+                          borderColor: selectedImage === idx 
+                            ? (img.gender === 'male' ? '#2196f3' : img.gender === 'female' ? '#e91e63' : 'primary.main')
+                            : '#e0e0e0',
+                          borderRadius: 1,
+                          overflow: 'hidden',
+                          opacity: selectedImage === idx ? 1 : 0.6,
+                          transition: 'all 0.2s',
+                          '&:hover': { opacity: 1 }
+                        }}
+                      >
+                        <Box
+                          component="img"
+                          src={resolveMediaUrl(getImageUrl(img.src))}
+                          alt={`Thumbnail ${idx + 1}`}
+                          onError={(e) => { e.target.src = '/placeholder-pet.svg'; }}
+                          sx={{
+                            width: 80,
+                            height: 80,
+                            objectFit: 'cover',
+                            display: 'block'
+                          }}
+                        />
+                        {img.gender && (
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              bottom: 2,
+                              right: 2,
+                              backgroundColor: img.gender === 'male' ? '#2196f3' : '#e91e63',
+                              color: 'white',
+                              borderRadius: '50%',
+                              width: 20,
+                              height: 20,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.7rem',
+                              fontWeight: 700
+                            }}
+                          >
+                            {img.gender === 'male' ? 'M' : 'F'}
+                          </Box>
+                        )}
+                      </Box>
+                    ))}
                   </Stack>
                 </Box>
-              </Stack>
-            </AccordionDetails>
-          </Accordion>
-        </Grid>
+              )}
+            </Card>
+          </Grid>
 
-        {/* Right: Pricing & Details */}
-        <Grid item xs={12} md={6}>
-          {/* Price Card */}
-          <Card sx={{ mb: 3, backgroundColor: '#f5f5f5' }}>
-            <CardContent>
-              <Typography variant="caption" color="textSecondary">
+          {/* Right: Product Details - Sticky on Desktop */}
+          <Grid item xs={12} md={5}>
+            <Box
+              sx={{
+                position: { md: 'sticky' },
+                top: { md: 90 },
+                pb: 3,
+              }}
+            >
+            {/* Breed & Species */}
+            <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+              {batch.breedId?.name || 'Unknown Breed'}
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+              {batch.speciesId?.name || 'Unknown Species'}
+            </Typography>
+
+            {/* Rating & Verified Badge */}
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
+              <Chip
+                icon={<VerifiedIcon />}
+                label="Verified Breeder"
+                color="success"
+                size="small"
+              />
+              <Rating value={4.5} precision={0.5} size="small" readOnly />
+              <Typography variant="body2" color="text.secondary">
+                (4.5)
+              </Typography>
+            </Stack>
+
+            <Divider sx={{ mb: 3 }} />
+
+            {/* Pricing */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                 Price Range
               </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                ₹{batch.price?.min?.toLocaleString()} - ₹
-                {batch.price?.max?.toLocaleString()}
-              </Typography>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Stack spacing={1}>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2" color="textSecondary">
-                    Available Pets
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {batch.availability?.available || 0} / {batch.counts?.total}
-                  </Typography>
-                </Stack>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2" color="textSecondary">
-                    Sold Percentage
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {batch.soldPercentage || 0}%
-                  </Typography>
-                </Stack>
+              <Stack direction="row" alignItems="baseline" spacing={1}>
+                <Typography variant="h3" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                  ₹{price.toLocaleString()}
+                </Typography>
+                {discount > 0 && (
+                  <>
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        textDecoration: 'line-through',
+                        color: 'text.secondary',
+                      }}
+                    >
+                      ₹{originalPrice.toLocaleString()}
+                    </Typography>
+                    <Chip
+                      label={`${discount}% OFF`}
+                      color="error"
+                      size="small"
+                    />
+                  </>
+                )}
               </Stack>
-            </CardContent>
-          </Card>
+            </Box>
 
-          {/* Status Chips */}
-          <Stack direction="row" spacing={1} sx={{ mb: 3 }}>
-            <Chip
-              icon={<VerifiedIcon />}
-              label="Verified Batch"
-              color="success"
-              variant="outlined"
-            />
-            <Chip
-              icon={<ShippingIcon />}
-              label="Free Shipping"
-              variant="outlined"
-            />
-          </Stack>
+            {/* Availability - Gender Split */}
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+              Available Stock
+            </Typography>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={6}>
+                <Card
+                  sx={{
+                    p: 2,
+                    textAlign: 'center',
+                    backgroundColor: maleCount > 0 ? 'primary.50' : 'grey.100',
+                    border: '1px solid',
+                    borderColor: maleCount > 0 ? 'primary.main' : 'grey.300',
+                  }}
+                >
+                  <Avatar
+                    sx={{
+                      bgcolor: 'primary.main',
+                      width: 40,
+                      height: 40,
+                      mx: 'auto',
+                      mb: 1,
+                    }}
+                  >
+                    <Typography variant="h6">♂</Typography>
+                  </Avatar>
+                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                    {maleCount}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Males Available
+                  </Typography>
+                </Card>
+              </Grid>
+              <Grid item xs={6}>
+                <Card
+                  sx={{
+                    p: 2,
+                    textAlign: 'center',
+                    backgroundColor: femaleCount > 0 ? '#fce4ec' : 'grey.100',
+                    border: '1px solid',
+                    borderColor: femaleCount > 0 ? '#ec407a' : 'grey.300',
+                  }}
+                >
+                  <Avatar
+                    sx={{
+                      bgcolor: '#ec407a',
+                      width: 40,
+                      height: 40,
+                      mx: 'auto',
+                      mb: 1,
+                    }}
+                  >
+                    <Typography variant="h6" sx={{ color: 'white' }}>♀</Typography>
+                  </Avatar>
+                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                    {femaleCount}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Females Available
+                  </Typography>
+                </Card>
+              </Grid>
+            </Grid>
 
-          {/* Features */}
-          <Card sx={{ mb: 3 }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-                What's Included
-              </Typography>
-              <Stack spacing={1}>
-                <Typography variant="body2">✓ Health Certificate</Typography>
-                <Typography variant="body2">✓ Initial Vaccination</Typography>
-                <Typography variant="body2">✓ 7-Day Money Back Guarantee</Typography>
-                <Typography variant="body2">✓ 24/7 Customer Support</Typography>
-              </Stack>
-            </CardContent>
-          </Card>
+            {/* What's Included */}
+            <Card sx={{ mb: 3, backgroundColor: 'grey.50' }}>
+              <CardContent>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                  What's Included
+                </Typography>
+                <Stack spacing={1.5}>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <CheckIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                    <Typography variant="body2">Health Certificate & Vaccination</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <CheckIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                    <Typography variant="body2">7-Day Money Back Guarantee</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <CheckIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                    <Typography variant="body2">Free Shipping & Delivery</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <CheckIcon sx={{ color: 'success.main', fontSize: 20 }} />
+                    <Typography variant="body2">24/7 Customer Support</Typography>
+                  </Stack>
+                </Stack>
+              </CardContent>
+            </Card>
 
-          {/* CTA Buttons */}
-          {batch.status !== 'sold_out' && (
-            <Button
-              fullWidth
-              variant="contained"
-              size="large"
-              startIcon={<CartIcon />}
-              onClick={() => setReserveDialogOpen(true)}
-              sx={{ mb: 2 }}
-            >
-              Select Pet to Reserve
-            </Button>
-          )}
-          {batch.status === 'sold_out' && (
-            <Alert severity="warning">This batch is currently sold out</Alert>
-          )}
+            {/* CTA Buttons */}
+            <Stack spacing={2}>
+              {batch.status !== 'sold_out' ? (
+                <>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    color="success"
+                    size="large"
+                    startIcon={<CartIcon />}
+                    onClick={() => navigate(`/User/petshop/stock/${batch._id}`)}
+                    sx={{
+                      py: 1.5,
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      boxShadow: 2,
+                      textTransform: 'none',
+                    }}
+                  >
+                    Buy
+                  </Button>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    size="large"
+                    startIcon={<ShareIcon />}
+                    sx={{ py: 1.5 }}
+                  >
+                    Share This Batch
+                  </Button>
+                  <Alert severity="info" sx={{ mt: 1 }}>
+                    Submit an application to reserve your pet. Our team will contact you within
+                    24 hours.
+                  </Alert>
+                </>
+              ) : (
+                <Alert severity="warning">This batch is currently sold out</Alert>
+              )}
+            </Stack>
+          </Box>
         </Grid>
       </Grid>
 
-      {/* Inventory Table */}
-      {inventory.length > 0 && (
-        <Box sx={{ mt: 4 }}>
-          <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+        {/* Available Pets Section */}
+        {inventory.length > 0 && (
+        <Box sx={{ mt: 6 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
             Available Pets in This Batch
           </Typography>
-          <TableContainer>
-            <Table>
-              <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Gender</TableCell>
-                  <TableCell>Age</TableCell>
-                  <TableCell>Price</TableCell>
-                  <TableCell align="center">Action</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {inventory
-                  .filter((pet) => !pet.reservedBy)
-                  .map((pet) => (
-                    <TableRow key={pet._id} hover>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {pet.petName}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{pet.gender || 'Unknown'}</TableCell>
-                      <TableCell>{pet.ageMonths} months</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>
-                        ₹{pet.price?.toLocaleString()}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Button
+          <Grid container spacing={2}>
+            {inventory
+              .filter((pet) => !pet.reservedBy)
+              .map((pet) => (
+                <Grid item xs={12} sm={6} md={4} key={pet._id}>
+                  <Card
+                    sx={{
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: 4,
+                      },
+                    }}
+                  >
+                    {pet.imageIds?.[0] && (
+                      <CardMedia
+                        component="img"
+                        image={resolveMediaUrl(pet.imageIds[0])}
+                        alt={pet.petName}
+                        sx={{
+                          height: 200,
+                          objectFit: 'cover',
+                        }}
+                      />
+                    )}
+                    <CardContent sx={{ flexGrow: 1 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                        {pet.petName}
+                      </Typography>
+                      <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+                        <Chip
+                          label={pet.gender || 'Unknown'}
                           size="small"
-                          variant="contained"
-                          onClick={() => handleReservePet(pet)}
-                        >
-                          Reserve
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                          color={pet.gender === 'Male' ? 'primary' : 'secondary'}
+                        />
+                        <Chip label={`${pet.ageMonths} months`} size="small" variant="outlined" />
+                      </Stack>
+                      <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                        ₹{pet.price?.toLocaleString()}
+                      </Typography>
+                    </CardContent>
+                    <Box sx={{ p: 2, pt: 0 }}>
+                      <Button
+                        fullWidth
+                        variant="contained"
+                        onClick={() => handleReservePet(pet)}
+                      >
+                        Reserve Now
+                      </Button>
+                    </Box>
+                  </Card>
+                </Grid>
+              ))}
+          </Grid>
         </Box>
-      )}
+        )}
 
-      {/* Reservation Dialog */}
-      <Dialog
+        {/* Reservation Dialog */}
+        <Dialog
         open={reserveDialogOpen}
         onClose={() => {
           setReserveDialogOpen(false);
@@ -424,18 +614,36 @@ const BatchDetailsPage = () => {
         fullWidth
       >
         <DialogTitle>
-          Reserve {selectedPet?.petName} for ₹{selectedPet?.price?.toLocaleString()}
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6">Reserve {selectedPet?.petName}</Typography>
+            <IconButton onClick={() => setReserveDialogOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Stack>
         </DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
-          <Stack spacing={2}>
+          <Stack spacing={3}>
             {selectedPet?.imageIds?.[0] && (
-              <CardMedia
+              <Box
                 component="img"
-                image={resolveMediaUrl(selectedPet.imageIds[0])}
+                src={resolveMediaUrl(selectedPet.imageIds[0])}
                 alt={selectedPet.petName}
-                sx={{ height: 200, objectFit: 'cover', borderRadius: 1 }}
+                sx={{
+                  width: '100%',
+                  height: 250,
+                  objectFit: 'cover',
+                  borderRadius: 2,
+                }}
               />
             )}
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.5 }}>
+                Price
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                ₹{selectedPet?.price?.toLocaleString()}
+              </Typography>
+            </Box>
             <TextField
               fullWidth
               label="Additional Notes (Optional)"
@@ -446,22 +654,21 @@ const BatchDetailsPage = () => {
               onChange={(e) => setNotes(e.target.value)}
             />
             <Alert severity="info">
-              ℹ️ This pet will be reserved for 7 days. Complete your purchase to confirm.
+              This pet will be reserved for 7 days. Complete your purchase to confirm ownership.
             </Alert>
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setReserveDialogOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={confirmReservation}
-            startIcon={<CartIcon />}
-          >
+        <DialogActions sx={{ p: 3, pt: 0 }}>
+          <Button onClick={() => setReserveDialogOpen(false)} size="large">
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={confirmReservation} size="large" startIcon={<CartIcon />}>
             Proceed to Checkout
           </Button>
         </DialogActions>
-      </Dialog>
-    </Container>
+        </Dialog>
+      </Container>
+    </Box>
   );
 };
 

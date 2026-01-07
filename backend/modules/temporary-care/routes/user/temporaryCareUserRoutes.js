@@ -4,11 +4,95 @@ const { auth } = require('../../../../core/middleware/auth');
 const userTemporaryCareController = require('../../user/controllers/userTemporaryCareController');
 const paymentController = require('../../user/controllers/paymentController');
 const careActivityController = require('../../user/controllers/careActivityController');
+
+// New booking controller
+const bookingController = require('../../user/controllers/bookingController');
+
 const TemporaryCareCenter = require('../../manager/models/TemporaryCareCenter');
 const TemporaryCare = require('../../models/TemporaryCare');
 const Pet = require('../../../../core/models/Pet');
 
 const router = express.Router();
+
+/**
+ * New Booking System Routes
+ */
+
+// Get available services
+router.get('/services', auth, bookingController.getAvailableServices);
+
+// Get user's pets for booking
+router.get('/my-pets', auth, bookingController.getUserPets);
+
+// Calculate booking price
+router.post('/calculate-price', auth, bookingController.calculatePrice);
+
+// Create new booking
+router.post('/bookings', auth, [
+  body('petId').notEmpty().withMessage('Pet is required'),
+  body('serviceTypeId').notEmpty().withMessage('Service type is required'),
+  body('startDate').isISO8601().withMessage('Valid start date is required'),
+  body('endDate').isISO8601().withMessage('Valid end date is required'),
+  body('locationType').isIn(['facility', 'customer_home']).optional()
+], bookingController.createBooking);
+
+// Get user's bookings
+router.get('/bookings', auth, bookingController.getUserBookings);
+
+// Get single booking details
+router.get('/bookings/:id', auth, bookingController.getBookingDetails);
+
+// Cancel booking
+router.post('/bookings/:id/cancel', auth, [
+  body('reason').notEmpty().withMessage('Cancellation reason is required')
+], bookingController.cancelBooking);
+
+// Submit review
+router.post('/bookings/:id/review', auth, [
+  body('ratings.overall').isInt({ min: 1, max: 5 }).withMessage('Overall rating is required (1-5)'),
+  body('comment').notEmpty().withMessage('Comment is required'),
+  body('wouldRecommend').isBoolean().withMessage('Recommendation status is required')
+], bookingController.submitReview);
+
+// Verify handover OTP
+router.post('/bookings/:id/verify-otp', auth, [
+  body('type').isIn(['dropOff', 'pickup']).withMessage('Type must be dropOff or pickup'),
+  body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
+], bookingController.verifyHandoverOTP);
+
+// Get booking timeline/activity
+router.get('/bookings/:id/timeline', auth, bookingController.getBookingTimeline);
+
+/**
+ * Payment Routes
+ */
+const paymentService = require('../../services/paymentService');
+
+// Create advance payment order
+router.post('/payments/advance/create-order', auth, [
+  body('bookingId').notEmpty().withMessage('Booking ID is required')
+], paymentService.createAdvancePaymentOrder);
+
+// Create final payment order
+router.post('/payments/final/create-order', auth, [
+  body('bookingId').notEmpty().withMessage('Booking ID is required')
+], paymentService.createFinalPaymentOrder);
+
+// Verify payment
+router.post('/payments/verify', auth, [
+  body('razorpay_order_id').notEmpty(),
+  body('razorpay_payment_id').notEmpty(),
+  body('razorpay_signature').notEmpty(),
+  body('bookingId').notEmpty(),
+  body('paymentType').isIn(['advance', 'final'])
+], paymentService.verifyPayment);
+
+// Get payment history
+router.get('/payments/booking/:bookingId', auth, paymentService.getPaymentHistory);
+
+/**
+ * Legacy Routes
+ */
 
 // Temporary care requests
 router.post(

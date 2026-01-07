@@ -85,6 +85,10 @@ router.get('/species-breeds', auth, async (req, res) => {
 router.get('/categories', auth, async (req, res) => {
   try {
     const categories = await PetCategory.find({ isActive: true }).sort({ displayName: 1 }).lean();
+    console.log('📁 Categories fetched:', categories.length, 'items');
+    if (categories.length === 0) {
+      console.warn('⚠️ WARNING: No active categories found in database! Please seed data or create categories via admin panel.');
+    }
     res.json({ success: true, data: categories });
   } catch (error) {
     console.error('Error fetching categories:', error);
@@ -101,6 +105,10 @@ router.get('/species', auth, async (req, res) => {
       query.category = String(category).toLowerCase();
     }
     const species = await Species.find(query).sort({ displayName: 1 }).lean();
+    console.log('🐾 Species fetched:', species.length, 'items', category ? `(filtered by category: ${category})` : '(all)');
+    if (species.length === 0) {
+      console.warn('⚠️ WARNING: No active species found in database! Please seed data or create species via admin panel.');
+    }
     res.json({ success: true, data: species });
   } catch (error) {
     console.error('Error fetching species:', error);
@@ -112,6 +120,10 @@ router.get('/species', auth, async (req, res) => {
 router.get('/breeds/:speciesId', auth, async (req, res) => {
   try {
     const breeds = await Breed.findBySpecies(req.params.speciesId);
+    console.log('🐕 Breeds fetched for species', req.params.speciesId, ':', breeds.length, 'items');
+    if (breeds.length === 0) {
+      console.warn(`⚠️ WARNING: No breeds found for species ${req.params.speciesId}! Please seed data or create breeds via admin panel.`);
+    }
 
     res.json({
       success: true,

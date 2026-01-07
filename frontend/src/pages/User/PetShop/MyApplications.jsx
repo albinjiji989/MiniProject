@@ -43,7 +43,11 @@ import {
   Store as StoreIcon,
   Receipt as ReceiptIcon,
   Close as CloseIcon,
-  ContentCopy as CopyIcon
+  ContentCopy as CopyIcon,
+  Email as EmailIcon,
+  Phone as PhoneIcon,
+  Home as AddressIcon,
+  Description as DocumentIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { apiClient, resolveMediaUrl } from '../../../services/api';
@@ -108,7 +112,7 @@ const MyApplications = () => {
   const handleViewDetails = async (applicationId) => {
     try {
       const response = await apiClient.get(`/petshop/user/purchase-applications/${applicationId}`);
-      setSelectedApplication(response.data.data.application);
+      setSelectedApplication(response.data.data);
       setDetailsOpen(true);
     } catch (err) {
       handleApiError(err, 'Failed to load application details');
@@ -407,190 +411,269 @@ const MyApplications = () => {
         )}
       </Container>
 
-      {/* Application Details Dialog */}
+      {/* Application Details Dialog - Professional Industry Level */}
       <Dialog
         open={detailsOpen}
         onClose={() => setDetailsOpen(false)}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
       >
         {selectedApplication && (
           <>
-            <DialogTitle>
+            <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white' }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h6">Application Details</Typography>
-                <IconButton onClick={() => setDetailsOpen(false)}>
+                <Box>
+                  <Typography variant="h6" fontWeight={700}>Application #{selectedApplication._id?.slice(-8)}</Typography>
+                  <Typography variant="caption">Applied on {new Date(selectedApplication.createdAt).toLocaleString()}</Typography>
+                </Box>
+                <IconButton onClick={() => setDetailsOpen(false)} sx={{ color: 'white' }}>
                   <CloseIcon />
                 </IconButton>
               </Box>
             </DialogTitle>
-            <DialogContent>
-              <Stack spacing={3}>
-                {/* Status */}
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Status
-                  </Typography>
-                  <Chip
-                    label={getStatusLabel(selectedApplication.status)}
-                    color={getStatusColor(selectedApplication.status)}
-                  />
-                </Box>
-
-                <Divider />
-
-                {/* Pet Details */}
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Pet Details
-                  </Typography>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableBody>
-                        <TableRow>
-                          <TableCell>Name</TableCell>
-                          <TableCell>{selectedApplication.petInventoryItemId?.name}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>Breed</TableCell>
-                          <TableCell>{selectedApplication.petInventoryItemId?.breed}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>Gender</TableCell>
-                          <TableCell>{selectedApplication.selectedGender}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>Price</TableCell>
-                          <TableCell>₹{selectedApplication.paymentAmount?.toLocaleString()}</TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-
-                <Divider />
-
-                {/* Personal Details */}
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Your Details
-                  </Typography>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableBody>
-                        <TableRow>
-                          <TableCell>Name</TableCell>
-                          <TableCell>{selectedApplication.personalDetails?.fullName}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>Email</TableCell>
-                          <TableCell>{selectedApplication.personalDetails?.email}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>Phone</TableCell>
-                          <TableCell>{selectedApplication.personalDetails?.phone}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>Address</TableCell>
-                          <TableCell>
-                            {selectedApplication.personalDetails?.address?.street}, {selectedApplication.personalDetails?.address?.city}, {selectedApplication.personalDetails?.address?.state} - {selectedApplication.personalDetails?.address?.pincode}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-
-                {/* OTP Info if scheduled */}
-                {selectedApplication.status === 'scheduled' && selectedApplication.otpCode && (
-                  <>
-                    <Divider />
-                    <Alert severity="info" icon={<ScheduleIcon />}>
-                      <Typography variant="subtitle2" gutterBottom>
-                        Handover Scheduled
+            <DialogContent sx={{ mt: 3 }}>
+              <Grid container spacing={3}>
+                {/* Application Status */}
+                <Grid item xs={12}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', borderLeft: 4, borderColor: getStatusColor(selectedApplication.status) + '.main' }}>
+                    <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                      <Chip 
+                        label={getStatusLabel(selectedApplication.status)} 
+                        color={getStatusColor(selectedApplication.status)} 
+                        size="large" 
+                        sx={{ fontWeight: 700 }} 
+                      />
+                      <Divider orientation="vertical" flexItem />
+                      <Typography variant="body2" color="text.secondary">
+                        Last Updated: {new Date(selectedApplication.updatedAt || selectedApplication.createdAt).toLocaleString()}
                       </Typography>
-                      <Typography variant="body2" gutterBottom>
-                        <strong>Date:</strong> {new Date(selectedApplication.scheduledHandoverDate).toLocaleDateString()}
+                    </Stack>
+                  </Paper>
+                </Grid>
+
+                {/* Pet Information */}
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      🐾 Pet Details
+                    </Typography>
+                    <Stack spacing={2}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar
+                          src={resolveMediaUrl(selectedApplication.petInventoryItemId?.images?.[0]?.url)}
+                          variant="rounded"
+                          sx={{ width: 100, height: 100 }}
+                        >
+                          <PetsIcon sx={{ fontSize: 48 }} />
+                        </Avatar>
+                        <Box flex={1}>
+                          <Typography variant="h6" fontWeight={600}>{selectedApplication.petInventoryItemId?.name || 'N/A'}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {selectedApplication.petInventoryItemId?.speciesId?.displayName || 'Pet'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Divider />
+                      <Grid container spacing={2}>
+                        <Grid item xs={6}>
+                          <Typography variant="caption" color="text.secondary">Breed</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedApplication.petInventoryItemId?.breedId?.name || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Typography variant="caption" color="text.secondary">Gender</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedApplication.selectedGender}</Typography>
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Typography variant="caption" color="text.secondary">Total Amount</Typography>
+                          <Typography variant="h5" fontWeight={700} color="success.main">₹{selectedApplication.paymentAmount?.toLocaleString() || '0'}</Typography>
+                        </Grid>
+                      </Grid>
+                    </Stack>
+                  </Paper>
+                </Grid>
+
+                {/* Your Details */}
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      👤 Your Information
+                    </Typography>
+                    <Stack spacing={2}>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary">Full Name</Typography>
+                        <Typography variant="body1" fontWeight={600}>{selectedApplication.personalDetails?.fullName}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <EmailIcon fontSize="small" color="action" />
+                        <Box flex={1}>
+                          <Typography variant="caption" color="text.secondary">Email Address</Typography>
+                          <Typography variant="body2">{selectedApplication.personalDetails?.email}</Typography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <PhoneIcon fontSize="small" color="action" />
+                        <Box flex={1}>
+                          <Typography variant="caption" color="text.secondary">Phone Number</Typography>
+                          <Typography variant="body2">{selectedApplication.personalDetails?.phone}</Typography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <AddressIcon fontSize="small" color="action" sx={{ mt: 0.5 }} />
+                        <Box flex={1}>
+                          <Typography variant="caption" color="text.secondary">Delivery Address</Typography>
+                          <Typography variant="body2">
+                            {selectedApplication.personalDetails?.address?.street}<br />
+                            {selectedApplication.personalDetails?.address?.city}, {selectedApplication.personalDetails?.address?.state}<br />
+                            {selectedApplication.personalDetails?.address?.pincode}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Stack>
+                  </Paper>
+                </Grid>
+
+                {/* Your Uploaded Documents */}
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3 }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      📸 Your Photo
+                    </Typography>
+                    {selectedApplication.userPhoto?.url ? (
+                      <Box sx={{ textAlign: 'center' }}>
+                        <img 
+                          src={resolveMediaUrl(selectedApplication.userPhoto.url)} 
+                          alt="Your Photo" 
+                          style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, objectFit: 'contain', border: '2px solid #e0e0e0' }}
+                        />
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                          {selectedApplication.userPhoto.name || 'Customer Photo'}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Alert severity="info">No photo uploaded</Alert>
+                    )}
+                  </Paper>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3 }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      📄 Your Documents ({selectedApplication.documents?.length || 0})
+                    </Typography>
+                    {selectedApplication.documents && selectedApplication.documents.length > 0 ? (
+                      <Stack spacing={1}>
+                        {selectedApplication.documents.map((doc, idx) => (
+                          <Paper key={idx} elevation={0} sx={{ p: 2, bgcolor: 'grey.50', display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <DocumentIcon color="primary" />
+                            <Box flex={1}>
+                              <Typography variant="body2" fontWeight={600}>{doc.name || `Document ${idx + 1}`}</Typography>
+                              <Typography variant="caption" color="text.secondary">{doc.type || 'ID Proof'}</Typography>
+                            </Box>
+                            <Button size="small" variant="outlined" href={resolveMediaUrl(doc.url)} target="_blank" rel="noopener">View</Button>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Alert severity="info">No documents uploaded</Alert>
+                    )}
+                  </Paper>
+                </Grid>
+
+                {/* Payment Information */}
+                {(selectedApplication.status === 'paid' || selectedApplication.status === 'scheduled' || selectedApplication.status === 'completed') && (
+                  <Grid item xs={12}>
+                    <Paper elevation={2} sx={{ p: 3, bgcolor: 'success.lighter' }}>
+                      <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'success.dark', mb: 2 }}>
+                        ✅ Payment Confirmed
                       </Typography>
-                      <Typography variant="body2" gutterBottom>
-                        <strong>Time:</strong> {selectedApplication.scheduledHandoverTime}
+                      <Grid container spacing={2}>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Payment Status</Typography>
+                          <Chip label={selectedApplication.paymentStatus || 'Completed'} color="success" size="small" />
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Transaction ID</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedApplication.paymentId?.slice(0, 20) || 'N/A'}...</Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Amount Paid</Typography>
+                          <Typography variant="h6" fontWeight={700} color="success.dark">₹{selectedApplication.paymentAmount?.toLocaleString()}</Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Payment Date</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedApplication.paymentDate ? new Date(selectedApplication.paymentDate).toLocaleDateString() : 'N/A'}</Typography>
+                        </Grid>
+                      </Grid>
+                    </Paper>
+                  </Grid>
+                )}
+
+                {/* Handover Information */}
+                {(selectedApplication.status === 'scheduled' || selectedApplication.status === 'completed') && (
+                  <Grid item xs={12}>
+                    <Paper elevation={2} sx={{ p: 3, bgcolor: 'warning.lighter', borderLeft: 4, borderColor: 'warning.main' }}>
+                      <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'warning.dark', mb: 2 }}>
+                        📍 Handover Schedule
                       </Typography>
-                      <Typography variant="body2" gutterBottom>
-                        <strong>Location:</strong> {selectedApplication.handoverLocation}
-                      </Typography>
-                      <Paper sx={{ p: 2, bgcolor: 'background.default', mt: 2 }}>
-                        <Stack direction="row" alignItems="center" spacing={2}>
-                          <OTPIcon color="primary" />
-                          <Box>
-                            <Typography variant="caption" color="text.secondary" display="block">
-                              Your Handover OTP
-                            </Typography>
-                            <Typography variant="h5" fontWeight={700} letterSpacing={3}>
-                              {selectedApplication.otpCode}
-                            </Typography>
-                          </Box>
-                          <IconButton onClick={() => copyOTP(selectedApplication.otpCode)}>
-                            <CopyIcon />
-                          </IconButton>
-                        </Stack>
-                      </Paper>
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        Show this OTP to the manager at the time of handover
-                      </Typography>
-                    </Alert>
-                  </>
+                      <Grid container spacing={3}>
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="caption" color="text.secondary">Scheduled Date</Typography>
+                          <Typography variant="h6" fontWeight={600}>{selectedApplication.scheduledHandoverDate ? new Date(selectedApplication.scheduledHandoverDate).toLocaleDateString() : 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="caption" color="text.secondary">Scheduled Time</Typography>
+                          <Typography variant="h6" fontWeight={600}>{selectedApplication.scheduledHandoverTime || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="caption" color="text.secondary">Location</Typography>
+                          <Typography variant="body1" fontWeight={600}>{selectedApplication.handoverLocation || 'Pet Shop'}</Typography>
+                        </Grid>
+                        {selectedApplication.status === 'scheduled' && selectedApplication.otpCode && (
+                          <Grid item xs={12}>
+                            <Alert severity="warning" icon={<OTPIcon />} sx={{ fontWeight: 600 }}>
+                              <Typography variant="subtitle2" gutterBottom>🔐 Your Handover OTP</Typography>
+                              <Typography variant="h3" fontWeight={700} letterSpacing={6} sx={{ my: 2, textAlign: 'center' }}>{selectedApplication.otpCode}</Typography>
+                              <Stack direction="row" spacing={2} alignItems="center" justifyContent="center">
+                                <Button 
+                                  variant="contained" 
+                                  size="small" 
+                                  startIcon={<CopyIcon />}
+                                  onClick={() => copyOTP(selectedApplication.otpCode)}
+                                >
+                                  Copy OTP
+                                </Button>
+                              </Stack>
+                              <Typography variant="caption" display="block" sx={{ mt: 2, textAlign: 'center' }}>
+                                ⚠️ Show this OTP to the manager at the time of handover. Expires: {selectedApplication.otpExpiresAt ? new Date(selectedApplication.otpExpiresAt).toLocaleString() : 'N/A'}
+                              </Typography>
+                            </Alert>
+                          </Grid>
+                        )}
+                      </Grid>
+                    </Paper>
+                  </Grid>
                 )}
 
                 {/* Rejection Reason */}
                 {selectedApplication.status === 'rejected' && selectedApplication.rejectionReason && (
-                  <>
-                    <Divider />
-                    <Alert severity="error">
-                      <Typography variant="subtitle2" gutterBottom>
-                        Rejection Reason
+                  <Grid item xs={12}>
+                    <Alert severity="error" sx={{ p: 2 }}>
+                      <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                        ❌ Application Rejected - Rejection Reason
                       </Typography>
                       <Typography variant="body2">
                         {selectedApplication.rejectionReason}
                       </Typography>
                     </Alert>
-                  </>
+                  </Grid>
                 )}
-
-                {/* Uploaded Documents */}
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Uploaded Documents
-                  </Typography>
-                  <Stack direction="row" spacing={2}>
-                    {selectedApplication.userPhoto && (
-                      <Box>
-                        <Typography variant="caption" display="block">Your Photo</Typography>
-                        <Avatar
-                          src={resolveMediaUrl(selectedApplication.userPhoto.url)}
-                          sx={{ width: 80, height: 80, mt: 1 }}
-                        />
-                      </Box>
-                    )}
-                    <Box>
-                      <Typography variant="caption" display="block">Documents ({selectedApplication.documents?.length || 0})</Typography>
-                      {selectedApplication.documents?.map((doc, idx) => (
-                        <Chip
-                          key={idx}
-                          label={`Document ${idx + 1}`}
-                          size="small"
-                          sx={{ mt: 1, mr: 0.5 }}
-                          onClick={() => window.open(resolveMediaUrl(doc.url), '_blank')}
-                        />
-                      ))}
-                    </Box>
-                  </Stack>
-                </Box>
-              </Stack>
+              </Grid>
             </DialogContent>
-            <DialogActions>
+            <DialogActions sx={{ p: 3, bgcolor: 'grey.50' }}>
               {(selectedApplication.status === 'pending' || selectedApplication.status === 'under_review') && (
                 <Button
                   color="error"
+                  variant="outlined"
                   startIcon={<CancelIcon />}
                   onClick={() => handleCancelApplication(selectedApplication._id)}
                 >
@@ -605,10 +688,10 @@ const MyApplications = () => {
                   onClick={() => handlePayment(selectedApplication)}
                   disabled={processingPayment}
                 >
-                  Pay Now
+                  {processingPayment ? 'Processing...' : 'Pay Now'}
                 </Button>
               )}
-              <Button onClick={() => setDetailsOpen(false)}>Close</Button>
+              <Button onClick={() => setDetailsOpen(false)} variant="outlined">Close</Button>
             </DialogActions>
           </>
         )}

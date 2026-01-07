@@ -1,7 +1,8 @@
 const PetshopPurchaseApplication = require('../../manager/models/PetshopPurchaseApplication');
 const PetInventoryItem = require('../../manager/models/PetInventoryItem');
 const PetRegistry = require('../../../../core/models/PetRegistry');
-const { sendEmail } = require('../../../../core/utils/email');
+const User = require('../../../../core/models/User');
+const { sendMail } = require('../../../../core/utils/email');
 const mongoose = require('mongoose');
 
 // Get all purchase applications for manager's store
@@ -28,7 +29,8 @@ const getPurchaseApplications = async (req, res) => {
         path: 'petInventoryItemId',
         populate: [
           { path: 'speciesId', select: 'name displayName' },
-          { path: 'breedId', select: 'name' }
+          { path: 'breedId', select: 'name' },
+          { path: 'images' }
         ]
       })
       .populate('userPhoto')
@@ -59,10 +61,14 @@ const approveApplication = async (req, res) => {
   try {
     const { approvalNotes } = req.body;
     
-    const application = await PetshopPurchaseApplication.findOne({
-      _id: req.params.id,
-      storeId: req.user.storeId
-    }).populate('userId', 'name email');
+    // Build query - only filter by storeId if it's a valid ObjectId
+    const query = { _id: req.params.id };
+    if (req.user.storeId && mongoose.Types.ObjectId.isValid(req.user.storeId)) {
+      query.storeId = req.user.storeId;
+    }
+    
+    const application = await PetshopPurchaseApplication.findOne(query)
+      .populate('userId', 'name email');
 
     if (!application) {
       return res.status(404).json({ success: false, message: 'Application not found' });
@@ -104,10 +110,14 @@ const rejectApplication = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Rejection reason is required' });
     }
     
-    const application = await PetshopPurchaseApplication.findOne({
-      _id: req.params.id,
-      storeId: req.user.storeId
-    }).populate('userId', 'name email');
+    // Build query - only filter by storeId if it's a valid ObjectId
+    const query = { _id: req.params.id };
+    if (req.user.storeId && mongoose.Types.ObjectId.isValid(req.user.storeId)) {
+      query.storeId = req.user.storeId;
+    }
+    
+    const application = await PetshopPurchaseApplication.findOne(query)
+      .populate('userId', 'name email');
 
     if (!application) {
       return res.status(404).json({ success: false, message: 'Application not found' });
@@ -145,10 +155,14 @@ const scheduleHandover = async (req, res) => {
   try {
     const { scheduledDate, scheduledTime, handoverLocation } = req.body;
     
-    const application = await PetshopPurchaseApplication.findOne({
-      _id: req.params.id,
-      storeId: req.user.storeId
-    }).populate('userId', 'name email');
+    // Build query - only filter by storeId if it's a valid ObjectId
+    const query = { _id: req.params.id };
+    if (req.user.storeId && mongoose.Types.ObjectId.isValid(req.user.storeId)) {
+      query.storeId = req.user.storeId;
+    }
+    
+    const application = await PetshopPurchaseApplication.findOne(query)
+      .populate('userId', 'name email');
 
     if (!application) {
       return res.status(404).json({ success: false, message: 'Application not found' });
@@ -171,12 +185,61 @@ const scheduleHandover = async (req, res) => {
     application.addStatusHistory('scheduled', req.user._id, `Handover scheduled for ${scheduledDate} ${scheduledTime}`);
     await application.save();
 
-    // TODO: Send OTP email to user
+    // Send OTP email to user
+    let emailSent = false;
+    let emailError = '';
+    
+    try {
+      let toEmail = '';
+      if (application.userId && typeof application.userId === 'object' && application.userId.email) {
+        toEmail = typeof application.userId.email === 'string' && application.userId.email.includes('@') ? application.userId.email : '';
+      } else if (application.userId) {
+        const user = await User.findById(application.userId).select('email name');
+        toEmail = (user && typeof user.email === 'string' && user.email.includes('@')) ? user.email : '';
+      }
+      
+      const petName = application.petInventoryItemId?.name || 'your pet';
+      const scheduled = new Date(scheduledDate).toLocaleDateString() + ' ' + scheduledTime;
+      const petShopLocation = {
+        address: handoverLocation || 'Pet Shop - Main Branch, 123 Pet Street, City',
+        name: 'Pet Shop',
+        phone: '+91-9876543210'
+      };
+      
+      const subject = 'Pet Purchase Handover Scheduled - OTP Required';
+      const message = `Hello${application.personalDetails?.fullName ? ' ' + application.personalDetails.fullName : ''}, 
+
+Your handover for ${petName} is scheduled on ${scheduled} at our pet shop.
+Location: ${petShopLocation.address}
+
+IMPORTANT: You must present this OTP code when picking up your pet: ${otp}
+
+Please arrive 15 minutes before your scheduled time. No pets will be released without the correct OTP.
+
+Thank you,
+Pet Shop Team`;
+
+      if (toEmail && subject) {
+        try {
+          await sendMail({ to: toEmail, subject, html: message });
+          emailSent = true;
+        } catch (err) {
+          emailError = err.message;
+          console.error('[EMAIL] Failed to send handover email:', err);
+        }
+      }
+    } catch (err) {
+      emailError = err.message;
+      console.error('[EMAIL] Error preparing handover email:', err);
+    }
 
     res.json({ 
       success: true, 
-      message: 'Handover scheduled successfully. OTP sent to user email.',
-      data: application
+      message: emailSent 
+        ? 'Handover scheduled and OTP sent to customer\'s email' 
+        : `Handover scheduled${emailError ? ` but email failed to send: ${emailError}` : ' but email could not be sent (no email address found)'}`,
+      data: application,
+      emailSent
     });
   } catch (error) {
     console.error('Schedule handover error:', error);
@@ -193,10 +256,14 @@ const verifyOTPAndCompleteHandover = async (req, res) => {
       return res.status(400).json({ success: false, message: 'OTP is required' });
     }
     
-    const application = await PetshopPurchaseApplication.findOne({
-      _id: req.params.id,
-      storeId: req.user.storeId
-    }).populate('petInventoryItemId');
+    // Build query - only filter by storeId if it's a valid ObjectId
+    const query = { _id: req.params.id };
+    if (req.user.storeId && mongoose.Types.ObjectId.isValid(req.user.storeId)) {
+      query.storeId = req.user.storeId;
+    }
+    
+    const application = await PetshopPurchaseApplication.findOne(query)
+      .populate('petInventoryItemId');
 
     if (!application) {
       return res.status(404).json({ success: false, message: 'Application not found' });
@@ -215,18 +282,59 @@ const verifyOTPAndCompleteHandover = async (req, res) => {
       return res.status(400).json({ success: false, message: verificationResult.message });
     }
 
-    // Create pet in registry
-    const petRegistry = await PetRegistry.create({
-      petCode: application.petInventoryItemId.petCode,
-      name: application.petInventoryItemId.name,
-      source: 'petshop',
-      petShopItemId: application.petInventoryItemId._id,
-      currentOwnerId: application.userId,
-      currentLocation: 'at_owner',
-      currentStatus: 'owned',
-      lastTransferAt: new Date(),
-      createdBy: req.user._id
-    });
+    // Check if pet already exists in registry, update or create
+    let petRegistry = await PetRegistry.findOne({ petCode: application.petInventoryItemId.petCode });
+    
+    if (petRegistry) {
+      // Update existing registry entry
+      petRegistry.source = 'user';
+      petRegistry.userPetId = null; // Will be set when Pet document is created
+      petRegistry.currentOwnerId = application.userId;
+      petRegistry.currentLocation = 'at_owner';
+      petRegistry.currentStatus = 'owned';
+      petRegistry.lastTransferAt = new Date();
+      petRegistry.updatedBy = req.user._id;
+      
+      // Add to ownership history
+      petRegistry.ownershipHistory.push({
+        previousOwnerId: null,
+        newOwnerId: application.userId,
+        transferType: 'purchase',
+        transferDate: new Date(),
+        transferPrice: application.paymentAmount,
+        transferReason: 'Pet shop purchase',
+        source: 'petshop',
+        performedBy: req.user._id
+      });
+      
+      await petRegistry.save();
+    } else {
+      // Create new registry entry
+      petRegistry = await PetRegistry.create({
+        petCode: application.petInventoryItemId.petCode,
+        name: application.petInventoryItemId.name,
+        source: 'user',
+        petShopItemId: application.petInventoryItemId._id,
+        currentOwnerId: application.userId,
+        currentLocation: 'at_owner',
+        currentStatus: 'owned',
+        lastTransferAt: new Date(),
+        firstAddedSource: 'pet_shop',
+        firstAddedBy: req.user._id,
+        firstAddedAt: new Date(),
+        createdBy: req.user._id,
+        ownershipHistory: [{
+          previousOwnerId: null,
+          newOwnerId: application.userId,
+          transferType: 'purchase',
+          transferDate: new Date(),
+          transferPrice: application.paymentAmount,
+          transferReason: 'Pet shop purchase',
+          source: 'petshop',
+          performedBy: req.user._id
+        }]
+      });
+    }
 
     // Update application
     application.status = 'completed';
@@ -261,10 +369,14 @@ const verifyOTPAndCompleteHandover = async (req, res) => {
 // Regenerate OTP
 const regenerateOTP = async (req, res) => {
   try {
-    const application = await PetshopPurchaseApplication.findOne({
-      _id: req.params.id,
-      storeId: req.user.storeId
-    }).populate('userId', 'name email');
+    // Build query - only filter by storeId if it's a valid ObjectId
+    const query = { _id: req.params.id };
+    if (req.user.storeId && mongoose.Types.ObjectId.isValid(req.user.storeId)) {
+      query.storeId = req.user.storeId;
+    }
+    
+    const application = await PetshopPurchaseApplication.findOne(query)
+      .populate('userId', 'name email');
 
     if (!application) {
       return res.status(404).json({ success: false, message: 'Application not found' });
@@ -280,11 +392,64 @@ const regenerateOTP = async (req, res) => {
     const otp = application.generateOTP();
     await application.save();
 
-    // TODO: Send new OTP email
+    // Send new OTP email to user
+    let emailSent = false;
+    let emailError = '';
+    
+    try {
+      let toEmail = '';
+      if (application.userId && typeof application.userId === 'object' && application.userId.email) {
+        toEmail = typeof application.userId.email === 'string' && application.userId.email.includes('@') ? application.userId.email : '';
+      } else if (application.userId) {
+        const user = await User.findById(application.userId).select('email name');
+        toEmail = (user && typeof user.email === 'string' && user.email.includes('@')) ? user.email : '';
+      }
+      
+      const petName = application.petInventoryItemId?.name || 'your pet';
+      const scheduled = application.scheduledHandoverDate 
+        ? new Date(application.scheduledHandoverDate).toLocaleDateString() + ' ' + application.scheduledHandoverTime 
+        : 'soon';
+      const petShopLocation = {
+        address: application.handoverLocation || 'Pet Shop - Main Branch, 123 Pet Street, City',
+        name: 'Pet Shop',
+        phone: '+91-9876543210'
+      };
+      
+      const subject = 'Pet Purchase Handover - New OTP';
+      const message = `Hello${application.personalDetails?.fullName ? ' ' + application.personalDetails.fullName : ''}, 
 
+A new OTP has been generated for your handover of ${petName} scheduled on ${scheduled} at our pet shop.
+Location: ${petShopLocation.address}
+
+IMPORTANT: You must present this OTP code when picking up your pet: ${otp}
+
+Please arrive 15 minutes before your scheduled time. No pets will be released without the correct OTP.
+
+Thank you,
+Pet Shop Team`;
+
+      if (toEmail && subject) {
+        try {
+          await sendMail({ to: toEmail, subject, html: message });
+          emailSent = true;
+        } catch (err) {
+          emailError = err.message;
+          console.error('[EMAIL] Failed to send OTP email:', err);
+        }
+      }
+    } catch (err) {
+      emailError = err.message;
+      console.error('[EMAIL] Error preparing OTP email:', err);
+    }
+
+    const message = emailSent 
+      ? 'New OTP generated and sent to customer\'s email' 
+      : `New OTP generated${emailError ? ` but email failed to send: ${emailError}` : ' but email could not be sent (no email address found)'}`;
+    
     res.json({ 
       success: true, 
-      message: 'New OTP generated and sent to user email'
+      message,
+      emailSent
     });
   } catch (error) {
     console.error('Regenerate OTP error:', error);

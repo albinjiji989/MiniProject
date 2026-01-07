@@ -261,7 +261,7 @@ const AdoptionDashboard = () => {
                         sx={{ flex: 1, minWidth: 80 }}
                         onClick={() => {
                           console.log('Adopt clicked, pet._id:', pet._id);
-                          navigate(`/User/adoption/apply?petId=${pet._id}`);
+                          navigate(`/User/adoption/wizard/${pet._id}/applicant`);
                         }}
                       >
                         Adopt

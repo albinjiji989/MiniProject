@@ -154,7 +154,10 @@ const CentralizedPetService = {
         break;
       case 'petshop':
         console.log('📦 Fetching from PetInventoryItem with ID:', registryEntry.petShopItemId);
-        sourceData = await PetInventoryItem.findById(registryEntry.petShopItemId).populate('imageIds');
+        sourceData = await PetInventoryItem.findById(registryEntry.petShopItemId)
+          .populate('imageIds')
+          .populate('speciesId', 'name displayName')
+          .populate('breedId', 'name');
         if (sourceData?.imageIds) {
           images = sourceData.imageIds.map(img => ({
             _id: img._id,
@@ -176,15 +179,69 @@ const CentralizedPetService = {
           }));
         }
         break;
+      case 'user':
+        // User-owned pet - could have come from petshop or adoption
+        console.log('📦 Fetching user pet - checking original source');
+        if (registryEntry.userPetId) {
+          console.log('📦 Fetching from core Pet with ID:', registryEntry.userPetId);
+          sourceData = await Pet.findById(registryEntry.userPetId).populate('imageIds');
+          if (sourceData?.imageIds) {
+            images = sourceData.imageIds.map(img => ({
+              _id: img._id,
+              url: img.url,
+              caption: img.caption,
+              isPrimary: img.isPrimary
+            }));
+          }
+        } else if (registryEntry.petShopItemId) {
+          console.log('📦 Fetching from PetInventoryItem with ID:', registryEntry.petShopItemId);
+          sourceData = await PetInventoryItem.findById(registryEntry.petShopItemId)
+            .populate('imageIds')
+            .populate('speciesId', 'name displayName')
+            .populate('breedId', 'name');
+          if (sourceData?.imageIds) {
+            images = sourceData.imageIds.map(img => ({
+              _id: img._id,
+              url: img.url,
+              caption: img.caption,
+              isPrimary: img.isPrimary
+            }));
+          }
+        } else if (registryEntry.adoptionPetId) {
+          console.log('📦 Fetching from AdoptionPet with ID:', registryEntry.adoptionPetId);
+          sourceData = await AdoptionPet.findById(registryEntry.adoptionPetId).populate('imageIds');
+          if (sourceData?.imageIds) {
+            images = sourceData.imageIds.map(img => ({
+              _id: img._id,
+              url: img.url,
+              caption: img.caption,
+              isPrimary: img.isPrimary
+            }));
+          }
+        }
+        break;
     }
 
     console.log('✅ Centralized Service - Returning pet with', images.length, 'images');
 
-    return {
+    // Build the response with proper species and breed data
+    const response = {
       ...registryEntry.toObject(),
       sourceData,
       images  // Add images from source data
     };
+
+    // If sourceData has populated species/breed, use those instead of registry's
+    if (sourceData) {
+      if (sourceData.speciesId) {
+        response.species = sourceData.speciesId;
+      }
+      if (sourceData.breedId) {
+        response.breed = sourceData.breedId;
+      }
+    }
+
+    return response;
   },
 
   /**
@@ -201,19 +258,85 @@ const CentralizedPetService = {
     
     const query = { ...filter };
     
-    const pets = await PetRegistry.find(query)
+    const registryPets = await PetRegistry.find(query)
       .populate('species', 'name displayName')
       .populate('breed', 'name')
       .populate('currentOwnerId', 'name email')
-      .populate('images')
+      .populate('imageIds')
       .sort(sort)
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
     const total = await PetRegistry.countDocuments(query);
 
+    // Enrich each pet with source data for proper species/breed display
+    const enrichedPets = await Promise.all(registryPets.map(async (registryEntry) => {
+      let sourceData = null;
+      let images = [];
+
+      // Fetch source-specific data based on source
+      if (registryEntry.source === 'petshop' && registryEntry.petShopItemId) {
+        sourceData = await PetInventoryItem.findById(registryEntry.petShopItemId)
+          .populate('imageIds')
+          .populate('speciesId', 'name displayName')
+          .populate('breedId', 'name');
+        if (sourceData?.imageIds) {
+          images = sourceData.imageIds;
+        }
+      } else if (registryEntry.source === 'user') {
+        // Check which original source the user pet came from
+        if (registryEntry.petShopItemId) {
+          sourceData = await PetInventoryItem.findById(registryEntry.petShopItemId)
+            .populate('imageIds')
+            .populate('speciesId', 'name displayName')
+            .populate('breedId', 'name');
+          if (sourceData?.imageIds) {
+            images = sourceData.imageIds;
+          }
+        } else if (registryEntry.userPetId) {
+          sourceData = await Pet.findById(registryEntry.userPetId).populate('imageIds');
+          if (sourceData?.imageIds) {
+            images = sourceData.imageIds;
+          }
+        } else if (registryEntry.adoptionPetId) {
+          sourceData = await AdoptionPet.findById(registryEntry.adoptionPetId).populate('imageIds');
+          if (sourceData?.imageIds) {
+            images = sourceData.imageIds;
+          }
+        }
+      } else if (registryEntry.source === 'adoption' && registryEntry.adoptionPetId) {
+        sourceData = await AdoptionPet.findById(registryEntry.adoptionPetId).populate('imageIds');
+        if (sourceData?.imageIds) {
+          images = sourceData.imageIds;
+        }
+      } else if (registryEntry.source === 'core' && registryEntry.corePetId) {
+        sourceData = await Pet.findById(registryEntry.corePetId).populate('imageIds');
+        if (sourceData?.imageIds) {
+          images = sourceData.imageIds;
+        }
+      }
+
+      // Build enriched pet object
+      const enrichedPet = {
+        ...registryEntry.toObject(),
+        images: images.length > 0 ? images : registryEntry.imageIds || []
+      };
+
+      // Override species and breed with source data if available
+      if (sourceData) {
+        if (sourceData.speciesId) {
+          enrichedPet.species = sourceData.speciesId;
+        }
+        if (sourceData.breedId) {
+          enrichedPet.breed = sourceData.breedId;
+        }
+      }
+
+      return enrichedPet;
+    }));
+
     return {
-      pets,
+      pets: enrichedPets,
       pagination: {
         current: page,
         pages: Math.ceil(total / limit),

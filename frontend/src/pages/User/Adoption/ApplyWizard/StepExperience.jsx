@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
 const KEY = 'adopt_apply_wizard'
 
 export default function StepExperience() {
   const navigate = useNavigate()
+  const { petId } = useParams()
   const [form, setForm] = useState(() => {
     try { 
       const savedData = JSON.parse(localStorage.getItem(KEY))?.experience || {}
@@ -28,8 +29,8 @@ export default function StepExperience() {
 
   const onChange = (e) => save({ [e.target.name]: e.target.value || '' })
 
-  const next = () => navigate('/User/adoption/apply/documents')
-  const back = () => navigate('/User/adoption/apply/home')
+  const next = () => navigate(`/User/adoption/wizard/${petId}/documents`)
+  const back = () => navigate(`/User/adoption/wizard/${petId}/home`)
 
   return (
     <div className="space-y-4">

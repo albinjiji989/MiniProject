@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { adoptionAPI, resolveMediaUrl } from '../../../../services/api'
+import { useNavigate, useParams } from 'react-router-dom'
+import { adoptionAPI } from '../../../../services/api'
 
 const KEY = 'adopt_apply_wizard'
 
 export default function StepDocuments() {
   const navigate = useNavigate()
+  const { petId } = useParams()
   const [form, setForm] = useState(() => {
     try { 
       const savedData = JSON.parse(localStorage.getItem(KEY))?.documents || []
@@ -79,8 +80,8 @@ export default function StepDocuments() {
   }
   const removeDoc = (i) => save({ documents: (form || []).filter((_, idx)=> idx !== i) }, true)
 
-  const next = () => navigate('/User/adoption/apply/review')
-  const back = () => navigate('/User/adoption/apply/experience')
+  const next = () => navigate(`/User/adoption/wizard/${petId}/review`)
+  const back = () => navigate(`/User/adoption/wizard/${petId}/experience`)
 
   return (
     <div className="space-y-4">

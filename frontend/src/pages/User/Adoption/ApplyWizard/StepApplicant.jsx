@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../../../contexts/AuthContext'
 
 const KEY = 'adopt_apply_wizard'
 
 export default function StepApplicant() {
   const navigate = useNavigate()
-  const [params] = useSearchParams()
+  const { petId } = useParams()
   const { user } = useAuth()
   
   const [form, setForm] = useState(() => {
@@ -24,12 +24,11 @@ export default function StepApplicant() {
   })
 
   useEffect(() => {
-    const petId = params.get('petId')
     console.log('StepApplicant: URL petId =', petId)
     if (petId && !form.petId) {
       update({ petId })
     }
-  }, [])
+  }, [petId])
 
   // Prefill from logged-in user profile (editable)
   useEffect(() => {
@@ -60,7 +59,7 @@ export default function StepApplicant() {
   }
 
   const onChange = (e) => update({ [e.target.name]: e.target.value || '' })
-  const next = () => navigate('/User/adoption/apply/home')
+  const next = () => navigate(`/User/adoption/wizard/${petId}/home`)
 
   return (
     <div className="space-y-4">

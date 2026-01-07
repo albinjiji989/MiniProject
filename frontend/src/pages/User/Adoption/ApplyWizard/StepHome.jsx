@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
 const KEY = 'adopt_apply_wizard'
 
 export default function StepHome() {
   const navigate = useNavigate()
+  const { petId } = useParams()
   const [form, setForm] = useState(() => {
     try { 
       const savedData = JSON.parse(localStorage.getItem(KEY))?.home || {}
@@ -49,8 +50,8 @@ export default function StepHome() {
     save({ [name]: type === 'checkbox' ? !!checked : (value || '') })
   }
 
-  const next = () => navigate('/User/adoption/apply/experience')
-  const back = () => navigate('/User/adoption/apply/applicant')
+  const next = () => navigate(`/User/adoption/wizard/${petId}/experience`)
+  const back = () => navigate(`/User/adoption/wizard/${petId}/applicant`)
 
   return (
     <div className="space-y-4">

@@ -193,6 +193,29 @@ export default function StepHealthMedia() {
     saveLocal({ documents: form.documents.filter((_, idx) => idx !== i) })
   }
 
+  const openDocument = (doc) => {
+    try {
+      // Get the document URL
+      const docUrl = typeof doc === 'string' ? doc : doc.url || doc.backendPath
+      
+      if (!docUrl) {
+        alert('Document URL not found')
+        return
+      }
+      
+      // Resolve the full URL using the helper function
+      const fullUrl = resolveMediaUrl(docUrl)
+      
+      console.log('Opening document:', fullUrl)
+      
+      // Open in new tab
+      window.open(fullUrl, '_blank', 'noopener,noreferrer')
+    } catch (error) {
+      console.error('Failed to open document:', error)
+      alert('Failed to open document. Please try again.')
+    }
+  }
+
   const onChange = (e) => {
     const { name, value } = e.target
     saveLocal({ [name]: value || '' })
@@ -376,7 +399,11 @@ export default function StepHealthMedia() {
                     
                     return (
                       <div key={i} className="flex items-center justify-between p-3 border rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors group">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div 
+                          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                          onClick={() => openDocument(doc)}
+                          title="Click to view document"
+                        >
                           <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center text-lg flex-shrink-0">
                             {docType.includes('pdf') ? '📄' : docType.startsWith('image/') ? '🖼️' : '📋'}
                           </div>
@@ -388,10 +415,18 @@ export default function StepHealthMedia() {
                               {docSize} • {docType}
                             </p>
                           </div>
+                          <div className="ml-auto mr-2 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </div>
                         </div>
                         <button
                           type="button"
-                          onClick={() => removeDoc(i)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            removeDoc(i)
+                          }}
                           className="ml-2 px-3 py-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded text-xs font-medium transition-colors"
                         >
                           Remove

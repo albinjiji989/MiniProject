@@ -11,6 +11,7 @@ import PetAdoptionForm from '../pages/User/Adoption/Adoption';
 import UserAdoptionWizard from '../pages/User/Adoption/ApplyWizard/ApplyLayout';
 import AdoptionApplications from '../pages/User/Adoption/AdoptionApplications'
 import UserAdoptionPetDetails from '../pages/User/Adoption/UserAdoptedPetDetails'
+import PetDetails from '../pages/User/Adoption/PetDetails'
 import AdoptionDashboard from '../pages/User/Adoption/AdoptionDashboard'
 import UserVetAppointments from '../pages/User/Veterinary/VeterinaryAppointments'
 import PetCareCalendar from '../pages/User/MyOwnedPets'
@@ -102,13 +103,12 @@ const UserRoutes = () => {
             <Route path="/" element={<AdoptionDashboard />} />
             <Route path="/applications" element={<UserAdoptionApplications />} />
             <Route path="/applications/:id" element={<UserAdoptionApplicationDetails />} />
-            <Route path="/apply/:petId" element={<PetAdoptionForm />} />
             <Route path="/wizard/*" element={<UserAdoptionWizard />} />
             <Route path="/payment/:applicationId" element={<AdoptionApplications />} />
             <Route path="/success/:applicationId" element={<AdoptionApplications />} />
             <Route path="/history" element={<AdoptionApplications />} />
             <Route path="/pets/:id" element={<UserAdoptionPetDetails />} />
-            <Route path="/detail/:id" element={<UserAdoptionPetDetails />} />
+            <Route path="/detail/:id" element={<PetDetails />} />
             <Route path="/adopted" element={<AdoptionDashboard />} />
           </Routes>
         } />

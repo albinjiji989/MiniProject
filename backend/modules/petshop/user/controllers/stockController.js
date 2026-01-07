@@ -144,8 +144,8 @@ const listPublicStocks = async (req, res) => {
     // Transform stocks for user display
     // Each stock IS a batch containing pets of same category/species/breed/age
     // Only gender differs within a batch (male/female counts)
-    const transformedStocks = allStocks
-      .map(stock => {
+    const transformedStocks = await Promise.all(
+      allStocks.map(async (stock) => {
         // Skip virtual stocks transformation as they're already in the right format
         if (stock.isVirtualStock) {
           return stock;
@@ -154,9 +154,19 @@ const listPublicStocks = async (req, res) => {
         // Get category from tags (first tag is typically the category)
         const category = stock.tags && stock.tags.length > 0 ? stock.tags[0] : '';
 
-        const totalCount = (stock.maleCount || 0) + (stock.femaleCount || 0);
-        if (totalCount <= 0) {
-          // Skip empty stocks
+        // Query actual available inventory items for this stock
+        // This excludes already purchased, reserved, or sold pets
+        const availableInventory = await PetInventoryItem.find({
+          stockId: stock._id,
+          status: { $in: ['available', 'available_for_sale'] }
+        });
+
+        const actualMaleCount = availableInventory.filter(item => item.gender === 'Male').length;
+        const actualFemaleCount = availableInventory.filter(item => item.gender === 'Female').length;
+        const actualAvailableCount = actualMaleCount + actualFemaleCount;
+
+        if (actualAvailableCount <= 0) {
+          // Skip stocks with no available pets
           return null;
         }
 
@@ -182,14 +192,16 @@ const listPublicStocks = async (req, res) => {
           discountPrice: stock.discountPrice,
           storeId: stock.storeId,
           storeName: stock.storeName,
-          maleCount: stock.maleCount,
-          femaleCount: stock.femaleCount,
-          availableCount: totalCount,
+          maleCount: actualMaleCount,  // Actual available count (excluding purchased/reserved)
+          femaleCount: actualFemaleCount,  // Actual available count (excluding purchased/reserved)
+          availableCount: actualAvailableCount,  // Total available (excluding purchased/reserved)
+          totalMaleCount: stock.maleCount || 0,  // Original total inventory
+          totalFemaleCount: stock.femaleCount || 0,  // Original total inventory
           // Batch-style counts object so UI can render gender distribution once
           counts: {
-            total: totalCount,
-            male: stock.maleCount || 0,
-            female: stock.femaleCount || 0,
+            total: actualAvailableCount,
+            male: actualMaleCount,
+            female: actualFemaleCount,
             unknown: 0
           },
           // Images
@@ -202,14 +214,16 @@ const listPublicStocks = async (req, res) => {
           isBatch: true // Mark as batch (one stock = one batch)
         };
       })
-      .filter(Boolean); // remove nulls / empty stocks
+    );
+
+    const filteredStocks = transformedStocks.filter(Boolean); // remove nulls / empty stocks
 
     // Paginate results
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
-    const paginatedStocks = transformedStocks.slice(startIndex, endIndex);
+    const paginatedStocks = filteredStocks.slice(startIndex, endIndex);
 
-    const total = transformedStocks.length;
+    const total = filteredStocks.length;
 
     res.json({
       success: true,
@@ -263,6 +277,17 @@ const getPublicStockById = async (req, res) => {
       });
     }
 
+    // Calculate real available counts from inventory items (excluding reserved/sold pets)
+    const PetInventoryItem = require('../../manager/models/PetInventoryItem');
+    const availableInventory = await PetInventoryItem.find({
+      stockId: stockId,
+      status: { $in: ['available', 'available_for_sale'] }
+    });
+
+    const actualMaleCount = availableInventory.filter(item => item.gender === 'Male').length;
+    const actualFemaleCount = availableInventory.filter(item => item.gender === 'Female').length;
+    const actualAvailableCount = actualMaleCount + actualFemaleCount;
+
     // Get category from tags (first tag is typically the category)
     const category = stock.tags && stock.tags.length > 0 ? stock.tags[0] : '';
 
@@ -294,7 +319,8 @@ const getPublicStockById = async (req, res) => {
         ...baseStockData,
         _id: `${stock._id}_male`,
         gender: 'male',
-        availableCount: stock.maleCount,
+        availableCount: actualMaleCount,
+        totalCount: stock.maleCount,
         images: stock.maleImageIds || [],
         maleImages: stock.maleImageIds || [],
         femaleImages: []
@@ -305,7 +331,8 @@ const getPublicStockById = async (req, res) => {
         ...baseStockData,
         _id: `${stock._id}_female`,
         gender: 'female',
-        availableCount: stock.femaleCount,
+        availableCount: actualFemaleCount,
+        totalCount: stock.femaleCount,
         images: stock.femaleImageIds || [],
         maleImages: [],
         femaleImages: stock.femaleImageIds || []
@@ -317,9 +344,11 @@ const getPublicStockById = async (req, res) => {
     const transformedStock = {
       ...baseStockData,
       _id: stock._id,
-      maleCount: stock.maleCount,
-      femaleCount: stock.femaleCount,
-      availableCount: stock.maleCount + stock.femaleCount,
+      maleCount: actualMaleCount,
+      femaleCount: actualFemaleCount,
+      totalMaleCount: stock.maleCount,
+      totalFemaleCount: stock.femaleCount,
+      availableCount: actualAvailableCount,
       maleImages: stock.maleImageIds || [],
       femaleImages: stock.femaleImageIds || [],
       images: (stock.maleImageIds && stock.maleImageIds.length > 0)

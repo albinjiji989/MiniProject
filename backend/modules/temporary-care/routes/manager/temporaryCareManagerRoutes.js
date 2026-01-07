@@ -10,6 +10,9 @@ const caregiverController = require('../../manager/controllers/caregiverControll
 const temporaryCareController = require('../../manager/controllers/temporaryCareController');
 const paymentController = require('../../manager/controllers/paymentController');
 
+// New booking controller
+const bookingController = require('../../manager/controllers/bookingController');
+
 const router = express.Router();
 
 const requireManager = [auth, authorizeModule('temporary-care'), (req, res, next) => {
@@ -22,6 +25,53 @@ const requireManager = [auth, authorizeModule('temporary-care'), (req, res, next
   }
   next();
 }];
+
+/**
+ * New Booking Management Routes
+ */
+
+// Get all bookings for manager's facility
+router.get('/bookings-new', requireManager, bookingController.getAllBookings);
+
+// Get today's schedule
+router.get('/schedule/today', requireManager, bookingController.getTodaySchedule);
+
+// Get dashboard statistics
+router.get('/dashboard-stats', requireManager, bookingController.getDashboardStats);
+
+// Get booking details
+router.get('/bookings-new/:id', requireManager, bookingController.getBookingDetails);
+
+// Assign staff to booking
+router.post('/bookings-new/:id/assign-staff', requireManager, [
+  body('staffId').notEmpty().withMessage('Staff ID is required'),
+  body('role').isIn(['primary', 'backup']).optional()
+], bookingController.assignStaff);
+
+// Add activity log
+router.post('/bookings-new/:id/activity', requireManager, [
+  body('activityType').isIn(['feeding', 'bathing', 'walking', 'medication', 'playtime', 'health_check', 'emergency', 'other']).withMessage('Valid activity type is required'),
+  body('notes').notEmpty().withMessage('Notes are required')
+], bookingController.addActivity);
+
+// Drop-off management
+router.post('/bookings-new/:id/dropoff/generate-otp', requireManager, bookingController.generateDropOffOTP);
+router.post('/bookings-new/:id/dropoff/verify', requireManager, [
+  body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
+], bookingController.verifyDropOffOTP);
+
+// Pickup management
+router.post('/bookings-new/:id/pickup/generate-otp', requireManager, bookingController.generatePickupOTP);
+router.post('/bookings-new/:id/pickup/verify', requireManager, [
+  body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
+], bookingController.verifyPickupOTP);
+
+// Get available staff
+router.get('/staff/available', requireManager, bookingController.getAvailableStaff);
+
+/**
+ * Legacy Routes
+ */
 
 // Routes that don't require store setup (for initial setup)
 router.get('/me/store', requireManager, managerController.getMyStoreInfo);

@@ -40,7 +40,8 @@ import {
   Phone as PhoneIcon,
   Home as AddressIcon,
   Image as ImageIcon,
-  Description as DocumentIcon
+  Description as DocumentIcon,
+  Send as SendIcon
 } from '@mui/icons-material';
 import { apiClient, resolveMediaUrl } from '../../../services/api';
 import { handleApiError } from '../../../utils/notifications';
@@ -130,12 +131,12 @@ const PurchaseApplications = () => {
     }
     try {
       setProcessing(true);
-      await apiClient.post(`/petshop/manager/purchase-applications/${actionDialog.app._id}/schedule-handover`, {
-        scheduledHandoverDate: actionData.date,
-        scheduledHandoverTime: actionData.time,
+      const response = await apiClient.post(`/petshop/manager/purchase-applications/${actionDialog.app._id}/schedule-handover`, {
+        scheduledDate: actionData.date,
+        scheduledTime: actionData.time,
         handoverLocation: actionData.location
       });
-      alert('Handover scheduled and OTP generated!');
+      alert(response.data.message || 'Handover scheduled and OTP sent to customer\'s email!');
       loadApplications();
       handleCloseAction();
     } catch (err) {
@@ -153,13 +154,26 @@ const PurchaseApplications = () => {
     try {
       setProcessing(true);
       await apiClient.post(`/petshop/manager/purchase-applications/${actionDialog.app._id}/verify-otp`, {
-        otpCode: actionData.otp
+        otp: actionData.otp
       });
       alert('OTP verified! Pet has been added to user dashboard.');
       loadApplications();
       handleCloseAction();
     } catch (err) {
       handleApiError(err, 'Failed to verify OTP');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleResendOTP = async (appId) => {
+    try {
+      setProcessing(true);
+      const response = await apiClient.post(`/petshop/manager/purchase-applications/${appId}/regenerate-otp`);
+      alert(response.data.message || 'New OTP has been generated and sent to customer\'s email!');
+      loadApplications();
+    } catch (err) {
+      handleApiError(err, 'Failed to resend OTP');
     } finally {
       setProcessing(false);
     }
@@ -325,15 +339,27 @@ const PurchaseApplications = () => {
                         )}
 
                         {app.status === 'scheduled' && (
-                          <Button
-                            size="small"
-                            color="success"
-                            startIcon={<VerifyIcon />}
-                            onClick={() => handleOpenAction('verify', app)}
-                            fullWidth
-                          >
-                            Verify OTP & Complete
-                          </Button>
+                          <>
+                            <Button
+                              size="small"
+                              color="success"
+                              startIcon={<VerifyIcon />}
+                              onClick={() => handleOpenAction('verify', app)}
+                              fullWidth
+                            >
+                              Verify OTP & Complete
+                            </Button>
+                            <Button
+                              size="small"
+                              color="warning"
+                              startIcon={<SendIcon />}
+                              onClick={() => handleResendOTP(app._id)}
+                              disabled={processing}
+                              fullWidth
+                            >
+                              Resend OTP
+                            </Button>
+                          </>
                         )}
                       </Stack>
                     </Grid>
@@ -345,84 +371,249 @@ const PurchaseApplications = () => {
         </Grid>
       )}
 
-      {/* Details Dialog */}
-      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="md" fullWidth>
+      {/* Details Dialog - Professional Industry Level */}
+      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="lg" fullWidth>
         {selectedApp && (
           <>
-            <DialogTitle>
+            <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white' }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h6">Application Details</Typography>
-                <IconButton onClick={() => setDetailsOpen(false)}>
+                <Box>
+                  <Typography variant="h6" fontWeight={700}>Purchase Application #{selectedApp._id?.slice(-8)}</Typography>
+                  <Typography variant="caption">Submitted on {new Date(selectedApp.createdAt).toLocaleString()}</Typography>
+                </Box>
+                <IconButton onClick={() => setDetailsOpen(false)} sx={{ color: 'white' }}>
                   <CloseIcon />
                 </IconButton>
               </Box>
             </DialogTitle>
-            <DialogContent>
-              <Stack spacing={3}>
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary">Status</Typography>
-                  <Chip label={getStatusLabel(selectedApp.status)} color={getStatusColor(selectedApp.status)} />
-                </Box>
-
-                <Divider />
-
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>Pet Details</Typography>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableBody>
-                        <TableRow>
-                          <TableCell>Name</TableCell>
-                          <TableCell>{selectedApp.petInventoryItemId?.name}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>Gender</TableCell>
-                          <TableCell>{selectedApp.selectedGender}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>Price</TableCell>
-                          <TableCell>₹{selectedApp.paymentAmount?.toLocaleString()}</TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-
-                <Divider />
-
-                <Box>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>Customer Details</Typography>
-                  <Stack spacing={1}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <EmailIcon fontSize="small" />
-                      <Typography variant="body2">{selectedApp.personalDetails?.email}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <PhoneIcon fontSize="small" />
-                      <Typography variant="body2">{selectedApp.personalDetails?.phone}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <AddressIcon fontSize="small" />
-                      <Typography variant="body2">
-                        {selectedApp.personalDetails?.address?.street}, {selectedApp.personalDetails?.address?.city}
+            <DialogContent sx={{ mt: 3 }}>
+              <Grid container spacing={3}>
+                {/* Status & Timeline */}
+                <Grid item xs={12}>
+                  <Paper elevation={0} sx={{ p: 2, bgcolor: 'grey.50', borderLeft: 4, borderColor: getStatusColor(selectedApp.status) + '.main' }}>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                      <Chip label={getStatusLabel(selectedApp.status)} color={getStatusColor(selectedApp.status)} size="large" sx={{ fontWeight: 700 }} />
+                      <Divider orientation="vertical" flexItem />
+                      <Typography variant="body2" color="text.secondary">
+                        Last Updated: {new Date(selectedApp.updatedAt || selectedApp.createdAt).toLocaleString()}
                       </Typography>
-                    </Box>
-                  </Stack>
-                </Box>
+                    </Stack>
+                  </Paper>
+                </Grid>
 
-                {selectedApp.status === 'scheduled' && selectedApp.otpCode && (
-                  <>
-                    <Divider />
-                    <Alert severity="info">
-                      <Typography variant="subtitle2">Handover OTP: <strong>{selectedApp.otpCode}</strong></Typography>
-                      <Typography variant="caption">Ask customer for this OTP during handover</Typography>
-                    </Alert>
-                  </>
+                {/* Pet Information */}
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      🐾 Pet Information
+                    </Typography>
+                    <Stack spacing={2}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar
+                          src={resolveMediaUrl(selectedApp.petInventoryItemId?.images?.[0]?.url)}
+                          variant="rounded"
+                          sx={{ width: 100, height: 100 }}
+                        >
+                          <ImageIcon sx={{ fontSize: 48 }} />
+                        </Avatar>
+                        <Box flex={1}>
+                          <Typography variant="h6" fontWeight={600}>{selectedApp.petInventoryItemId?.name || 'N/A'}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {selectedApp.petInventoryItemId?.speciesId?.displayName || selectedApp.petInventoryItemId?.speciesId?.name || 'N/A'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Divider />
+                      <Grid container spacing={2}>
+                        <Grid item xs={6}>
+                          <Typography variant="caption" color="text.secondary">Breed</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedApp.petInventoryItemId?.breedId?.name || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Typography variant="caption" color="text.secondary">Gender</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedApp.selectedGender}</Typography>
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Typography variant="caption" color="text.secondary">Age</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedApp.petInventoryItemId?.age || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Typography variant="caption" color="text.secondary">Pet Code</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedApp.petInventoryItemId?.petCode || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Typography variant="caption" color="text.secondary">Price</Typography>
+                          <Typography variant="h5" fontWeight={700} color="success.main">₹{selectedApp.paymentAmount?.toLocaleString() || '0'}</Typography>
+                        </Grid>
+                      </Grid>
+                    </Stack>
+                  </Paper>
+                </Grid>
+
+                {/* Customer Information */}
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      👤 Customer Information
+                    </Typography>
+                    <Stack spacing={2}>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary">Full Name</Typography>
+                        <Typography variant="body1" fontWeight={600}>{selectedApp.personalDetails?.fullName || selectedApp.userId?.name}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <EmailIcon fontSize="small" color="action" />
+                        <Box flex={1}>
+                          <Typography variant="caption" color="text.secondary">Email</Typography>
+                          <Typography variant="body2">{selectedApp.personalDetails?.email || selectedApp.userId?.email}</Typography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <PhoneIcon fontSize="small" color="action" />
+                        <Box flex={1}>
+                          <Typography variant="caption" color="text.secondary">Phone</Typography>
+                          <Typography variant="body2">{selectedApp.personalDetails?.phone || selectedApp.userId?.phone}</Typography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <AddressIcon fontSize="small" color="action" sx={{ mt: 0.5 }} />
+                        <Box flex={1}>
+                          <Typography variant="caption" color="text.secondary">Address</Typography>
+                          <Typography variant="body2">
+                            {selectedApp.personalDetails?.address?.street}<br />
+                            {selectedApp.personalDetails?.address?.city}, {selectedApp.personalDetails?.address?.state}<br />
+                            {selectedApp.personalDetails?.address?.pincode}, {selectedApp.personalDetails?.address?.country || 'India'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Stack>
+                  </Paper>
+                </Grid>
+
+                {/* Uploaded Documents */}
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3 }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      📸 Customer Photo
+                    </Typography>
+                    {selectedApp.userPhoto?.url ? (
+                      <Box sx={{ textAlign: 'center' }}>
+                        <img 
+                          src={resolveMediaUrl(selectedApp.userPhoto.url)} 
+                          alt="Customer" 
+                          style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, objectFit: 'contain' }}
+                        />
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                          {selectedApp.userPhoto.name || 'Customer Photo'}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Alert severity="info">No photo uploaded</Alert>
+                    )}
+                  </Paper>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <Paper elevation={2} sx={{ p: 3 }}>
+                    <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
+                      📄 Documents ({selectedApp.documents?.length || 0})
+                    </Typography>
+                    {selectedApp.documents && selectedApp.documents.length > 0 ? (
+                      <Stack spacing={1}>
+                        {selectedApp.documents.map((doc, idx) => (
+                          <Paper key={idx} elevation={0} sx={{ p: 2, bgcolor: 'grey.50', display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <DocumentIcon color="primary" />
+                            <Box flex={1}>
+                              <Typography variant="body2" fontWeight={600}>{doc.name || `Document ${idx + 1}`}</Typography>
+                              <Typography variant="caption" color="text.secondary">{doc.type || 'Unknown type'}</Typography>
+                            </Box>
+                            <Button size="small" href={resolveMediaUrl(doc.url)} target="_blank" rel="noopener">View</Button>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    ) : (
+                      <Alert severity="info">No documents uploaded</Alert>
+                    )}
+                  </Paper>
+                </Grid>
+
+                {/* Payment Information */}
+                {(selectedApp.status === 'paid' || selectedApp.status === 'scheduled' || selectedApp.status === 'completed') && (
+                  <Grid item xs={12}>
+                    <Paper elevation={2} sx={{ p: 3, bgcolor: 'success.lighter' }}>
+                      <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'success.dark', mb: 2 }}>
+                        💳 Payment Information
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Payment Status</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedApp.paymentStatus || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Payment ID</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedApp.paymentId || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Amount Paid</Typography>
+                          <Typography variant="body2" fontWeight={600} color="success.dark">₹{selectedApp.paymentAmount?.toLocaleString()}</Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Typography variant="caption" color="text.secondary">Payment Date</Typography>
+                          <Typography variant="body2" fontWeight={600}>{selectedApp.paymentDate ? new Date(selectedApp.paymentDate).toLocaleDateString() : 'N/A'}</Typography>
+                        </Grid>
+                      </Grid>
+                    </Paper>
+                  </Grid>
                 )}
-              </Stack>
+
+                {/* Handover Information */}
+                {(selectedApp.status === 'scheduled' || selectedApp.status === 'completed') && (
+                  <Grid item xs={12}>
+                    <Paper elevation={2} sx={{ p: 3, bgcolor: 'info.lighter', borderLeft: 4, borderColor: 'info.main' }}>
+                      <Typography variant="h6" fontWeight={700} gutterBottom sx={{ color: 'info.dark', mb: 2 }}>
+                        🔐 Handover Details
+                      </Typography>
+                      <Grid container spacing={3}>
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="caption" color="text.secondary">Scheduled Date</Typography>
+                          <Typography variant="body1" fontWeight={600}>{selectedApp.scheduledHandoverDate ? new Date(selectedApp.scheduledHandoverDate).toLocaleDateString() : 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="caption" color="text.secondary">Scheduled Time</Typography>
+                          <Typography variant="body1" fontWeight={600}>{selectedApp.scheduledHandoverTime || 'N/A'}</Typography>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <Typography variant="caption" color="text.secondary">Location</Typography>
+                          <Typography variant="body1" fontWeight={600}>{selectedApp.handoverLocation || 'N/A'}</Typography>
+                        </Grid>
+                        {selectedApp.status === 'scheduled' && selectedApp.otpCode && (
+                          <Grid item xs={12}>
+                            <Alert severity="warning" sx={{ fontWeight: 600 }}>
+                              <Typography variant="subtitle2" gutterBottom>🔢 Handover OTP (Required for Verification)</Typography>
+                              <Typography variant="h4" fontWeight={700} letterSpacing={4} sx={{ my: 1 }}>{selectedApp.otpCode}</Typography>
+                              <Typography variant="caption">Ask the customer to provide this OTP during handover. OTP expires: {selectedApp.otpExpiresAt ? new Date(selectedApp.otpExpiresAt).toLocaleString() : 'N/A'}</Typography>
+                            </Alert>
+                          </Grid>
+                        )}
+                      </Grid>
+                    </Paper>
+                  </Grid>
+                )}
+              </Grid>
             </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setDetailsOpen(false)}>Close</Button>
+            <DialogActions sx={{ p: 3, bgcolor: 'grey.50' }}>
+              <Button onClick={() => setDetailsOpen(false)} variant="outlined">Close</Button>
+              {selectedApp.status === 'scheduled' && (
+                <Button 
+                  onClick={() => handleResendOTP(selectedApp._id)} 
+                  variant="contained" 
+                  color="warning"
+                  startIcon={<SendIcon />}
+                  disabled={processing}
+                >
+                  Resend OTP to Customer
+                </Button>
+              )}
             </DialogActions>
           </>
         )}

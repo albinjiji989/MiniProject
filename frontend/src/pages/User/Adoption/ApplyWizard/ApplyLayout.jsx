@@ -1,18 +1,25 @@
 import React from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, Outlet, useLocation, useNavigate, Navigate, useParams } from 'react-router-dom'
+import StepApplicant from './StepApplicant'
+import StepHome from './StepHome'
+import StepExperience from './StepExperience'
+import StepDocuments from './StepDocuments'
+import StepReview from './StepReview'
 
-const STEPS = [
-  { key: 'applicant', label: 'Applicant', path: '/User/adoption/apply' },
-  { key: 'home', label: 'Home', path: '/User/adoption/apply/home' },
-  { key: 'experience', label: 'Experience', path: '/User/adoption/apply/experience' },
-  { key: 'documents', label: 'Documents', path: '/User/adoption/apply/documents' },
-  { key: 'review', label: 'Review', path: '/User/adoption/apply/review' },
-]
-
-export default function ApplyLayout() {
+function WizardLayout() {
   const location = useLocation()
   const navigate = useNavigate()
-  const idx = Math.max(0, STEPS.findIndex(s => location.pathname.endsWith(s.key)))
+  const { petId } = useParams()
+  
+  const STEPS = [
+    { key: 'applicant', label: 'Applicant' },
+    { key: 'home', label: 'Home' },
+    { key: 'experience', label: 'Experience' },
+    { key: 'documents', label: 'Documents' },
+    { key: 'review', label: 'Review' },
+  ]
+  
+  const idx = Math.max(0, STEPS.findIndex(s => location.pathname.includes(s.key)))
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -38,5 +45,20 @@ export default function ApplyLayout() {
         <Outlet />
       </div>
     </div>
+  )
+}
+
+export default function ApplyWizardRouter() {
+  return (
+    <Routes>
+      <Route path=":petId" element={<WizardLayout />}>
+        <Route index element={<Navigate to="applicant" replace />} />
+        <Route path="applicant" element={<StepApplicant />} />
+        <Route path="home" element={<StepHome />} />
+        <Route path="experience" element={<StepExperience />} />
+        <Route path="documents" element={<StepDocuments />} />
+        <Route path="review" element={<StepReview />} />
+      </Route>
+    </Routes>
   )
 }
