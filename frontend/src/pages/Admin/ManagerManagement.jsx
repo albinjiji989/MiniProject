@@ -366,6 +366,12 @@ const ManagerManagement = () => {
   }
 
   const handleCancelInvite = () => {
+    // If on OTP step, ask for confirmation before canceling
+    if (inviteStep === 2) {
+      if (!window.confirm('OTP has been sent. Are you sure you want to cancel? You will lose the OTP code.')) {
+        return; // Don't close if user clicks "No"
+      }
+    }
     setInviteDialog(false)
     setInviteStep(1)
     // Don't clear the invite data here - user might want to continue later
@@ -375,6 +381,7 @@ const ManagerManagement = () => {
     // Clear all data when user explicitly cancels
     setInviteData({ name: '', email: '', phone: '', module: '' })
     setOtpData({ email: '', module: '', otp: '' })
+    setInviteStep(1)
   }
   
   const handleResendOtp = async (email, module) => {
@@ -885,7 +892,19 @@ const ManagerManagement = () => {
       </Dialog>
 
       {/* Invite Manager Dialog */}
-      <Dialog open={inviteDialog} onClose={handleCancelInvite} maxWidth="md" fullWidth>
+      <Dialog 
+        open={inviteDialog} 
+        onClose={(event, reason) => {
+          // Prevent closing on backdrop click or ESC when on OTP step
+          if (inviteStep === 2 && (reason === 'backdropClick' || reason === 'escapeKeyDown')) {
+            return;
+          }
+          handleCancelInvite();
+        }} 
+        maxWidth="md" 
+        fullWidth
+        disableEscapeKeyDown={inviteStep === 2}
+      >
         <DialogTitle>
           {inviteStep === 1 ? 'Invite New Manager' : 'Verify OTP'}
         </DialogTitle>

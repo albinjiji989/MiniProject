@@ -9,6 +9,7 @@ const managerRequestsController = require('../../manager/controllers/managerRequ
 const caregiverController = require('../../manager/controllers/caregiverController');
 const temporaryCareController = require('../../manager/controllers/temporaryCareController');
 const paymentController = require('../../manager/controllers/paymentController');
+const applicationManagerController = require('../../manager/controllers/applicationManagerController');
 
 // New booking controller
 const bookingController = require('../../manager/controllers/bookingController');
@@ -93,6 +94,10 @@ router.get('/bookings', dashboardController.getBookings);
 router.get('/facilities', dashboardController.getFacilities);
 router.get('/caregivers-list', dashboardController.getCaregivers);
 
+// Inboard pets (pets currently in care)
+router.get('/inboard-pets', dashboardController.getInboardPets);
+router.get('/inboard-pets/:petCode', dashboardController.getInboardPetDetails);
+
 // Center management
 router.get('/me/center', centerController.getMyCenter);
 router.post(
@@ -126,5 +131,73 @@ router.put('/cares/:id/complete', temporaryCareController.completeCare);
 router.get('/payments', paymentController.listPayments);
 router.get('/payments/:id', paymentController.getPayment);
 router.post('/payments/:id/refund', [ body('refundAmount').optional().isNumeric(), body('refundReason').optional().isString() ], paymentController.processRefund);
+
+/**
+ * New Application Management Routes (Multi-Pet Support)
+ */
+
+// Get all applications
+router.get('/applications', applicationManagerController.getApplications);
+
+// Get application details
+router.get('/applications/:id', applicationManagerController.getApplicationDetails);
+
+// Set pricing for application
+router.post('/applications/:id/pricing', [
+  body('petPricing').isArray({ min: 1 }).withMessage('Pet pricing is required'),
+  body('petPricing.*.petId').notEmpty().withMessage('Pet ID is required'),
+  body('petPricing.*.totalAmount').isNumeric().withMessage('Total amount is required')
+], applicationManagerController.setPricing);
+
+// Verify capacity
+router.get('/applications/:id/verify-capacity', applicationManagerController.verifyCapacity);
+
+// Approve or reject application
+router.post('/applications/:id/approve-reject', [
+  body('action').isIn(['approve', 'reject']).withMessage('Action must be approve or reject'),
+  body('reason').optional().isString()
+], applicationManagerController.approveOrRejectApplication);
+
+// Assign kennels
+router.post('/applications/:id/assign-kennels', [
+  body('assignments').isArray({ min: 1 }).withMessage('At least one assignment is required'),
+  body('assignments.*.petId').notEmpty().withMessage('Pet ID is required'),
+  body('assignments.*.kennelId').notEmpty().withMessage('Kennel ID is required')
+], applicationManagerController.assignKennels);
+
+// Record check-in condition
+router.post('/applications/:id/check-in', [
+  body('petId').notEmpty().withMessage('Pet ID is required'),
+  body('condition.description').notEmpty().withMessage('Condition description is required'),
+  body('condition.healthStatus').isIn(['healthy', 'minor_issues', 'needs_attention']).withMessage('Valid health status is required'),
+  body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
+], applicationManagerController.recordCheckInCondition);
+
+// Add daily care log
+router.post('/applications/:id/care-logs', [
+  body('date').isISO8601().withMessage('Valid date is required'),
+  body('petId').notEmpty().withMessage('Pet ID is required'),
+  body('activities').isArray({ min: 1 }).withMessage('At least one activity is required')
+], applicationManagerController.addDailyCareLog);
+
+// Record emergency
+router.post('/applications/:id/emergency', [
+  body('severity').isIn(['low', 'medium', 'high', 'critical']).withMessage('Valid severity is required'),
+  body('description').notEmpty().withMessage('Description is required')
+], applicationManagerController.recordEmergency);
+
+// Generate final bill
+router.post('/applications/:id/final-bill', applicationManagerController.generateFinalBill);
+
+// Record check-out
+router.post('/applications/:id/check-out', [
+  body('petId').notEmpty().withMessage('Pet ID is required'),
+  body('condition.description').notEmpty().withMessage('Condition description is required'),
+  body('condition.healthStatus').isIn(['healthy', 'minor_issues', 'needs_attention']).withMessage('Valid health status is required'),
+  body('otp').optional().isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
+], applicationManagerController.recordCheckOut);
+
+// Dashboard stats
+router.get('/applications/dashboard/stats', applicationManagerController.getDashboardStats);
 
 module.exports = router;

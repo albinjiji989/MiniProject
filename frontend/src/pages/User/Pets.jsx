@@ -381,6 +381,22 @@ const Pets = () => {
                             variant="filled" 
                             sx={{ fontSize: '0.7rem' }}
                           />
+                          
+                          {/* Temporary Care Tag */}
+                          {pet.temporaryCareStatus?.inCare && (
+                            <Chip 
+                              label="In Temporary Care" 
+                              size="small" 
+                              color="warning" 
+                              variant="filled"
+                              sx={{ 
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                bgcolor: 'warning.main',
+                                color: 'warning.contrastText'
+                              }}
+                            />
+                          )}
                                           
                           {pet.gender && (
                             <Chip 

@@ -283,6 +283,28 @@ const petSchema = new mongoose.Schema({
     }
   }],
 
+  // Temporary Care Status
+  temporaryCareStatus: {
+    inCare: {
+      type: Boolean,
+      default: false
+    },
+    applicationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TemporaryCareApplication'
+    },
+    centerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TemporaryCareCenter'
+    },
+    startDate: {
+      type: Date
+    },
+    expectedEndDate: {
+      type: Date
+    }
+  },
+
   // Soft delete
   isActive: {
     type: Boolean,

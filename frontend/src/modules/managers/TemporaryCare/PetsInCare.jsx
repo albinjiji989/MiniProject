@@ -11,8 +11,8 @@ const PetsInCare = () => {
   const loadPets = async () => {
     try {
       setLoading(true);
-      const response = await temporaryCareAPI.getTemporaryCareByManager();
-      const activePets = response.data?.data?.cares?.filter(care => care.status === 'active') || [];
+      const response = await temporaryCareAPI.managerListCares({ status: 'active' });
+      const activePets = response.data?.data?.cares || [];
       setPets(activePets);
     } catch (e) {
       setError(e?.response?.data?.message || 'Failed to load pets in care');

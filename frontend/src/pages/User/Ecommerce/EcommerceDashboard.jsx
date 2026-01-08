@@ -61,7 +61,7 @@ const Checkout = () => {
 
   const loadCart = async () => {
     try {
-      const response = await apiClient.get('/api/ecommerce/cart');
+      const response = await apiClient.get('/ecommerce/cart');
       setCart(response.data.cart);
     } catch (err) {
       setError('Failed to load cart');

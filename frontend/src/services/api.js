@@ -503,7 +503,7 @@ export const pharmacyAPI = {
 // Temporary Care API
 export const temporaryCareAPI = {
   // User functions
-  listPublicCenters: () => api.get('/temporary-care/public/centers'),
+  listPublicCenters: () => api.get('/temporary-care/user/public/centers'),
   submitRequest: (data) => api.post('/temporary-care/requests', data),
   listHosts: () => api.get('/temporary-care/hosts'),
   listMyStays: () => api.get('/temporary-care/my-stays'),
@@ -511,12 +511,21 @@ export const temporaryCareAPI = {
   getCareHistory: () => api.get('/temporary-care/user/care-history'),
   
   // Manager functions
+  getMyStore: () => api.get('/temporary-care/manager/me/store'),
+  updateMyStore: (payload) => api.put('/temporary-care/manager/me/store', payload),
+  getMyCenter: () => api.get('/temporary-care/manager/me/center'),
+  upsertMyCenter: (payload) => api.post('/temporary-care/manager/me/center', payload),
   managerGetDashboardStats: () => api.get('/temporary-care/manager/dashboard/stats'),
+  managerGetBookings: (params) => api.get('/temporary-care/manager/bookings', { params }),
+  managerListCares: (params) => api.get('/temporary-care/manager/cares', { params }),
+  managerGetCareById: (id) => api.get(`/temporary-care/manager/cares/${id}`),
   managerListRequests: (params) => api.get('/temporary-care/manager/requests', { params }),
-  listCaregivers: (params) => api.get('/temporary-care/caregivers', { params }),
+  listCaregivers: (params) => api.get('/temporary-care/manager/caregivers', { params }),
+  createCaregiver: (data) => api.post('/temporary-care/manager/caregivers', data),
+  updateCaregiver: (id, data) => api.put(`/temporary-care/manager/caregivers/${id}`, data),
+  deleteCaregiver: (id) => api.delete(`/temporary-care/manager/caregivers/${id}`),
   managerDecideRequest: (id, decision) => api.put(`/temporary-care/manager/requests/${id}/decide`, { decision }),
   managerAssignRequest: (id, caregiverId) => api.put(`/temporary-care/manager/requests/${id}/assign`, { caregiverId }),
-  createCaregiver: (data) => api.post('/temporary-care/caregivers', data),
   
   // Payment functions
   getTemporaryCare: (id) => api.get(`/temporary-care/user/${id}`),
@@ -538,7 +547,47 @@ export const temporaryCareAPI = {
   getPetsInCare: () => api.get('/temporary-care/user/pets-in-care'),
   
   // Get temporary care details by ID
-  getPetDetails: (id) => api.get(`/temporary-care/user/${id}`)
+  getPetDetails: (id) => api.get(`/temporary-care/user/${id}`),
+  
+  // New Application APIs (Multi-Pet Support)
+  submitApplication: (data) => api.post('/temporary-care/user/applications', data),
+  calculateEstimatedPricing: (data) => api.post('/temporary-care/user/applications/calculate-pricing', data),
+  getMyApplications: (params) => api.get('/temporary-care/user/applications', { params }),
+  getApplicationDetails: (id) => api.get(`/temporary-care/user/applications/${id}`),
+  cancelApplication: (id) => api.post(`/temporary-care/user/applications/${id}/cancel`),
+  approvePricing: (id) => api.post(`/temporary-care/user/applications/${id}/approve-pricing`),
+  rejectPricing: (id, data) => api.post(`/temporary-care/user/applications/${id}/reject-pricing`, data),
+  
+  // Manager Application APIs
+  managerGetApplications: (params) => api.get('/temporary-care/manager/applications', { params }),
+  managerGetApplicationDetails: (id) => api.get(`/temporary-care/manager/applications/${id}`),
+  managerSetPricing: (id, data) => api.post(`/temporary-care/manager/applications/${id}/pricing`, data),
+  managerVerifyCapacity: (id) => api.get(`/temporary-care/manager/applications/${id}/verify-capacity`),
+  managerApproveOrReject: (id, data) => api.post(`/temporary-care/manager/applications/${id}/approve-reject`, data),
+  managerAssignKennels: (id, data) => api.post(`/temporary-care/manager/applications/${id}/assign-kennels`, data),
+  managerRecordCheckIn: (id, data) => api.post(`/temporary-care/manager/applications/${id}/check-in`, data),
+  managerAddCareLog: (id, data) => api.post(`/temporary-care/manager/applications/${id}/care-logs`, data),
+  managerRecordEmergency: (id, data) => api.post(`/temporary-care/manager/applications/${id}/emergency`, data),
+  managerGenerateFinalBill: (id, data) => api.post(`/temporary-care/manager/applications/${id}/final-bill`, data),
+  managerRecordCheckOut: (id, data) => api.post(`/temporary-care/manager/applications/${id}/check-out`, data),
+  managerGetDashboardStats: () => api.get('/temporary-care/manager/applications/dashboard/stats'),
+  
+  // Payment APIs
+  createApplicationPaymentOrder: (data) => api.post('/temporary-care/user/applications/payments/create-order', data),
+  verifyApplicationPayment: (data) => api.post('/temporary-care/user/applications/payments/verify', data),
+  getApplicationPaymentHistory: (applicationId) => api.get(`/temporary-care/user/applications/${applicationId}/payments`),
+  
+  // Feedback APIs
+  submitApplicationFeedback: (applicationId, data) => api.post(`/temporary-care/user/applications/${applicationId}/feedback`, data),
+  getApplicationFeedback: (applicationId) => api.get(`/temporary-care/user/applications/${applicationId}/feedback`),
+  
+  // Handover OTP APIs
+  generateHandoverOTP: (data) => api.post('/temporary-care/user/applications/handover/generate-otp', data),
+  verifyHandoverOTP: (data) => api.post('/temporary-care/user/applications/handover/verify-otp', data),
+  
+  // Manager Inboard Pets APIs
+  managerGetInboardPets: () => api.get('/temporary-care/manager/inboard-pets'),
+  managerGetInboardPetDetails: (petCode) => api.get(`/temporary-care/manager/inboard-pets/${petCode}`)
 }
 
 // Admin API for Temporary Care
@@ -561,6 +610,9 @@ export const veterinaryAPI = {
   // Manager store setup
   managerGetMyStore: () => api.get('/veterinary/manager/me/store'),
   managerUpdateMyStore: (payload) => api.put('/veterinary/manager/me/store', payload),
+  // Aliases for consistency with other modules
+  getMyStore: () => api.get('/veterinary/manager/me/store'),
+  updateMyStore: (payload) => api.put('/veterinary/manager/me/store', payload),
   
   // Manager dashboard
   managerGetDashboardStats: () => api.get('/veterinary/manager/dashboard/stats'),

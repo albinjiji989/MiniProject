@@ -52,7 +52,7 @@ const BrowseEcommerce = () => {
       if (searchTerm) params.append('search', searchTerm);
       if (selectedCategory) params.append('category', selectedCategory);
 
-      const response = await apiClient.get(`/api/ecommerce/products?${params.toString()}`);
+      const response = await apiClient.get(`/ecommerce/products?${params.toString()}`);
       const productsData = response.data.products || [];
       setProducts(productsData);
 
@@ -79,7 +79,7 @@ const BrowseEcommerce = () => {
     if (!targetProduct) return;
 
     try {
-      await apiClient.post('/api/ecommerce/cart/add', {
+      await apiClient.post('/ecommerce/cart/add', {
         productId: targetProduct._id,
         quantity: quantity
       });

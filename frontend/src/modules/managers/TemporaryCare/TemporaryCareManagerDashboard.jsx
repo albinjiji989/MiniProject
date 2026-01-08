@@ -90,7 +90,7 @@ const TemporaryCareManagerDashboard = () => {
   const loadCaregivers = async () => {
     setLoading(true);
     try {
-      const response = await apiClient.get('/api/temporary-care/manager/caregivers');
+      const response = await apiClient.get('/temporary-care/manager/caregivers');
       setCaregivers(response.data.caregivers || []);
       setError('');
     } catch (err) {
@@ -103,7 +103,7 @@ const TemporaryCareManagerDashboard = () => {
   const loadBookings = async () => {
     setLoading(true);
     try {
-      const response = await apiClient.get('/api/temporary-care/manager/bookings');
+      const response = await apiClient.get('/temporary-care/manager/bookings');
       setBookings(response.data.bookings || []);
       setError('');
     } catch (err) {
@@ -146,10 +146,10 @@ const TemporaryCareManagerDashboard = () => {
     try {
       setLoading(true);
       if (editingCaregiver) {
-        await apiClient.put(`/api/temporary-care/manager/caregivers/${editingCaregiver._id}`, caregiverForm);
+        await apiClient.put(`/temporary-care/manager/caregivers/${editingCaregiver._id}`, caregiverForm);
         setSuccess('Caregiver updated successfully');
       } else {
-        await apiClient.post('/api/temporary-care/manager/caregivers', caregiverForm);
+        await apiClient.post('/temporary-care/manager/caregivers', caregiverForm);
         setSuccess('Caregiver created successfully');
       }
       handleCloseCaregiverDialog();
@@ -166,7 +166,7 @@ const TemporaryCareManagerDashboard = () => {
     if (!window.confirm('Are you sure you want to delete this caregiver?')) return;
     try {
       setLoading(true);
-      await apiClient.delete(`/api/temporary-care/manager/caregivers/${id}`);
+      await apiClient.delete(`/temporary-care/manager/caregivers/${id}`);
       setSuccess('Caregiver deleted successfully');
       loadCaregivers();
       setError('');
@@ -181,7 +181,7 @@ const TemporaryCareManagerDashboard = () => {
     if (!bookingStatusUpdate) return;
     try {
       setLoading(true);
-      await apiClient.put(`/api/temporary-care/manager/bookings/${selectedBooking._id}`, {
+      await apiClient.put(`/temporary-care/manager/bookings/${selectedBooking._id}`, {
         status: bookingStatusUpdate
       });
       setSuccess('Booking status updated successfully');

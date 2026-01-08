@@ -21,11 +21,33 @@ const userSchema = new mongoose.Schema({
   // Flag to use custom picture instead of Google
   useCustomProfilePicture: { type: Boolean, default: false },
   role: { type: String, default: 'public_user' },
+  
+  // Module assignments for managers (array of Module references)
+  assignedModules: [{ 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Module' 
+  }],
+  
+  // Store information for managers
+  storeInfo: {
+    storeId: { type: String, unique: true, sparse: true },
+    storeName: { type: String, default: '' },
+    storeAddress: { type: String, default: '' },
+    storeCity: { type: String, default: '' },
+    storeState: { type: String, default: '' },
+    storePincode: { type: String, default: '' },
+    storePhone: { type: String, default: '' },
+    storeDescription: { type: String, default: '' },
+    isActive: { type: Boolean, default: true }
+  },
+  
+  // Backwards compatibility
   assignedModule: { type: String, default: null },
-  // Store identity for module managers (e.g., PSP1xxxxx)
   storeId: { type: String, index: true, sparse: true },
   storeName: { type: String, default: '' },
+  
   isActive: { type: Boolean, default: true },
+  isTemporaryPassword: { type: Boolean, default: false },
   mustChangePassword: { type: Boolean, default: false },
   resetPasswordToken: { type: String, default: null },
   resetPasswordExpires: { type: Date, default: null },

@@ -8,6 +8,8 @@ const mongoose = require('mongoose');
 const getAllUserPets = async (req, res) => {
   try {
     const userId = req.user._id;
+    const Pet = require('../models/Pet');
+    const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet');
 
     // Use PetRegistry as single source of truth - it's already deduplicated by petCode
     const pets = await PetRegistry.aggregate([
@@ -138,11 +140,36 @@ const getAllUserPets = async (req, res) => {
       return pet;
     });
 
+    // Fetch temporary care status for each pet
+    const petsWithCareStatus = await Promise.all(
+      petsWithResolvedImages.map(async (pet) => {
+        let temporaryCareStatus = null;
+
+        // Try to find in Pet collection first
+        let sourcePet = await Pet.findOne({ petCode: pet.petCode });
+        
+        // If not found, try AdoptionPet
+        if (!sourcePet) {
+          sourcePet = await AdoptionPet.findOne({ petCode: pet.petCode });
+        }
+
+        // Extract temporary care status if exists
+        if (sourcePet && sourcePet.temporaryCareStatus && sourcePet.temporaryCareStatus.inCare) {
+          temporaryCareStatus = sourcePet.temporaryCareStatus;
+        }
+
+        return {
+          ...pet,
+          temporaryCareStatus
+        };
+      })
+    );
+
     res.json({ 
       success: true, 
       data: { 
-        pets: petsWithResolvedImages,
-        total: petsWithResolvedImages.length
+        pets: petsWithCareStatus,
+        total: petsWithCareStatus.length
       } 
     });
 

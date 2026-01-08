@@ -41,7 +41,7 @@ const Orders = () => {
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const response = await apiClient.get('/api/ecommerce/orders');
+      const response = await apiClient.get('/ecommerce/orders');
       setOrders(response.data.orders || []);
       setError('');
     } catch (err) {

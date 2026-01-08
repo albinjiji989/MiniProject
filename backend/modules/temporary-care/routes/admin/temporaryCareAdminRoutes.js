@@ -3,12 +3,12 @@ const { body } = require('express-validator');
 const { authenticate, auth } = require('../../../../core/middleware/auth');
 const { authorize } = require('../../../../core/middleware/role');
 const TemporaryCareCenter = require('../../manager/models/TemporaryCareCenter');
-const analyticsController = require('../controllers/analyticsController');
+const analyticsController = require('../../admin/controllers/analyticsController');
 
 // New Controllers
-const serviceTypeController = require('../controllers/serviceTypeController');
-const staffController = require('../controllers/staffController');
-const bookingController = require('../controllers/bookingController');
+const serviceTypeController = require('../../admin/controllers/serviceTypeController');
+const staffController = require('../../admin/controllers/staffController');
+const bookingController = require('../../admin/controllers/bookingController');
 
 const router = express.Router();
 

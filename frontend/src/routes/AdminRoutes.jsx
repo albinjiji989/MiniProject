@@ -27,6 +27,10 @@ import TestDebug from '../pages/Admin/TestDebug'
 import DebugPage from '../pages/Admin/DebugPage'
 import TemporaryCareAdminDashboard from '../pages/Admin/TemporaryCareAdminDashboard'
 
+// New Admin Components
+import ModuleManagementNew from '../modules/admin/components/ModuleManagement'
+import ManagerInviteNew from '../modules/admin/components/ManagerInvite'
+
 const AdminRoutes = () => {
   return (
     <Routes>
@@ -38,6 +42,11 @@ const AdminRoutes = () => {
         <Route path="users" element={<UserManagement />} />
         <Route path="roles" element={<RoleManagement />} />
         <Route path="modules" element={<ModuleManagement />} />
+        
+        {/* New Module Management */}
+        <Route path="module-management" element={<ModuleManagementNew />} />
+        <Route path="manager-invite" element={<ManagerInviteNew />} />
+        
         {/* Pet Management Routes */}
         <Route path="pets" element={<PetManagementDashboard />} />
         <Route path="pet-categories" element={<PetCategories />} />

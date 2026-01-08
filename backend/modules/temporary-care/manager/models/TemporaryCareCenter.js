@@ -21,6 +21,15 @@ const temporaryCareCenterSchema = new mongoose.Schema({
     current: { type: Number, default: 0 },
     available: { type: Number, default: 0 }
   },
+  
+  // Kennel information
+  kennels: [{
+    kennelId: { type: String, required: true },
+    kennelLabel: { type: String }, // e.g., "Kennel A-12"
+    size: { type: String, enum: ['small', 'medium', 'large', 'extra_large'] },
+    isAvailable: { type: Boolean, default: true },
+    currentPet: { type: mongoose.Schema.Types.ObjectId, ref: 'Pet' }
+  }],
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   storeId: { type: String, index: true },
   storeName: { type: String, default: '' },

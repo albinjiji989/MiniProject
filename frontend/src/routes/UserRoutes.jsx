@@ -35,6 +35,10 @@ import PetShopUserPaymentMethods from '../pages/User/PetShop/Payment'
 import PetShopUserProfile from '../pages/User/PetShop/UserPetShopDashboard'
 import MyApplications from '../pages/User/PetShop/MyApplications'
 import TemporaryCareUserDashboard from '../pages/User/TemporaryCare/TemporaryCareDashboard'
+import SubmitTemporaryCareApplication from '../pages/User/TemporaryCare/SubmitTemporaryCareApplication'
+import MyTemporaryCareApplications from '../pages/User/TemporaryCare/MyApplications'
+import ApplicationPayment from '../pages/User/TemporaryCare/ApplicationPayment'
+import ApplicationFeedback from '../pages/User/TemporaryCare/ApplicationFeedback'
 import TemporaryCareUserBookings from '../pages/User/TemporaryCare/TemporaryCare'
 import TemporaryCareUserCaregivers from '../pages/User/TemporaryCare/TemporaryCare'
 import TemporaryCareUserFacilities from '../pages/User/TemporaryCare/TemporaryCare'
@@ -43,17 +47,17 @@ import TemporaryCareUserBookingDetails from '../pages/User/TemporaryCare/Tempora
 import TemporaryCareUserPets from '../pages/User/TemporaryCare/TemporaryCare'
 import TemporaryCareUserReviews from '../pages/User/TemporaryCare/TemporaryCare'
 import TemporaryCareUserPayments from '../pages/User/TemporaryCare/Payment'
-import EcommerceUserDashboard from '../pages/User/Ecommerce/EcommerceDashboard'
+import EcommerceUserDashboard from '../pages/User/Ecommerce/Dashboard'
 import EcommerceUserProducts from '../pages/User/Ecommerce/Ecommerce'
 import EcommerceUserCart from '../pages/User/Ecommerce/Cart'
-import EcommerceUserCheckout from '../pages/User/Ecommerce/Cart'
+import EcommerceUserCheckout from '../pages/User/Ecommerce/Checkout'
 import EcommerceUserOrders from '../pages/User/Ecommerce/Orders'
 import EcommerceUserOrderDetails from '../pages/User/Ecommerce/ProductDetails'
 import EcommerceUserWishlist from '../pages/User/Ecommerce/Ecommerce'
 import EcommerceUserReviews from '../pages/User/Ecommerce/Ecommerce'
 import EcommerceUserAddress from '../pages/User/Ecommerce/Ecommerce'
 import EcommerceUserPaymentMethods from '../pages/User/Ecommerce/Cart'
-import EcommerceUserProfile from '../pages/User/Ecommerce/EcommerceDashboard'
+import EcommerceUserProfile from '../pages/User/Profile'
 import PharmacyUserDashboard from '../pages/User/Pharmacy/PharmacyDashboard'
 import PharmacyUserMedications from '../pages/User/Pharmacy/Pharmacy'
 import PharmacyUserPrescriptions from '../pages/User/Pharmacy/Pharmacy'
@@ -201,6 +205,11 @@ const UserRoutes = () => {
         <Route path="/temporary-care/*" element={
           <Routes>
             <Route path="/dashboard" element={<TemporaryCareUserDashboard />} />
+            <Route path="/apply" element={<SubmitTemporaryCareApplication />} />
+            <Route path="/applications" element={<MyTemporaryCareApplications />} />
+            <Route path="/applications/:id/payment" element={<ApplicationPayment />} />
+            <Route path="/applications/:id/feedback" element={<ApplicationFeedback />} />
+            {/* Legacy routes (backward compatibility) */}
             <Route path="/bookings" element={<TemporaryCareUserBookings />} />
             <Route path="/caregivers" element={<TemporaryCareUserCaregivers />} />
             <Route path="/facilities" element={<TemporaryCareUserFacilities />} />

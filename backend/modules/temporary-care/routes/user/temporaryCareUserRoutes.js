@@ -4,6 +4,7 @@ const { auth } = require('../../../../core/middleware/auth');
 const userTemporaryCareController = require('../../user/controllers/userTemporaryCareController');
 const paymentController = require('../../user/controllers/paymentController');
 const careActivityController = require('../../user/controllers/careActivityController');
+const applicationController = require('../../user/controllers/applicationController');
 
 // New booking controller
 const bookingController = require('../../user/controllers/bookingController');
@@ -230,16 +231,133 @@ router.post(
 
 router.get('/care-activities/:temporaryCareId', auth, careActivityController.getCareActivities);
 
-// Public centers listing (active only)
+// Public centers listing (active only) - No auth required for browsing
 router.get('/public/centers', async (req, res) => {
   try {
-    const centers = await TemporaryCareCenter.find({ isActive: true }).select('name capacity storeId storeName address');
-    res.json({ success: true, data: { centers } });
+    const centers = await TemporaryCareCenter.find({ isActive: true })
+      .select('name description capacity storeId storeName address phone email')
+      .populate('owner', 'name email phone')
+      .lean();
+    
+    // Calculate available capacity for each center
+    const centersWithCapacity = await Promise.all(centers.map(async (center) => {
+      // Count active applications for this center
+      const TemporaryCareApplication = require('../../models/TemporaryCareApplication');
+      const activeApplications = await TemporaryCareApplication.find({
+        centerId: center._id,
+        status: { $in: ['approved', 'active_care'] },
+        startDate: { $lte: new Date() },
+        endDate: { $gte: new Date() }
+      });
+      
+      const petsInCare = activeApplications.reduce((sum, app) => sum + (app.pets?.length || 0), 0);
+      const available = (center.capacity?.total || 0) - petsInCare;
+      
+      return {
+        ...center,
+        capacity: {
+          total: center.capacity?.total || 0,
+          current: petsInCare,
+          available: Math.max(0, available)
+        }
+      };
+    }));
+    
+    res.json({ success: true, data: { centers: centersWithCapacity } });
   } catch (e) {
     console.error('List public centers error:', e);
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ success: false, message: 'Server error', error: e.message });
   }
 });
+
+/**
+ * New Application Routes (Multi-Pet Support)
+ */
+
+// Submit temporary care application
+router.post('/applications', auth, [
+  body('pets').isArray({ min: 1 }).withMessage('At least one pet is required'),
+  body('pets.*.petId').notEmpty().withMessage('Pet ID is required'),
+  body('centerId').notEmpty().withMessage('Center ID is required'),
+  body('startDate').isISO8601().withMessage('Valid start date is required'),
+  body('endDate').isISO8601().withMessage('Valid end date is required')
+], applicationController.submitApplication);
+
+// Calculate estimated pricing
+router.post('/applications/calculate-pricing', auth, [
+  body('pets').isArray({ min: 1 }).withMessage('At least one pet is required'),
+  body('pets.*.petId').notEmpty().withMessage('Pet ID is required'),
+  body('centerId').notEmpty().withMessage('Center ID is required'),
+  body('startDate').isISO8601().withMessage('Valid start date is required'),
+  body('endDate').isISO8601().withMessage('Valid end date is required')
+], applicationController.calculateEstimatedPricing);
+
+// Get user's applications
+router.get('/applications', auth, applicationController.getMyApplications);
+
+// Get application details
+router.get('/applications/:id', auth, applicationController.getApplicationDetails);
+
+// Approve pricing set by manager
+router.post('/applications/:id/approve-pricing', auth, applicationController.approvePricing);
+
+// Reject pricing set by manager
+router.post('/applications/:id/reject-pricing', auth, [
+  body('reason').optional().isString()
+], applicationController.rejectPricing);
+
+// Cancel application
+router.post('/applications/:id/cancel', auth, applicationController.cancelApplication);
+
+/**
+ * Application Payment Routes
+ */
+const applicationPaymentController = require('../../user/controllers/applicationPaymentController');
+
+// Create payment order for application
+router.post('/applications/payments/create-order', auth, [
+  body('applicationId').notEmpty().withMessage('Application ID is required'),
+  body('paymentType').isIn(['advance', 'final']).withMessage('Payment type must be advance or final')
+], applicationPaymentController.createApplicationPaymentOrder);
+
+// Verify payment
+router.post('/applications/payments/verify', auth, [
+  body('razorpay_order_id').notEmpty().withMessage('Order ID is required'),
+  body('razorpay_payment_id').notEmpty().withMessage('Payment ID is required'),
+  body('razorpay_signature').notEmpty().withMessage('Signature is required'),
+  body('applicationId').notEmpty().withMessage('Application ID is required')
+], applicationPaymentController.verifyApplicationPayment);
+
+// Get payment history
+router.get('/applications/:applicationId/payments', auth, applicationPaymentController.getApplicationPaymentHistory);
+
+// Generate handover OTP after advance payment
+router.post('/applications/handover/generate-otp', auth, [
+  body('applicationId').notEmpty().withMessage('Application ID is required')
+], applicationPaymentController.generateHandoverOTP);
+
+// Verify handover OTP (can be called by manager or user)
+router.post('/applications/handover/verify-otp', auth, [
+  body('applicationId').notEmpty().withMessage('Application ID is required'),
+  body('otp').notEmpty().withMessage('OTP is required')
+], applicationPaymentController.verifyHandoverOTP);
+
+/**
+ * Application Feedback Routes
+ */
+const applicationFeedbackController = require('../../user/controllers/applicationFeedbackController');
+
+// Submit feedback
+router.post('/applications/:applicationId/feedback', auth, [
+  body('rating').isInt({ min: 1, max: 5 }).withMessage('Rating must be between 1 and 5'),
+  body('comment').optional().isString(),
+  body('serviceRating').optional().isInt({ min: 1, max: 5 }),
+  body('staffRating').optional().isInt({ min: 1, max: 5 }),
+  body('facilityRating').optional().isInt({ min: 1, max: 5 })
+], applicationFeedbackController.submitFeedback);
+
+// Get feedback
+router.get('/applications/:applicationId/feedback', auth, applicationFeedbackController.getFeedback);
 
 // Get details for a specific temporary care record
 router.get('/:id', auth, async (req, res) => {

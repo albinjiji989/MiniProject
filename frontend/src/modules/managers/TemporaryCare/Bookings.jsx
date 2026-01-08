@@ -16,7 +16,7 @@ const Bookings = () => {
         params.status = statusFilter;
       }
       
-      const response = await temporaryCareAPI.getTemporaryCareByManager();
+      const response = await temporaryCareAPI.managerListCares(params);
       setBookings(response.data?.data?.cares || []);
     } catch (e) {
       setError(e?.response?.data?.message || 'Failed to load bookings');

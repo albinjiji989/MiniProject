@@ -125,6 +125,27 @@ const adoptionPetSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
+  // Temporary Care Status
+  temporaryCareStatus: {
+    inCare: {
+      type: Boolean,
+      default: false,
+    },
+    applicationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TemporaryCareApplication',
+    },
+    centerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TemporaryCareCenter',
+    },
+    startDate: {
+      type: Date,
+    },
+    expectedEndDate: {
+      type: Date,
+    },
+  },
   // Soft Delete
   isDeleted: { type: Boolean, default: false, index: true },
   deletedAt: { type: Date },

@@ -91,9 +91,18 @@ app.use('/api/petshop/manager', require('./modules/petshop/manager/routes/petsho
 app.use('/api/petshop/user', require('./modules/petshop/user/routes/petshopUserRoutes'));
 app.use('/api/temporary-care', require('./modules/temporary-care/routes'));
 app.use('/api/veterinary', require('./modules/veterinary/routes'));
-app.use('/api/ecommerce/manager', require('./modules/ecommerce/manager/routes/ecommerceManagerRoutes'));
-app.use('/api/ecommerce', require('./modules/ecommerce/user/routes/ecommerceRoutes'));
 app.use('/api/pharmacy', require('./modules/pharmacy/routes'));
+
+// Admin Module Management Routes
+app.use('/api/admin', require('./modules/admin/routes'));
+
+// Manager Profile Routes
+app.use('/api/manager', require('./modules/manager/routes'));
+
+// E-Commerce Routes
+app.use('/api/ecommerce/admin', require('./modules/ecommerce/admin/routes'));
+app.use('/api/ecommerce/manager', require('./modules/ecommerce/manager/routes'));
+app.use('/api/ecommerce', require('./modules/ecommerce/user/routes'));
 app.use('/api/rbac', require('./core/routes/rbac/rbac/rbac'));
 app.use('/api/roles', require('./core/routes/rbac/rbac/roles'));
 app.use('/api/permissions', require('./core/routes/rbac/rbac/permissions'));

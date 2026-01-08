@@ -6,6 +6,13 @@ import StoreSetup from '../pages/Manager/StoreSetup'
 import StoreNameSetup from '../pages/Manager/StoreNameSetup'
 import RequestStoreNameChange from '../pages/Manager/RequestStoreNameChange'
 import UserProfile from '../pages/User/Profile'
+
+// E-Commerce Manager Components
+import ProductManagement from '../modules/ecommerce/manager/ProductManagement'
+
+// Admin Components
+import ModuleManagement from '../modules/admin/components/ModuleManagement'
+import ManagerInvite from '../modules/admin/components/ManagerInvite'
 import AdoptionManagerDashboard from '../modules/managers/Adoption/AdoptionManagerDashboard'
 import PetsList from '../modules/managers/Adoption/PetsList'
 import PetDetailsManager from '../modules/managers/Adoption/PetDetails'
@@ -52,6 +59,8 @@ import EcommerceManagerDashboard from '../modules/managers/Ecommerce/EcommerceMa
 import PharmacyManagerDashboard from '../modules/managers/Pharmacy/PharmacyManagerDashboard'
 import RescueManagerDashboard from '../modules/managers/Rescue/RescueManagerDashboard'
 import TemporaryCareManagerDashboard from '../modules/managers/TemporaryCare/TemporaryCareManagerDashboard'
+import ApplicationManagerDashboard from '../pages/Manager/TemporaryCare/ApplicationManagerDashboard'
+import ProfessionalApplicationDashboard from '../pages/Manager/TemporaryCare/ProfessionalApplicationDashboard'
 import TemporaryCareManagerRequests from '../modules/managers/TemporaryCare/Requests'
 import TemporaryCareManagerCaregivers from '../modules/managers/TemporaryCare/Caregivers'
 import TemporaryCareBookings from '../modules/managers/TemporaryCare/Bookings'
@@ -103,14 +112,20 @@ const ManagerRoutes = () => {
   return (
     <ManagerLayout>
       <Routes>
+        {/* New Manager Dashboard */}
+        <Route path="/dashboard" element={<ManagerDashboardRedirect />} />
+        
         {/* Manager: Profile */}
         <Route path="/profile" element={<UserProfile />} />
         
         {/* Manager: Store Name Change Request */}
         <Route path="/store-name-change" element={<RequestStoreNameChange />} />
         
-        {/* Unified manager dashboard redirect */}
-        <Route path="/dashboard" element={<ManagerDashboardRedirect />} />
+        {/* E-Commerce Module */}
+        <Route path="/ecommerce/products" element={<ProductManagement />} />
+        
+        {/* Unified manager dashboard redirect (backwards compatibility) */}
+        <Route path="/dashboard-old" element={<ManagerDashboardRedirect />} />
         
         {/* Adoption Manager workspace */}
         <Route path="/adoption/*" element={
@@ -210,7 +225,9 @@ const ManagerRoutes = () => {
         {/* Temporary Care Manager */}
         <Route path="/temporary-care/*" element={
           <Routes>
-            <Route path="/dashboard" element={<TemporaryCareManagerDashboard />} />
+            <Route path="/dashboard" element={<ProfessionalApplicationDashboard />} />
+            <Route path="/applications" element={<ProfessionalApplicationDashboard />} />
+            {/* Legacy routes (backward compatibility) */}
             <Route path="/manage" element={<TemporaryCareManage />} />
             <Route path="/requests" element={<TemporaryCareManagerRequests />} />
             <Route path="/caregivers" element={<TemporaryCareManagerCaregivers />} />
@@ -251,7 +268,7 @@ const ManagerRoutes = () => {
             <Route path="/staff/new" element={<VeterinaryManagerStaffForm />} />
             <Route path="/staff/:id/edit" element={<VeterinaryManagerStaffForm />} />
             <Route path="/staff/:id" element={<VeterinaryManagerStaffDetails />} />
-            <Route path="/wizard/*" element={<VetWizardLayout />}>
+            <Route path="/wizard/*">
               <Route path="basic" element={<VetStepBasics />} />
               <Route path="tests" element={<VetStepTests />} />
               <Route path="medications" element={<VetStepMedications />} />

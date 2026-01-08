@@ -41,7 +41,7 @@ const ShoppingCart = () => {
   const loadCart = async () => {
     setLoading(true);
     try {
-      const response = await apiClient.get('/api/ecommerce/cart');
+      const response = await apiClient.get('/ecommerce/cart');
       setCart(response.data.cart);
       setError('');
     } catch (err) {
@@ -55,7 +55,7 @@ const ShoppingCart = () => {
     if (newQuantity <= 0) return;
     setUpdatingItem(productId);
     try {
-      const response = await apiClient.put(`/api/ecommerce/cart/${productId}`, {
+      const response = await apiClient.put(`/ecommerce/cart/items/${productId}`, {
         quantity: newQuantity
       });
       setCart(response.data.cart);
@@ -68,7 +68,7 @@ const ShoppingCart = () => {
 
   const handleRemoveItem = async (productId) => {
     try {
-      const response = await apiClient.delete(`/api/ecommerce/cart/${productId}`);
+      const response = await apiClient.delete(`/ecommerce/cart/items/${productId}`);
       setCart(response.data.cart);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to remove item');
@@ -78,7 +78,7 @@ const ShoppingCart = () => {
   const handleClearCart = async () => {
     if (!window.confirm('Clear entire cart?')) return;
     try {
-      const response = await apiClient.delete('/api/ecommerce/cart');
+      const response = await apiClient.delete('/ecommerce/cart/clear');
       setCart(response.data.cart);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to clear cart');

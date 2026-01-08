@@ -18,6 +18,16 @@ import ManagerRoutes from './routes/ManagerRoutes'
 import ProtectedRoute from './core/components/ProtectedRoute'
 import StoreNameSetup from './pages/Manager/StoreNameSetup'
 
+// E-Commerce Manager Pages
+import ProductManagement from './modules/ecommerce/manager/ProductManagement'
+import CategoryManagement from './modules/ecommerce/manager/CategoryManagement'
+import OrderManagement from './modules/ecommerce/manager/OrderManagement'
+
+// E-Commerce User Pages
+import ProductBrowse from './modules/ecommerce/user/ProductBrowse'
+import Cart from './modules/ecommerce/user/Cart'
+import Checkout from './modules/ecommerce/user/Checkout'
+
 function App() {
   const { user, loading } = useAuth()
 
@@ -178,6 +188,16 @@ function App() {
       <Route
         path="/manager/store-name-setup"
         element={<StoreNameSetup />} />
+      
+      {/* E-Commerce Manager Routes */}
+      <Route path="/manager/ecommerce/products" element={<ProtectedRoute><ProductManagement /></ProtectedRoute>} />
+      <Route path="/manager/ecommerce/categories" element={<ProtectedRoute><CategoryManagement /></ProtectedRoute>} />
+      <Route path="/manager/ecommerce/orders" element={<ProtectedRoute><OrderManagement /></ProtectedRoute>} />
+      
+      {/* E-Commerce User Routes */}
+      <Route path="/ecommerce/products" element={<ProductBrowse />} />
+      <Route path="/ecommerce/cart" element={<ProtectedRoute><Cart /></ProtectedRoute>} />
+      <Route path="/ecommerce/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
       
       {/* Compatibility routes */}
       <Route path="/manager/adoptions/*" element={<Navigate to="/manager/adoption" replace />} />

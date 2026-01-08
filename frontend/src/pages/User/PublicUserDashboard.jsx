@@ -319,15 +319,15 @@ const PublicUserDashboard = () => {
     loadDashboardData()
   }, [])
 
-  // Load modules data - only active modules
+  // Load modules data - show all modules to everyone with status badges
   useEffect(() => {
     (async () => {
       setModulesLoading(true)
       setModulesError('')
       try {
         const res = await modulesAPI.list()
-        // Filter to only show active modules
-        const list = (res.data?.data || []).filter(module => module.status === 'active')
+        // Show all modules, display status on cards
+        const list = (res.data?.data || [])
         setModules(list)
       } catch (e) {
         setModules([])
@@ -336,7 +336,7 @@ const PublicUserDashboard = () => {
         setModulesLoading(false)
       }
     })()
-  }, [])
+  }, [user])
 
   // Enhanced unified list of pets from all sources with image validation
   const allMyPets = useMemo(() => {
@@ -1082,38 +1082,78 @@ const PublicUserDashboard = () => {
                   description: m.description,
                   icon: getModuleIcon(m.icon),
                   path: path,
-                  isActive: true
+                  status: m.status,
+                  maintenanceMessage: m.maintenanceMessage,
+                  blockReason: m.blockReason,
+                  isActive: m.status === 'active'
                 }
               })
-            ).map((module, index) => (
-              <Grid item xs={12} sm={6} md={3} key={index}>
-                <Card
-                  onClick={() => navigate(module.path)}
-                  sx={{
-                    background: getGradientFor(index),
-                    color: 'white',
-                    cursor: 'pointer',
-                    transition: 'transform 0.2s, box-shadow 0.2s',
-                    boxShadow: 3,
-                    '&:hover': { transform: 'translateY(-4px)', boxShadow: 6 },
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}
-                >
-                  <CardContent sx={{ textAlign: 'center', py: 4 }}>
-                    <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: 2, mb: 1, color: 'white' }}>
-                      {module.icon}
-                    </Box>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                      {module.title}
-                    </Typography>
-                    <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                      {module.description}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
+            ).map((module, index) => {
+              const isDisabled = module.status && module.status !== 'active'
+              const getStatusInfo = () => {
+                switch(module.status) {
+                  case 'maintenance':
+                    return { label: 'Under Maintenance', color: 'warning', message: module.maintenanceMessage || 'This module is currently under maintenance' }
+                  case 'blocked':
+                    return { label: 'Blocked by Admin', color: 'error', message: module.blockReason || 'This module has been blocked' }
+                  case 'coming_soon':
+                    return { label: 'Coming Soon', color: 'info', message: 'This module is coming soon' }
+                  default:
+                    return null
+                }
+              }
+              const statusInfo = getStatusInfo()
+              
+              return (
+                <Grid item xs={12} sm={6} md={3} key={index}>
+                  <Card
+                    onClick={() => !isDisabled && navigate(module.path)}
+                    sx={{
+                      background: isDisabled ? '#9e9e9e' : getGradientFor(index),
+                      color: 'white',
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      boxShadow: 3,
+                      opacity: isDisabled ? 0.7 : 1,
+                      '&:hover': isDisabled ? {} : { transform: 'translateY(-4px)', boxShadow: 6 },
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {statusInfo && (
+                      <Chip
+                        label={statusInfo.label}
+                        color={statusInfo.color}
+                        size="small"
+                        sx={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          zIndex: 1,
+                          fontWeight: 'bold'
+                        }}
+                      />
+                    )}
+                    <CardContent sx={{ textAlign: 'center', py: 4 }}>
+                      <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: 2, mb: 1, color: 'white' }}>
+                        {module.icon}
+                      </Box>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                        {module.title}
+                      </Typography>
+                      <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                        {module.description}
+                      </Typography>
+                      {statusInfo && statusInfo.message && (
+                        <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.8, fontStyle: 'italic' }}>
+                          {statusInfo.message}
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+              )
+            })}
           </Grid>
         )}
       </Box>

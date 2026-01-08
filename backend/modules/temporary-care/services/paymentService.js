@@ -1,5 +1,5 @@
-const CareBooking = require('../../models/CareBooking');
-const TemporaryCarePayment = require('../../models/TemporaryCarePayment');
+const CareBooking = require('../models/CareBooking');
+const TemporaryCarePayment = require('../models/TemporaryCarePayment');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
