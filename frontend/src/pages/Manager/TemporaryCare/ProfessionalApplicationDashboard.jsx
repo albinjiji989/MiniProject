@@ -48,6 +48,7 @@ import {
   List as ListIcon,
   Visibility as ViewIcon,
   CheckCircle as ApproveIcon,
+  Check as CheckIcon,
   Cancel as RejectIcon,
   AttachMoney as MoneyIcon,
   Pets as PetsIcon,
@@ -65,7 +66,8 @@ import {
   Assignment as TaskIcon,
   TrendingUp as TrendingUpIcon,
   PendingActions as PendingIcon,
-  CheckCircleOutline as ActiveIcon
+  CheckCircleOutline as ActiveIcon,
+  Add as AddIcon
 } from '@mui/icons-material';
 import { temporaryCareAPI, resolveMediaUrl } from '../../../services/api';
 
@@ -85,6 +87,12 @@ const ProfessionalApplicationDashboard = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [tabValue, setTabValue] = useState(0);
+  const [otpDialogOpen, setOtpDialogOpen] = useState(false);
+  const [generatedOTP, setGeneratedOTP] = useState(null);
+  const [verifyOtpDialogOpen, setVerifyOtpDialogOpen] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [selectedAppForOtp, setSelectedAppForOtp] = useState(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -179,6 +187,49 @@ const ProfessionalApplicationDashboard = () => {
       alert(err?.response?.data?.message || `Failed to ${actionType} application`);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!otpInput || otpInput.length !== 6) {
+      alert('Please enter a valid 6-digit OTP');
+      return;
+    }
+
+    try {
+      setOtpVerifying(true);
+      await temporaryCareAPI.verifyHandoverOTP({
+        applicationId: selectedAppForOtp._id,
+        otp: otpInput
+      });
+      alert('Pet handover completed successfully! Pet is now in your care.');
+      setVerifyOtpDialogOpen(false);
+      setOtpInput('');
+      setSelectedAppForOtp(null);
+      loadDashboardData();
+      setDetailsDialogOpen(false);
+    } catch (err) {
+      console.error('Error verifying OTP:', err);
+      alert(err?.response?.data?.message || 'Failed to verify OTP. Please check the code and try again.');
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
+  const handleGenerateOTP = async (application) => {
+    try {
+      const response = await temporaryCareAPI.managerGenerateHandoverOTP({
+        applicationId: application._id
+      });
+      const otpData = response.data?.data;
+      setGeneratedOTP({
+        ...otpData,
+        applicationNumber: application.applicationNumber
+      });
+      setOtpDialogOpen(true);
+    } catch (err) {
+      console.error('Error generating OTP:', err);
+      alert(err?.response?.data?.message || 'Failed to generate OTP');
     }
   };
 
@@ -425,6 +476,31 @@ const ProfessionalApplicationDashboard = () => {
                         </IconButton>
                       </Tooltip>
                     )}
+                    {app.status === 'advance_paid' && (
+                      <>
+                        <Tooltip title="Generate OTP for Handover">
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => handleGenerateOTP(app)}
+                          >
+                            <AddIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Verify OTP from User">
+                          <IconButton
+                            size="small"
+                            color="success"
+                            onClick={() => {
+                              setSelectedAppForOtp(app);
+                              setVerifyOtpDialogOpen(true);
+                            }}
+                          >
+                            <CheckIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
@@ -467,8 +543,15 @@ const ProfessionalApplicationDashboard = () => {
         application={selectedApplication}
         onUpdate={loadDashboardData}
         onAction={(action) => {
-          setActionType(action);
-          setActionDialogOpen(true);
+          if (action === 'generateOTP') {
+            handleGenerateOTP(selectedApplication);
+          } else if (action === 'verifyOTP') {
+            setSelectedAppForOtp(selectedApplication);
+            setVerifyOtpDialogOpen(true);
+          } else {
+            setActionType(action);
+            setActionDialogOpen(true);
+          }
         }}
       />
 
@@ -495,6 +578,31 @@ const ProfessionalApplicationDashboard = () => {
         setReason={setRejectionReason}
         onConfirm={handleApplicationAction}
         loading={actionLoading}
+      />
+
+      {/* OTP Display Dialog */}
+      <OTPDisplayDialog
+        open={otpDialogOpen}
+        onClose={() => {
+          setOtpDialogOpen(false);
+          setGeneratedOTP(null);
+        }}
+        otpData={generatedOTP}
+      />
+
+      {/* OTP Verification Dialog */}
+      <OTPVerificationDialog
+        open={verifyOtpDialogOpen}
+        onClose={() => {
+          setVerifyOtpDialogOpen(false);
+          setOtpInput('');
+          setSelectedAppForOtp(null);
+        }}
+        application={selectedAppForOtp}
+        otpInput={otpInput}
+        setOtpInput={setOtpInput}
+        onVerify={handleVerifyOTP}
+        loading={otpVerifying}
       />
     </Container>
   );
@@ -732,10 +840,10 @@ const ApplicationDetailsDialog = ({ open, onClose, application, onUpdate, onActi
                     <CardContent>
                       <Typography variant="h6" gutterBottom>Payment Status</Typography>
                       <Divider sx={{ my: 2 }} />
-                      {application.payments?.advance?.paid ? (
+                      {application.paymentStatus?.advance?.status === 'completed' ? (
                         <Alert severity="success">
-                          Advance payment of ₹{application.payments.advance.amount?.toLocaleString()} received on{' '}
-                          {new Date(application.payments.advance.paidAt).toLocaleDateString()}
+                          Advance payment of ₹{application.pricing?.advanceAmount?.toLocaleString()} received
+                          {application.paymentStatus.advance.paidAt && ` on ${new Date(application.paymentStatus.advance.paidAt).toLocaleDateString()}`}
                         </Alert>
                       ) : (
                         <Alert severity="warning">Advance payment pending</Alert>
@@ -764,6 +872,29 @@ const ApplicationDetailsDialog = ({ open, onClose, application, onUpdate, onActi
             Approve
           </Button>
         )}
+        
+        {/* OTP Generation & Verification Buttons - shown when advance is paid */}
+        {application.status === 'advance_paid' && (
+          <>
+            <Button 
+              variant="contained" 
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={() => onAction('generateOTP')}
+            >
+              Generate OTP
+            </Button>
+            <Button 
+              variant="contained" 
+              color="success"
+              startIcon={<CheckIcon />}
+              onClick={() => onAction('verifyOTP')}
+            >
+              Verify OTP
+            </Button>
+          </>
+        )}
+        
         {/* Reject/Cancel only allowed before payment */}
         {!['approved', 'advance_paid', 'active_care', 'completed', 'cancelled', 'rejected'].includes(application.status) && (
           <Button 
@@ -965,6 +1096,147 @@ const ActionConfirmationDialog = ({ open, onClose, actionType, reason, setReason
         disabled={loading}
       >
         {loading ? <CircularProgress size={24} /> : 'Confirm'}
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
+// OTP Display Dialog (Manager does NOT see the OTP - it's secret!)
+const OTPDisplayDialog = ({ open, onClose, otpData }) => (
+  <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <DialogTitle>
+      <Box display="flex" alignItems="center" gap={1}>
+        <CheckIcon color="success" />
+        <Typography variant="h6">OTP Sent Successfully</Typography>
+      </Box>
+    </DialogTitle>
+    <DialogContent>
+      {otpData && (
+        <>
+          <Alert severity="success" sx={{ mb: 2 }}>
+            <strong>OTP has been sent to user's email</strong>
+          </Alert>
+          
+          <Paper elevation={2} sx={{ p: 3, bgcolor: 'info.lighter', mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>User Information:</Typography>
+            <Box sx={{ pl: 1 }}>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>Name:</strong> {otpData.userName}
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>Email:</strong> {otpData.emailSent}
+              </Typography>
+              {otpData.userPhone && (
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Phone:</strong> {otpData.userPhone}
+                </Typography>
+              )}
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>Application:</strong> {otpData.applicationNumber}
+              </Typography>
+              <Typography variant="body2" color="warning.main">
+                <strong>Expires:</strong> {new Date(otpData.expiresAt).toLocaleString()}
+              </Typography>
+            </Box>
+          </Paper>
+
+          <Alert severity="info" icon={<TaskIcon />}>
+            <Typography variant="subtitle2" gutterBottom>
+              <strong>Next Steps:</strong>
+            </Typography>
+            <Typography variant="body2" component="div">
+              <ol style={{ margin: 0, paddingLeft: 20 }}>
+                <li>User will receive the OTP via email</li>
+                <li>Ask the user to check their email</li>
+                <li>User will show/tell you the 6-digit OTP</li>
+                <li>Click "Verify OTP" button and enter the code</li>
+              </ol>
+            </Typography>
+          </Alert>
+
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            <Typography variant="caption">
+              <strong>Security Note:</strong> Never share or display the OTP publicly. 
+              The user must provide it from their email.
+            </Typography>
+          </Alert>
+        </>
+      )}
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Close</Button>
+    </DialogActions>
+  </Dialog>
+);
+
+// OTP Verification Dialog (Manager enters OTP from user)
+const OTPVerificationDialog = ({ open, onClose, application, otpInput, setOtpInput, onVerify, loading }) => (
+  <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <DialogTitle>
+      <Box display="flex" alignItems="center" gap={1}>
+        <CheckIcon color="primary" />
+        <Typography variant="h6">Verify Handover OTP</Typography>
+      </Box>
+    </DialogTitle>
+    <DialogContent>
+      {application && (
+        <>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            Ask the user to provide the 6-digit OTP from their email.
+          </Alert>
+
+          <Paper elevation={1} sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
+            <Typography variant="subtitle2" gutterBottom>Application Details:</Typography>
+            <Typography variant="body2"><strong>User:</strong> {application.userId?.name}</Typography>
+            <Typography variant="body2"><strong>Application:</strong> {application.applicationNumber}</Typography>
+            <Typography variant="body2"><strong>Pets:</strong> {application.pets?.length || 0}</Typography>
+          </Paper>
+
+          <TextField
+            fullWidth
+            label="Enter OTP"
+            variant="outlined"
+            value={otpInput}
+            onChange={(e) => {
+              const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+              setOtpInput(value);
+            }}
+            placeholder="000000"
+            inputProps={{
+              maxLength: 6,
+              style: { 
+                fontSize: 24, 
+                letterSpacing: 8, 
+                textAlign: 'center',
+                fontWeight: 'bold'
+              }
+            }}
+            helperText={`${otpInput.length}/6 digits entered`}
+            error={otpInput.length > 0 && otpInput.length < 6}
+            disabled={loading}
+          />
+
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            <Typography variant="caption">
+              <strong>Important:</strong> The OTP is valid for 15 minutes only. 
+              Make sure the user provides the correct code from their email.
+            </Typography>
+          </Alert>
+        </>
+      )}
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose} disabled={loading}>
+        Cancel
+      </Button>
+      <Button 
+        onClick={onVerify} 
+        variant="contained" 
+        color="success"
+        disabled={loading || otpInput.length !== 6}
+        startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
+      >
+        {loading ? 'Verifying...' : 'Verify & Accept Pet'}
       </Button>
     </DialogActions>
   </Dialog>

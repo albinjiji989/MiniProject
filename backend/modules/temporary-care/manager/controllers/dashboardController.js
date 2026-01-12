@@ -117,24 +117,43 @@ const getCaregivers = async (req, res) => {
 
 // Get all pets currently in care (inboard pets)
 const getInboardPets = async (req, res) => {
+  console.log('🚀 getInboardPets API CALLED');
   try {
-    const managerId = req.user.id;
+    // Get manager's center - use req.user._id like in applicationManagerController
+    const center = await TemporaryCareCenter.findOne({ owner: req.user._id, isActive: true });
+    
+    if (!center) {
+      console.log('⚠️  No center found for manager:', req.user._id);
+      return res.json({
+        success: true,
+        data: {
+          pets: [],
+          total: 0,
+          centers: [],
+          message: 'No care center found. Please set up your center first.'
+        }
+      });
+    }
 
-    // Find manager's centers
-    const centers = await TemporaryCareCenter.find({
-      managerId,
-      isActive: true
+    console.log('✅ Manager:', req.user._id);
+    console.log('✅ Found center:', center.name, 'ID:', center._id.toString());
+
+    // DEBUG: Check ALL applications with active_care status (regardless of center)
+    const allActiveApps = await TemporaryCareApplication.find({ status: 'active_care' });
+    console.log(`🔍 Total active_care applications in database: ${allActiveApps.length}`);
+    allActiveApps.forEach(app => {
+      console.log(`   - App ${app.applicationNumber}: centerId=${app.centerId?.toString()}, pets=${app.pets?.length}`);
     });
 
-    const centerIds = centers.map(c => c._id);
-
-    // Find all active care applications in manager's centers
+    // Find all active care applications in manager's center
     const applications = await TemporaryCareApplication.find({
-      centerId: { $in: centerIds },
+      centerId: center._id,
       status: 'active_care'
     }).populate('userId', 'name email phone')
       .populate('centerId', 'name address')
       .sort({ careStartDate: -1 });
+    
+    console.log(`📋 Found ${applications.length} active_care applications for center ${center._id.toString()}`);
 
     // Fetch pet details for each application
     const petsInCare = [];
@@ -142,22 +161,23 @@ const getInboardPets = async (req, res) => {
     for (const application of applications) {
       for (const petEntry of application.pets) {
         // Try to find pet in Pet collection first, then AdoptionPet
-        let pet = await Pet.findOne({ petCode: petEntry.petCode })
+        let pet = await Pet.findOne({ petCode: petEntry.petId })
           .populate('speciesId', 'name')
           .populate('breedId', 'name');
         
         if (!pet) {
-          pet = await AdoptionPet.findOne({ petCode: petEntry.petCode })
+          pet = await AdoptionPet.findOne({ petCode: petEntry.petId })
             .populate('species', 'name')
             .populate('breed', 'name');
         }
 
         if (pet) {
           petsInCare.push({
-            petCode: petEntry.petCode,
+            petCode: petEntry.petId,
             petName: pet.name || petEntry.petName,
             species: pet.speciesId?.name || pet.species?.name || 'Unknown',
             breed: pet.breedId?.name || pet.breed?.name || 'Unknown',
+            category: pet.category || 'Unknown',
             age: pet.age,
             ageUnit: pet.ageUnit,
             gender: pet.gender,
@@ -194,7 +214,7 @@ const getInboardPets = async (req, res) => {
       data: {
         pets: petsInCare,
         total: petsInCare.length,
-        centers: centers.map(c => ({ id: c._id, name: c.name }))
+        centers: [{ id: center._id, name: center.name }]
       }
     });
   } catch (error) {
@@ -211,20 +231,21 @@ const getInboardPets = async (req, res) => {
 const getInboardPetDetails = async (req, res) => {
   try {
     const { petCode } = req.params;
-    const managerId = req.user.id;
 
-    // Find manager's centers
-    const centers = await TemporaryCareCenter.find({
-      managerId,
-      isActive: true
-    });
-
-    const centerIds = centers.map(c => c._id);
+    // Get manager's center - use req.user._id
+    const center = await TemporaryCareCenter.findOne({ owner: req.user._id, isActive: true });
+    
+    if (!center) {
+      return res.status(404).json({
+        success: false,
+        message: 'Care center not found'
+      });
+    }
 
     // Find application with this pet
     const application = await TemporaryCareApplication.findOne({
-      centerId: { $in: centerIds },
-      'pets.petCode': petCode,
+      centerId: center._id,
+      'pets.petId': petCode,
       status: 'active_care'
     }).populate('userId', 'name email phone address')
       .populate('centerId', 'name address phone email');

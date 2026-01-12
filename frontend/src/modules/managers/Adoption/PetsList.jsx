@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, resolveMediaUrl } from '../../../services/api'
-import { Box, Grid, Card, CardContent, Typography, Stack, Button, TextField, Select, MenuItem, FormControl, InputLabel, Chip, Pagination, Checkbox, IconButton, Divider, Dialog, DialogTitle, DialogContent } from '@mui/material'
+import { Box, Grid, Card, CardContent, Typography, Stack, Button, TextField, Select, MenuItem, FormControl, InputLabel, Chip, Pagination, Checkbox, IconButton, Divider, Dialog, DialogTitle, DialogContent, Tabs, Tab } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -19,8 +19,7 @@ const PetsList = () => {
   const [limit, setLimit] = useState(9)
   const [total, setTotal] = useState(0)
   const [q, setQ] = useState('')
-  const [status, setStatus] = useState('')
-  const [showPending, setShowPending] = useState(false)
+  const [statusTab, setStatusTab] = useState('all') // all, available, adopted, reserved, pending
   const [species, setSpecies] = useState('')
   const [breed, setBreed] = useState('')
   const [gender, setGender] = useState('')
@@ -156,11 +155,19 @@ const PetsList = () => {
     setLoading(true)
     setError(null)
     try {
-      console.log('Loading pets with params:', { search: q, status, page, limit });
+      // Determine the actual status to send to API based on the current tab
+      let apiStatus = '';
+      if (statusTab === 'pending') {
+        apiStatus = 'pending';
+      } else if (statusTab !== 'all') {
+        apiStatus = statusTab; // available, adopted, or reserved
+      }
+      
+      console.log('Loading pets with params:', { search: q, status: apiStatus, page, limit });
       const res = await apiClient.get('/adoption/manager/pets', { 
         params: { 
           search: q, 
-          status: showPending ? 'pending' : status, 
+          status: apiStatus || undefined, 
           species: species || undefined,
           breed: breed || undefined,
           gender: gender || undefined,
@@ -353,7 +360,7 @@ const PetsList = () => {
 
   const resetFilters = () => {
     setQ('');
-    setStatus('');
+    setStatusTab('all');
     setSpecies('');
     setBreed('');
     setGender('');
@@ -395,7 +402,7 @@ const PetsList = () => {
     fetchFilters();
   }, []);
 
-  useEffect(() => { load() }, [page, limit, q, status, species, breed, gender, sortBy, sortOrder])
+  useEffect(() => { load() }, [page, limit, q, statusTab, species, breed, gender, sortBy, sortOrder])
   // Debounce search/status changes to avoid spamming API and heavy re-renders
   useEffect(() => {
     const t = setTimeout(() => {
@@ -404,7 +411,7 @@ const PetsList = () => {
     }, 300)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, status, species, breed, gender, sortBy, sortOrder])
+  }, [q, statusTab, species, breed, gender, sortBy, sortOrder])
 
   return (
     <Box 
@@ -442,111 +449,21 @@ const PetsList = () => {
         </Typography>
         
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
-          <TextField 
-            size="small" 
-            placeholder="Search pets..." 
-            value={q} 
-            onChange={(e)=>setQ(e.target.value)} 
-            sx={{ minWidth: 150 }}
-          />
-          {!showPending ? (
-            <>
-              <FormControl size="small" sx={{ minWidth: 120 }}>
-                <InputLabel id="status">Status</InputLabel>
-                <Select 
-                  labelId="status" 
-                  label="Status" 
-                  value={status} 
-                  onChange={(e)=>setStatus(e.target.value)}
-                >
-                  <MenuItem value="">All</MenuItem>
-                  <MenuItem value="available">Available</MenuItem>
-                  <MenuItem value="adopted">Adopted</MenuItem>
-                  <MenuItem value="reserved">Reserved</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ minWidth: 120 }}>
-                <InputLabel id="species">Species</InputLabel>
-                <Select 
-                  labelId="species" 
-                  label="Species" 
-                  value={species} 
-                  onChange={(e)=>setSpecies(e.target.value)}
-                >
-                  <MenuItem value="">All Species</MenuItem>
-                  {speciesOptions.map(spec => (
-                    <MenuItem key={spec} value={spec}>{spec}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ minWidth: 120 }}>
-                <InputLabel id="gender">Gender</InputLabel>
-                <Select 
-                  labelId="gender" 
-                  label="Gender" 
-                  value={gender} 
-                  onChange={(e)=>setGender(e.target.value)}
-                >
-                  <MenuItem value="">All Genders</MenuItem>
-                  <MenuItem value="male">Male</MenuItem>
-                  <MenuItem value="female">Female</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ minWidth: 120 }}>
-                <InputLabel id="breed">Breed</InputLabel>
-                <Select 
-                  labelId="breed" 
-                  label="Breed" 
-                  value={breed} 
-                  onChange={(e)=>setBreed(e.target.value)}
-                >
-                  <MenuItem value="">All Breeds</MenuItem>
-                  {breedOptions.map(br => (
-                    <MenuItem key={br} value={br}>{br}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ minWidth: 120 }}>
-                <InputLabel id="sort">Sort By</InputLabel>
-                <Select 
-                  labelId="sort" 
-                  label="Sort By" 
-                  value={`${sortBy}-${sortOrder}`} 
-                  onChange={(e) => {
-                    const [by, order] = e.target.value.split('-');
-                    setSortBy(by);
-                    setSortOrder(order);
-                  }}
-                >
-                  <MenuItem value="dateAdded-desc">Newest First</MenuItem>
-                  <MenuItem value="dateAdded-asc">Oldest First</MenuItem>
-                  <MenuItem value="name-asc">Name (A-Z)</MenuItem>
-                  <MenuItem value="name-desc">Name (Z-A)</MenuItem>
-                  <MenuItem value="species-asc">Species (A-Z)</MenuItem>
-                  <MenuItem value="breed-asc">Breed (A-Z)</MenuItem>
-                  <MenuItem value="age-asc">Age (Low to High)</MenuItem>
-                  <MenuItem value="age-desc">Age (High to Low)</MenuItem>
-                </Select>
-              </FormControl>
-              <Button 
-                variant="outlined" 
-                onClick={()=>{ setPage(1); load() }}
-                startIcon={<SearchIcon />}
-              >
-                Filter
-              </Button>
-              <Button 
-                variant="outlined" 
-                onClick={resetFilters}
-              >
-                Reset
-              </Button>
-            </>
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              Showing pending pets awaiting media upload and approval
-            </Typography>
-          )}
+          <Button 
+            variant="contained" 
+            onClick={()=>navigate('/manager/adoption/wizard/start')}
+            startIcon={<AddIcon />}
+          >
+            Add Pet
+          </Button>
+          <Button 
+            variant="contained" 
+            color="success" 
+            onClick={()=>navigate('../import')}
+            startIcon={<FileUploadIcon />}
+          >
+            Import CSV
+          </Button>
           <IconButton 
             onClick={load} 
             title="Refresh"
@@ -556,10 +473,117 @@ const PetsList = () => {
           </IconButton>
         </Box>
       </Box>
+
+      {/* Status Tabs */}
+      <Box sx={{ bgcolor: 'background.paper', borderRadius: 1, boxShadow: 1 }}>
+        <Tabs 
+          value={statusTab} 
+          onChange={(e, newValue) => {
+            setStatusTab(newValue);
+            setPage(1);
+          }}
+          sx={{ borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Tab label="All Pets" value="all" />
+          <Tab label="Available" value="available" />
+          <Tab label="Adopted" value="adopted" />
+          <Tab label="Reserved" value="reserved" />
+          <Tab label="Pending" value="pending" />
+        </Tabs>
+      </Box>
+
+      {/* Filters Section */}
+      <Box 
+        sx={{ 
+          p: 2,
+          bgcolor: 'background.paper',
+          borderRadius: 1,
+          boxShadow: 1
+        }}
+      >
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+          <TextField 
+            size="small" 
+            placeholder="Search pets..." 
+            value={q} 
+            onChange={(e)=>setQ(e.target.value)} 
+            sx={{ minWidth: 150 }}
+          />
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel id="species">Species</InputLabel>
+            <Select 
+              labelId="species" 
+              label="Species" 
+              value={species} 
+              onChange={(e)=>setSpecies(e.target.value)}
+            >
+              <MenuItem value="">All Species</MenuItem>
+              {speciesOptions.map(spec => (
+                <MenuItem key={spec} value={spec}>{spec}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel id="gender">Gender</InputLabel>
+            <Select 
+              labelId="gender" 
+              label="Gender" 
+              value={gender} 
+              onChange={(e)=>setGender(e.target.value)}
+            >
+              <MenuItem value="">All Genders</MenuItem>
+              <MenuItem value="male">Male</MenuItem>
+              <MenuItem value="female">Female</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel id="breed">Breed</InputLabel>
+            <Select 
+              labelId="breed" 
+              label="Breed" 
+              value={breed} 
+              onChange={(e)=>setBreed(e.target.value)}
+            >
+              <MenuItem value="">All Breeds</MenuItem>
+              {breedOptions.map(br => (
+                <MenuItem key={br} value={br}>{br}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel id="sort">Sort By</InputLabel>
+            <Select 
+              labelId="sort" 
+              label="Sort By" 
+              value={`${sortBy}-${sortOrder}`} 
+              onChange={(e) => {
+                const [by, order] = e.target.value.split('-');
+                setSortBy(by);
+                setSortOrder(order);
+              }}
+            >
+              <MenuItem value="dateAdded-desc">Newest First</MenuItem>
+              <MenuItem value="dateAdded-asc">Oldest First</MenuItem>
+              <MenuItem value="name-asc">Name (A-Z)</MenuItem>
+              <MenuItem value="name-desc">Name (Z-A)</MenuItem>
+              <MenuItem value="species-asc">Species (A-Z)</MenuItem>
+              <MenuItem value="breed-asc">Breed (A-Z)</MenuItem>
+              <MenuItem value="age-asc">Age (Low to High)</MenuItem>
+              <MenuItem value="age-desc">Age (High to Low)</MenuItem>
+            </Select>
+          </FormControl>
+          <Button 
+            variant="outlined" 
+            onClick={resetFilters}
+          >
+            Reset Filters
+          </Button>
+        </Box>
+      </Box>
       
       {/* Action Buttons */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
-        {showPending ? (
+        {statusTab === 'pending' ? (
           <Button 
             variant="contained" 
             color="success" 
@@ -582,42 +606,6 @@ const PetsList = () => {
             Delete Selected ({selected.size})
           </Button>
         )}
-        <Box sx={{ flexGrow: 1 }} />
-        <Button 
-          variant={showPending ? "outlined" : "contained"}
-          onClick={() => {
-            setShowPending(false);
-            setPage(1);
-            setTimeout(load, 100);
-          }}
-        >
-          Regular Pets
-        </Button>
-        <Button 
-          variant={!showPending ? "outlined" : "contained"}
-          onClick={() => {
-            setShowPending(true);
-            setPage(1);
-            setTimeout(load, 100);
-          }}
-        >
-          Pending Pets
-        </Button>
-        <Button 
-          variant="contained" 
-          onClick={()=>navigate('/manager/adoption/wizard/start')}
-          startIcon={<AddIcon />}
-        >
-          Add Pet
-        </Button>
-        <Button 
-          variant="contained" 
-          color="success" 
-          onClick={()=>navigate('../import')}
-          startIcon={<FileUploadIcon />}
-        >
-          Import CSV
-        </Button>
       </Box>
       {/* Results Summary */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
@@ -789,7 +777,7 @@ const PetsList = () => {
                 </Box>
                 
                 {/* Pending badge */}
-                {showPending && (
+                {statusTab === 'pending' && (
                   <Box sx={{ position: 'absolute', top: 8, left: 8 }}>
                     <Chip 
                       label="PENDING" 
@@ -878,7 +866,7 @@ const PetsList = () => {
                   >
                     Edit
                   </Button>
-                  {showPending ? (
+                  {statusTab === 'pending' ? (
                     <Button 
                       size="small" 
                       color="success" 

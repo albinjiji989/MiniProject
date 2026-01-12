@@ -34,6 +34,12 @@ router.post('/products/inventory/bulk', auth, authorize('ecommerce_manager'), pr
 router.patch('/products/:productId/pricing', auth, authorize('ecommerce_manager'), productController.updatePricing);
 router.get('/products/:productId/analytics', auth, authorize('ecommerce_manager', 'admin'), productController.getProductAnalytics);
 
+// Product Images
+router.post('/products/:productId/images', auth, authorize('ecommerce_manager'), productController.uploadProductImages);
+router.get('/products/:productId/images', auth, authorize('ecommerce_manager', 'admin'), productController.getProductImages);
+router.delete('/products/:productId/images/:imageId', auth, authorize('ecommerce_manager'), productController.deleteProductImage);
+router.patch('/products/:productId/images/:imageId/primary', auth, authorize('ecommerce_manager'), productController.setPrimaryImage);
+
 // Product Variants
 router.post('/products/:productId/variants', auth, authorize('ecommerce_manager'), productController.addVariant);
 router.put('/products/:productId/variants/:variantId', auth, authorize('ecommerce_manager'), productController.updateVariant);

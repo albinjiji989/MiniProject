@@ -5,13 +5,12 @@ const { Product, Cart, Order } = require('../../models/Ecommerce');
 // Get all products with filters
 const listProducts = async (req, res) => {
   try {
-    const { category, search, page = 1, limit = 20, isPharmacy = false } = req.query;
+    const { category, search, page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
 
     const query = { isActive: true };
 
     if (category) query.category = category;
-    if (isPharmacy === 'true') query.isPharmacy = true;
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -47,7 +46,7 @@ const listProducts = async (req, res) => {
 // Create product
 const createProduct = async (req, res) => {
   try {
-    const { name, description, category, price, costPrice, images, stock, specifications, petTypes, isPharmacy } = req.body;
+    const { name, description, category, price, costPrice, images, stock, specifications, petTypes } = req.body;
 
     const product = new Product({
       name,
@@ -59,7 +58,6 @@ const createProduct = async (req, res) => {
       stock,
       specifications,
       petTypes,
-      isPharmacy,
       storageId: req.user?.storeId || req.user?._id
     });
 

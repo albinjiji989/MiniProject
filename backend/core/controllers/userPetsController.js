@@ -15,7 +15,7 @@ const getAllUserPets = async (req, res) => {
     const pets = await PetRegistry.aggregate([
       // Match all pets owned by this user
       { $match: { 
-        currentOwnerId: mongoose.Types.ObjectId(userId),
+        currentOwnerId: new mongoose.Types.ObjectId(userId),
         // Optionally filter out deleted pets if you have a soft delete flag
         isDeleted: { $ne: true }
       }},
@@ -140,17 +140,18 @@ const getAllUserPets = async (req, res) => {
       return pet;
     });
 
-    // Fetch temporary care status for each pet
+    // Fetch temporary care status AND images from source models for each pet
     const petsWithCareStatus = await Promise.all(
       petsWithResolvedImages.map(async (pet) => {
         let temporaryCareStatus = null;
+        let sourceImages = pet.images || [];
 
         // Try to find in Pet collection first
-        let sourcePet = await Pet.findOne({ petCode: pet.petCode });
+        let sourcePet = await Pet.findOne({ petCode: pet.petCode }).populate('images');
         
         // If not found, try AdoptionPet
         if (!sourcePet) {
-          sourcePet = await AdoptionPet.findOne({ petCode: pet.petCode });
+          sourcePet = await AdoptionPet.findOne({ petCode: pet.petCode }).populate('images');
         }
 
         // Extract temporary care status if exists
@@ -158,8 +159,21 @@ const getAllUserPets = async (req, res) => {
           temporaryCareStatus = sourcePet.temporaryCareStatus;
         }
 
+        // If PetRegistry has no images but source model has, use source images
+        if ((!sourceImages || sourceImages.length === 0) && sourcePet && sourcePet.images && sourcePet.images.length > 0) {
+          sourceImages = sourcePet.images.map(img => ({
+            _id: img._id,
+            url: img.url && !img.url.startsWith('http') 
+              ? `${process.env.BASE_URL || 'http://localhost:5000'}${img.url}` 
+              : img.url,
+            isPrimary: img.isPrimary,
+            filename: img.filename
+          }));
+        }
+
         return {
           ...pet,
+          images: sourceImages,
           temporaryCareStatus
         };
       })
@@ -192,7 +206,7 @@ const getUserPetStats = async (req, res) => {
 
     const stats = await PetRegistry.aggregate([
       { $match: { 
-        currentOwnerId: mongoose.Types.ObjectId(userId),
+        currentOwnerId: new mongoose.Types.ObjectId(userId),
         isDeleted: { $ne: true }
       }},
       

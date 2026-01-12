@@ -128,86 +128,25 @@ const Pets = () => {
         setLoading(true);
         setError('');
         
-        // Load all pets from all sources in parallel
-        const [
-          userPetsRes, 
-          ownedPetsRes, 
-          purchasedPetsRes, 
-          adoptedPetsRes
-        ] = await Promise.allSettled([
-          userPetsAPI.list(),
-          apiClient.get('/pets/my-pets'),
-          apiClient.get('/petshop/user/my-purchased-pets'),
-          apiClient.get('/adoption/user/my-adopted-pets')
-        ]);
+        // Use the unified API endpoint that returns all pets with temporaryCareStatus
+        const response = await userPetsAPI.getAllPets();
+        const allPets = response.data?.data?.pets || [];
         
-        let allPets = [];
-        
-        // CRITICAL: Add purchased and adopted pets FIRST
-        // They have complete data with images from source tables
-        // The /pets/my-pets endpoint returns registry data without images
-        
-        // Process purchased pets FIRST
-        if (purchasedPetsRes.status === 'fulfilled') {
-          console.log('📦 RAW API RESPONSE:', purchasedPetsRes.value.data);
-          const purchasedPets = purchasedPetsRes.value.data?.data?.pets || [];
-          console.log('📦 EXTRACTED PURCHASED PETS:', purchasedPets.length);
-          if (purchasedPets.length > 0) {
-            console.log('📦 FIRST PETSHOP PET FULL DATA:', purchasedPets[0]);
-          }
-          // Add purchased pets FIRST - they have images from PetInventoryItem
-          allPets = [...purchasedPets];
-        }
-        
-        // Process adopted pets SECOND
-        if (adoptedPetsRes.status === 'fulfilled') {
-          console.log('🏠 RAW API RESPONSE:', adoptedPetsRes.value.data);
-          const adoptedPets = adoptedPetsRes.value.data?.data || [];
-          console.log('🏠 EXTRACTED ADOPTED PETS:', adoptedPets.length);
-          if (adoptedPets.length > 0) {
-            console.log('🏠 FIRST ADOPTED PET FULL DATA:', adoptedPets[0]);
-          }
-          // Add adopted pets SECOND - they have images from AdoptionPet
-          allPets = [...allPets, ...adoptedPets];
-        }
-        
-        // Process user pets LAST (these may be duplicates without images)
-        if (userPetsRes.status === 'fulfilled') {
-          const userPets = userPetsRes.value.data?.data || [];
-          allPets = [...allPets, ...userPets];
-        }
-        
-        // Process owned pets LAST (these may be duplicates without images)
-        if (ownedPetsRes.status === 'fulfilled') {
-          const ownedPets = ownedPetsRes.value.data?.data?.pets || [];
-          allPets = [...allPets, ...ownedPets];
-        }
-        
-        console.log('🔍 ALL PETS BEFORE DEDUP:', allPets.length);
-        console.log('🔍 SAMPLE PET FROM ALL:', allPets[0]);
-        
-        // Remove duplicates based on petCode or _id
-        const uniquePets = allPets.filter((pet, index, self) => {
-          // If pet has a petCode, deduplicate based on that
-          if (pet.petCode) {
-            return index === self.findIndex(p => p.petCode === pet.petCode);
-          }
-          // If no petCode, deduplicate based on _id
-          return index === self.findIndex(p => p._id === pet._id);
-        });
-        
-        console.log('🔍 UNIQUE PETS AFTER DEDUP:', uniquePets.length);
-        console.log('🔍 ALL UNIQUE PETS:', uniquePets.map(p => ({
+        console.log('🐾 LOADED PETS FROM UNIFIED API:', allPets.length);
+        console.log('🐾 SAMPLE PET DATA:', allPets[0]);
+        console.log('🐾 ALL PETS:', allPets.map(p => ({
           name: p.name,
           petCode: p.petCode,
           source: p.source,
           hasImages: !!p.images,
           imagesLength: p.images?.length,
-          firstImageUrl: p.images?.[0]?.url
+          firstImageUrl: p.images?.[0]?.url,
+          temporaryCareStatus: p.temporaryCareStatus
         })));
         
-        setPets(uniquePets);
+        setPets(allPets);
       } catch (e) {
+        console.error('❌ Error loading pets:', e);
         setError(e?.response?.data?.message || 'Failed to load pets');
       } finally {
         setLoading(false);
@@ -310,7 +249,16 @@ const Pets = () => {
                     {/* Pet Image */}
                     <Box
                       component="img"
-                      src={'/placeholder-pet.svg'}
+                      src={(() => {
+                        // Images are already resolved URLs from backend
+                        if (pet.images && Array.isArray(pet.images) && pet.images.length > 0) {
+                          const primaryImage = pet.images.find(img => img.isPrimary) || pet.images[0];
+                          if (primaryImage && primaryImage.url) {
+                            return primaryImage.url; // Already resolved by backend
+                          }
+                        }
+                        return '/placeholder-pet.svg';
+                      })()}
                       alt={pet.name || 'Pet'}
                       sx={{
                         width: '100%',
@@ -320,32 +268,6 @@ const Pets = () => {
                         border: '2px solid',
                         borderColor: 'divider',
                         bgcolor: 'grey.100'
-                      }}
-                      ref={(el) => {
-                        if (el) {
-                          console.log('🖼️ IMAGE REF CALLBACK:', {
-                            petName: pet.name,
-                            hasImages: !!pet.images,
-                            isArray: Array.isArray(pet.images),
-                            imagesLength: pet.images?.length,
-                            images: pet.images,
-                            firstImage: pet.images?.[0]
-                          });
-                          
-                          if (pet.images && Array.isArray(pet.images) && pet.images.length > 0) {
-                            const primaryImage = pet.images.find(img => img.isPrimary) || pet.images[0];
-                            console.log('🖼️ PRIMARY IMAGE FOUND:', primaryImage);
-                            if (primaryImage && primaryImage.url) {
-                              const resolvedUrl = resolveMediaUrl(primaryImage.url);
-                              console.log('✅ SETTING IMAGE URL:', resolvedUrl);
-                              el.src = resolvedUrl;
-                            } else {
-                              console.log('❌ NO URL IN PRIMARY IMAGE');
-                            }
-                          } else {
-                            console.log('❌ NO IMAGES ARRAY OR EMPTY');
-                          }
-                        }
                       }}
                       onError={(e) => {
                         e.currentTarget.src = '/placeholder-pet.svg';
@@ -369,13 +291,13 @@ const Pets = () => {
                           </Typography>
                                           
                           <Typography variant="body2" color="text.secondary" gutterBottom>
-                            {pet.species?.displayName || pet.species?.name || pet.species || 'Unknown Species'} • {pet.breed?.name || pet.breed || 'Unknown Breed'}
+                            {pet.species?.displayName || pet.species?.name || 'Unknown Species'} • {pet.breed?.name || 'Unknown Breed'}
                           </Typography>
                         </Box>
                                         
                         <Stack direction="row" spacing={1} flexWrap="wrap" gap={0.5}>
                           <Chip 
-                            label={pet.status || pet.currentStatus || 'Unknown'} 
+                            label={pet.currentStatus || 'Unknown'} 
                             size="small" 
                             color="primary" 
                             variant="filled" 

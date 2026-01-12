@@ -78,7 +78,26 @@ const PetList = ({ pets, loading }) => {
               }} 
               onClick={() => navigate(`/User/pets/${pet._id || 'view'}`)}
             >
-              <CardContent>
+              <CardContent sx={{ position: 'relative' }}>
+                {/* Pet Code Badge - Right Top Corner */}
+                {(pet.petCode || pet.code) && (
+                  <Chip 
+                    label={pet.petCode || pet.code} 
+                    size="small" 
+                    color="primary"
+                    variant="filled"
+                    sx={{ 
+                      position: 'absolute',
+                      top: 12,
+                      right: 12,
+                      fontFamily: 'monospace', 
+                      fontSize: '0.7rem',
+                      height: 22,
+                      fontWeight: 600
+                    }}
+                  />
+                )}
+                
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                   {(() => {
                     const src = resolveMediaUrl(
@@ -105,23 +124,9 @@ const PetList = ({ pets, loading }) => {
                     );
                   })()}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                      <Typography variant="h6" noWrap sx={{ fontWeight: 'bold' }}>
-                        {pet.name || 'Unnamed Pet'}
-                      </Typography>
-                      {(pet.petCode || pet.code) && (
-                        <Chip 
-                          label={pet.petCode || pet.code} 
-                          size="small" 
-                          variant="outlined"
-                          sx={{ 
-                            fontFamily: 'monospace', 
-                            fontSize: '0.7rem',
-                            height: 20
-                          }}
-                        />
-                      )}
-                    </Box>
+                    <Typography variant="h6" noWrap sx={{ fontWeight: 'bold', pr: 8 }}>
+                      {pet.name || 'Unnamed Pet'}
+                    </Typography>
                     <Typography variant="body2" color="text.secondary" noWrap>
                       {/* Handle case where breed might be an object - MATCHING PETS LIST PAGE */}
                       {(typeof pet.breed === 'object' && pet.breed !== null ? 
@@ -133,18 +138,36 @@ const PetList = ({ pets, loading }) => {
                         (pet.gender.name || pet.gender._id || JSON.stringify(pet.gender)) : 
                         (pet.gender || 'Gender not set'))}
                     </Typography>
-                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                      {/* Current Status Badge */}
                       <Chip 
-                        label={pet.status || pet.currentStatus || 'Owned'} 
+                        label={pet.currentStatus || pet.status || 'Owned'} 
                         size="small" 
                         color={
+                          pet.currentStatus === 'in care' ? 'warning' :
                           pet.status === 'adopted' ? 'success' :
                           pet.status === 'reserved' ? 'warning' :
                           'primary'
                         }
-                        variant="outlined"
+                        variant="filled"
                       />
-                      {/* UPDATED TAG HANDLING - MATCHING PETS LIST PAGE */}
+                      
+                      {/* Temporary Care Tag - HIGH PRIORITY */}
+                      {pet.temporaryCareStatus?.inCare && (
+                        <Chip 
+                          label="In Temporary Care" 
+                          size="small" 
+                          color="warning" 
+                          variant="filled"
+                          sx={{ 
+                            fontWeight: 600,
+                            bgcolor: 'warning.main',
+                            color: 'warning.contrastText'
+                          }}
+                        />
+                      )}
+                      
+                      {/* Source Tags */}
                       {pet.tags?.includes('purchased') && (
                         <Chip label="Purchased" size="small" color="info" variant="outlined" />
                       )}

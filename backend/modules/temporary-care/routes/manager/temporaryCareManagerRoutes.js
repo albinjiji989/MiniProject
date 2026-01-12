@@ -200,4 +200,16 @@ router.post('/applications/:id/check-out', [
 // Dashboard stats
 router.get('/applications/dashboard/stats', applicationManagerController.getDashboardStats);
 
+// **HANDOVER OTP ROUTES (Manager initiates when user arrives)**
+// Generate OTP when user arrives at center with pet
+router.post('/applications/handover/generate-otp', [
+  body('applicationId').notEmpty().withMessage('Application ID is required')
+], applicationManagerController.generateHandoverOTP);
+
+// Verify OTP from user for pet handover
+router.post('/applications/handover/verify-otp', [
+  body('applicationId').notEmpty().withMessage('Application ID is required'),
+  body('otp').notEmpty().withMessage('OTP is required').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
+], applicationManagerController.verifyHandoverOTP);
+
 module.exports = router;

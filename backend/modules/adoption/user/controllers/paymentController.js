@@ -172,7 +172,7 @@ const verifyUserPayment = async (req, res) => {
           temperament: Array.isArray(pet.temperament) ? pet.temperament : (pet.temperament ? [pet.temperament] : []),
           specialNeeds: Array.isArray(pet.specialNeeds) ? pet.specialNeeds : (pet.specialNeeds ? [pet.specialNeeds] : []),
           imageIds: (pet.images || []).map(img => img._id || img.id),
-          currentStatus: 'Adopted',
+          currentStatus: 'with user',
           healthStatus: 'Good',
           createdBy: req.user.id
         });
@@ -188,7 +188,7 @@ const verifyUserPayment = async (req, res) => {
           firstAddedSource: 'adoption_center',
           firstAddedBy: pet.createdBy,
           currentOwnerId: req.user.id,
-          currentStatus: 'adopted',
+          currentStatus: 'with user',
           currentLocation: 'at_owner',
           gender: (pet.gender || 'Unknown').toLowerCase() === 'male' ? 'Male' : (pet.gender || 'Unknown').toLowerCase() === 'female' ? 'Female' : 'Unknown',
           age: pet.age || 0,

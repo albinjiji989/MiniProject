@@ -581,9 +581,9 @@ export const temporaryCareAPI = {
   submitApplicationFeedback: (applicationId, data) => api.post(`/temporary-care/user/applications/${applicationId}/feedback`, data),
   getApplicationFeedback: (applicationId) => api.get(`/temporary-care/user/applications/${applicationId}/feedback`),
   
-  // Handover OTP APIs
-  generateHandoverOTP: (data) => api.post('/temporary-care/user/applications/handover/generate-otp', data),
-  verifyHandoverOTP: (data) => api.post('/temporary-care/user/applications/handover/verify-otp', data),
+  // Handover OTP APIs (MANAGER SIDE - manager generates, user receives via email)
+  managerGenerateHandoverOTP: (data) => api.post('/temporary-care/manager/applications/handover/generate-otp', data),
+  verifyHandoverOTP: (data) => api.post('/temporary-care/manager/applications/handover/verify-otp', data),
   
   // Manager Inboard Pets APIs
   managerGetInboardPets: () => api.get('/temporary-care/manager/inboard-pets'),
@@ -748,8 +748,8 @@ export const customBreedRequestsAPI = {
 
 export const userPetsAPI = {
   // NEW: Unified endpoint - replaces 4 separate API calls
-  getAllPets: () => api.get('/user/all-pets'),
-  getPetStats: () => api.get('/user/pet-stats'),
+  getAllPets: () => api.get('/user/unified/all-pets'),
+  getPetStats: () => api.get('/user/unified/pet-stats'),
   
   // Legacy endpoints (keep for backward compatibility)
   list: (params = {}) => api.get('/user/pets', { params }),

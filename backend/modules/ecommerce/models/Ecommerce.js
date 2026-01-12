@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
-// Product/Item Schema (for both Ecommerce and Pharmacy)
+// Product/Item Schema for Ecommerce
 const productSchema = new Schema(
   {
     name: {
@@ -11,7 +11,7 @@ const productSchema = new Schema(
     description: String,
     category: {
       type: String,
-      enum: ['pet_food', 'toys', 'accessories', 'pharmacy', 'grooming', 'health', 'other'],
+      enum: ['pet_food', 'toys', 'accessories', 'grooming', 'health', 'other'],
       required: true
     },
     subcategory: String,
@@ -54,14 +54,6 @@ const productSchema = new Schema(
     supplier: String,
     sku: String,
     barcode: String,
-    isPharmacy: {
-      type: Boolean,
-      default: false
-    },
-    requiresPrescription: {
-      type: Boolean,
-      default: false
-    },
     manufacturingDate: Date,
     rating: {
       average: {

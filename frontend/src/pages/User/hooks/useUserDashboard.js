@@ -8,92 +8,18 @@ export const useUserPets = () => {
     queryKey: ['userPets'],
     queryFn: async () => {
       try {
-        // Fetch from all pet sources in parallel
-        const [petNewRes, petRes, adoptedRes, purchasedRes] = await Promise.allSettled([
-          userPetsAPI.list({
-            page: 1,
-            limit: 12,
-          }),
-          apiClient.get('/pets/my-pets'),
-          adoptionAPI.getMyAdoptedPets(),
-          apiClient.get('/petshop/user/my-purchased-pets')
-        ]);
+        // Use unified API endpoint that includes temporaryCareStatus
+        const response = await userPetsAPI.getAllPets();
+        const pets = response.data?.data?.pets || [];
         
-        // Process PetNew results
-        let petNewPets = [];
-        if (petNewRes.status === 'fulfilled') {
-          const data = petNewRes.value.data;
-          petNewPets = Array.isArray(data?.data) ? data.data : (data?.data?.pets || []);
-        }
-        
-        // Process Pet results
-        let corePets = [];
-        if (petRes.status === 'fulfilled') {
-          corePets = petRes.value.data?.data?.pets || [];
-        }
-        
-        // Process adopted pets
-        let adoptedPets = [];
-        if (adoptedRes.status === 'fulfilled') {
-          adoptedPets = adoptedRes.value.data?.data || [];
-        }
-        
-        // Process purchased pets
-        let purchasedPets = [];
-        if (purchasedRes.status === 'fulfilled') {
-          purchasedPets = purchasedRes.value.data?.data?.pets || [];
-        }
-        
-        // Map adopted pets to pet-like objects
-        const mappedAdoptedPets = adoptedPets.map(pet => ({
-          _id: pet._id,
-          name: pet.name || 'Pet',
-          images: pet.images || [],
-          petCode: pet.petCode,
-          breed: pet.breed,
-          species: pet.species,
-          gender: pet.gender || 'Unknown',
-          status: 'adopted',
-          currentStatus: 'adopted',
-          tags: ['adoption'],
-          adoptionDate: pet.adoptionDate,
-          age: pet.age,
-          ageUnit: pet.ageUnit,
-          color: pet.color,
-          createdAt: pet.adoptionDate
-        }));
-        
-        // Map purchased pets to pet-like objects
-        const mappedPurchasedPets = purchasedPets.map(pet => ({
-          _id: pet._id,
-          name: pet.name || 'Pet',
-          images: pet.images || [],
-          petCode: pet.petCode,
-          breed: pet.breed,
-          species: pet.species,
-          gender: pet.gender || 'Unknown',
-          status: 'purchased',
-          currentStatus: 'purchased',
-          tags: ['purchased'],
-          purchaseDate: pet.acquiredDate,
-          age: pet.age,
-          ageUnit: pet.ageUnit,
-          color: pet.color,
-          createdAt: pet.acquiredDate,
-          source: pet.source,
-          sourceLabel: pet.sourceLabel
-        }));
-        
-        // Combine and deduplicate pets
-        const combinedPets = [...petNewPets, ...corePets, ...mappedAdoptedPets, ...mappedPurchasedPets];
-        const uniquePets = combinedPets.filter((pet, index, self) => 
-          index === self.findIndex(p => (p.petCode || p._id) === (pet.petCode || pet._id))
-        );
+        console.log('🐾 Dashboard loaded pets:', pets.length);
+        console.log('🐾 Sample pet:', pets[0]);
+        console.log('🐾 Pets with temporary care:', pets.filter(p => p.temporaryCareStatus?.inCare));
         
         // Sort pets by creation date (newest first)
-        const sortedPets = [...uniquePets].sort((a, b) => {
-          const dateA = new Date(a.createdAt || a.adoptionDate || a.purchaseDate || 0);
-          const dateB = new Date(b.createdAt || b.adoptionDate || b.purchaseDate || 0);
+        const sortedPets = [...pets].sort((a, b) => {
+          const dateA = new Date(a.createdAt || a.updatedAt || 0);
+          const dateB = new Date(b.createdAt || b.updatedAt || 0);
           return dateB - dateA;
         });
         
@@ -103,8 +29,10 @@ export const useUserPets = () => {
         return [];
       }
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    cacheTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 0, // Always fetch fresh data
+    cacheTime: 1 * 60 * 1000, // 1 minute cache
+    refetchOnMount: true,
+    refetchOnWindowFocus: true
   });
 };
 

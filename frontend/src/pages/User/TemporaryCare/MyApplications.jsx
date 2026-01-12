@@ -230,17 +230,14 @@ const MyApplications = () => {
                         <ViewIcon />
                       </IconButton>
                       
-                      {/* Show Generate OTP button if advance payment is completed but not yet in care */}
+                      {/* User just waits for manager to generate OTP - no action needed */}
                       {app.status === 'advance_paid' && (
-                        <Button
+                        <Chip 
+                          label="Awaiting Handover" 
+                          color="info" 
                           size="small"
-                          variant="contained"
-                          color="success"
-                          onClick={() => handleGenerateOTP(app)}
-                          disabled={otpLoading}
-                        >
-                          Generate OTP
-                        </Button>
+                          icon={<CalendarIcon />}
+                        />
                       )}
                       
                       {/* Cancel only allowed before payment */}

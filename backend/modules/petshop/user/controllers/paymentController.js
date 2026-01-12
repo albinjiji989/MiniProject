@@ -444,7 +444,7 @@ const verifyRazorpaySignature = async (req, res) => {
         }, {
           currentOwnerId: req.user._id,
           currentLocation: 'at_owner', // Ensure pet is transferred to owner immediately
-          currentStatus: 'owned', // Changed from 'sold' to 'owned' to match frontend expectations
+          currentStatus: 'with user', // Status when pet is with owner
           lastTransferAt: new Date()
         });
         
@@ -480,7 +480,7 @@ const verifyRazorpaySignature = async (req, res) => {
           breedId: pet.breedId,
           ownerId: req.user._id,
           createdBy: req.user._id,
-          currentStatus: 'sold',
+          currentStatus: 'with user',
           gender: pet.gender || 'Unknown',
           age: pet.age || 0,
           ageUnit: pet.ageUnit || 'months',

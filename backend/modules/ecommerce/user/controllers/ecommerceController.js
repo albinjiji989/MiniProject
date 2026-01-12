@@ -5,13 +5,12 @@ const { Product, Cart, Order } = require('../../models/Ecommerce');
 // Get all products (public)
 const getProducts = async (req, res) => {
   try {
-    const { category, search, page = 1, limit = 12, isPharmacy = false, petType } = req.query;
+    const { category, search, page = 1, limit = 12, petType } = req.query;
     const skip = (page - 1) * limit;
 
     const query = { isActive: true };
 
     if (category) query.category = category;
-    if (isPharmacy === 'true') query.isPharmacy = true;
     if (petType) query.petTypes = { $in: [petType] };
     if (search) {
       query.$or = [

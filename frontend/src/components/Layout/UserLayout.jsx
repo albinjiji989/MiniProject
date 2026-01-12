@@ -98,7 +98,7 @@ const createCustomTheme = (isDarkMode) => createTheme({
 
 const UserLayout = ({ children }) => {
   const { user } = useAuth()
-  const [sidebarOpen, setSidebarOpen] = useState(false) // Start closed by default
+  const [sidebarOpen, setSidebarOpen] = useState(true) // Start open by default
   const [isDarkMode, setIsDarkMode] = useState(false)
   const isMobile = useMediaQuery('(max-width:900px)')
   

@@ -87,7 +87,7 @@ const createManagerTheme = (isDarkMode) => createTheme({
 })
 
 const ManagerLayout = ({ children, user, moduleType = 'petshop' }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const isMobile = useMediaQuery('(max-width:900px)')
   

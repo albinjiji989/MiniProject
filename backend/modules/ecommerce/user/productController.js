@@ -1,6 +1,7 @@
 const Product = require('../models/Product');
 const ProductCategory = require('../models/ProductCategory');
 const ProductReview = require('../models/ProductReview');
+const ProductImage = require('../models/ProductImage');
 
 /**
  * Get all products with filtering, sorting, and pagination
@@ -78,9 +79,29 @@ exports.getProducts = async (req, res) => {
       Product.countDocuments(query)
     ]);
 
+    // Fetch primary images for each product
+    const productIds = products.map(p => p._id);
+    const images = await ProductImage.find({
+      productId: { $in: productIds },
+      isActive: true,
+      isPrimary: true
+    }).select('productId url');
+
+    // Map images to products
+    const imageMap = {};
+    images.forEach(img => {
+      imageMap[img.productId.toString()] = img.url;
+    });
+
+    // Add image URL to each product
+    const productsWithImages = products.map(product => ({
+      ...product,
+      imageUrl: imageMap[product._id.toString()] || null
+    }));
+
     res.json({
       success: true,
-      data: products,
+      data: productsWithImages,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(total / parseInt(limit)),
@@ -104,21 +125,33 @@ exports.getProductById = async (req, res) => {
     // Try to find by ID first, then by slug
     let product = await Product.findById(id)
       .populate('category subcategory', 'name slug description')
-      .populate('relatedProducts', 'name slug images basePrice salePrice ratings');
+      .populate('relatedProducts', 'name slug images basePrice salePrice ratings')
+      .lean();
     
     if (!product) {
       product = await Product.findOne({ slug: id, status: 'active' })
         .populate('category subcategory', 'name slug description')
-        .populate('relatedProducts', 'name slug images basePrice salePrice ratings');
+        .populate('relatedProducts', 'name slug images basePrice salePrice ratings')
+        .lean();
     }
     
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
     
-    // Increment view count
-    product.analytics.views += 1;
-    await product.save();
+    // Fetch all images for this product
+    const images = await ProductImage.find({
+      productId: product._id,
+      isActive: true
+    })
+    .select('url isPrimary caption altText displayOrder')
+    .sort({ isPrimary: -1, displayOrder: 1 });
+    
+    // Increment view count (need to get non-lean doc for save)
+    await Product.findByIdAndUpdate(product._id, { $inc: { 'analytics.views': 1 } });
+    
+    // Add images to product
+    product.images = images;
     
     res.json({ success: true, data: product });
   } catch (error) {

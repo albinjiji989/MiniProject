@@ -2,6 +2,8 @@ const TemporaryCareApplication = require('../../models/TemporaryCareApplication'
 const TemporaryCarePayment = require('../../models/TemporaryCarePayment');
 const paymentService = require('../../../../core/services/paymentService');
 const { validationResult } = require('express-validator');
+const crypto = require('crypto');
+const { sendMail } = require('../../../../core/utils/email');
 
 /**
  * Create payment order for application (advance or final)
@@ -286,7 +288,7 @@ const generateHandoverOTP = async (req, res) => {
     const application = await TemporaryCareApplication.findOne({
       _id: applicationId,
       userId: req.user._id
-    });
+    }).populate('userId', 'email name').populate('centerId', 'name');
 
     if (!application) {
       return res.status(404).json({ success: false, message: 'Application not found' });
@@ -309,7 +311,6 @@ const generateHandoverOTP = async (req, res) => {
     }
 
     // Generate 6-digit OTP
-    const crypto = require('crypto');
     const otp = crypto.randomInt(100000, 999999).toString();
     const otpExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
@@ -320,13 +321,59 @@ const generateHandoverOTP = async (req, res) => {
     application.handover.dropoff.otpUsed = false;
     await application.save();
 
+    // Send OTP via email
+    const userEmail = application.userId.email;
+    const userName = application.userId.name || 'User';
+    const centerName = application.centerId?.name || 'Temporary Care Center';
+    
+    const subject = `🐾 Pet Handover OTP - ${otp}`;
+    const html = `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;background:#0b0f1a;padding:24px;color:#e6e9ef;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border-radius:16px;overflow:hidden;">
+        <tr><td style="padding:28px;background:linear-gradient(135deg,#6a11cb,#2575fc);color:#fff;">
+          <h1 style="margin:0;font-size:20px;">🐾 Pet Handover OTP</h1>
+        </td></tr>
+        <tr><td style="padding:24px 28px;color:#e6e9ef;">
+          <p style="margin:0 0 16px;">Hi <b>${userName}</b>,</p>
+          <p style="margin:0 0 24px;">Your advance payment has been confirmed! Use this OTP to hand over your pet to <b>${centerName}</b>.</p>
+          
+          <div style="background:rgba(106,17,203,0.15);border:2px dashed rgba(37,117,252,0.6);border-radius:12px;padding:20px;text-align:center;margin:20px 0;">
+            <p style="margin:0;font-size:13px;color:#9ca3af;">Handover OTP</p>
+            <div style="font-size:36px;font-weight:bold;color:#2575fc;letter-spacing:8px;margin:12px 0;">${otp}</div>
+            <p style="margin:0;font-size:12px;color:#6b7280;">Valid for 15 minutes</p>
+          </div>
+
+          <div style="background:rgba(251,191,36,0.1);border-left:4px solid #fbbf24;padding:12px 16px;margin:20px 0;">
+            <p style="margin:0;font-size:13px;"><b>⏰ Expires:</b> ${otpExpiry.toLocaleString()}</p>
+          </div>
+
+          <p style="margin:16px 0 8px;"><b>Instructions:</b></p>
+          <ul style="margin:0;padding-left:20px;line-height:1.8;">
+            <li>Visit the temporary care center with your pet</li>
+            <li>Share this OTP with the staff member</li>
+            <li>Complete the handover process</li>
+          </ul>
+
+          <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;">If you didn't request this, please contact us immediately.</p>
+        </td></tr>
+        <tr><td style="padding:16px 28px;text-align:center;font-size:11px;color:#6b7280;border-top:1px solid rgba(255,255,255,0.1);">
+          <p style="margin:0;">Pet Connect Temporary Care System &copy; ${new Date().getFullYear()}</p>
+        </td></tr>
+      </table>
+    </div>`;
+
+    // Send email (non-blocking)
+    await sendMail({ to: userEmail, subject, html }).catch(err => {
+      console.error('Failed to send OTP email:', err);
+    });
+
     res.json({
       success: true,
-      message: 'Handover OTP generated successfully',
+      message: `Handover OTP generated and sent to ${userEmail}`,
       data: {
         otp,
         expiresAt: otpExpiry,
-        applicationId: application._id
+        applicationId: application._id,
+        emailSent: userEmail
       }
     });
   } catch (error) {
@@ -393,9 +440,9 @@ const verifyHandoverOTP = async (req, res) => {
 
     // Update pets' temporary care status
     for (const petEntry of application.pets) {
-      let pet = await Pet.findOne({ petCode: petEntry.petCode });
+      let pet = await Pet.findOne({ petCode: petEntry.petId });
       if (!pet) {
-        pet = await AdoptionPet.findOne({ petCode: petEntry.petCode });
+        pet = await AdoptionPet.findOne({ petCode: petEntry.petId });
       }
 
       if (pet) {

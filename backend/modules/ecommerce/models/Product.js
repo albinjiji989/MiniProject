@@ -64,12 +64,19 @@ const productSchema = new mongoose.Schema({
     enum: ['dog', 'cat', 'bird', 'fish', 'rabbit', 'hamster', 'all'],
     default: ['all']
   }],
+  species: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Species'
+  }],
+  breeds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Breed'
+  }],
   ageGroup: [{
     type: String,
     enum: ['puppy', 'adult', 'senior', 'all'],
     default: ['all']
   }],
-  breed: [String], // Specific breeds this product is for
   
   // Pricing
   pricing: {

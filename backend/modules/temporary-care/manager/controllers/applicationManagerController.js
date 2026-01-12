@@ -5,6 +5,7 @@ const Pet = require('../../../../core/models/Pet');
 const AdoptionPet = require('../../../adoption/manager/models/AdoptionPet');
 const { validationResult } = require('express-validator');
 const crypto = require('crypto');
+const { sendMail } = require('../../../../core/utils/email');
 
 /**
  * Get all applications for manager's center
@@ -769,8 +770,46 @@ const recordCheckOut = async (req, res) => {
     application.checkOut.actualCheckOutTime = new Date();
     application.checkOut.checkedOutBy = req.user._id;
     application.status = 'completed';
+    application.careEndDate = new Date();
 
     await application.save();
+
+    // Update pets' status back to "with user" after checkout
+    const PetRegistry = require('../../../../core/models/PetRegistry');
+    const Pet = require('../../../../core/models/Pet');
+    const AdoptionPet = require('../../../adoption/manager/models/AdoptionPet');
+    
+    for (const petEntry of application.pets) {
+      let pet = await Pet.findOne({ petCode: petEntry.petId });
+      if (!pet) {
+        pet = await AdoptionPet.findOne({ petCode: petEntry.petId });
+      }
+
+      if (pet) {
+        // Clear temporary care status
+        pet.temporaryCareStatus = {
+          inCare: false,
+          applicationId: null,
+          centerId: null,
+          startDate: null,
+          endDate: new Date()
+        };
+        
+        // Update pet's current status back to "with user"
+        pet.currentStatus = 'with user';
+        
+        await pet.save();
+        
+        // Also update in PetRegistry
+        await PetRegistry.findOneAndUpdate(
+          { petCode: petEntry.petId },
+          { 
+            currentStatus: 'with user',
+            currentLocation: 'With Owner'
+          }
+        );
+      }
+    }
 
     res.json({
       success: true,
@@ -861,6 +900,215 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
+/**
+ * Generate OTP for pet handover when user arrives at center (manager initiates)
+ */
+const generateHandoverOTP = async (req, res) => {
+  try {
+    const { applicationId } = req.body;
+
+    // Get manager's center
+    const center = await TemporaryCareCenter.findOne({ owner: req.user._id, isActive: true });
+    if (!center) {
+      return res.status(404).json({ success: false, message: 'Care center not found' });
+    }
+
+    const application = await TemporaryCareApplication.findOne({
+      _id: applicationId,
+      centerId: center._id
+    }).populate('userId', 'email name phone').populate('centerId', 'name');
+
+    if (!application) {
+      return res.status(404).json({ success: false, message: 'Application not found' });
+    }
+
+    // Check if advance payment is completed
+    if (application.paymentStatus.advance.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Advance payment must be completed before handover'
+      });
+    }
+
+    // Check if already in active care
+    if (application.status === 'active_care') {
+      return res.status(400).json({
+        success: false,
+        message: 'Pet is already in care'
+      });
+    }
+
+    // Generate 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const otpExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    // Update application with handover OTP (using checkIn schema field)
+    if (!application.checkIn) {
+      application.checkIn = {};
+    }
+    application.checkIn.otp = otp;
+    application.checkIn.otpGeneratedAt = new Date();
+    application.checkIn.otpExpiresAt = otpExpiry;
+    application.checkIn.otpUsed = false;
+    await application.save();
+
+    // Send OTP via email to USER
+    const userEmail = application.userId.email;
+    const userName = application.userId.name || 'User';
+    const centerName = application.centerId?.name || 'Temporary Care Center';
+    
+    const subject = `🐾 Pet Handover OTP - ${otp}`;
+    const html = `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;background:#0b0f1a;padding:24px;color:#e6e9ef;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border-radius:16px;overflow:hidden;">
+        <tr><td style="padding:28px;background:linear-gradient(135deg,#6a11cb,#2575fc);color:#fff;">
+          <h1 style="margin:0;font-size:20px;">🐾 Pet Handover OTP</h1>
+        </td></tr>
+        <tr><td style="padding:24px 28px;color:#e6e9ef;">
+          <p style="margin:0 0 16px;">Hi <b>${userName}</b>,</p>
+          <p style="margin:0 0 24px;">You have arrived at <b>${centerName}</b> for pet handover! Please verify this OTP with the staff member:</p>
+          
+          <div style="background:rgba(106,17,203,0.15);border:2px dashed rgba(37,117,252,0.6);border-radius:12px;padding:20px;text-align:center;margin:20px 0;">
+            <p style="margin:0;font-size:13px;color:#9ca3af;">Your Handover OTP</p>
+            <div style="font-size:36px;font-weight:bold;color:#2575fc;letter-spacing:8px;margin:12px 0;">${otp}</div>
+            <p style="margin:0;font-size:12px;color:#6b7280;">Valid for 15 minutes</p>
+          </div>
+
+          <div style="background:rgba(251,191,36,0.1);border-left:4px solid #fbbf24;padding:12px 16px;margin:20px 0;">
+            <p style="margin:0;font-size:13px;"><b>⏰ Expires:</b> ${otpExpiry.toLocaleString()}</p>
+          </div>
+
+          <p style="margin:16px 0 8px;"><b>Instructions:</b></p>
+          <ul style="margin:0;padding-left:20px;line-height:1.8;">
+            <li>Show this OTP to the care center staff</li>
+            <li>Complete the handover paperwork</li>
+            <li>Your pet will be safely checked in</li>
+          </ul>
+
+          <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;">If you didn't arrive at the center, please contact us immediately.</p>
+        </td></tr>
+        <tr><td style="padding:16px 28px;text-align:center;font-size:11px;color:#6b7280;border-top:1px solid rgba(255,255,255,0.1);">
+          <p style="margin:0;">Pet Connect Temporary Care System &copy; ${new Date().getFullYear()}</p>
+        </td></tr>
+      </table>
+    </div>`;
+
+    // Send email (non-blocking)
+    await sendMail({ to: userEmail, subject, html }).catch(err => {
+      console.error('Failed to send OTP email:', err);
+    });
+
+    res.json({
+      success: true,
+      message: `Handover OTP sent to ${userEmail}`,
+      data: {
+        applicationId: application._id,
+        emailSent: userEmail,
+        userPhone: application.userId.phone,
+        userName,
+        expiresAt: otpExpiry
+      }
+    });
+  } catch (error) {
+    console.error('Generate handover OTP error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+/**
+ * Verify handover OTP (manager enters OTP from user)
+ */
+const verifyHandoverOTP = async (req, res) => {
+  try {
+    const { applicationId, otp } = req.body;
+
+    // Get manager's center
+    const center = await TemporaryCareCenter.findOne({ owner: req.user._id, isActive: true });
+    if (!center) {
+      return res.status(404).json({ success: false, message: 'Care center not found' });
+    }
+
+    const application = await TemporaryCareApplication.findOne({
+      _id: applicationId,
+      centerId: center._id
+    });
+
+    if (!application) {
+      return res.status(404).json({ success: false, message: 'Application not found' });
+    }
+
+    // Verify OTP (using checkIn schema field)
+    if (!application.checkIn || !application.checkIn.otp) {
+      return res.status(400).json({ success: false, message: 'No OTP generated for this application' });
+    }
+
+    if (application.checkIn.otpUsed) {
+      return res.status(400).json({ success: false, message: 'OTP has already been used' });
+    }
+
+    if (new Date() > application.checkIn.otpExpiresAt) {
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please generate a new one.' });
+    }
+
+    if (application.checkIn.otp !== otp) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    }
+
+    // Mark OTP as used
+    application.checkIn.otpUsed = true;
+    application.checkIn.actualCheckInTime = new Date();
+    application.checkIn.checkedInBy = req.user._id;
+    application.status = 'active_care';
+    application.careStartDate = new Date();
+    await application.save();
+
+    // Update pets' temporary care status AND currentStatus
+    const PetRegistry = require('../../../../core/models/PetRegistry');
+    
+    for (const petEntry of application.pets) {
+      let pet = await Pet.findOne({ petCode: petEntry.petId });
+      if (!pet) {
+        pet = await AdoptionPet.findOne({ petCode: petEntry.petId });
+      }
+
+      if (pet) {
+        // Update temporary care status
+        pet.temporaryCareStatus = {
+          inCare: true,
+          applicationId: application._id,
+          centerId: application.centerId,
+          startDate: new Date()
+        };
+        
+        // Update pet's current status to "in care"
+        pet.currentStatus = 'in care';
+        
+        await pet.save();
+        
+        // Also update in PetRegistry for consistency
+        await PetRegistry.findOneAndUpdate(
+          { petCode: petEntry.petId },
+          { 
+            currentStatus: 'in care',
+            currentLocation: `Temporary Care - ${center.centerName || 'Care Center'}`
+          }
+        );
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Pet handover completed successfully',
+      data: {
+        application,
+        careStartDate: application.careStartDate
+      }
+    });
+  } catch (error) {
+    console.error('Verify handover OTP error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
 module.exports = {
   getApplications,
   getApplicationDetails,
@@ -873,5 +1121,7 @@ module.exports = {
   recordEmergency,
   generateFinalBill,
   recordCheckOut,
-  getDashboardStats
+  getDashboardStats,
+  generateHandoverOTP,
+  verifyHandoverOTP
 };

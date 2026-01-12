@@ -1,5 +1,8 @@
 const Product = require('../models/Product');
 const ProductCategory = require('../models/ProductCategory');
+const ProductImage = require('../models/ProductImage');
+const { processEntityImages } = require('../../../core/utils/imageUploadHandler');
+const cloudinary = require('cloudinary').v2;
 
 /**
  * MANAGER: Product Management
@@ -503,3 +506,207 @@ exports.getProductAnalytics = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
+
+/**
+ * Upload product images
+ */
+exports.uploadProductImages = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { images } = req.body; // Array of base64 images with metadata
+
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No images provided. Please provide images in base64 format.' 
+      });
+    }
+
+    // Verify product exists
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    // Process images using the centralized image handler
+    const savedImages = await processEntityImages(
+      images,
+      'Product',
+      productId,
+      req.user._id,
+      'ecommerce',
+      'manager'
+    );
+
+    // Get existing images count to determine if this is the first image
+    const existingCount = await ProductImage.countDocuments({ productId, isActive: true });
+    
+    // Save images to ProductImage collection
+    const productImages = [];
+    for (let i = 0; i < savedImages.length; i++) {
+      const imgData = savedImages[i];
+      const isPrimary = existingCount === 0 && i === 0; // First image is primary if no images exist
+
+      const productImage = new ProductImage({
+        productId,
+        url: imgData.url,
+        publicId: imgData.publicId,
+        caption: imgData.caption || '',
+        altText: images[i]?.altText || product.name,
+        isPrimary,
+        displayOrder: existingCount + i,
+        imageType: images[i]?.imageType || 'product',
+        uploadedBy: req.user._id,
+        fileSize: imgData.fileSize,
+        dimensions: imgData.dimensions,
+        format: imgData.format
+      });
+
+      await productImage.save();
+      productImages.push(productImage);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `${productImages.length} image(s) uploaded successfully`,
+      data: { images: productImages }
+    });
+  } catch (error) {
+    console.error('Upload product images error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error while uploading images', 
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * Get all images for a product
+ */
+exports.getProductImages = async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    const images = await ProductImage.find({ 
+      productId, 
+      isActive: true 
+    })
+    .populate('uploadedBy', 'name email')
+    .sort({ isPrimary: -1, displayOrder: 1 });
+
+    res.json({
+      success: true,
+      data: { images, count: images.length }
+    });
+  } catch (error) {
+    console.error('Get product images error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * Delete a product image
+ */
+exports.deleteProductImage = async (req, res) => {
+  try {
+    const { productId, imageId } = req.params;
+
+    const image = await ProductImage.findOne({ 
+      _id: imageId, 
+      productId 
+    });
+
+    if (!image) {
+      return res.status(404).json({ success: false, message: 'Image not found' });
+    }
+
+    // Delete from Cloudinary
+    if (image.publicId) {
+      try {
+        await cloudinary.uploader.destroy(image.publicId);
+      } catch (cloudinaryError) {
+        console.error('Cloudinary deletion error:', cloudinaryError);
+        // Continue even if cloudinary deletion fails
+      }
+    }
+
+    // Soft delete
+    image.isActive = false;
+    await image.save();
+
+    // If this was the primary image, set another image as primary
+    if (image.isPrimary) {
+      const nextImage = await ProductImage.findOne({ 
+        productId, 
+        isActive: true,
+        _id: { $ne: imageId }
+      }).sort({ displayOrder: 1 });
+
+      if (nextImage) {
+        nextImage.isPrimary = true;
+        await nextImage.save();
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Image deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete product image error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * Set an image as primary
+ */
+exports.setPrimaryImage = async (req, res) => {
+  try {
+    const { productId, imageId } = req.params;
+
+    // Find the image
+    const image = await ProductImage.findOne({ 
+      _id: imageId, 
+      productId,
+      isActive: true 
+    });
+
+    if (!image) {
+      return res.status(404).json({ success: false, message: 'Image not found' });
+    }
+
+    // Unset current primary image
+    await ProductImage.updateMany(
+      { productId, isPrimary: true },
+      { isPrimary: false }
+    );
+
+    // Set new primary image
+    image.isPrimary = true;
+    await image.save();
+
+    res.json({
+      success: true,
+      message: 'Primary image updated successfully',
+      data: { image }
+    });
+  } catch (error) {
+    console.error('Set primary image error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error', 
+      error: error.message 
+    });
+  }
+};
+

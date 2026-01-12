@@ -62,9 +62,9 @@ const EcommerceDashboard = () => {
       const pendingCount = orders.filter(o => ['pending', 'processing'].includes(o.status)).length;
       const completedCount = orders.filter(o => o.status === 'delivered').length;
 
-      // Load featured products
-      const productsResponse = await apiClient.get('/ecommerce/products/featured');
-      setFeaturedProducts(productsResponse.data.products?.slice(0, 4) || []);
+      // Load recent products (instead of featured)
+      const productsResponse = await apiClient.get('/ecommerce/products?limit=4');
+      setFeaturedProducts(productsResponse.data.data?.products || []);
 
       setStats({
         cartItems: cartCount,

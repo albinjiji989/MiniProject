@@ -43,7 +43,6 @@ import ReservedPets from '../modules/managers/PetShop/ReservedPets'
 import PurchasedPets from '../modules/managers/PetShop/PurchasedPets'
 import PurchasePet from '../modules/managers/PetShop/PurchasePet'
 import PurchaseApplications from '../modules/managers/PetShop/PurchaseApplications'
-import PetShopDeliveryManagement from '../pages/Manager/PetShopDeliveryManagement'
 import PetShopPetHistory from '../modules/managers/PetShop/PetHistory'
 import HandoverManagement from '../modules/managers/PetShop/HandoverManagement'
 import ScheduleHandover from '../modules/managers/PetShop/ScheduleHandover'
@@ -56,6 +55,9 @@ import StepGenderClassification from '../modules/managers/PetShop/Wizard/StepGen
 import StepReviewImproved from '../modules/managers/PetShop/Wizard/StepReviewImproved'
 import StockManagement from '../modules/managers/PetShop/StockManagement'
 import EcommerceManagerDashboard from '../modules/managers/Ecommerce/EcommerceManagerDashboard'
+import EcommerceProductsList from '../modules/managers/Ecommerce/ProductsList'
+import EcommerceProductForm from '../modules/managers/Ecommerce/ProductForm'
+import EcommerceOrderManagement from '../modules/ecommerce/manager/OrderManagement'
 import PharmacyManagerDashboard from '../modules/managers/Pharmacy/PharmacyManagerDashboard'
 import RescueManagerDashboard from '../modules/managers/Rescue/RescueManagerDashboard'
 import TemporaryCareManagerDashboard from '../modules/managers/TemporaryCare/TemporaryCareManagerDashboard'
@@ -161,6 +163,10 @@ const ManagerRoutes = () => {
         <Route path="/ecommerce/*" element={
           <Routes>
             <Route path="/dashboard" element={<EcommerceManagerDashboard />} />
+            <Route path="/products" element={<EcommerceProductsList />} />
+            <Route path="/products/add" element={<EcommerceProductForm />} />
+            <Route path="/products/edit/:id" element={<EcommerceProductForm />} />
+            <Route path="/orders" element={<EcommerceOrderManagement />} />
             <Route path="/manage" element={<EcommerceManage />} />
             <Route path="/" element={<Navigate to="/manager/ecommerce/dashboard" replace />} />
           </Routes>
@@ -214,7 +220,6 @@ const ManagerRoutes = () => {
             <Route path="/schedule-handover/:reservationId" element={<ScheduleHandover />} />
             <Route path="/pets/:petId/history" element={<PetShopPetHistory />} />
             <Route path="/handover/:reservationId" element={<HandoverManagement />} />
-            <Route path="/delivery" element={<PetShopDeliveryManagement />} />
             {/* Stock Management Routes */}
             <Route path="/stocks" element={<StockManagement />} />
             <Route path="/stocks/add" element={<StockManagement />} />

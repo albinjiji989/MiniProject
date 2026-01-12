@@ -248,6 +248,16 @@ const ApplicationManagerDashboard = () => {
                       Set Pricing
                     </Button>
                   )}
+                  {app.status === 'advance_paid' && (
+                    <Button 
+                      size="small" 
+                      variant="contained" 
+                      color="warning"
+                      onClick={() => navigate(`/manager/temporary-care/applications/${app._id}`)}
+                    >
+                      Complete Handover
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

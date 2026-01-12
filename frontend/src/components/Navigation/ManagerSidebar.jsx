@@ -22,21 +22,16 @@ import {
   Inventory as InventoryIcon,
   ShoppingCart as OrdersIcon,
   Assessment as ReportsIcon,
-  People as StaffIcon,
   Settings as SettingsIcon,
   Store as StoreIcon,
   Pets as PetsIcon,
-  LocalShipping as DeliveryIcon,
   Receipt as InvoiceIcon,
   BookOnline as ReservationsIcon,
   Person as ProfileIcon,
-  Help as HelpIcon,
   Logout as LogoutIcon,
   ExpandLess,
   ExpandMore,
   ChevronLeft as ChevronLeftIcon,
-  TrendingUp as AnalyticsIcon,
-  Notifications as NotificationsIcon,
   ShoppingCart
 } from '@mui/icons-material'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -122,12 +117,6 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
           icon: <InventoryIcon />,
           path: `/manager/${type}/import`,
           active: location.pathname.includes('/import')
-        },
-        {
-          title: 'AI/ML Insights',
-          icon: <AnalyticsIcon />,
-          path: `/manager/${type}/aiml-dashboard`,
-          active: location.pathname.includes('/aiml-dashboard')
         },
         {
           title: 'Reports',
@@ -228,6 +217,36 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
       ]
     }
     
+    // ECOMMERCE MANAGER
+    if (type === 'ecommerce') {
+      return [
+        {
+          title: 'Dashboard',
+          icon: <DashboardIcon />,
+          path: '/manager/ecommerce/dashboard',
+          active: location.pathname === '/manager/ecommerce/dashboard'
+        },
+        {
+          title: 'Products',
+          icon: <InventoryIcon />,
+          path: '/manager/ecommerce/products',
+          active: location.pathname.includes('/products')
+        },
+        {
+          title: 'Orders',
+          icon: <OrdersIcon />,
+          path: '/manager/ecommerce/orders',
+          active: location.pathname.includes('/orders')
+        },
+        {
+          title: 'Reports',
+          icon: <ReportsIcon />,
+          path: '/manager/ecommerce/reports',
+          active: location.pathname.includes('/reports')
+        }
+      ]
+    }
+    
     // PETSHOP MANAGER (Default)
     return [
       {
@@ -305,47 +324,14 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
             icon: <ShoppingCart />,
             path: `/manager/${type}/purchase-applications`,
             active: location.pathname.includes('/purchase-applications')
-          },
-          {
-            title: 'Delivery',
-            icon: <DeliveryIcon />,
-            path: `/manager/${type}/delivery`,
-            active: location.pathname.includes('/delivery')
           }
         ]
       },
       {
-        title: 'Analytics & Reports',
+        title: 'Reports',
         icon: <ReportsIcon />,
-        key: 'reports',
-        expandable: true,
-        expanded: expandedItems.reports,
-        children: [
-          {
-            title: 'Sales Analytics',
-            icon: <AnalyticsIcon />,
-            path: `/manager/${type}/analytics`,
-            active: location.pathname.includes('/analytics')
-          },
-          {
-            title: 'Performance Reports',
-            icon: <ReportsIcon />,
-            path: `/manager/${type}/reports`,
-            active: location.pathname.includes('/reports')
-          },
-          {
-            title: 'Customer Insights',
-            icon: <AnalyticsIcon />,
-            path: `/manager/${type}/insights`,
-            active: location.pathname.includes('/insights')
-          }
-        ]
-      },
-      {
-        title: 'Staff Management',
-        icon: <StaffIcon />,
-        path: `/manager/${type}/staff`,
-        active: location.pathname.includes('/staff')
+        path: `/manager/${type}/reports`,
+        active: location.pathname.includes('/reports')
       },
       {
         title: 'Store Settings',
@@ -360,20 +346,9 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
 
   const bottomItems = [
     {
-      title: 'Notifications',
-      icon: <NotificationsIcon />,
-      path: `/manager/${moduleType}/notifications`,
-      badge: 3
-    },
-    {
       title: 'Profile',
       icon: <ProfileIcon />,
       path: `/manager/profile`
-    },
-    {
-      title: 'Help & Support',
-      icon: <HelpIcon />,
-      path: `/manager/${moduleType}/help`
     }
   ]
 

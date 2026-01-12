@@ -240,8 +240,14 @@ const SubmitTemporaryCareApplication = () => {
         return petId && index === self.findIndex(p => (p.petCode || p._id) === petId);
       });
 
-      console.log('✅ Loaded pets:', uniquePets.length, uniquePets);
-      return uniquePets;
+      // Filter out pets already in temporary care
+      const availablePets = uniquePets.filter(pet => !pet.temporaryCareStatus?.inCare);
+
+      console.log('✅ Total loaded pets:', uniquePets.length);
+      console.log('✅ Available pets (not in care):', availablePets.length);
+      console.log('❌ Pets in care (filtered out):', uniquePets.length - availablePets.length);
+      
+      return availablePets;
     } catch (err) {
       console.error('Error loading pets:', err);
       return [];

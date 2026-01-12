@@ -146,31 +146,6 @@ const TopNavbar = ({ onMenuClick, user, onThemeToggle, isDarkMode }) => {
             />
           </Box>
 
-          {/* Center Section - Search */}
-          <Box sx={{ 
-            display: { xs: 'none', md: 'flex' },
-            alignItems: 'center',
-            bgcolor: alpha(theme.palette.primary.main, 0.05),
-            borderRadius: 3,
-            px: 2,
-            py: 0.5,
-            minWidth: 300,
-            maxWidth: 400,
-            flex: 1,
-            mx: 3
-          }}>
-            <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />
-            <InputBase
-              placeholder="Search pets, shops, services..."
-              sx={{ 
-                flex: 1,
-                '& input': {
-                  padding: '8px 0'
-                }
-              }}
-            />
-          </Box>
-
           {/* Right Section */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {/* Theme Toggle */}

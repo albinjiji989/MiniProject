@@ -64,225 +64,22 @@ const PublicUserDashboard = () => {
       setActivityLoading(true)
       setActivityError('')
       
-      // Load all data in parallel to reduce loading time
-      const [petsRes, ownedRes, activityRes, purchasedRes, adoptedRes] = await Promise.allSettled([
-        userPetsAPI.list(),
-        apiClient.get('/pets/my-pets'),
-        apiClient.get('/user-dashboard/activities'),
-        apiClient.get('/petshop/user/my-purchased-pets'), // Add pet shop purchased pets
-        apiClient.get('/adoption/user/my-adopted-pets') // Add adopted pets
+      // Use unified API endpoint that includes temporaryCareStatus
+      const [petsRes, activityRes] = await Promise.allSettled([
+        userPetsAPI.getAllPets(),
+        apiClient.get('/user-dashboard/activities')
       ])
-      
 
-      
-      // Process pets from PetNew model
+      // Process pets from unified API
       let allPets = []
       if (petsRes.status === 'fulfilled') {
-        const petNewPets = petsRes.value.data?.data || []
-        allPets = [...allPets, ...petNewPets]
+        allPets = petsRes.value.data?.data?.pets || []
+        console.log('🐾 Dashboard loaded pets:', allPets.length)
+        console.log('🐾 Pets with temporary care:', allPets.filter(p => p.temporaryCareStatus?.inCare))
       }
       
-      // Process core owned pets
-      if (ownedRes.status === 'fulfilled') {
-        const corePets = ownedRes.value.data?.data?.pets || []
-        allPets = [...allPets, ...corePets]
-      }
-      
-      // Process purchased pets - EXACT SAME CODE AS PETS LIST PAGE
-      let purchasedPets = []
-      if (purchasedRes.status === 'fulfilled') {
-        purchasedPets = purchasedRes.value.data?.data?.pets || []
-        console.log('📦 Purchased pets from API:', purchasedPets.length)
-        if (purchasedPets.length > 0) {
-          console.log('📦 First purchased pet sample:', {
-            name: purchasedPets[0].name,
-            hasImages: !!purchasedPets[0].images,
-            imagesCount: purchasedPets[0].images?.length || 0,
-            firstImage: purchasedPets[0].images?.[0]
-          })
-        }
-      }
-      
-      // Process adopted pets
-      let adoptedPets = []
-      if (adoptedRes.status === 'fulfilled') {
-        adoptedPets = adoptedRes.value.data?.data || []
-      }
-      
-      // Map purchased pets to pet-like objects - EXACT SAME CODE AS PETS LIST PAGE
-      const mappedPurchasedPets = purchasedPets.map(pet => {
-        console.log('🔍 MAPPING PURCHASED PET:', {
-          petCode: pet.petCode,
-          hasImages: !!pet.images,
-          imagesArray: pet.images,
-          imagesLength: pet.images?.length,
-          firstImageUrl: pet.images?.[0]?.url
-        });
-        
-        return {
-          _id: pet._id,
-          name: pet.name || 'Pet',
-          images: pet.images || [],
-          petCode: pet.petCode,
-          breed: pet.breed,
-          species: pet.species,
-          gender: pet.gender || 'Unknown',
-          status: 'purchased',
-          currentStatus: 'purchased',
-          tags: ['purchased'],
-          purchaseDate: pet.acquiredDate,
-          age: pet.age,
-          ageUnit: pet.ageUnit,
-          color: pet.color,
-          createdAt: pet.acquiredDate,
-          source: pet.source,
-          sourceLabel: pet.sourceLabel,
-          petShopItemId: pet._id  // Add this for cross-source image fetching
-        };
-      });
-      
-      // Map adopted pets to pet-like objects
-      const mappedAdoptedPets = adoptedPets.map(pet => ({
-        _id: pet._id,
-        name: pet.name || 'Pet',
-        images: pet.images || [],
-        petCode: pet.petCode,
-        breed: pet.breed,
-        species: pet.species,
-        gender: pet.gender || 'Unknown',
-        status: 'adopted',
-        currentStatus: 'adopted',
-        tags: ['adoption'],
-        adoptionDate: pet.adoptionDate,
-        age: pet.age,
-        ageUnit: pet.ageUnit,
-        color: pet.color,
-        createdAt: pet.adoptionDate,
-        source: 'adoption',
-        sourceLabel: 'Adoption',
-        adoptionPetId: pet._id  // Add this for cross-source image fetching
-      }))
-      
-      console.log('🐕 ALL PETS (from /pets):', allPets.map(p => ({ 
-        _id: p._id, 
-        petCode: p.petCode, 
-        name: p.name, 
-        source: p.source,
-        adoptionPetId: p.adoptionPetId,
-        petShopItemId: p.petShopItemId
-      })));
-      
-      console.log('🎁 ADOPTED PETS (from /adoption):', mappedAdoptedPets.map(p => ({ 
-        _id: p._id, 
-        petCode: p.petCode, 
-        name: p.name, 
-        source: p.source,
-        adoptionPetId: p.adoptionPetId
-      })));
-      
-      console.log('🐕 ADOPTION PETS IN ALL PETS:', allPets.filter(p => p.source === 'adoption').map(p => ({ 
-        _id: p._id, 
-        petCode: p.petCode, 
-        name: p.name, 
-        source: p.source,
-        adoptionPetId: p.adoptionPetId
-      })));
-      
-      // DETAILED LOG - Copy this to see the issue
-      console.log('📋 FULL ADOPTION DATA:');
-      console.log('  From /adoption API:', JSON.stringify(mappedAdoptedPets.map(p => ({ 
-        _id: p._id, 
-        petCode: p.petCode,
-        adoptionPetId: p.adoptionPetId
-      }))));
-      console.log('  From /pets API:', JSON.stringify(allPets.filter(p => p.source === 'adoption').map(p => ({ 
-        _id: p._id, 
-        petCode: p.petCode,
-        adoptionPetId: p.adoptionPetId
-      }))));
-      
-      console.log('🛒 PURCHASED PETS (from /petshop):', mappedPurchasedPets.map(p => ({ 
-        _id: p._id, 
-        petCode: p.petCode, 
-        name: p.name, 
-        source: p.source,
-        petShopItemId: p.petShopItemId
-      })));
-
-      // Combine all pets and remove duplicates - EXACT SAME CODE AS PETS LIST PAGE
-      // PUT PURCHASED/ADOPTED PETS FIRST - they have complete data including images
-      // allPets from /pets endpoint may have duplicates without images
-      const combinedPets = [...mappedPurchasedPets, ...mappedAdoptedPets, ...allPets]
-      
-      console.log('🔍 BEFORE DEDUP - Total pets:', combinedPets.length, {
-        petshop: combinedPets.filter(p => p.source === 'petshop').length,
-        adoption: combinedPets.filter(p => p.source === 'adoption').length,
-        core: combinedPets.filter(p => p.source === 'core').length
-      });
-      
-      console.log('🔍 COMBINED PETS - First petshop pet:', combinedPets.find(p => p.source === 'petshop'));
-      
-      // More robust deduplication based on petCode first, then _id
-      // This will keep the FIRST occurrence (which is now from purchased/adopted with images)
-      const uniquePets = combinedPets.filter((pet, index, self) => {
-        // Strategy 1: For adoption pets, ALWAYS use adoptionPetId (even if they have petCode)
-        if (pet.source === 'adoption' && pet.adoptionPetId) {
-          const firstIndexWithAdoptionId = self.findIndex(p => 
-            p.source === 'adoption' && p.adoptionPetId === pet.adoptionPetId
-          );
-          if (firstIndexWithAdoptionId !== index) {
-            console.log('🗑️ REMOVING DUPLICATE (adoptionPetId):', pet.adoptionPetId, 'name:', pet.name);
-          }
-          return index === firstIndexWithAdoptionId;
-        }
-        
-        // Strategy 2: For petshop pets, use petShopItemId first
-        if (pet.source === 'petshop' && pet.petShopItemId) {
-          const firstIndexWithItemId = self.findIndex(p => 
-            p.source === 'petshop' && p.petShopItemId === pet.petShopItemId
-          );
-          if (firstIndexWithItemId !== index) {
-            console.log('🗑️ REMOVING DUPLICATE (petShopItemId):', pet.petShopItemId);
-          }
-          return index === firstIndexWithItemId;
-        }
-        
-        // Strategy 3: If pet has a petCode, deduplicate based on that
-        if (pet.petCode) {
-          const firstIndexWithCode = self.findIndex(p => p.petCode === pet.petCode);
-          if (firstIndexWithCode !== index) {
-            console.log('🗑️ REMOVING DUPLICATE (petCode):', pet.petCode, 'source:', pet.source);
-          }
-          return index === firstIndexWithCode;
-        }
-        
-        // Strategy 4: Fallback to _id for unique pets
-        const firstIndexWithId = self.findIndex(p => p._id === pet._id);
-        if (firstIndexWithId !== index) {
-          console.log('🗑️ REMOVING DUPLICATE (_id):', pet._id, 'name:', pet.name);
-        }
-        return index === firstIndexWithId;
-      })
-      
-      console.log('🔍 AFTER DEDUP - Total pets:', uniquePets.length, {
-        petshop: uniquePets.filter(p => p.source === 'petshop').length,
-        adoption: uniquePets.filter(p => p.source === 'adoption').length,
-        core: uniquePets.filter(p => p.source === 'core').length
-      });
-      
-      console.log('🔍 UNIQUE PETS - First petshop pet:', uniquePets.find(p => p.source === 'petshop'));
-      console.log('🔍 UNIQUE PETS - First petshop pet images:', uniquePets.find(p => p.source === 'petshop')?.images);
-      
-      console.log('📋 ALL UNIQUE PETS WITH KEY FIELDS:', uniquePets.map(p => ({
-        _id: p._id,
-        petCode: p.petCode,
-        name: p.name,
-        source: p.source,
-        hasImages: !!p.images?.length
-      })));
-      
-      setMyPets(uniquePets)
-      setOwnedPets(uniquePets)
+      setMyPets(allPets)
+      setOwnedPets(allPets)
       
       // Process recent activity
       if (activityRes.status === 'fulfilled') {
@@ -775,8 +572,9 @@ const PublicUserDashboard = () => {
               <Box sx={{ overflowX: 'auto', pb: 1 }}>
                 <Box sx={{ display: 'flex', gap: 3, minWidth: '100%' }}>
                   {allMyPets.slice(0, 4).map((pet) => {
-                    const isAdopted = pet?.tags?.includes('adoption') || pet?.status === 'adopted';
-                    const isPurchased = pet?.tags?.includes('purchased') || pet?.source === 'petshop';
+                    // Determine pet type from source field (unified API uses 'source' and 'firstAddedSource')
+                    const isAdopted = pet.source === 'adoption' || pet.firstAddedSource === 'adoption_center' || pet?.tags?.includes('adoption') || pet?.status === 'adopted';
+                    const isPurchased = pet.source === 'petshop' || pet.firstAddedSource === 'pet_shop' || pet?.tags?.includes('purchased');
                     
                     // Color scheme based on pet type
                     const cardColor = isAdopted 
@@ -851,7 +649,7 @@ const PublicUserDashboard = () => {
                             }}
                           />
                           
-                          {/* Status Badge */}
+                          {/* Status Badge - Always show source status */}
                           <Box 
                             sx={{ 
                               position: 'absolute', 
@@ -885,6 +683,21 @@ const PublicUserDashboard = () => {
                             {pet.name || 'Unnamed Pet'}
                           </Typography>
                           
+                          {/* Temporary Care Badge - Show below name */}
+                          {pet.temporaryCareStatus?.inCare && (
+                            <Chip 
+                              label="In Temporary Care" 
+                              size="small" 
+                              color="warning" 
+                              sx={{ 
+                                fontWeight: 600,
+                                mb: 1,
+                                bgcolor: 'warning.main',
+                                color: 'white'
+                              }}
+                            />
+                          )}
+                          
                           {pet.petCode && (
                             <Chip 
                               label={pet.petCode} 
@@ -905,7 +718,7 @@ const PublicUserDashboard = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <PetIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
                               <Typography variant="body2" color="text.secondary">
-                                {pet.breedId?.name || pet.breed?.name || pet.breed || 'Breed not specified'}
+                                {pet.breed?.name || (typeof pet.breed === 'string' ? pet.breed : 'Unknown Breed')}
                               </Typography>
                             </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -913,7 +726,7 @@ const PublicUserDashboard = () => {
                                 fontWeight: 600,
                                 color: pet.gender === 'Male' ? '#3b82f6' : pet.gender === 'Female' ? '#ec4899' : 'text.secondary'
                               }}>
-                                {pet.gender || 'Gender not set'}
+                                {typeof pet.gender === 'string' ? pet.gender : 'Gender not set'}
                               </Typography>
                               {pet.age && (
                                 <>

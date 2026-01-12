@@ -74,7 +74,7 @@ const createPet = async (req, res) => {
       age: typeof age === 'number' ? age : (age ? Number(age) : undefined),
       ageUnit: ageUnit || 'months',
       color: color || undefined,
-      currentStatus: 'Available',
+      currentStatus: 'with user',
       healthStatus: 'Good'
     };
 

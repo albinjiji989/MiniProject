@@ -27,7 +27,6 @@ import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 const AdoptionManagerDashboard = () => {
   const navigate = useNavigate();
@@ -152,9 +151,6 @@ const AdoptionManagerDashboard = () => {
           <Typography variant="body2" color="text.secondary">Overview of pets, applications, and operations</Typography>
         </Box>
         <Stack direction="row" spacing={1}>
-          <Button variant="outlined" startIcon={<AutoAwesomeIcon />} onClick={() => navigate('/manager/adoption/aiml-dashboard')}>
-            AI/ML Insights
-          </Button>
           <Button variant="outlined" startIcon={<RefreshIcon />} onClick={fetchData}>Refresh</Button>
           <Button variant="contained" onClick={() => navigate('/manager/adoption/wizard/start')}>Add New Pet</Button>
         </Stack>
