@@ -111,6 +111,28 @@ const verifyUserPayment = async (req, res) => {
     };
 
     await application.completePayment(application.paymentDetails);
+    
+    // Blockchain: Log payment completion event
+    try {
+      const BlockchainService = require('../../../../core/services/blockchainService');
+      await BlockchainService.addBlock({
+        eventType: 'PAYMENT_COMPLETED',
+        petId: application.petId,
+        userId: req.user.id, // Adopter who paid
+        data: {
+          applicationId: application._id,
+          adopterId: req.user.id,
+          amount: paymentDetails.payment.amount / 100,
+          currency: paymentDetails.payment.currency,
+          transactionId: paymentDetails.payment.id,
+          razorpayOrderId: orderId,
+          razorpayPaymentId: paymentId,
+          paymentDate: new Date()
+        }
+      });
+    } catch (blockchainErr) {
+      console.error('Blockchain logging failed for PAYMENT_COMPLETED:', blockchainErr);
+    }
 
     // Complete adoption
     const pet = await AdoptionPet.findById(application.petId);

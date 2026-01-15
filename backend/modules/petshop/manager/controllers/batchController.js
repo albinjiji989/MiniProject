@@ -7,6 +7,7 @@ const PetBatch = require('../models/PetBatch');
 const PetInventoryItem = require('../models/PetInventoryItem');
 const ErrorHandler = require('../../../../core/utils/errorHandler');
 const logger = require('../../../../core/utils/logger');
+const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
 
 // ============= PUBLIC (USER) ENDPOINTS =============
 
@@ -226,6 +227,15 @@ exports.reservePetFromBatch = async (req, res) => {
     // Update batch availability
     await batch.reserve(1);
 
+    // Blockchain: record reservation event
+    await petshopBlockchainService.addBlock('pet_reserved', {
+      petId: availablePet._id,
+      batchId: batch._id,
+      reservedBy: userId,
+      reservedAt: availablePet.reservedAt,
+      reservationExpiresAt: availablePet.reservationExpiresAt
+    });
+
     res.json({
       success: true,
       data: {
@@ -327,6 +337,17 @@ exports.createBatch = async (req, res) => {
 
     const savedBatch = await batch.save();
 
+    // Blockchain: record batch creation
+    await petshopBlockchainService.addBlock('batch_created', {
+      batchId: savedBatch._id,
+      shopId,
+      speciesId,
+      breedId,
+      counts,
+      price,
+      createdBy: req.user._id
+    });
+
     // Populate the response with related data
     const populatedBatch = await PetBatch.findById(savedBatch._id)
       .populate('shopId', 'name code')
@@ -410,6 +431,13 @@ exports.publishBatch = async (req, res) => {
     // Mark batch as published
     await batch.publish();
 
+    // Blockchain: record batch published event
+    await petshopBlockchainService.addBlock('batch_published', {
+      batchId: batch._id,
+      publishedBy: req.user._id,
+      publishedAt: new Date()
+    });
+
     res.json({
       success: true,
       data: batch,
@@ -479,6 +507,14 @@ exports.confirmReservation = async (req, res) => {
     pet.confirmedAt = new Date();
     await pet.save();
 
+    // Blockchain: record reservation confirmation event
+    await petshopBlockchainService.addBlock('reservation_confirmed', {
+      petId: pet._id,
+      batchId: batchId,
+      confirmedBy: req.user._id,
+      confirmedAt: pet.confirmedAt
+    });
+
     res.json({
       success: true,
       data: pet,
@@ -519,6 +555,15 @@ exports.releaseReservation = async (req, res) => {
     // Update batch availability
     await batch.cancelReservation(1);
 
+    // Blockchain: record reservation release event
+    await petshopBlockchainService.addBlock('reservation_released', {
+      petId: pet._id,
+      batchId: batch._id,
+      releasedBy: req.user._id,
+      releasedAt: new Date(),
+      reason: reason || null
+    });
+
     res.json({
       success: true,
       data: pet,
@@ -553,6 +598,15 @@ exports.markPetAsSold = async (req, res) => {
     await pet.save();
 
     await batch.markSold(1);
+
+    // Blockchain: record pet sold event
+    await petshopBlockchainService.addBlock('pet_sold', {
+      petId: pet._id,
+      batchId,
+      soldTo: pet.soldTo || null,
+      soldAt: pet.soldAt,
+      status: pet.status
+    });
 
     res.json({
       success: true,

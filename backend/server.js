@@ -83,6 +83,9 @@ app.use('/api/user-dashboard', require('./core/routes/user/userDashboard'));
 app.use('/api/user/ownership-history', require('./core/routes/user/user/ownership-history'));
 app.use('/api/pets', require('./core/routes/pet'));  // Use index.js to include centralized routes
 app.use('/api/pet-age', require('./core/routes/petAgeRoutes'));
+
+// Blockchain routes
+app.use('/api/blockchain', require('./core/routes/blockchainRoutes'));
 app.use('/api/pet-audit', require('./core/routes/petAuditRoutes'));
 
 // Management System Routes

@@ -1,199 +1,317 @@
 const ProductReview = require('../models/ProductReview');
-const Order = require('../models/Order');
 const Product = require('../models/Product');
+const Order = require('../models/Order');
+const { uploadReviewImages, deleteImages } = require('../../../config/cloudinary');
 
 /**
- * Add product review
+ * Create product review with images
  */
-exports.addReview = async (req, res) => {
+exports.createReview = [
+  uploadReviewImages.array('images', 5), // Max 5 images per review
+  async (req, res) => {
+    try {
+      const { productId, rating, title, comment } = req.body;
+
+      // Verify user purchased the product
+      const hasPurchased = await Order.exists({
+        user: req.user.id,
+        'items.product': productId,
+        status: 'delivered'
+      });
+
+      if (!hasPurchased) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only review products you have purchased'
+        });
+      }
+
+      // Check if user already reviewed
+      const existingReview = await ProductReview.findOne({
+        product: productId,
+        user: req.user.id
+      });
+
+      if (existingReview) {
+        return res.status(400).json({
+          success: false,
+          message: 'You have already reviewed this product'
+        });
+      }
+
+      // Format uploaded images
+      const images = req.files ? req.files.map(file => ({
+        url: file.path,
+        publicId: file.filename
+      })) : [];
+
+      // Create review
+      const review = new ProductReview({
+        product: productId,
+        user: req.user.id,
+        rating: parseInt(rating),
+        title,
+        comment,
+        images,
+        isVerifiedPurchase: true
+      });
+
+      await review.save();
+
+      // Update product rating
+      const product = await Product.findById(productId);
+      if (product) {
+        product.updateRating(parseInt(rating));
+        await product.save();
+      }
+
+      await review.populate('user', 'name profileImage');
+
+      res.status(201).json({
+        success: true,
+        message: 'Review submitted successfully',
+        data: review
+      });
+    } catch (error) {
+      console.error('Error creating review:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error creating review',
+        error: error.message
+      });
+    }
+  }
+];
+
+/**
+ * Get product reviews
+ */
+exports.getProductReviews = async (req, res) => {
   try {
     const { productId } = req.params;
-    const {
-      orderId,
-      rating,
-      title,
-      comment,
-      images,
-      videos,
-      petInfo
-    } = req.body;
-    
-    // Check if product exists
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
+    const { page = 1, limit = 10, rating, sortBy = 'helpful' } = req.query;
+
+    const query = { product: productId };
+    if (rating) query.rating = parseInt(rating);
+
+    let sort = {};
+    switch (sortBy) {
+      case 'recent':
+        sort = { createdAt: -1 };
+        break;
+      case 'helpful':
+        sort = { helpfulCount: -1, createdAt: -1 };
+        break;
+      case 'rating-high':
+        sort = { rating: -1, createdAt: -1 };
+        break;
+      case 'rating-low':
+        sort = { rating: 1, createdAt: -1 };
+        break;
+      default:
+        sort = { helpfulCount: -1 };
     }
-    
-    // Check if user already reviewed this product
-    const existingReview = await ProductReview.findOne({
-      product: productId,
-      user: req.user._id
-    });
-    
-    if (existingReview) {
-      return res.status(400).json({
-        success: false,
-        message: 'You have already reviewed this product'
-      });
-    }
-    
-    // Verify purchase if orderId provided
-    let isVerifiedPurchase = false;
-    if (orderId) {
-      const order = await Order.findOne({
-        _id: orderId,
-        customer: req.user._id,
-        status: 'delivered',
-        'items.product': productId
-      });
-      
-      if (order) {
-        isVerifiedPurchase = true;
+
+    const reviews = await ProductReview.find(query)
+      .populate('user', 'name profileImage')
+      .sort(sort)
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .lean();
+
+    const count = await ProductReview.countDocuments(query);
+
+    // Get rating distribution
+    const distribution = await ProductReview.aggregate([
+      { $match: { product: productId } },
+      {
+        $group: {
+          _id: '$rating',
+          count: { $sum: 1 }
+        }
       }
-    }
-    
-    // Create review
-    const review = new ProductReview({
-      product: productId,
-      user: req.user._id,
-      order: orderId,
-      rating: {
-        overall: rating.overall,
-        quality: rating.quality,
-        value: rating.value,
-        packaging: rating.packaging
-      },
-      title,
-      comment,
-      images,
-      videos,
-      petInfo,
-      isVerifiedPurchase,
-      status: 'approved' // Auto-approve, or set to 'pending' for moderation
+    ]);
+
+    const ratingDistribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    distribution.forEach(d => {
+      ratingDistribution[d._id] = d.count;
     });
-    
-    await review.save();
-    
-    res.status(201).json({
+
+    res.json({
       success: true,
-      message: 'Review submitted successfully',
-      data: review
+      data: reviews,
+      ratingDistribution,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        pages: Math.ceil(count / limit),
+        limit: parseInt(limit)
+      }
     });
   } catch (error) {
-    console.error('Add review error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    console.error('Error fetching reviews:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching reviews',
+      error: error.message
+    });
   }
 };
 
 /**
  * Update review
  */
-exports.updateReview = async (req, res) => {
-  try {
-    const { reviewId } = req.params;
-    
-    const review = await ProductReview.findOne({
-      _id: reviewId,
-      user: req.user._id
-    });
-    
-    if (!review) {
-      return res.status(404).json({ success: false, message: 'Review not found' });
+exports.updateReview = [
+  uploadReviewImages.array('newImages', 5),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { rating, title, comment, removeImageIds } = req.body;
+
+      const review = await ProductReview.findOne({
+        _id: id,
+        user: req.user.id
+      });
+
+      if (!review) {
+        return res.status(404).json({
+          success: false,
+          message: 'Review not found'
+        });
+      }
+
+      // Update fields
+      if (rating) review.rating = parseInt(rating);
+      if (title) review.title = title;
+      if (comment) review.comment = comment;
+
+      // Remove images
+      if (removeImageIds && removeImageIds.length > 0) {
+        const publicIds = removeImageIds.map(id => 
+          review.images.find(img => img._id.toString() === id)?.publicId
+        ).filter(Boolean);
+        
+        if (publicIds.length > 0) {
+          await deleteImages(publicIds);
+        }
+        
+        review.images = review.images.filter(
+          img => !removeImageIds.includes(img._id.toString())
+        );
+      }
+
+      // Add new images
+      if (req.files && req.files.length > 0) {
+        const newImages = req.files.map(file => ({
+          url: file.path,
+          publicId: file.filename
+        }));
+        review.images.push(...newImages);
+      }
+
+      await review.save();
+
+      // Update product rating if rating changed
+      if (rating) {
+        const product = await Product.findById(review.product);
+        if (product) {
+          // Recalculate rating
+          const allReviews = await ProductReview.find({ product: product._id });
+          const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
+          product.ratings.average = totalRating / allReviews.length;
+          product.ratings.count = allReviews.length;
+          
+          // Update distribution
+          product.ratings.distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+          allReviews.forEach(r => {
+            product.ratings.distribution[r.rating]++;
+          });
+          
+          await product.save();
+        }
+      }
+
+      await review.populate('user', 'name profileImage');
+
+      res.json({
+        success: true,
+        message: 'Review updated successfully',
+        data: review
+      });
+    } catch (error) {
+      console.error('Error updating review:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error updating review',
+        error: error.message
+      });
     }
-    
-    // Update allowed fields
-    const { rating, title, comment, images, videos, petInfo } = req.body;
-    
-    if (rating) {
-      review.rating = {
-        overall: rating.overall || review.rating.overall,
-        quality: rating.quality || review.rating.quality,
-        value: rating.value || review.rating.value,
-        packaging: rating.packaging || review.rating.packaging
-      };
-    }
-    
-    if (title !== undefined) review.title = title;
-    if (comment !== undefined) review.comment = comment;
-    if (images !== undefined) review.images = images;
-    if (videos !== undefined) review.videos = videos;
-    if (petInfo !== undefined) review.petInfo = petInfo;
-    
-    // Reset to pending if significantly changed
-    review.status = 'approved'; // Or 'pending' for re-moderation
-    
-    await review.save();
-    
-    res.json({
-      success: true,
-      message: 'Review updated successfully',
-      data: review
-    });
-  } catch (error) {
-    console.error('Update review error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
-};
+];
 
 /**
  * Delete review
  */
 exports.deleteReview = async (req, res) => {
   try {
-    const { reviewId } = req.params;
-    
+    const { id } = req.params;
+
     const review = await ProductReview.findOne({
-      _id: reviewId,
-      user: req.user._id
+      _id: id,
+      user: req.user.id
     });
-    
+
     if (!review) {
-      return res.status(404).json({ success: false, message: 'Review not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Review not found'
+      });
     }
-    
-    await review.remove();
-    
+
+    // Delete images from Cloudinary
+    if (review.images && review.images.length > 0) {
+      const publicIds = review.images.map(img => img.publicId);
+      await deleteImages(publicIds);
+    }
+
+    await review.deleteOne();
+
+    // Update product rating
+    const product = await Product.findById(review.product);
+    if (product) {
+      const allReviews = await ProductReview.find({ product: product._id });
+      
+      if (allReviews.length === 0) {
+        product.ratings = {
+          average: 0,
+          count: 0,
+          distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
+        };
+      } else {
+        const totalRating = allReviews.reduce((sum, r) => sum + r.rating, 0);
+        product.ratings.average = totalRating / allReviews.length;
+        product.ratings.count = allReviews.length;
+        
+        product.ratings.distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+        allReviews.forEach(r => {
+          product.ratings.distribution[r.rating]++;
+        });
+      }
+      
+      await product.save();
+    }
+
     res.json({
       success: true,
       message: 'Review deleted successfully'
     });
   } catch (error) {
-    console.error('Delete review error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
-
-/**
- * Get user's reviews
- */
-exports.getMyReviews = async (req, res) => {
-  try {
-    const { page = 1, limit = 10 } = req.query;
-    
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
-    const [reviews, total] = await Promise.all([
-      ProductReview.find({ user: req.user._id })
-        .populate('product', 'name slug images')
-        .sort('-createdAt')
-        .skip(skip)
-        .limit(parseInt(limit)),
-      ProductReview.countDocuments({ user: req.user._id })
-    ]);
-    
-    res.json({
-      success: true,
-      data: reviews,
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(total / parseInt(limit)),
-        total,
-        limit: parseInt(limit)
-      }
+    console.error('Error deleting review:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting review',
+      error: error.message
     });
-  } catch (error) {
-    console.error('Get my reviews error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
@@ -202,133 +320,41 @@ exports.getMyReviews = async (req, res) => {
  */
 exports.markHelpful = async (req, res) => {
   try {
-    const { reviewId } = req.params;
-    
-    const review = await ProductReview.findById(reviewId);
-    
+    const { id } = req.params;
+
+    const review = await ProductReview.findById(id);
     if (!review) {
-      return res.status(404).json({ success: false, message: 'Review not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Review not found'
+      });
     }
-    
-    review.markHelpful(req.user._id);
+
+    // Check if user already marked as helpful
+    if (review.helpfulBy.includes(req.user.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have already marked this review as helpful'
+      });
+    }
+
+    review.helpfulCount += 1;
+    review.helpfulBy.push(req.user.id);
     await review.save();
-    
+
     res.json({
       success: true,
       message: 'Marked as helpful',
-      helpfulCount: review.helpful.count
+      data: { helpfulCount: review.helpfulCount }
     });
   } catch (error) {
-    console.error('Mark helpful error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    console.error('Error marking review as helpful:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error marking review as helpful',
+      error: error.message
+    });
   }
 };
 
-/**
- * Mark review as not helpful
- */
-exports.markNotHelpful = async (req, res) => {
-  try {
-    const { reviewId } = req.params;
-    
-    const review = await ProductReview.findById(reviewId);
-    
-    if (!review) {
-      return res.status(404).json({ success: false, message: 'Review not found' });
-    }
-    
-    review.markNotHelpful(req.user._id);
-    await review.save();
-    
-    res.json({
-      success: true,
-      message: 'Marked as not helpful',
-      notHelpfulCount: review.notHelpful.count
-    });
-  } catch (error) {
-    console.error('Mark not helpful error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
-
-/**
- * Report review
- */
-exports.reportReview = async (req, res) => {
-  try {
-    const { reviewId } = req.params;
-    const { reason } = req.body;
-    
-    const review = await ProductReview.findById(reviewId);
-    
-    if (!review) {
-      return res.status(404).json({ success: false, message: 'Review not found' });
-    }
-    
-    // Check if user already reported
-    const alreadyReported = review.reports.some(
-      r => r.user.toString() === req.user._id.toString()
-    );
-    
-    if (alreadyReported) {
-      return res.status(400).json({
-        success: false,
-        message: 'You have already reported this review'
-      });
-    }
-    
-    review.reports.push({
-      user: req.user._id,
-      reason,
-      createdAt: new Date()
-    });
-    
-    // Auto-flag if multiple reports
-    if (review.reports.length >= 3) {
-      review.status = 'reported';
-    }
-    
-    await review.save();
-    
-    res.json({
-      success: true,
-      message: 'Review reported successfully'
-    });
-  } catch (error) {
-    console.error('Report review error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
-
-/**
- * Add reply to review
- */
-exports.addReply = async (req, res) => {
-  try {
-    const { reviewId } = req.params;
-    const { comment } = req.body;
-    
-    const review = await ProductReview.findById(reviewId);
-    
-    if (!review) {
-      return res.status(404).json({ success: false, message: 'Review not found' });
-    }
-    
-    review.replies.push({
-      user: req.user._id,
-      comment,
-      createdAt: new Date()
-    });
-    
-    await review.save();
-    
-    res.json({
-      success: true,
-      message: 'Reply added successfully',
-      data: review
-    });
-  } catch (error) {
-    console.error('Add reply error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
+module.exports = exports;

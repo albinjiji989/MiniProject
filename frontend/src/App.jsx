@@ -18,15 +18,7 @@ import ManagerRoutes from './routes/ManagerRoutes'
 import ProtectedRoute from './core/components/ProtectedRoute'
 import StoreNameSetup from './pages/Manager/StoreNameSetup'
 
-// E-Commerce Manager Pages
-import ProductManagement from './modules/ecommerce/manager/ProductManagement'
-import CategoryManagement from './modules/ecommerce/manager/CategoryManagement'
-import OrderManagement from './modules/ecommerce/manager/OrderManagement'
-
-// E-Commerce User Pages
-import ProductBrowse from './modules/ecommerce/user/ProductBrowse'
-import Cart from './modules/ecommerce/user/Cart'
-import Checkout from './modules/ecommerce/user/Checkout'
+// E-Commerce imports removed - now handled by ManagerRoutes and UserRoutes
 
 function App() {
   const { user, loading } = useAuth()
@@ -105,13 +97,7 @@ function App() {
     <Routes>
       <Route 
         path="/" 
-        element={
-          loading
-            ? null
-            : (user
-                ? <Navigate to={getRedirectPath(user)} replace />
-                : <Landing />)
-        } 
+        element={<Landing />} 
       />
 
       <Route path="/about" element={<About />} />
@@ -150,11 +136,7 @@ function App() {
       {/* Dashboard route - standalone with its own navigation */}
       <Route
         path="/User/dashboard"
-        element={
-          <ProtectedRoute>
-            <PublicUserDashboard />
-          </ProtectedRoute>
-        }
+        element={<PublicUserDashboard />}
       />
       {/* Back-compat redirect */}
       <Route path="/dashboard" element={<Navigate to="/User/dashboard" replace />} />
@@ -169,14 +151,10 @@ function App() {
         }
       />
       
-      {/* User protected routes */}
+      {/* User routes - public, protect sensitive actions individually */}
       <Route
         path="/User/*"
-        element={
-          <ProtectedRoute>
-            <UserRoutes />
-          </ProtectedRoute>
-        }
+        element={<UserRoutes />}
       />
       
       {/* Manager routes */}
@@ -189,15 +167,7 @@ function App() {
         path="/manager/store-name-setup"
         element={<StoreNameSetup />} />
       
-      {/* E-Commerce Manager Routes */}
-      <Route path="/manager/ecommerce/products" element={<ProtectedRoute><ProductManagement /></ProtectedRoute>} />
-      <Route path="/manager/ecommerce/categories" element={<ProtectedRoute><CategoryManagement /></ProtectedRoute>} />
-      <Route path="/manager/ecommerce/orders" element={<ProtectedRoute><OrderManagement /></ProtectedRoute>} />
-      
-      {/* E-Commerce User Routes */}
-      <Route path="/ecommerce/products" element={<ProductBrowse />} />
-      <Route path="/ecommerce/cart" element={<ProtectedRoute><Cart /></ProtectedRoute>} />
-      <Route path="/ecommerce/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+      {/* E-Commerce routes now handled by ManagerRoutes and UserRoutes */}
       
       {/* Compatibility routes */}
       <Route path="/manager/adoptions/*" element={<Navigate to="/manager/adoption" replace />} />

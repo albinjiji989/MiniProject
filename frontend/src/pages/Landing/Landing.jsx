@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
 import {
   Box,
   Container,
@@ -41,12 +42,14 @@ import {
   ContactMail as ContactIcon,
 } from '@mui/icons-material'
 
+
 const Landing = () => {
   const navigate = useNavigate()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isNavigating, setIsNavigating] = useState(false)
+  const { user, loading } = useAuth()
 
   const handleMobileMenuToggle = () => {
     setMobileMenuOpen(!mobileMenuOpen)
@@ -56,7 +59,6 @@ const Landing = () => {
     if (isNavigating) return
     setIsNavigating(true)
     navigate('/login')
-    // Reset after a short delay to allow for navigation
     setTimeout(() => setIsNavigating(false), 1000)
   }
 
@@ -64,7 +66,14 @@ const Landing = () => {
     if (isNavigating) return
     setIsNavigating(true)
     navigate('/register')
-    // Reset after a short delay to allow for navigation
+    setTimeout(() => setIsNavigating(false), 1000)
+  }
+
+  // New: handle Get Started logic (always go to login)
+  const handleGetStarted = () => {
+    if (isNavigating) return
+    setIsNavigating(true)
+    navigate('/login')
     setTimeout(() => setIsNavigating(false), 1000)
   }
 
@@ -282,8 +291,8 @@ const Landing = () => {
                     variant="contained"
                     size="large"
                     endIcon={<ArrowForwardIcon />}
-                    onClick={handleRegisterClick}
-                    disabled={isNavigating}
+                    onClick={handleGetStarted}
+                    disabled={isNavigating || loading}
                     sx={{
                       background: 'linear-gradient(135deg, #6a11cb 0%, #2575fc 100%)',
                       boxShadow: '0 12px 30px rgba(37, 117, 252, 0.4)',
@@ -293,7 +302,7 @@ const Landing = () => {
                       fontSize: '1.1rem'
                     }}
                   >
-                    {isNavigating ? 'Loading...' : 'Get Started'}
+                    {isNavigating || loading ? 'Loading...' : 'Get Started'}
                   </Button>
                   <Button
                     variant="outlined"

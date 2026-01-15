@@ -181,18 +181,42 @@ const listReservedPets = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
+// const petshopBlockchainService = require('../../../../core/services/petshopBlockchainService');
+const PetCodeGenerator = require('../../../../core/utils/petCodeGenerator');
 
 const createInventoryItem = async (req, res) => {
   try {
+    // Only allow managers to add pets
+    if (!req.user || !req.user.role || !req.user.role.includes('manager')) {
+      return res.status(403).json({ success: false, message: 'Only managers can add pets' });
+    }
+
     // Use UnifiedPetService to create pet shop pet and register in PetRegistry
     const UnifiedPetService = require('../../../../core/services/UnifiedPetService');
-    
+
     // Add createdBy field from authenticated user
-    const itemData = { 
-      ...req.body, 
+    const itemData = {
+      ...req.body,
       ...getStoreFilter(req.user),
-      createdBy: req.user.id  // Explicitly set createdBy from authenticated user
+      createdBy: req.user.id // Explicitly set createdBy from authenticated user
     };
+
+    // Secure petCode generation (backend only, unique, cryptographically strong)
+    let generatedPetCode;
+    try {
+      generatedPetCode = await PetCodeGenerator.generateUniquePetCode();
+      itemData.petCode = generatedPetCode;
+      // Blockchain logging: petCode_generated event
+      await petshopBlockchainService.addBlock('petCode_generated', {
+        petCode: generatedPetCode,
+        generatedBy: req.user.id,
+        storeId: req.user.storeId || null,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: 'Failed to generate unique petCode', error: err.message });
+    }
     
     // Handle optional color field
     if (itemData.color !== undefined) {
@@ -261,6 +285,20 @@ const createInventoryItem = async (req, res) => {
     await result.petShopPet.populate('images');
     console.log('🖼️  Final item with images:', result.petShopPet.images);
     
+    // Blockchain logging: pet_created event
+    try {
+      await petshopBlockchainService.addBlock('pet_created', {
+        petId: result.petShopPet._id,
+        petCode: result.petShopPet.petCode,
+        createdBy: req.user.id,
+        storeId: req.user.storeId || null,
+        status: result.petShopPet.status,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.warn('Blockchain logging failed for pet_created:', err.message);
+    }
+
     res.status(201).json({
       success: true,
       data: { 
@@ -376,6 +414,21 @@ const updateInventoryItem = async (req, res) => {
       console.warn(`⚠️  Failed to update PetRegistry for pet ${item.petCode}:`, registryErr.message);
     }
     
+    // Blockchain logging: pet_status_changed event
+    try {
+      await petshopBlockchainService.addBlock('pet_status_changed', {
+        petId: item._id,
+        petCode: item.petCode,
+        updatedBy: req.user.id,
+        storeId: req.user.storeId || null,
+        newStatus: item.status,
+        updateFields: Object.keys(updateData),
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.warn('Blockchain logging failed for pet_status_changed:', err.message);
+    }
+
     res.json({
       success: true,
       data: { item },
@@ -429,6 +482,20 @@ const deleteInventoryItem = async (req, res) => {
       console.warn(`⚠️  Failed to update PetRegistry for pet ${item.petCode}:`, registryErr.message);
     }
     
+    // Blockchain logging: pet_removed_from_sale event
+    try {
+      await petshopBlockchainService.addBlock('pet_removed_from_sale', {
+        petId: item._id,
+        petCode: item.petCode,
+        removedBy: req.user.id,
+        storeId: req.user.storeId || null,
+        status: item.status,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.warn('Blockchain logging failed for pet_removed_from_sale:', err.message);
+    }
+
     res.json({
       success: true,
       message: 'Inventory item removed from sale successfully'

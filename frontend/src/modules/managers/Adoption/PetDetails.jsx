@@ -35,6 +35,7 @@ import {
   Visibility as VisibilityIcon
 } from '@mui/icons-material';
 
+
 const PetDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -43,6 +44,9 @@ const PetDetails = () => {
   const [savingMedia, setSavingMedia] = useState(false);
   const [showAllImages, setShowAllImages] = useState(false);
   const [showAllDocs, setShowAllDocs] = useState(false);
+  const [blockchainHistory, setBlockchainHistory] = useState([]);
+  const [blockchainLoading, setBlockchainLoading] = useState(false);
+  const [blockchainValid, setBlockchainValid] = useState(null);
   const imgInputRef = React.useRef(null);
   const docInputRef = React.useRef(null);
 
@@ -60,6 +64,28 @@ const PetDetails = () => {
     };
     load();
   }, [id]);
+
+  // Load blockchain history for this pet
+  useEffect(() => {
+    if (!pet || !pet._id) return;
+    const fetchBlockchain = async () => {
+      setBlockchainLoading(true);
+      try {
+        const [historyRes, verifyRes] = await Promise.all([
+          apiClient.get(`/blockchain/pet/${pet._id}`),
+          apiClient.get('/blockchain/verify')
+        ]);
+        setBlockchainHistory(historyRes.data?.data || []);
+        setBlockchainValid(verifyRes.data?.valid);
+      } catch (e) {
+        setBlockchainHistory([]);
+        setBlockchainValid(null);
+      } finally {
+        setBlockchainLoading(false);
+      }
+    };
+    fetchBlockchain();
+  }, [pet]);
 
   const readAsDataUrl = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -240,6 +266,47 @@ const PetDetails = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
+      {/* Blockchain Verification Section */}
+      <Box sx={{ mb: 3 }}>
+        <Card variant="outlined">
+          <CardContent>
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <span role="img" aria-label="blockchain">⛓️</span> Blockchain Verification
+            </Typography>
+            {blockchainLoading ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CircularProgress size={18} />
+                <Typography variant="body2">Loading blockchain status...</Typography>
+              </Box>
+            ) : blockchainValid === true ? (
+              <Alert severity="success" sx={{ mb: 2 }}>Blockchain is valid and tamper-proof for this pet's adoption history.</Alert>
+            ) : blockchainValid === false ? (
+              <Alert severity="error" sx={{ mb: 2 }}>Blockchain verification failed! Data may be tampered.</Alert>
+            ) : (
+              <Alert severity="warning" sx={{ mb: 2 }}>Blockchain status unknown or not available.</Alert>
+            )}
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 500, mb: 1 }}>Adoption Blockchain History</Typography>
+            {blockchainLoading ? (
+              <CircularProgress size={18} />
+            ) : blockchainHistory.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">No blockchain events found for this pet.</Typography>
+            ) : (
+              <Box sx={{ maxHeight: 220, overflowY: 'auto' }}>
+                {blockchainHistory.map((block, idx) => (
+                  <Box key={block._id || idx} sx={{ mb: 1, p: 1, border: '1px solid #eee', borderRadius: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {block.eventType.replace(/_/g, ' ').toUpperCase()} <span style={{ color: '#888', fontWeight: 400 }}>({new Date(block.timestamp).toLocaleString()})</span>
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">Block #{block.index} | Hash: {block.hash.slice(0, 12)}... | Prev: {block.previousHash.slice(0, 12)}...</Typography>
+                    <pre style={{ fontSize: 12, margin: 0, color: '#444', background: '#fafafa', borderRadius: 4, padding: 4 }}>{JSON.stringify(block.data, null, 2)}</pre>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
       {/* Incomplete Profile Alert */}
       {(!pet.age && !pet.weight && !pet.color && !pet.description) && (
         <Alert 

@@ -1,7 +1,7 @@
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import UserLayout from '../components/Layout/UserLayout'
-import UserDashboard from '../pages/User/ModernUserDashboard'
+import ModernUserDashboard from '../pages/User/ModernUserDashboard'
 import UserProfile from '../pages/User/Profile'
 import UserPets from '../pages/User/Pets'
 import UserAdoptionApplications from '../pages/User/Adoption/AdoptionApplications';
@@ -47,16 +47,12 @@ import TemporaryCareUserBookingDetails from '../pages/User/TemporaryCare/Tempora
 import TemporaryCareUserPets from '../pages/User/TemporaryCare/TemporaryCare'
 import TemporaryCareUserReviews from '../pages/User/TemporaryCare/TemporaryCare'
 import TemporaryCareUserPayments from '../pages/User/TemporaryCare/Payment'
-import EcommerceUserDashboard from '../pages/User/Ecommerce/Dashboard'
-import EcommerceUserProducts from '../pages/User/Ecommerce/Ecommerce'
+import EcommerceHome from '../pages/User/EcommerceHome'
+import Shop from '../pages/User/Shop'
+import ProductDetail from '../pages/User/ProductDetail'
 import EcommerceUserCart from '../pages/User/Ecommerce/Cart'
 import EcommerceUserCheckout from '../pages/User/Ecommerce/Checkout'
 import EcommerceUserOrders from '../pages/User/Ecommerce/Orders'
-import EcommerceUserOrderDetails from '../pages/User/Ecommerce/ProductDetails'
-import EcommerceUserWishlist from '../pages/User/Ecommerce/Ecommerce'
-import EcommerceUserReviews from '../pages/User/Ecommerce/Ecommerce'
-import EcommerceUserAddress from '../pages/User/Ecommerce/Ecommerce'
-import EcommerceUserPaymentMethods from '../pages/User/Ecommerce/Cart'
 import EcommerceUserProfile from '../pages/User/Profile'
 import PharmacyUserDashboard from '../pages/User/Pharmacy/PharmacyDashboard'
 import PharmacyUserMedications from '../pages/User/Pharmacy/Pharmacy'
@@ -66,14 +62,7 @@ import PharmacyUserPharmacies from '../pages/User/Pharmacy/Pharmacy'
 import PharmacyUserCart from '../pages/User/Pharmacy/Pharmacy'
 import PharmacyUserCheckout from '../pages/User/Pharmacy/Pharmacy'
 import PharmacyUserOrderDetails from '../pages/User/Pharmacy/PharmacyDashboard'
-import RescueUserDashboard from '../pages/User/Rescue/RescueDashboard'
-import RescueUserPets from '../pages/User/Rescue/Rescue'
-import RescueUserEvents from '../pages/User/Rescue/Rescue'
-import RescueUserVolunteer from '../pages/User/Rescue/Rescue'
-import RescueUserDonations from '../pages/User/Rescue/Rescue'
-import RescueUserStories from '../pages/User/Rescue/Rescue'
-import RescueUserAdoptionForm from '../pages/User/Rescue/Rescue'
-import RescueUserPetDetails from '../pages/User/Rescue/Rescue'
+
 import VeterinaryUserDashboard from '../pages/User/Veterinary/VeterinaryDashboard'
 import VeterinaryUserAppointments from '../pages/User/Veterinary/VeterinaryAppointments'
 import VeterinaryUserSchedule from '../pages/User/Veterinary/VeterinaryDashboard'
@@ -86,12 +75,17 @@ import VeterinaryUserMedicalRecords from '../pages/User/Veterinary/VeterinaryMed
 import VeterinaryUserPrescriptions from '../pages/User/Veterinary/Veterinary'
 import PublicUserDashboard from '../pages/User/PublicUserDashboard'
 
+import { useAuth } from '../contexts/AuthContext'
+
 const UserRoutes = () => {
+  const { user, loading } = useAuth();
   return (
     <UserLayout>
       <Routes>
         {/* User: Dashboard */}
-        <Route path="/dashboard" element={<UserDashboard />} />
+        <Route path="/dashboard" element={
+          loading ? null : user ? <ModernUserDashboard /> : <PublicUserDashboard />
+        } />
         
         {/* User: Profile */}
         <Route path="/profile" element={<UserProfile />} />
@@ -171,17 +165,12 @@ const UserRoutes = () => {
         {/* User: E-commerce */}
         <Route path="/ecommerce/*" element={
           <Routes>
-            <Route path="/dashboard" element={<EcommerceUserDashboard />} />
-            <Route path="/products" element={<EcommerceUserProducts />} />
+            <Route path="/dashboard" element={<EcommerceHome />} />
+            <Route path="/shop" element={<Shop />} />
+            <Route path="/product/:slug" element={<ProductDetail />} />
             <Route path="/cart" element={<EcommerceUserCart />} />
             <Route path="/checkout" element={<EcommerceUserCheckout />} />
             <Route path="/orders" element={<EcommerceUserOrders />} />
-            <Route path="/orders/:id" element={<EcommerceUserOrderDetails />} />
-            <Route path="/wishlist" element={<EcommerceUserWishlist />} />
-            <Route path="/reviews" element={<EcommerceUserReviews />} />
-            <Route path="/address" element={<EcommerceUserAddress />} />
-            <Route path="/payment-methods" element={<EcommerceUserPaymentMethods />} />
-            <Route path="/profile" element={<EcommerceUserProfile />} />
             <Route path="/" element={<Navigate to="/user/ecommerce/dashboard" replace />} />
           </Routes>
         } />
@@ -223,26 +212,13 @@ const UserRoutes = () => {
           </Routes>
         } />
         
-        {/* User: Rescue */}
-        <Route path="/rescue/*" element={
-          <Routes>
-            <Route path="/dashboard" element={<RescueUserDashboard />} />
-            <Route path="/pets" element={<RescueUserPets />} />
-            <Route path="/events" element={<RescueUserEvents />} />
-            <Route path="/volunteer" element={<RescueUserVolunteer />} />
-            <Route path="/donations" element={<RescueUserDonations />} />
-            <Route path="/stories" element={<RescueUserStories />} />
-            <Route path="/adopt/:petId" element={<RescueUserAdoptionForm />} />
-            <Route path="/pets/:id" element={<RescueUserPetDetails />} />
-            <Route path="/" element={<Navigate to="/user/rescue/dashboard" replace />} />
-          </Routes>
-        } />
+        
         
         {/* Public User Dashboard */}
         <Route path="/" element={<PublicUserDashboard />} />
         
         {/* Catch-all route */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/User/dashboard" replace />} />
       </Routes>
     </UserLayout>
   )

@@ -7,8 +7,16 @@ import StoreNameSetup from '../pages/Manager/StoreNameSetup'
 import RequestStoreNameChange from '../pages/Manager/RequestStoreNameChange'
 import UserProfile from '../pages/User/Profile'
 
-// E-Commerce Manager Components
-import ProductManagement from '../modules/ecommerce/manager/ProductManagement'
+// NEW E-Commerce Manager Components
+import EcommerceDashboard from '../pages/Manager/EcommerceDashboard'
+import AddProduct from '../pages/Manager/AddProduct'
+import ProductList from '../pages/Manager/ProductList'
+import OrderManagement from '../pages/Manager/OrderManagement'
+import EcommerceManage from '../pages/Manager/EcommerceManage'
+import CategoryManagement from '../pages/Manager/CategoryManagement'
+
+// E-Commerce Manager Components (NEW - all using pages/Manager/)
+// Old imports removed - using new components from pages/Manager/
 
 // Admin Components
 import ModuleManagement from '../modules/admin/components/ModuleManagement'
@@ -54,10 +62,6 @@ import StepPricingImproved from '../modules/managers/PetShop/Wizard/StepPricingI
 import StepGenderClassification from '../modules/managers/PetShop/Wizard/StepGenderClassification'
 import StepReviewImproved from '../modules/managers/PetShop/Wizard/StepReviewImproved'
 import StockManagement from '../modules/managers/PetShop/StockManagement'
-import EcommerceManagerDashboard from '../modules/managers/Ecommerce/EcommerceManagerDashboard'
-import EcommerceProductsList from '../modules/managers/Ecommerce/ProductsList'
-import EcommerceProductForm from '../modules/managers/Ecommerce/ProductForm'
-import EcommerceOrderManagement from '../modules/ecommerce/manager/OrderManagement'
 import PharmacyManagerDashboard from '../modules/managers/Pharmacy/PharmacyManagerDashboard'
 import RescueManagerDashboard from '../modules/managers/Rescue/RescueManagerDashboard'
 import TemporaryCareManagerDashboard from '../modules/managers/TemporaryCare/TemporaryCareManagerDashboard'
@@ -99,7 +103,6 @@ import VetStepBasics from '../modules/managers/Veterinary/Wizard/StepBasics'
 import VetStepTests from '../modules/managers/Veterinary/Wizard/StepTestsInjections'
 import VetStepMedications from '../modules/managers/Veterinary/Wizard/StepMedicationsReview'
 import AdoptionManage from '../modules/managers/Adoption/Manage'
-import EcommerceManage from '../modules/managers/Ecommerce/Manage'
 import PharmacyManage from '../modules/managers/Pharmacy/Manage'
 import RescueManage from '../modules/managers/Rescue/Manage'
 import PetShopManage from '../modules/managers/PetShop/Manage'
@@ -122,9 +125,6 @@ const ManagerRoutes = () => {
         
         {/* Manager: Store Name Change Request */}
         <Route path="/store-name-change" element={<RequestStoreNameChange />} />
-        
-        {/* E-Commerce Module */}
-        <Route path="/ecommerce/products" element={<ProductManagement />} />
         
         {/* Unified manager dashboard redirect (backwards compatibility) */}
         <Route path="/dashboard-old" element={<ManagerDashboardRedirect />} />
@@ -162,11 +162,12 @@ const ManagerRoutes = () => {
         {/* Ecommerce Manager */}
         <Route path="/ecommerce/*" element={
           <Routes>
-            <Route path="/dashboard" element={<EcommerceManagerDashboard />} />
-            <Route path="/products" element={<EcommerceProductsList />} />
-            <Route path="/products/add" element={<EcommerceProductForm />} />
-            <Route path="/products/edit/:id" element={<EcommerceProductForm />} />
-            <Route path="/orders" element={<EcommerceOrderManagement />} />
+            <Route path="/dashboard" element={<EcommerceDashboard />} />
+            <Route path="/products" element={<ProductList />} />
+            <Route path="/products/add" element={<AddProduct />} />
+            <Route path="/products/:id/edit" element={<AddProduct />} />
+            <Route path="/categories" element={<CategoryManagement />} />
+            <Route path="/orders" element={<OrderManagement />} />
             <Route path="/manage" element={<EcommerceManage />} />
             <Route path="/" element={<Navigate to="/manager/ecommerce/dashboard" replace />} />
           </Routes>

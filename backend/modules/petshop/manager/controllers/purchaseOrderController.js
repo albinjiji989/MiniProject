@@ -1,4 +1,5 @@
 const PurchaseOrder = require('../models/PurchaseOrder');
+const petshopBlockchainService = require('../../../../core/services/petshopBlockchainService');
 const PetInventoryItem = require('../models/PetInventoryItem');
 const User = require('../../../core/models/User');
 const { getStoreFilter } = require('../../../core/utils/storeFilter');
@@ -45,6 +46,19 @@ const createPurchaseOrder = async (req, res) => {
       total,
       notes: req.body.notes || ''
     });
+    // Blockchain logging: order_created event
+    try {
+      await petshopBlockchainService.addBlock('order_created', {
+        orderId: po._id,
+        orderNumber: po.orderNumber,
+        createdBy: req.user._id,
+        storeId: req.user.storeId || null,
+        total: po.total,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.warn('Blockchain logging failed for order_created:', err.message);
+    }
     res.status(201).json({ success: true, message: 'Purchase order created', data: { order: po } });
   } catch (e) {
     console.error('Create purchase order error:', e);
@@ -98,6 +112,19 @@ const updatePurchaseOrder = async (req, res) => {
     po.total = total;
     po.notes = req.body.notes ?? po.notes;
     await po.save();
+    // Blockchain logging: order_updated event
+    try {
+      await petshopBlockchainService.addBlock('order_updated', {
+        orderId: po._id,
+        updatedBy: req.user._id,
+        storeId: req.user.storeId || null,
+        total: po.total,
+        updateFields: Object.keys(req.body),
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.warn('Blockchain logging failed for order_updated:', err.message);
+    }
     res.json({ success: true, message: 'Purchase order updated', data: { order: po } });
   } catch (e) {
     console.error('Update purchase order error:', e);
@@ -112,6 +139,18 @@ const submitPurchaseOrder = async (req, res) => {
     if (po.status !== 'draft') return res.status(400).json({ success: false, message: 'Only draft orders can be submitted' });
     po.status = 'submitted';
     await po.save();
+    // Blockchain logging: order_submitted event
+    try {
+      await petshopBlockchainService.addBlock('order_submitted', {
+        orderId: po._id,
+        submittedBy: req.user._id,
+        storeId: req.user.storeId || null,
+        total: po.total,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.warn('Blockchain logging failed for order_submitted:', err.message);
+    }
     res.json({ success: true, message: 'Purchase order submitted', data: { order: po } });
   } catch (e) {
     console.error('Submit purchase order error:', e);
@@ -164,6 +203,18 @@ const receivePurchaseOrder = async (req, res) => {
 
     po.status = 'received';
     await po.save();
+    // Blockchain logging: order_received event
+    try {
+      await petshopBlockchainService.addBlock('order_received', {
+        orderId: po._id,
+        receivedBy: req.user._id,
+        storeId: req.user.storeId || null,
+        receivedCount: created.length,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.warn('Blockchain logging failed for order_received:', err.message);
+    }
     res.json({ success: true, message: 'Items received into inventory', data: { received: created.length } });
   } catch (e) {
     console.error('Receive PO error:', e);

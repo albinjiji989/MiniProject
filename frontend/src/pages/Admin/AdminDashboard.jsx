@@ -36,7 +36,13 @@ import {
   FileDownload as DownloadIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import { userAPI as usersAPI, modulesAPI, managersAPI, apiClient } from '../../services/api'
+import { userAPI as usersAPI, modulesAPI, managersAPI, apiClient, blockchainAPI } from '../../services/api'
+import BlockchainStats from '../../components/blockchain/BlockchainStats'
+import { TextField, InputAdornment } from '@mui/material'
+import SearchIcon from '@mui/icons-material/Search'
+// ...existing code...
+
+// ...existing code...
 import {
   speciesAPI,
   breedsAPI,
@@ -44,9 +50,70 @@ import {
   customBreedRequestsAPI,
 } from '../../services/petSystemAPI'
 
+
 const AdminDashboard = () => {
   const navigate = useNavigate()
 
+  // Blockchain audit state
+  const [blockchainEvents, setBlockchainEvents] = useState([])
+  const [blockchainSearch, setBlockchainSearch] = useState('')
+  const [blockchainLoading, setBlockchainLoading] = useState(false)
+  const [blockchainError, setBlockchainError] = useState('')
+
+  // Blockchain event search handler
+  const handleBlockchainSearch = async () => {
+    setBlockchainLoading(true)
+    setBlockchainError('')
+    try {
+      // Search by petCode or eventType
+      const query = blockchainSearch.trim()
+      let events = []
+      if (!query) {
+        setBlockchainEvents([])
+        setBlockchainLoading(false)
+        return
+      }
+      // Try as petCode first
+      try {
+        const res = await blockchainAPI.getPetHistory(query)
+        events = res.data?.data?.events || []
+      } catch {
+        // If not a petCode, try as eventType (fetch all, filter client-side)
+        const statsRes = await blockchainAPI.getStats()
+        const allEvents = statsRes.data?.data?.allEvents || []
+        events = allEvents.filter(ev => (ev.eventType || '').toLowerCase().includes(query.toLowerCase()))
+      }
+      setBlockchainEvents(events)
+    } catch (e) {
+      setBlockchainError(e?.response?.data?.message || 'Failed to search blockchain events')
+    } finally {
+      setBlockchainLoading(false)
+    }
+  }
+
+  // Download blockchain events as CSV
+  const downloadBlockchainCSV = () => {
+    if (!blockchainEvents.length) return
+    const header = ['EventType','Timestamp','PetCode','Details']
+    const rows = blockchainEvents.map(ev => [
+      ev.eventType,
+      new Date(ev.timestamp || ev.createdAt).toLocaleString(),
+      ev.petCode || '',
+      typeof ev.details === 'string' ? ev.details : JSON.stringify(ev.details)
+    ])
+    const csv = [header, ...rows].map(r => r.map(x => '"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `blockchain_audit_${Date.now()}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  // ...existing dashboard state and logic...
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -65,7 +132,6 @@ const AdminDashboard = () => {
   // Recent activities
   const [recentActivities, setRecentActivities] = useState([])
   const [systemAlerts, setSystemAlerts] = useState([])
-
 
   useEffect(() => {
     loadDashboardData()
@@ -314,6 +380,58 @@ const AdminDashboard = () => {
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+            {/* Blockchain Audit Section */}
+            <Box mb={4}>
+              <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>Blockchain Audit & Verification</Typography>
+              <BlockchainStats />
+              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <TextField
+                  label="Search by PetCode or Event Type"
+                  value={blockchainSearch}
+                  onChange={e => setBlockchainSearch(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleBlockchainSearch() }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon />
+                      </InputAdornment>
+                    )
+                  }}
+                  sx={{ minWidth: 320 }}
+                />
+                <Button variant="contained" onClick={handleBlockchainSearch} disabled={blockchainLoading}>Search</Button>
+                <Button variant="outlined" onClick={downloadBlockchainCSV} disabled={!blockchainEvents.length}>Download CSV</Button>
+              </Box>
+              {blockchainLoading && <CircularProgress size={20} sx={{ ml: 2 }} />}
+              {blockchainError && <Alert severity="error" sx={{ my: 1 }}>{blockchainError}</Alert>}
+              {blockchainEvents.length > 0 && (
+                <Card sx={{ mt: 2 }}>
+                  <CardContent>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Blockchain Event Log</Typography>
+                    <Box sx={{ maxHeight: 320, overflow: 'auto' }}>
+                      <List>
+                        {blockchainEvents.map((ev, idx) => (
+                          <React.Fragment key={ev._id || idx}>
+                            <ListItem alignItems="flex-start">
+                              <ListItemText
+                                primary={<>
+                                  <b>{ev.eventType}</b> {ev.petCode && <Chip label={ev.petCode} size="small" sx={{ ml: 1 }} />}
+                                </>}
+                                secondary={<>
+                                  <Typography variant="caption" color="text.secondary">{new Date(ev.timestamp || ev.createdAt).toLocaleString()}</Typography>
+                                  {ev.details && <><br /><span style={{ fontSize: '0.95em' }}>{typeof ev.details === 'string' ? ev.details : JSON.stringify(ev.details)}</span></>}
+                                </>}
+                              />
+                            </ListItem>
+                            {idx < blockchainEvents.length - 1 && <Divider />}
+                          </React.Fragment>
+                        ))}
+                      </List>
+                    </Box>
+                  </CardContent>
+                </Card>
+              )}
+            </Box>
       <Box mb={4}>
         <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
           Admin Dashboard

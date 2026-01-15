@@ -1,87 +1,52 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../../../core/middleware/auth');
-
-// Controllers
 const productController = require('./productController');
-const cartController = require('./cartController');
-const orderController = require('./orderController');
-const wishlistController = require('./wishlistController');
-const addressController = require('./addressController');
 const reviewController = require('./reviewController');
+const cartController = require('./cartController');
+const wishlistController = require('./wishlistController');
+const orderController = require('./orderController');
+const categoryController = require('../manager/categoryController');
 
-// ============== PRODUCT ROUTES ==============
+// ============ CATEGORY ROUTES (PUBLIC) ============
+router.get('/categories', categoryController.getAllCategories);
+router.get('/categories/tree', categoryController.getCategoryTree);
+router.get('/categories/:id', categoryController.getCategory);
 
-// Browse products
-router.get('/products', productController.getProducts);
+// ============ PUBLIC PRODUCT ROUTES ============
+router.get('/products', productController.browseProducts);
 router.get('/products/featured', productController.getFeaturedProducts);
-router.get('/products/search', productController.searchProducts);
-router.get('/products/:id', productController.getProductById);
+router.get('/products/deals', productController.getDeals);
+router.get('/products/search-suggestions', productController.getSearchSuggestions);
+router.get('/products/:slug', productController.getProductDetails);
 
-// Categories
-router.get('/categories', productController.getCategories);
-router.get('/categories/tree', productController.getCategoryTree);
+// ============ REVIEW ROUTES ============
+router.get('/products/:productId/reviews', reviewController.getProductReviews);
 
-// Product filters
-router.get('/filters', productController.getProductFilters);
+// Protected routes (require authentication)
+router.use(auth);
 
-// Product reviews (public)
-router.get('/products/:productId/reviews', productController.getProductReviews);
+router.post('/reviews', reviewController.createReview);
+router.put('/reviews/:id', reviewController.updateReview);
+router.delete('/reviews/:id', reviewController.deleteReview);
+router.post('/reviews/:id/helpful', reviewController.markHelpful);
 
-// Product analytics
-router.post('/products/:productId/track-click', productController.trackProductClick);
+// ============ CART ROUTES ============
+router.get('/cart', cartController.getCart);
+router.post('/cart', cartController.addToCart);
+router.put('/cart/:itemId', cartController.updateCartItem);
+router.delete('/cart/:itemId', cartController.removeFromCart);
+router.delete('/cart', cartController.clearCart);
 
-// ============== CART ROUTES (Protected) ==============
+// ============ WISHLIST ROUTES ============
+router.get('/wishlist', wishlistController.getWishlist);
+router.post('/wishlist', wishlistController.addToWishlist);
+router.delete('/wishlist/:productId', wishlistController.removeFromWishlist);
 
-router.get('/cart', auth, cartController.getCart);
-router.post('/cart/add', auth, cartController.addToCart);
-router.put('/cart/items/:itemId', auth, cartController.updateCartItem);
-router.delete('/cart/items/:itemId', auth, cartController.removeFromCart);
-router.delete('/cart/clear', auth, cartController.clearCart);
-router.get('/cart/summary', auth, cartController.getCartSummary);
-
-// Coupon
-router.post('/cart/coupon/apply', auth, cartController.applyCoupon);
-router.delete('/cart/coupon/remove', auth, cartController.removeCoupon);
-
-// ============== ORDER ROUTES (Protected) ==============
-
-router.post('/orders/payment/create', auth, orderController.createPaymentOrder);
-router.post('/orders/place', auth, orderController.placeOrder);
-router.get('/orders', auth, orderController.getMyOrders);
-router.get('/orders/:orderId', auth, orderController.getOrderById);
-router.put('/orders/:orderId/cancel', auth, orderController.cancelOrder);
-router.post('/orders/:orderId/return', auth, orderController.requestReturn);
-router.get('/orders/:orderId/track', auth, orderController.trackOrder);
-
-// ============== WISHLIST ROUTES (Protected) ==============
-
-router.get('/wishlist', auth, wishlistController.getWishlist);
-router.post('/wishlist/add', auth, wishlistController.addToWishlist);
-router.delete('/wishlist/items/:itemId', auth, wishlistController.removeFromWishlist);
-router.get('/wishlist/check/:productId', auth, wishlistController.checkWishlist);
-router.post('/wishlist/items/:itemId/move-to-cart', auth, wishlistController.moveToCart);
-router.delete('/wishlist/clear', auth, wishlistController.clearWishlist);
-
-// ============== ADDRESS ROUTES (Protected) ==============
-
-router.get('/addresses', auth, addressController.getAddresses);
-router.get('/addresses/default', auth, addressController.getDefaultAddress);
-router.get('/addresses/:addressId', auth, addressController.getAddressById);
-router.post('/addresses', auth, addressController.addAddress);
-router.put('/addresses/:addressId', auth, addressController.updateAddress);
-router.delete('/addresses/:addressId', auth, addressController.deleteAddress);
-router.put('/addresses/:addressId/set-default', auth, addressController.setDefaultAddress);
-
-// ============== REVIEW ROUTES (Protected) ==============
-
-router.post('/reviews/:productId', auth, reviewController.addReview);
-router.put('/reviews/:reviewId', auth, reviewController.updateReview);
-router.delete('/reviews/:reviewId', auth, reviewController.deleteReview);
-router.get('/reviews/my', auth, reviewController.getMyReviews);
-router.post('/reviews/:reviewId/helpful', auth, reviewController.markHelpful);
-router.post('/reviews/:reviewId/not-helpful', auth, reviewController.markNotHelpful);
-router.post('/reviews/:reviewId/report', auth, reviewController.reportReview);
-router.post('/reviews/:reviewId/reply', auth, reviewController.addReply);
+// ============ ORDER ROUTES ============
+router.get('/orders', orderController.getUserOrders);
+router.get('/orders/:id', orderController.getOrderDetails);
+router.post('/orders', orderController.createOrder);
+router.post('/orders/:id/cancel', orderController.cancelOrder);
 
 module.exports = router;

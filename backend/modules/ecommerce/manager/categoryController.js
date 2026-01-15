@@ -2,183 +2,144 @@ const ProductCategory = require('../models/ProductCategory');
 const Product = require('../models/Product');
 
 /**
- * MANAGER: Category Management
- * Managers can create and manage product categories
+ * Enhanced Category Controller for Manager
+ * Supports unlimited category hierarchy
  */
 
-/**
- * Get all categories (manager view with inactive)
- */
+// Get all categories with hierarchy
 exports.getAllCategories = async (req, res) => {
   try {
-    const { level, parent, search } = req.query;
+    const { includeInactive, parentId } = req.query;
     
     const query = {};
-    
-    if (level !== undefined) {
-      query.level = parseInt(level);
-    }
-    
-    if (parent) {
-      query.parent = parent === 'null' ? null : parent;
-    }
-    
-    if (search) {
-      query.name = { $regex: search, $options: 'i' };
-    }
+    if (!includeInactive) query.isActive = true;
+    if (parentId) query.parent = parentId === 'root' ? null : parentId;
     
     const categories = await ProductCategory.find(query)
-      .populate('parent', 'name slug level')
-      .sort('level displayOrder name')
-      .lean();
+      .populate('parent', 'name slug')
+      .populate('ancestors', 'name slug')
+      .sort({ level: 1, displayOrder: 1, name: 1 });
     
-    res.json({ success: true, data: categories });
+    res.json({
+      success: true,
+      data: categories
+    });
   } catch (error) {
-    console.error('Get categories error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching categories',
+      error: error.message
+    });
   }
 };
 
-/**
- * Get category hierarchy tree (all levels)
- */
+// Get category tree (hierarchical structure)
 exports.getCategoryTree = async (req, res) => {
   try {
-    // Get all categories
-    const allCategories = await ProductCategory.find({})
-      .sort('level displayOrder name')
-      .lean();
+    const { includeInactive } = req.query;
     
-    // Build tree structure
-    const buildTree = (parentId = null, currentLevel = 0) => {
-      return allCategories
-        .filter(cat => {
-          if (parentId === null) {
-            return cat.parent === null || cat.parent === undefined;
-          }
-          return cat.parent && cat.parent.toString() === parentId.toString();
-        })
-        .map(cat => ({
-          ...cat,
-          children: buildTree(cat._id, currentLevel + 1)
-        }));
+    const query = { parent: null };
+    if (!includeInactive) query.isActive = true;
+    
+    const buildTree = async (parentId = null, level = 0) => {
+      const query = { parent: parentId };
+      if (!includeInactive) query.isActive = true;
+      
+      const categories = await ProductCategory.find(query)
+        .sort({ displayOrder: 1, name: 1 })
+        .lean();
+      
+      const tree = [];
+      for (const category of categories) {
+        const children = await buildTree(category._id, level + 1);
+        tree.push({
+          ...category,
+          children,
+          hasChildren: children.length > 0
+        });
+      }
+      
+      return tree;
     };
     
-    const tree = buildTree();
+    const tree = await buildTree();
     
-    res.json({ success: true, data: tree });
+    res.json({
+      success: true,
+      data: tree
+    });
   } catch (error) {
-    console.error('Get category tree error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error building category tree',
+      error: error.message
+    });
   }
 };
 
-/**
- * Get single category with breadcrumb
- */
-exports.getCategoryById = async (req, res) => {
+// Get single category with full path
+exports.getCategory = async (req, res) => {
   try {
-    const { categoryId } = req.params;
-    
-    const category = await ProductCategory.findById(categoryId)
-      .populate('parent');
+    const category = await ProductCategory.findById(req.params.id)
+      .populate('parent', 'name slug')
+      .populate('ancestors', 'name slug');
     
     if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-    
-    // Build breadcrumb
-    const breadcrumb = [];
-    let current = category;
-    
-    while (current) {
-      breadcrumb.unshift({
-        _id: current._id,
-        name: current.name,
-        slug: current.slug,
-        level: current.level
+      return res.status(404).json({
+        success: false,
+        message: 'Category not found'
       });
-      
-      if (current.parent && current.parent._id) {
-        current = await ProductCategory.findById(current.parent._id).populate('parent');
-      } else {
-        current = null;
-      }
     }
     
-    res.json({ 
-      success: true, 
+    // Get children
+    const children = await ProductCategory.find({ parent: category._id })
+      .sort({ displayOrder: 1, name: 1 });
+    
+    res.json({
+      success: true,
       data: {
         ...category.toObject(),
-        breadcrumb
+        children
       }
     });
   } catch (error) {
-    console.error('Get category error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching category',
+      error: error.message
+    });
   }
 };
 
-/**
- * Create new category
- * Examples:
- * - Level 0: Food, Toys, Grooming (parent: null)
- * - Level 1: Dog Food, Cat Food (parent: Food)
- * - Level 2: Pedigree, Royal Canin (parent: Dog Food)
- */
+// Create category
 exports.createCategory = async (req, res) => {
   try {
-    const {
-      name,
-      slug,
-      description,
-      parent,
-      image,
-      icon,
-      displayOrder,
-      metaTitle,
-      metaDescription,
-      metaKeywords,
-      isActive
-    } = req.body;
+    console.log('Creating category with data:', req.body);
+    console.log('User:', req.user);
     
-    // Determine level based on parent
-    let level = 0;
-    if (parent) {
-      const parentCategory = await ProductCategory.findById(parent);
-      if (!parentCategory) {
-        return res.status(404).json({ success: false, message: 'Parent category not found' });
-      }
-      level = parentCategory.level + 1;
-    }
+    const categoryData = {
+      name: req.body.name,
+      description: req.body.description || '',
+      parent: req.body.parent || null,
+      createdBy: req.user.id
+    };
     
-    // Check if slug already exists
-    if (slug) {
-      const existing = await ProductCategory.findOne({ slug });
-      if (existing) {
-        return res.status(400).json({ success: false, message: 'Slug already exists' });
-      }
-    }
+    console.log('Category data to save:', categoryData);
     
-    const category = new ProductCategory({
-      name,
-      slug,
-      description,
-      parent: parent || null,
-      level,
-      image,
-      icon,
-      displayOrder: displayOrder || 0,
-      metaTitle,
-      metaDescription,
-      metaKeywords,
-      isActive: isActive !== undefined ? isActive : true,
-      productCount: 0
-    });
-    
+    const category = new ProductCategory(categoryData);
     await category.save();
     
-    await category.populate('parent', 'name slug level');
+    console.log('Category saved:', category);
+    
+    // Update parent's product count if exists
+    if (category.parent) {
+      await ProductCategory.findByIdAndUpdate(category.parent, {
+        $inc: { productCount: 0 }
+      });
+    }
+    
+    await category.populate('parent', 'name slug');
+    await category.populate('ancestors', 'name slug');
     
     res.status(201).json({
       success: true,
@@ -186,51 +147,50 @@ exports.createCategory = async (req, res) => {
       data: category
     });
   } catch (error) {
-    console.error('Create category error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    console.error('Error creating category:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating category',
+      error: error.message,
+      stack: error.stack
+    });
   }
 };
 
-/**
- * Update category
- */
+// Update category
 exports.updateCategory = async (req, res) => {
   try {
-    const { categoryId } = req.params;
+    const { id } = req.params;
+    const updates = req.body;
     
-    const category = await ProductCategory.findById(categoryId);
+    // Prevent circular reference
+    if (updates.parent) {
+      const category = await ProductCategory.findById(id);
+      const descendants = await category.getAllDescendants();
+      const descendantIds = descendants.map(d => d._id.toString());
+      
+      if (descendantIds.includes(updates.parent.toString())) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot set a descendant as parent (circular reference)'
+        });
+      }
+    }
+    
+    const category = await ProductCategory.findByIdAndUpdate(
+      id,
+      updates,
+      { new: true, runValidators: true }
+    )
+      .populate('parent', 'name slug')
+      .populate('ancestors', 'name slug');
+    
     if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Category not found'
+      });
     }
-    
-    // Check if changing parent (level will change)
-    if (req.body.parent !== undefined && req.body.parent !== category.parent) {
-      if (req.body.parent) {
-        const newParent = await ProductCategory.findById(req.body.parent);
-        if (!newParent) {
-          return res.status(404).json({ success: false, message: 'Parent category not found' });
-        }
-        category.level = newParent.level + 1;
-      } else {
-        category.level = 0;
-      }
-    }
-    
-    // Update allowed fields
-    const allowedUpdates = [
-      'name', 'slug', 'description', 'parent', 'image', 'icon',
-      'displayOrder', 'metaTitle', 'metaDescription', 'metaKeywords', 'isActive'
-    ];
-    
-    allowedUpdates.forEach(field => {
-      if (req.body[field] !== undefined) {
-        category[field] = req.body[field];
-      }
-    });
-    
-    await category.save();
-    
-    await category.populate('parent', 'name slug level');
     
     res.json({
       success: true,
@@ -238,45 +198,53 @@ exports.updateCategory = async (req, res) => {
       data: category
     });
   } catch (error) {
-    console.error('Update category error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error updating category',
+      error: error.message
+    });
   }
 };
 
-/**
- * Delete category (only if no products and no child categories)
- */
+// Delete category
 exports.deleteCategory = async (req, res) => {
   try {
-    const { categoryId } = req.params;
+    const { id } = req.params;
+    const { moveProductsTo, deleteProducts } = req.query;
     
-    const category = await ProductCategory.findById(categoryId);
+    const category = await ProductCategory.findById(id);
     if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Category not found'
+      });
     }
     
-    // Check if has products
-    const productCount = await Product.countDocuments({ 
-      $or: [
-        { category: categoryId },
-        { subcategory: categoryId }
-      ]
-    });
+    // Check for children
+    const childrenCount = await ProductCategory.countDocuments({ parent: id });
+    if (childrenCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete category with subcategories. Delete subcategories first.'
+      });
+    }
     
+    // Handle products
+    const productCount = await Product.countDocuments({ category: id });
     if (productCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot delete category with ${productCount} products. Please move or delete products first.`
-      });
-    }
-    
-    // Check if has child categories
-    const childCount = await ProductCategory.countDocuments({ parent: categoryId });
-    if (childCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot delete category with ${childCount} subcategories. Please delete subcategories first.`
-      });
+      if (deleteProducts === 'true') {
+        await Product.deleteMany({ category: id });
+      } else if (moveProductsTo) {
+        await Product.updateMany(
+          { category: id },
+          { category: moveProductsTo }
+        );
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: `Category has ${productCount} products. Specify moveProductsTo or deleteProducts=true`
+        });
+      }
     }
     
     await category.deleteOne();
@@ -286,118 +254,60 @@ exports.deleteCategory = async (req, res) => {
       message: 'Category deleted successfully'
     });
   } catch (error) {
-    console.error('Delete category error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting category',
+      error: error.message
+    });
   }
 };
 
-/**
- * Toggle category active status
- */
-exports.toggleActiveStatus = async (req, res) => {
+// Get category path (breadcrumb)
+exports.getCategoryPath = async (req, res) => {
   try {
-    const { categoryId } = req.params;
-    
-    const category = await ProductCategory.findById(categoryId);
+    const category = await ProductCategory.findById(req.params.id);
     if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Category not found'
+      });
     }
     
-    category.isActive = !category.isActive;
-    await category.save();
+    const path = await category.getFullPath();
     
     res.json({
       success: true,
-      message: `Category ${category.isActive ? 'activated' : 'deactivated'} successfully`,
-      data: category
+      data: path
     });
   } catch (error) {
-    console.error('Toggle active status error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching category path',
+      error: error.message
+    });
   }
 };
 
-/**
- * Get category statistics
- */
-exports.getCategoryStats = async (req, res) => {
-  try {
-    const { categoryId } = req.params;
-    
-    const category = await ProductCategory.findById(categoryId);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-    
-    // Get all descendant categories
-    const getDescendants = async (catId) => {
-      const children = await ProductCategory.find({ parent: catId });
-      let descendants = [...children];
-      
-      for (let child of children) {
-        const childDescendants = await getDescendants(child._id);
-        descendants = [...descendants, ...childDescendants];
-      }
-      
-      return descendants;
-    };
-    
-    const descendants = await getDescendants(categoryId);
-    const descendantIds = descendants.map(d => d._id);
-    
-    // Count products in this category and all descendants
-    const productCount = await Product.countDocuments({
-      $or: [
-        { category: categoryId },
-        { subcategory: categoryId },
-        { category: { $in: descendantIds } },
-        { subcategory: { $in: descendantIds } }
-      ],
-      status: 'active'
-    });
-    
-    // Get subcategories count
-    const subcategoryCount = await ProductCategory.countDocuments({ parent: categoryId });
-    
-    res.json({
-      success: true,
-      data: {
-        category: category.name,
-        level: category.level,
-        directProducts: category.productCount,
-        totalProducts: productCount,
-        subcategories: subcategoryCount,
-        allDescendants: descendants.length
-      }
-    });
-  } catch (error) {
-    console.error('Get category stats error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
-
-/**
- * Reorder categories (change displayOrder)
- */
+// Reorder categories
 exports.reorderCategories = async (req, res) => {
   try {
-    const { categories } = req.body; // Array of { id, displayOrder }
+    const { orders } = req.body; // [{ id, displayOrder }]
     
-    const bulkOps = categories.map(cat => ({
-      updateOne: {
-        filter: { _id: cat.id },
-        update: { displayOrder: cat.displayOrder }
-      }
-    }));
+    const updates = orders.map(({ id, displayOrder }) =>
+      ProductCategory.findByIdAndUpdate(id, { displayOrder })
+    );
     
-    await ProductCategory.bulkWrite(bulkOps);
+    await Promise.all(updates);
     
     res.json({
       success: true,
       message: 'Categories reordered successfully'
     });
   } catch (error) {
-    console.error('Reorder categories error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error reordering categories',
+      error: error.message
+    });
   }
 };

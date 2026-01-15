@@ -6,16 +6,14 @@ import PublicUserDashboard from '../User/PublicUserDashboard'
 import AdoptionManagerDashboard from '../../modules/managers/Adoption/AdoptionManagerDashboard'
 import VeterinaryManagerDashboard from '../../modules/managers/Veterinary/VeterinaryManagerDashboard'
 import PharmacyManagerDashboard from '../../modules/managers/Pharmacy/PharmacyManagerDashboard'
-import EcommerceManagerDashboard from '../../modules/managers/Ecommerce/EcommerceManagerDashboard'
+import EcommerceDashboard from '../Manager/EcommerceDashboard' // NEW
 import PetShopManagerDashboard from '../../modules/managers/PetShop/PetShopManagerDashboard'
 import TemporaryCareManagerDashboard from '../../modules/managers/TemporaryCare/TemporaryCareManagerDashboard'
 import RescueManagerDashboard from '../../modules/managers/Rescue/RescueManagerDashboard'
 import TemporaryCareWorkerDashboard from './TemporaryCareWorkerDashboard'
-
 const Dashboard = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
-
   // Redirect admin users to proper admin dashboard
   React.useEffect(() => {
     if (user && user.role === 'admin') {
@@ -51,13 +49,13 @@ const Dashboard = () => {
     }
 
     if (role === 'ecommerce_manager') {
-      return <EcommerceManagerDashboard />
+      return <EcommerceDashboard />
     }
 
     if (role === 'adoption_manager') {
       return <AdoptionManagerDashboard />
     }
-    
+
     if (role === 'rescue_manager') {
       return <RescueManagerDashboard />
     }

@@ -1,48 +1,78 @@
 const Product = require('../models/Product');
 const ProductCategory = require('../models/ProductCategory');
-const ProductReview = require('../models/ProductReview');
-const ProductImage = require('../models/ProductImage');
 
 /**
- * Get all products with filtering, sorting, and pagination
+ * User Product Controller - Flipkart-style shopping experience
  */
-exports.getProducts = async (req, res) => {
+
+// Browse products with advanced filters
+exports.browseProducts = async (req, res) => {
   try {
     const {
       page = 1,
-      limit = 20,
-      sort = '-createdAt',
+      limit = 40,
       category,
-      subcategory,
-      petType,
-      ageGroup,
-      breed,
+      search,
       minPrice,
       maxPrice,
-      rating,
+      petType,
+      breed,
       brand,
-      inStock,
-      isFeatured,
-      search,
-      tags
+      rating,
+      sortBy = 'popularity', // popularity, price-low, price-high, newest, discount
+      inStock = 'true',
+      specifications
     } = req.query;
-
-    // Build query
+    
     const query = { status: 'active' };
-
-    if (category) query.category = category;
-    if (subcategory) query.subcategory = subcategory;
-    if (petType) query.petType = petType;
-    if (ageGroup) query.ageGroup = ageGroup;
-    if (breed) query.breed = { $in: Array.isArray(breed) ? breed : [breed] };
-    if (brand) query.brand = brand;
-    if (isFeatured === 'true') query.isFeatured = true;
+    
+    // Category filter (includes all descendants)
+    if (category) {
+      const cat = await ProductCategory.findById(category);
+      if (cat) {
+        const descendants = await cat.getAllDescendants();
+        const categoryIds = [cat._id, ...descendants.map(d => d._id)];
+        query.category = { $in: categoryIds };
+      }
+    }
+    
+    // Search
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { tags: { $in: [search.toLowerCase()] } },
+        { 'attributes.brand': { $regex: search, $options: 'i' } }
+      ];
+    }
     
     // Price range
     if (minPrice || maxPrice) {
-      query.basePrice = {};
-      if (minPrice) query.basePrice.$gte = parseFloat(minPrice);
-      if (maxPrice) query.basePrice.$lte = parseFloat(maxPrice);
+      query.$expr = {
+        $and: []
+      };
+      const priceField = {
+        $ifNull: ['$pricing.salePrice', '$pricing.basePrice']
+      };
+      if (minPrice) {
+        query.$expr.$and.push({ $gte: [priceField, parseFloat(minPrice)] });
+      }
+      if (maxPrice) {
+        query.$expr.$and.push({ $lte: [priceField, parseFloat(maxPrice)] });
+      }
+    }
+    
+    // Pet filters
+    if (petType) {
+      query.petType = { $in: [petType, 'all'] };
+    }
+    if (breed) {
+      query.breeds = breed;
+    }
+    
+    // Brand filter
+    if (brand) {
+      query['attributes.brand'] = brand;
     }
     
     // Rating filter
@@ -52,344 +82,252 @@ exports.getProducts = async (req, res) => {
     
     // Stock filter
     if (inStock === 'true') {
-      query.stock = { $gt: 0 };
+      query.$or = [
+        { 'inventory.trackInventory': false },
+        { 'inventory.allowBackorder': true },
+        { $expr: { $gt: [{ $subtract: ['$inventory.stock', '$inventory.reserved'] }, 0] } }
+      ];
     }
     
-    // Search
-    if (search) {
-      query.$text = { $search: search };
+    // Specifications filter
+    if (specifications) {
+      try {
+        const specs = JSON.parse(specifications);
+        Object.entries(specs).forEach(([key, value]) => {
+          query[`specifications.${key}`] = value;
+        });
+      } catch (e) {
+        // Invalid JSON, skip
+      }
     }
     
-    // Tags
-    if (tags) {
-      query.tags = { $in: Array.isArray(tags) ? tags : [tags] };
+    // Sorting
+    let sort = {};
+    switch (sortBy) {
+      case 'price-low':
+        sort = { 'pricing.salePrice': 1, 'pricing.basePrice': 1 };
+        break;
+      case 'price-high':
+        sort = { 'pricing.salePrice': -1, 'pricing.basePrice': -1 };
+        break;
+      case 'newest':
+        sort = { createdAt: -1 };
+        break;
+      case 'discount':
+        sort = { 'pricing.discount.value': -1 };
+        break;
+      case 'rating':
+        sort = { 'ratings.average': -1, 'ratings.count': -1 };
+        break;
+      case 'popularity':
+      default:
+        sort = { 'analytics.purchases': -1, 'analytics.views': -1 };
+        break;
     }
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    // Execute query with pagination
-    const [products, total] = await Promise.all([
-      Product.find(query)
-        .populate('category subcategory', 'name slug')
-        .select('-__v')
-        .sort(sort)
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean(),
-      Product.countDocuments(query)
-    ]);
-
-    // Fetch primary images for each product
-    const productIds = products.map(p => p._id);
-    const images = await ProductImage.find({
-      productId: { $in: productIds },
-      isActive: true,
-      isPrimary: true
-    }).select('productId url');
-
-    // Map images to products
-    const imageMap = {};
-    images.forEach(img => {
-      imageMap[img.productId.toString()] = img.url;
-    });
-
-    // Add image URL to each product
-    const productsWithImages = products.map(product => ({
-      ...product,
-      imageUrl: imageMap[product._id.toString()] || null
-    }));
-
+    
+    const products = await Product.find(query)
+      .select('name slug images pricing ratings inventory isFeatured isBestseller isNew attributes.brand petType')
+      .sort(sort)
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .lean();
+    
+    const count = await Product.countDocuments(query);
+    
+    // Get available filters for current results
+    const availableFilters = await getAvailableFilters(query);
+    
     res.json({
       success: true,
-      data: productsWithImages,
+      data: products,
+      filters: availableFilters,
       pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(total / parseInt(limit)),
-        totalProducts: total,
+        total: count,
+        page: parseInt(page),
+        pages: Math.ceil(count / limit),
         limit: parseInt(limit)
       }
     });
   } catch (error) {
-    console.error('Get products error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error browsing products',
+      error: error.message
+    });
   }
 };
 
-/**
- * Get single product by ID or slug
- */
-exports.getProductById = async (req, res) => {
+// Get single product details
+exports.getProductDetails = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { slug } = req.params;
     
-    // Try to find by ID first, then by slug
-    let product = await Product.findById(id)
-      .populate('category subcategory', 'name slug description')
-      .populate('relatedProducts', 'name slug images basePrice salePrice ratings')
-      .lean();
+    const product = await Product.findOne({ slug, status: 'active' })
+      .populate('category', 'name slug path')
+      .populate('categoryPath', 'name slug')
+      .populate('relatedProducts', 'name slug images pricing ratings')
+      .populate('breeds', 'name')
+      .populate('species', 'name');
     
     if (!product) {
-      product = await Product.findOne({ slug: id, status: 'active' })
-        .populate('category subcategory', 'name slug description')
-        .populate('relatedProducts', 'name slug images basePrice salePrice ratings')
-        .lean();
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
     }
     
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
+    // Increment view count
+    product.analytics.views += 1;
+    await product.save();
     
-    // Fetch all images for this product
-    const images = await ProductImage.find({
-      productId: product._id,
-      isActive: true
-    })
-    .select('url isPrimary caption altText displayOrder')
-    .sort({ isPrimary: -1, displayOrder: 1 });
-    
-    // Increment view count (need to get non-lean doc for save)
-    await Product.findByIdAndUpdate(product._id, { $inc: { 'analytics.views': 1 } });
-    
-    // Add images to product
-    product.images = images;
-    
-    res.json({ success: true, data: product });
+    res.json({
+      success: true,
+      data: product
+    });
   } catch (error) {
-    console.error('Get product error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching product details',
+      error: error.message
+    });
   }
 };
 
-/**
- * Get all categories with hierarchy
- */
-exports.getCategories = async (req, res) => {
-  try {
-    const { level, parent, includeInactive } = req.query;
-    
-    const query = {};
-    
-    if (!includeInactive) {
-      query.isActive = true;
-    }
-    
-    if (level !== undefined) {
-      query.level = parseInt(level);
-    }
-    
-    if (parent) {
-      query.parent = parent === 'null' ? null : parent;
-    }
-    
-    const categories = await ProductCategory.find(query)
-      .populate('parent', 'name slug')
-      .sort('displayOrder name')
-      .lean();
-    
-    res.json({ success: true, data: categories });
-  } catch (error) {
-    console.error('Get categories error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
-
-/**
- * Get category tree structure
- */
-exports.getCategoryTree = async (req, res) => {
-  try {
-    const rootCategories = await ProductCategory.find({ level: 0, isActive: true })
-      .sort('displayOrder name')
-      .lean();
-    
-    // Populate children recursively
-    for (let category of rootCategories) {
-      category.children = await ProductCategory.find({ parent: category._id, isActive: true })
-        .sort('displayOrder name')
-        .lean();
-      
-      for (let child of category.children) {
-        child.children = await ProductCategory.find({ parent: child._id, isActive: true })
-          .sort('displayOrder name')
-          .lean();
-      }
-    }
-    
-    res.json({ success: true, data: rootCategories });
-  } catch (error) {
-    console.error('Get category tree error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
-
-/**
- * Get featured/bestseller products
- */
+// Get featured products
 exports.getFeaturedProducts = async (req, res) => {
   try {
-    const { type = 'featured', limit = 10 } = req.query;
+    const { limit = 12 } = req.query;
     
-    const query = { status: 'active' };
-    
-    if (type === 'featured') {
-      query.isFeatured = true;
-    } else if (type === 'bestseller') {
-      query.isBestseller = true;
-    } else if (type === 'new') {
-      query.isNew = true;
-    }
-    
-    const products = await Product.find(query)
-      .populate('category', 'name slug')
-      .select('name slug images basePrice salePrice ratings discount')
-      .sort('-createdAt')
+    const products = await Product.find({
+      status: 'active',
+      isFeatured: true
+    })
+      .select('name slug images pricing ratings isBestseller isNew attributes.brand')
+      .sort({ 'analytics.purchases': -1 })
       .limit(parseInt(limit))
       .lean();
     
-    res.json({ success: true, data: products });
+    res.json({
+      success: true,
+      data: products
+    });
   } catch (error) {
-    console.error('Get featured products error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching featured products',
+      error: error.message
+    });
   }
 };
 
-/**
- * Search products with autocomplete
- */
-exports.searchProducts = async (req, res) => {
+// Get deals/offers
+exports.getDeals = async (req, res) => {
   try {
-    const { q, limit = 10 } = req.query;
+    const { limit = 20 } = req.query;
     
-    if (!q || q.trim().length < 2) {
+    const now = new Date();
+    const products = await Product.find({
+      status: 'active',
+      'pricing.salePrice': { $exists: true },
+      $expr: { $lt: ['$pricing.salePrice', '$pricing.basePrice'] },
+      $or: [
+        { 'pricing.discount.startDate': { $lte: now } },
+        { 'pricing.discount.startDate': { $exists: false } }
+      ],
+      $or: [
+        { 'pricing.discount.endDate': { $gte: now } },
+        { 'pricing.discount.endDate': { $exists: false } }
+      ]
+    })
+      .select('name slug images pricing ratings attributes.brand')
+      .sort({ 'pricing.discount.value': -1 })
+      .limit(parseInt(limit))
+      .lean();
+    
+    res.json({
+      success: true,
+      data: products
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching deals',
+      error: error.message
+    });
+  }
+};
+
+// Search suggestions
+exports.getSearchSuggestions = async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.length < 2) {
       return res.json({ success: true, data: [] });
     }
     
     const products = await Product.find({
       status: 'active',
-      $text: { $search: q }
+      name: { $regex: q, $options: 'i' }
     })
-      .select('name slug images basePrice salePrice category')
-      .populate('category', 'name')
-      .limit(parseInt(limit))
+      .select('name slug images pricing')
+      .limit(10)
       .lean();
     
-    res.json({ success: true, data: products });
-  } catch (error) {
-    console.error('Search products error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
-
-/**
- * Get product reviews
- */
-exports.getProductReviews = async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const { page = 1, limit = 10, rating, verified, sort = '-createdAt' } = req.query;
-    
-    const query = { 
-      product: productId,
-      status: 'approved'
-    };
-    
-    if (rating) {
-      query['rating.overall'] = parseInt(rating);
-    }
-    
-    if (verified === 'true') {
-      query.isVerifiedPurchase = true;
-    }
-    
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
-    const [reviews, total] = await Promise.all([
-      ProductReview.find(query)
-        .populate('user', 'name')
-        .sort(sort)
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean(),
-      ProductReview.countDocuments(query)
-    ]);
+    const categories = await ProductCategory.find({
+      isActive: true,
+      name: { $regex: q, $options: 'i' }
+    })
+      .select('name slug')
+      .limit(5)
+      .lean();
     
     res.json({
       success: true,
-      data: reviews,
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(total / parseInt(limit)),
-        total,
-        limit: parseInt(limit)
+      data: {
+        products,
+        categories
       }
     });
   } catch (error) {
-    console.error('Get reviews error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching suggestions',
+      error: error.message
+    });
   }
 };
 
-/**
- * Get filters/facets for products
- */
-exports.getProductFilters = async (req, res) => {
+// Helper function to get available filters
+async function getAvailableFilters(baseQuery) {
   try {
-    const { category, petType } = req.query;
-    
-    const matchQuery = { status: 'active' };
-    if (category) matchQuery.category = category;
-    if (petType) matchQuery.petType = petType;
-    
-    const [
-      brands,
-      petTypes,
-      ageGroups,
-      priceRange
-    ] = await Promise.all([
-      Product.distinct('brand', matchQuery),
-      Product.distinct('petType', matchQuery),
-      Product.distinct('ageGroup', matchQuery),
+    const [brands, priceRange, petTypes] = await Promise.all([
+      Product.distinct('attributes.brand', baseQuery),
       Product.aggregate([
-        { $match: matchQuery },
+        { $match: baseQuery },
         {
           $group: {
             _id: null,
-            minPrice: { $min: '$basePrice' },
-            maxPrice: { $max: '$basePrice' }
+            minPrice: { $min: { $ifNull: ['$pricing.salePrice', '$pricing.basePrice'] } },
+            maxPrice: { $max: { $ifNull: ['$pricing.salePrice', '$pricing.basePrice'] } }
           }
         }
-      ])
+      ]),
+      Product.distinct('petType', baseQuery)
     ]);
     
-    res.json({
-      success: true,
-      filters: {
-        brands: brands.filter(Boolean),
-        petTypes: petTypes.filter(Boolean),
-        ageGroups: ageGroups.filter(Boolean),
-        priceRange: priceRange[0] || { minPrice: 0, maxPrice: 10000 }
-      }
-    });
+    return {
+      brands: brands.filter(Boolean),
+      priceRange: priceRange[0] || { minPrice: 0, maxPrice: 0 },
+      petTypes: petTypes.filter(pt => pt !== 'all')
+    };
   } catch (error) {
-    console.error('Get filters error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    return {
+      brands: [],
+      priceRange: { minPrice: 0, maxPrice: 0 },
+      petTypes: []
+    };
   }
-};
+}
 
-/**
- * Track product click (for analytics)
- */
-exports.trackProductClick = async (req, res) => {
-  try {
-    const { productId } = req.params;
-    
-    await Product.findByIdAndUpdate(productId, {
-      $inc: { 'analytics.clicks': 1 }
-    });
-    
-    res.json({ success: true, message: 'Click tracked' });
-  } catch (error) {
-    console.error('Track click error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
-  }
-};
+module.exports = exports;

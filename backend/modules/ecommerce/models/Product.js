@@ -42,17 +42,17 @@ const productSchema = new mongoose.Schema({
   },
   shortDescription: String,
   
-  // Categorization
+  // Categorization - Support unlimited depth
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'ProductCategory',
-    required: true,
+    required: false, // Not required for draft products
     index: true
   },
-  subcategory: {
+  categoryPath: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'ProductCategory'
-  },
+  }], // Full category hierarchy [root, sub, subsub, ...]
   tags: [{
     type: String,
     lowercase: true
@@ -160,9 +160,17 @@ const productSchema = new mongoose.Schema({
     nutritionalInfo: Object
   },
   
+  // Dynamic Specifications (based on category template)
+  specifications: [{
+    name: String,
+    value: mongoose.Schema.Types.Mixed,
+    unit: String
+  }],
+  
   // Media
   images: [{
     url: String,
+    publicId: String, // Cloudinary public ID for deletion
     alt: String,
     isPrimary: Boolean,
     order: Number

@@ -1,62 +1,60 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../../../core/middleware/auth');
-const { authorize } = require('../../../core/middleware/role');
-
-// Controllers
+const { auth, authorizeModule } = require('../../../core/middleware/auth');
 const categoryController = require('./categoryController');
 const productController = require('./productController');
 const orderController = require('./orderController');
+const imageController = require('./imageController');
 
-// ============== CATEGORY MANAGEMENT ==============
+// Middleware: All routes require authentication and ecommerce module access
+router.use(auth);
+router.use(authorizeModule('ecommerce'));
 
-router.get('/categories', auth, authorize('ecommerce_manager', 'admin'), categoryController.getAllCategories);
-router.get('/categories/tree', auth, authorize('ecommerce_manager', 'admin'), categoryController.getCategoryTree);
-router.get('/categories/:categoryId', auth, authorize('ecommerce_manager', 'admin'), categoryController.getCategoryById);
-router.post('/categories', auth, authorize('ecommerce_manager'), categoryController.createCategory);
-router.put('/categories/:categoryId', auth, authorize('ecommerce_manager'), categoryController.updateCategory);
-router.delete('/categories/:categoryId', auth, authorize('ecommerce_manager'), categoryController.deleteCategory);
-router.patch('/categories/:categoryId/toggle-active', auth, authorize('ecommerce_manager'), categoryController.toggleActiveStatus);
-router.get('/categories/:categoryId/stats', auth, authorize('ecommerce_manager', 'admin'), categoryController.getCategoryStats);
-router.post('/categories/reorder', auth, authorize('ecommerce_manager'), categoryController.reorderCategories);
+// Additional authorization check for manager/admin/ecommerce_manager
+const requireManager = (req, res, next) => {
+  const role = req.user?.role;
+  const hasRole = Array.isArray(role)
+    ? (role.includes('manager') || role.includes('admin') || role.includes('ecommerce_manager'))
+    : (role === 'manager' || role === 'admin' || role === 'ecommerce_manager');
+  if (!hasRole) {
+    return res.status(403).json({ success: false, message: 'Ecommerce manager access required' });
+  }
+  next();
+};
 
-// ============== PRODUCT MANAGEMENT ==============
+router.use(requireManager);
 
-router.get('/products', auth, authorize('ecommerce_manager', 'admin'), productController.getAllProducts);
-router.get('/products/low-stock', auth, authorize('ecommerce_manager'), productController.getLowStockProducts);
-router.get('/products/:productId', auth, authorize('ecommerce_manager', 'admin'), productController.getProductById);
-router.post('/products', auth, authorize('ecommerce_manager'), productController.createProduct);
-router.put('/products/:productId', auth, authorize('ecommerce_manager'), productController.updateProduct);
-router.delete('/products/:productId', auth, authorize('ecommerce_manager'), productController.deleteProduct);
-router.patch('/products/:productId/status', auth, authorize('ecommerce_manager'), productController.updateProductStatus);
-router.patch('/products/:productId/inventory', auth, authorize('ecommerce_manager'), productController.updateInventory);
-router.post('/products/inventory/bulk', auth, authorize('ecommerce_manager'), productController.bulkUpdateInventory);
-router.patch('/products/:productId/pricing', auth, authorize('ecommerce_manager'), productController.updatePricing);
-router.get('/products/:productId/analytics', auth, authorize('ecommerce_manager', 'admin'), productController.getProductAnalytics);
+// ============ IMAGE UPLOAD ROUTES ============
+router.post('/images/upload', imageController.uploadProductImages);
+router.delete('/images/delete', imageController.deleteProductImage);
+router.put('/images/reorder', imageController.reorderProductImages);
 
-// Product Images
-router.post('/products/:productId/images', auth, authorize('ecommerce_manager'), productController.uploadProductImages);
-router.get('/products/:productId/images', auth, authorize('ecommerce_manager', 'admin'), productController.getProductImages);
-router.delete('/products/:productId/images/:imageId', auth, authorize('ecommerce_manager'), productController.deleteProductImage);
-router.patch('/products/:productId/images/:imageId/primary', auth, authorize('ecommerce_manager'), productController.setPrimaryImage);
+// ============ CATEGORY ROUTES ============
+router.get('/categories', categoryController.getAllCategories);
+router.get('/categories/tree', categoryController.getCategoryTree);
+router.get('/categories/:id', categoryController.getCategory);
+router.get('/categories/:id/path', categoryController.getCategoryPath);
+router.post('/categories', categoryController.createCategory);
+router.put('/categories/:id', categoryController.updateCategory);
+router.delete('/categories/:id', categoryController.deleteCategory);
+router.post('/categories/reorder', categoryController.reorderCategories);
 
-// Product Variants
-router.post('/products/:productId/variants', auth, authorize('ecommerce_manager'), productController.addVariant);
-router.put('/products/:productId/variants/:variantId', auth, authorize('ecommerce_manager'), productController.updateVariant);
-router.delete('/products/:productId/variants/:variantId', auth, authorize('ecommerce_manager'), productController.deleteVariant);
+// ============ PRODUCT ROUTES ============
+router.get('/products', productController.getAllProducts);
+router.get('/products/:id', productController.getProduct);
+router.post('/products', productController.createProduct);
+router.put('/products/:id', productController.updateProduct);
+router.delete('/products/:id', productController.deleteProduct);
+router.post('/products/bulk-update', productController.bulkUpdateProducts);
+router.patch('/products/:id/status', productController.updateProductStatus);
+router.patch('/products/:id/inventory', productController.updateInventory);
+router.get('/products/:id/analytics', productController.getProductAnalytics);
+router.post('/products/:id/duplicate', productController.duplicateProduct);
 
-// ============== ORDER MANAGEMENT ==============
-
-router.get('/orders', auth, authorize('ecommerce_manager', 'admin'), orderController.getAllOrders);
-router.get('/orders/pending', auth, authorize('ecommerce_manager'), orderController.getPendingOrders);
-router.get('/orders/stats', auth, authorize('ecommerce_manager', 'admin'), orderController.getOrderStats);
-router.get('/orders/:orderId', auth, authorize('ecommerce_manager', 'admin'), orderController.getOrderById);
-router.patch('/orders/:orderId/status', auth, authorize('ecommerce_manager'), orderController.updateOrderStatus);
-router.post('/orders/:orderId/confirm', auth, authorize('ecommerce_manager'), orderController.confirmOrder);
-router.post('/orders/:orderId/ship', auth, authorize('ecommerce_manager'), orderController.shipOrder);
-router.post('/orders/:orderId/deliver', auth, authorize('ecommerce_manager'), orderController.markDelivered);
-router.post('/orders/:orderId/cancellation/process', auth, authorize('ecommerce_manager'), orderController.processCancellation);
-router.post('/orders/:orderId/return/process', auth, authorize('ecommerce_manager'), orderController.processReturn);
-router.post('/orders/:orderId/notes', auth, authorize('ecommerce_manager'), orderController.addInternalNote);
+// ============ ORDER ROUTES ============
+router.get('/orders', orderController.getAllOrders);
+router.get('/orders/:id', orderController.getOrder);
+router.patch('/orders/:id/status', orderController.updateOrderStatus);
+router.get('/dashboard/stats', orderController.getDashboardStats);
 
 module.exports = router;

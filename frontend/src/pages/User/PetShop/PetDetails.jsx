@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Box, Container, Typography, Grid, Card, CardContent, CardMedia, Chip, Button, CircularProgress, Alert, TextField, Rating, Divider, Stack } from '@mui/material'
-import { petShopAPI, apiClient, resolveMediaUrl } from '../../../services/api'
+import { petShopAPI, apiClient, resolveMediaUrl, blockchainAPI } from '../../../services/api'
 import { Pets as PetsIcon, ArrowBack as BackIcon } from '@mui/icons-material'
 
 const PetDetails = () => {
@@ -11,6 +11,11 @@ const PetDetails = () => {
   const [error, setError] = useState('')
   const [item, setItem] = useState(null)
   const [notes, setNotes] = useState('')
+  // Blockchain integration state
+  const [blockchainLoading, setBlockchainLoading] = useState(true)
+  const [blockchainError, setBlockchainError] = useState('')
+  const [blockchainStatus, setBlockchainStatus] = useState(null) // { isValid, lastVerified, ... }
+  const [blockchainEvents, setBlockchainEvents] = useState([])
   const [reserving, setReserving] = useState(false)
   const [wishloading, setWishloading] = useState(false)
   const [isWishlisted, setIsWishlisted] = useState(false)
@@ -45,6 +50,24 @@ const PetDetails = () => {
     } finally { setLoading(false) }
   }
 
+  // Load blockchain status and pet event history
+  const loadBlockchain = async (petId) => {
+    setBlockchainLoading(true)
+    setBlockchainError('')
+    try {
+      // Fetch chain status (validity, last verified)
+      const statusRes = await blockchainAPI.verifyChain()
+      setBlockchainStatus(statusRes.data?.data || statusRes.data)
+      // Fetch pet event history
+      const eventsRes = await blockchainAPI.getPetHistory(petId)
+      setBlockchainEvents(eventsRes.data?.data?.events || [])
+    } catch (e) {
+      setBlockchainError(e?.response?.data?.message || 'Failed to load blockchain info')
+    } finally {
+      setBlockchainLoading(false)
+    }
+  }
+
   const toggleWishlist = async () => {
     try {
       setWishloading(true)
@@ -72,8 +95,16 @@ const PetDetails = () => {
     }
   }
 
-  useEffect(() => { load() // eslint-disable-next-line
+  useEffect(() => {
+    load()
   }, [id])
+
+  // Load blockchain info after pet loads
+  useEffect(() => {
+    if (item && item.petCode) {
+      loadBlockchain(item.petCode)
+    }
+  }, [item])
 
   useEffect(() => {
     const fetchExtras = async () => {
@@ -146,6 +177,43 @@ const PetDetails = () => {
           </CardMedia>
         )}
         <CardContent>
+          {/* Blockchain status and event history */}
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Blockchain Verification</Typography>
+            {blockchainLoading ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><CircularProgress size={20} /> <span>Verifying blockchain...</span></Box>
+            ) : blockchainError ? (
+              <Alert severity="error">{blockchainError}</Alert>
+            ) : blockchainStatus ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                <Chip label={blockchainStatus.isValid ? 'Chain Valid' : 'Chain Invalid'} color={blockchainStatus.isValid ? 'success' : 'error'} />
+                {blockchainStatus.lastVerified && (
+                  <Typography variant="caption" color="text.secondary">Last verified: {new Date(blockchainStatus.lastVerified).toLocaleString()}</Typography>
+                )}
+              </Box>
+            ) : null}
+            {/* Pet blockchain event history */}
+            {blockchainLoading ? null : (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>Pet Blockchain Event History:</Typography>
+                {blockchainEvents.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">No blockchain events found for this pet.</Typography>
+                ) : (
+                  <Box sx={{ borderLeft: '3px solid #eee', pl: 2, mt: 1 }}>
+                    {blockchainEvents.map((ev, idx) => (
+                      <Box key={ev._id || idx} sx={{ mb: 1.5 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{ev.eventType || 'Event'}</Typography>
+                        <Typography variant="caption" color="text.secondary">{new Date(ev.timestamp || ev.createdAt).toLocaleString()}</Typography>
+                        {ev.details && <Typography variant="body2" sx={{ mt: 0.5 }}>{typeof ev.details === 'string' ? ev.details : JSON.stringify(ev.details)}</Typography>}
+                        <Divider sx={{ my: 1 }} />
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Box>
+          {/* Main pet details UI */}
           <Stack direction={{ xs:'column', sm:'row' }} justifyContent="space-between" alignItems={{ xs:'flex-start', sm:'center' }} spacing={2} sx={{ mb: 2 }}>
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>{item.name || 'Pet'} {item.petCode ? `• ${item.petCode}` : ''}</Typography>

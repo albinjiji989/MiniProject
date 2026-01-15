@@ -1,3 +1,12 @@
+// Blockchain API
+export const blockchainAPI = {
+  // Get blockchain event history for a pet
+  getPetHistory: (petId) => apiClient.get(`/blockchain/pet/${petId}`),
+  // Verify blockchain integrity (returns status)
+  verifyChain: () => apiClient.get('/blockchain/verify'),
+  // Get blockchain stats (already used in BlockchainStats)
+  getStats: () => apiClient.get('/blockchain/stats'),
+};
 import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'

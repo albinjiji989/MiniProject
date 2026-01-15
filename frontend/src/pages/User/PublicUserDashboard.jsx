@@ -190,7 +190,6 @@ const PublicUserDashboard = () => {
     const pathMap = {
       'adoption': '/User/adoption',
       'veterinary': '/User/veterinary',
-      'rescue': '/User/rescue',
       'petshop': '/User/petshop',
       'pharmacy': '/User/pharmacy',
       'ecommerce': '/User/ecommerce',

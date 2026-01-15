@@ -280,8 +280,26 @@ const createPet = async (req, res) => {
     
     // Use UnifiedPetService to create adoption pet and register in PetRegistry
     const UnifiedPetService = require('../../../../core/services/UnifiedPetService');
+    const BlockchainService = require('../../../../core/services/blockchainService');
     
     const result = await UnifiedPetService.createAdoptionPet(petData, req.user);
+    // Blockchain: Log pet creation event
+    try {
+      await BlockchainService.addBlock({
+        eventType: 'PET_CREATED',
+        petId: result.adoptionPet._id,
+        userId: req.user.id,
+        data: {
+          name: result.adoptionPet.name,
+          breed: result.adoptionPet.breed,
+          species: result.adoptionPet.species,
+          status: result.adoptionPet.status,
+          petCode: result.adoptionPet.petCode,
+        }
+      });
+    } catch (blockchainErr) {
+      console.error('Blockchain logging failed for PET_CREATED:', blockchainErr);
+    }
     
     // Process images and documents - we'll handle them separately now
     let images = sanitizeMedia(ensureArray(req.body?.images), false)
@@ -499,6 +517,28 @@ const updatePet = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Pet not found' });
     }
 
+    // Blockchain: Log status change event if status is updated
+    try {
+      const BlockchainService = require('../../../../core/services/blockchainService');
+      if (update.status && update.status !== pet.status) {
+        await BlockchainService.addBlock({
+          eventType: 'PET_STATUS_CHANGED',
+          petId: pet._id,
+          userId: req.user.id,
+          data: {
+            newStatus: update.status,
+            previousStatus: pet.status,
+            name: pet.name,
+            breed: pet.breed,
+            species: pet.species,
+            petCode: pet.petCode,
+          }
+        });
+      }
+    } catch (blockchainErr) {
+      console.error('Blockchain logging failed for PET_STATUS_CHANGED:', blockchainErr);
+    }
+
     // Handle imageIds if provided directly (new, simpler path)
     if (hasImageIds && imageIds) {
       pet.imageIds = imageIds;
@@ -667,6 +707,25 @@ const deletePet = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Pet not found' });
     }
 
+    // Blockchain: Log pet deletion event
+    try {
+      const BlockchainService = require('../../../../core/services/blockchainService');
+      await BlockchainService.addBlock({
+        eventType: 'PET_DELETED',
+        petId: pet._id,
+        userId: req.user.id,
+        data: {
+          name: pet.name,
+          breed: pet.breed,
+          species: pet.species,
+          status: pet.status,
+          petCode: pet.petCode,
+        }
+      });
+    } catch (blockchainErr) {
+      console.error('Blockchain logging failed for PET_DELETED:', blockchainErr);
+    }
+
     // Delete associated images and documents from filesystem and database
     await deletePetMedia(pet);
 
@@ -803,6 +862,30 @@ const bulkDeletePets = async (req, res) => {
     
     // Find all pets to delete
     const pets = await AdoptionPet.find({ _id: { $in: validIds } });
+    
+    // Blockchain: Log deletion for each pet in bulk operation
+    try {
+      const BlockchainService = require('../../../../core/services/blockchainService');
+      for (const pet of pets) {
+        await BlockchainService.addBlock({
+          eventType: 'PET_DELETED',
+          petId: pet._id,
+          userId: req.user.id,
+          data: {
+            name: pet.name,
+            breed: pet.breed,
+            species: pet.species,
+            status: pet.status,
+            petCode: pet.petCode,
+            bulkOperation: true,
+            bulkOperationId: `BULK_DELETE_${Date.now()}`
+          }
+        });
+      }
+    } catch (blockchainErr) {
+      console.error('Blockchain logging failed for bulk pet deletion:', blockchainErr);
+      // Continue with deletion even if blockchain fails (non-blocking)
+    }
     
     // Delete media for each pet
     for (const pet of pets) {
@@ -1249,6 +1332,27 @@ const importPetsCSV = async (req, res) => {
         const pet = new AdoptionPet(processedData);
         const savedPet = await pet.save();
         
+        // Blockchain: Log pet creation from CSV import
+        try {
+          const BlockchainService = require('../../../../core/services/blockchainService');
+          await BlockchainService.addBlock({
+            eventType: 'PET_CREATED',
+            petId: savedPet._id,
+            userId: req.user.id,
+            data: {
+              name: savedPet.name,
+              breed: savedPet.breed,
+              species: savedPet.species,
+              status: savedPet.status,
+              petCode: savedPet.petCode,
+              importMethod: 'CSV_BULK_IMPORT',
+              csvRow: rowNumber
+            }
+          });
+        } catch (blockchainErr) {
+          console.error(`Blockchain logging failed for CSV imported pet ${savedPet._id}:`, blockchainErr);
+        }
+        
         results.successful.push({
           row: rowNumber,
           petId: savedPet._id,
@@ -1508,6 +1612,38 @@ const publishPendingPets = async (req, res) => {
         success: false, 
         error: 'No valid pet IDs provided' 
       });
+    }
+    
+    // First, get all pets before updating (for blockchain logging)
+    const pets = await AdoptionPet.find({ 
+      _id: { $in: validIds },
+      createdBy: req.user.id,
+      status: 'pending'
+    });
+    
+    // Blockchain: Log status change for each pending pet being published
+    try {
+      const BlockchainService = require('../../../../core/services/blockchainService');
+      for (const pet of pets) {
+        await BlockchainService.addBlock({
+          eventType: 'PET_STATUS_CHANGED',
+          petId: pet._id,
+          userId: req.user.id,
+          data: {
+            previousStatus: 'pending',
+            newStatus: 'available',
+            name: pet.name,
+            breed: pet.breed,
+            species: pet.species,
+            petCode: pet.petCode,
+            publishOperation: true,
+            publishTimestamp: new Date()
+          }
+        });
+      }
+    } catch (blockchainErr) {
+      console.error('Blockchain logging failed for publish pending pets:', blockchainErr);
+      // Continue with update even if blockchain fails (non-blocking)
     }
     
     // Update pets to available status

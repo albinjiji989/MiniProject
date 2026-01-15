@@ -3,6 +3,7 @@ const PetInventoryItem = require('../../manager/models/PetInventoryItem');
 const PetShop = require('../../manager/models/PetShop');
 const ShopOrder = require('./ShopOrder');
 
+const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
 // Review management
 const createReview = async (req, res) => {
   try {
@@ -23,12 +24,20 @@ const createReview = async (req, res) => {
       'items.itemId': itemId,
       status: 'completed',
     });
-
     if (!hasPurchased) {
       return res.status(403).json({
         success: false,
         message: 'You must purchase the item before reviewing',
       });
+    }
+    // Blockchain verification before review
+    const item = await PetInventoryItem.findById(itemId);
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Pet not found' });
+    }
+    const isChainValid = await petshopBlockchainService.verifyChain('petId', item._id.toString());
+    if (!isChainValid) {
+      return res.status(400).json({ success: false, message: 'Blockchain verification failed for this pet. Action blocked.' });
     }
 
     // Check if review already exists
@@ -46,6 +55,19 @@ const createReview = async (req, res) => {
         { rating, comment },
         { new: true }
       );
+      // Blockchain logging: review_updated event
+      try {
+        await petshopBlockchainService.addBlock('review_updated', {
+          reviewId: review._id,
+          userId,
+          itemId,
+          rating,
+          type,
+          timestamp: new Date(),
+        });
+      } catch (err) {
+        console.warn('Blockchain logging failed for review_updated:', err.message);
+      }
     } else {
       // Create new review
       review = new Review({
@@ -56,6 +78,19 @@ const createReview = async (req, res) => {
         comment,
       });
       await review.save();
+      // Blockchain logging: review_created event
+      try {
+        await petshopBlockchainService.addBlock('review_created', {
+          reviewId: review._id,
+          userId,
+          itemId,
+          rating,
+          type,
+          timestamp: new Date(),
+        });
+      } catch (err) {
+        console.warn('Blockchain logging failed for review_created:', err.message);
+      }
     }
 
     // Update item's average rating

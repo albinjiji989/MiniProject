@@ -115,6 +115,23 @@ const approveApplication = async (req, res) => {
     }
 
     await application.approve(req.user.id, notes);
+    // Blockchain: Log application approval event
+    try {
+      const BlockchainService = require('../../../../core/services/blockchainService');
+      await BlockchainService.addBlock({
+        eventType: 'APPLICATION_APPROVED',
+        petId: application.petId,
+        userId: req.user.id,
+        data: {
+          applicationId: application._id,
+          applicantId: application.userId,
+          status: 'approved',
+          notes: notes || '',
+        }
+      });
+    } catch (blockchainErr) {
+      console.error('Blockchain logging failed for APPLICATION_APPROVED:', blockchainErr);
+    }
 
     // Reserve the pet
     const pet = await AdoptionPet.findById(application.petId);
@@ -162,6 +179,24 @@ const rejectApplication = async (req, res) => {
     }
 
     await application.reject(req.user.id, reason, notes);
+    // Blockchain: Log application rejection event
+    try {
+      const BlockchainService = require('../../../../core/services/blockchainService');
+      await BlockchainService.addBlock({
+        eventType: 'APPLICATION_REJECTED',
+        petId: application.petId,
+        userId: req.user.id,
+        data: {
+          applicationId: application._id,
+          applicantId: application.userId,
+          status: 'rejected',
+          reason: reason || '',
+          notes: notes || '',
+        }
+      });
+    } catch (blockchainErr) {
+      console.error('Blockchain logging failed for APPLICATION_REJECTED:', blockchainErr);
+    }
 
     // Make pet available again
     const pet = await AdoptionPet.findById(application.petId);
@@ -443,6 +478,29 @@ const completeHandover = async (req, res) => {
         pet.adopterUserId = app.userId
         pet.adoptionDate = new Date()
         await pet.save()
+        
+        // Blockchain: Log handover completion (pet transferred to adopter)
+        try {
+          const BlockchainService = require('../../../../core/services/blockchainService');
+          await BlockchainService.addBlock({
+            eventType: 'HANDOVER_COMPLETED',
+            petId: pet._id,
+            userId: req.user.id, // Manager who completed handover
+            data: {
+              applicationId: app._id,
+              adopterId: app.userId,
+              petName: pet.name,
+              petCode: pet.petCode,
+              breed: pet.breed,
+              species: pet.species,
+              handoverDate: new Date(),
+              adoptionDate: pet.adoptionDate,
+              location: app.handover?.location || 'Adoption Center'
+            }
+          });
+        } catch (blockchainErr) {
+          console.error('Blockchain logging failed for HANDOVER_COMPLETED:', blockchainErr);
+        }
         
         // Create core Pet for the adopter preserving petCode
         try {

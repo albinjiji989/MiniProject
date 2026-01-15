@@ -427,6 +427,27 @@ const submitApplication = async (req, res) => {
 
     await application.save();
 
+    // Blockchain: Log application submission event
+    try {
+      const BlockchainService = require('../../../../core/services/blockchainService');
+      await BlockchainService.addBlock({
+        eventType: 'APPLICATION_SUBMITTED',
+        petId: pet._id,
+        userId: req.user.id,
+        data: {
+          applicationId: application._id,
+          petName: pet.name,
+          petCode: pet.petCode,
+          breed: pet.breed,
+          species: pet.species,
+          applicantName: applicationData.fullName || 'Unknown',
+          applicantEmail: applicationData.email || '',
+        }
+      });
+    } catch (blockchainErr) {
+      console.error('Blockchain logging failed for APPLICATION_SUBMITTED:', blockchainErr);
+    }
+
     // Notify managers (best-effort)
     try {
       const managers = await User.find({ role: 'adoption_manager', isActive: true }).select('email');

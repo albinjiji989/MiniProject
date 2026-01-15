@@ -9,6 +9,7 @@ const { sendMail } = require('../../../../core/utils/email');
 const paymentService = require('../../../../core/services/paymentService');
 const UnifiedPetRegistrationService = require('../../../../core/services/unifiedPetRegistrationService');
 
+const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
 // ===== Direct Buy Now (Bypasses Reservation/Approval) =====
 const createDirectBuyOrder = async (req, res) => {
   try {
@@ -23,11 +24,14 @@ const createDirectBuyOrder = async (req, res) => {
     
     // Verify item exists and is available
     const item = await PetInventoryItem.findById(itemId);
-    
     if (!item) {
       return res.status(404).json({ success: false, message: 'Pet not found' });
     }
-    
+    // Blockchain verification before payment
+    const isChainValid = await petshopBlockchainService.verifyChain('petId', item._id.toString());
+    if (!isChainValid) {
+      return res.status(400).json({ success: false, message: 'Blockchain verification failed for this pet. Action blocked.' });
+    }
     if (item.status !== 'available_for_sale') {
       return res.status(400).json({ 
         success: false, 
@@ -74,7 +78,18 @@ const createDirectBuyOrder = async (req, res) => {
     });
     
     await reservation.save();
-    
+    // Blockchain logging: payment_direct_buy_initiated event
+    try {
+      await petshopBlockchainService.addBlock('payment_direct_buy_initiated', {
+        reservationId: reservation._id,
+        userId: req.user._id,
+        itemId: itemId,
+        amount: totalAmount,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.warn('Blockchain logging failed for payment_direct_buy_initiated:', err.message);
+    }
     // Update item status to reserved
     item.status = 'reserved';
     await item.save();
@@ -113,6 +128,18 @@ const createDirectBuyOrder = async (req, res) => {
     };
     await reservation.save();
     
+    // Blockchain logging: payment_order_created event
+    try {
+      await petshopBlockchainService.addBlock('payment_order_created', {
+        reservationId: reservation._id,
+        userId: req.user._id,
+        orderId: orderResult.order.id,
+        amount: totalAmount,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.warn('Blockchain logging failed for payment_order_created:', err.message);
+    }
     res.json({
       success: true,
       data: {
@@ -212,6 +239,18 @@ const createRazorpayOrder = async (req, res) => {
     // Keep status as 'payment_pending' - it will be updated to 'paid' after payment verification
     await reservation.save();
     
+    // Blockchain logging: payment_order_created event
+    try {
+      await petshopBlockchainService.addBlock('payment_order_created', {
+        reservationId: reservation._id,
+        userId: req.user._id,
+        orderId: orderResult.order.id,
+        amount: totalAmount,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.warn('Blockchain logging failed for payment_order_created:', err.message);
+    }
     res.json({
       success: true,
       data: {
@@ -291,6 +330,18 @@ const verifyRazorpaySignature = async (req, res) => {
       amount: reservation.paymentInfo?.amount || 0
     };
     reservation.status = 'at_owner';
+    // Blockchain logging: payment_successful event
+    try {
+      await petshopBlockchainService.addBlock('payment_successful', {
+        reservationId: reservation._id,
+        userId: req.user._id,
+        paymentId: razorpay_payment_id,
+        amount: reservation.paymentInfo?.amount || 0,
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      console.warn('Blockchain logging failed for payment_successful:', err.message);
+    }
 
     // Check if this is a stock-based purchase
     const inventoryItem = await PetInventoryItem.findById(reservation.itemId._id)
@@ -422,6 +473,22 @@ const verifyRazorpaySignature = async (req, res) => {
         createdBy: req.user._id,
         status: 'Completed'
       });
+      // Blockchain logging: ownership_transferred event
+      try {
+        await petshopBlockchainService.addBlock('ownership_transferred', {
+          petId: pet._id,
+          petCode: pet.petCode,
+          newOwner: req.user._id,
+          transferType: 'Sale',
+          transferDate: new Date(),
+          transferReason: 'Pet shop purchase',
+          transferFee: pet.price || 0,
+          performedBy: req.user._id,
+          timestamp: new Date(),
+        });
+      } catch (err) {
+        console.warn('Blockchain logging failed for ownership_transferred:', err.message);
+      }
     }
 
     // Update centralized pet registry with initial ownership for all pets
@@ -460,7 +527,22 @@ const verifyRazorpaySignature = async (req, res) => {
           notes: `Payment completed - Pet transferred to owner`,
           performedBy: req.user._id
         });
-        
+        // Blockchain logging: registry_ownership_transfer event
+        try {
+          await petshopBlockchainService.addBlock('registry_ownership_transfer', {
+            petCode: pet.petCode,
+            previousOwnerId: null,
+            newOwnerId: req.user._id,
+            transferType: 'purchase',
+            transferPrice: pet.price || 0,
+            transferReason: 'Pet Shop Purchase',
+            source: 'petshop',
+            performedBy: req.user._id,
+            timestamp: new Date(),
+          });
+        } catch (err) {
+          console.warn('Blockchain logging failed for registry_ownership_transfer:', err.message);
+        }
         console.log(`PetRegistry updated for pet ${pet.petCode}: transferred to user ${req.user._id}`);
       }
     } catch (regErr) {
