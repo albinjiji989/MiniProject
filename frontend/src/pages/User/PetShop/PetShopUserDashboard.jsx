@@ -379,13 +379,31 @@ const PetShopUserDashboard = () => {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
-          PetShop
-        </Typography>
-        <Typography variant="body1" color="textSecondary">
-          Browse batches, reserve your favorite pet, and complete your purchase
-        </Typography>
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
+            PetShop
+          </Typography>
+          <Typography variant="body1" color="textSecondary">
+            Browse batches, reserve your favorite pet, and complete your purchase
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          onClick={() => navigate('/user/petshop/ai-identifier')}
+          sx={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white',
+            px: 3,
+            py: 1.5,
+            '&:hover': {
+              background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+            }
+          }}
+          startIcon={<SearchIcon />}
+        >
+          AI Pet Identifier
+        </Button>
       </Box>
 
       {/* Tabs */}

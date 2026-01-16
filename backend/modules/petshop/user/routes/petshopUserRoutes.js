@@ -18,6 +18,8 @@ const petHistoryController = require('../controllers/petHistoryController');
 const stockController = require('../controllers/stockController');
 const purchaseApplicationController = require('../controllers/purchaseApplicationController');
 const purchasePaymentController = require('../controllers/purchasePaymentController');
+const aiStockController = require('../controllers/aiStockController');
+const aiRecommendationController = require('../controllers/aiRecommendationController');
 // Batch controller (reused from manager; provides public list & details)
 const batchController = require('../../manager/controllers/batchController');
 
@@ -97,6 +99,18 @@ router.post('/purchase-applications', auth, upload.fields([
 router.get('/purchase-applications', auth, purchaseApplicationController.getMyApplications);
 router.get('/purchase-applications/:id', auth, purchaseApplicationController.getApplicationDetails);
 router.post('/purchase-applications/:id/cancel', auth, purchaseApplicationController.cancelApplication);
+
+// AI Stock Availability routes (for AI breed identification integration)
+router.get('/check-availability', aiStockController.checkBreedAvailability);
+router.get('/breed-stock/:speciesId/:breedId', auth, aiStockController.getBreedStockDetails);
+router.get('/search-breeds', aiStockController.searchBreedsByName);
+router.get('/list-all-breeds', aiStockController.listAllBreeds); // Debug endpoint
+router.get('/debug-batches', aiStockController.debugBatches); // Debug endpoint - show actual stock
+
+// AI Recommendation routes (Complete AI workflow: Identify → Check Stock → Find Products)
+router.get('/ai-recommendations', aiRecommendationController.getAIRecommendations);
+router.get('/products/by-breed/:breedId', aiRecommendationController.getProductsByBreed);
+router.get('/products/by-species/:speciesId', aiRecommendationController.getProductsBySpecies);
 
 // Purchase payment routes
 router.post('/purchase-applications/payment/create-order', auth, purchasePaymentController.createPurchasePaymentOrder);

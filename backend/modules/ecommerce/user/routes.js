@@ -7,6 +7,7 @@ const cartController = require('./cartController');
 const wishlistController = require('./wishlistController');
 const orderController = require('./orderController');
 const categoryController = require('../manager/categoryController');
+const mlRecommendationController = require('./mlRecommendationController');
 
 // ============ CATEGORY ROUTES (PUBLIC) ============
 router.get('/categories', categoryController.getAllCategories);
@@ -19,6 +20,11 @@ router.get('/products/featured', productController.getFeaturedProducts);
 router.get('/products/deals', productController.getDeals);
 router.get('/products/search-suggestions', productController.getSearchSuggestions);
 router.get('/products/:slug', productController.getProductDetails);
+
+// ============ ML RECOMMENDATION ROUTES (PUBLIC) ============
+router.get('/ml/recommendations', mlRecommendationController.getMLBreedRecommendations);
+router.get('/ml/similar/:productId', mlRecommendationController.getMLSimilarProducts);
+router.get('/ml/model-status', mlRecommendationController.getMLModelStatus);
 
 // ============ REVIEW ROUTES ============
 router.get('/products/:productId/reviews', reviewController.getProductReviews);
@@ -43,10 +49,20 @@ router.get('/wishlist', wishlistController.getWishlist);
 router.post('/wishlist', wishlistController.addToWishlist);
 router.delete('/wishlist/:productId', wishlistController.removeFromWishlist);
 
+// ============ ML RECOMMENDATION ROUTES (PROTECTED) ============
+router.get('/ml/personalized', mlRecommendationController.getPersonalizedRecommendations);
+router.post('/ml/track-interaction', mlRecommendationController.trackUserInteraction);
+router.post('/ml/train-model', mlRecommendationController.trainRecommendationModel); // Admin only in production
+
 // ============ ORDER ROUTES ============
 router.get('/orders', orderController.getUserOrders);
 router.get('/orders/:id', orderController.getOrderDetails);
 router.post('/orders', orderController.createOrder);
 router.post('/orders/:id/cancel', orderController.cancelOrder);
+
+// Payment routes
+router.post('/orders/payment/create', orderController.createPaymentOrder);
+router.post('/orders/payment/verify', orderController.verifyPaymentAndCreateOrder);
+router.post('/orders/cod', orderController.createCODOrder);
 
 module.exports = router;

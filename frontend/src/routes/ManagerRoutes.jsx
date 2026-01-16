@@ -11,7 +11,8 @@ import UserProfile from '../pages/User/Profile'
 import EcommerceDashboard from '../pages/Manager/EcommerceDashboard'
 import AddProduct from '../pages/Manager/AddProduct'
 import ProductList from '../pages/Manager/ProductList'
-import OrderManagement from '../pages/Manager/OrderManagement'
+import EcommerceOrders from '../pages/Manager/EcommerceOrders'
+import OrderDetail from '../pages/User/OrderDetail'
 import EcommerceManage from '../pages/Manager/EcommerceManage'
 import CategoryManagement from '../pages/Manager/CategoryManagement'
 
@@ -47,6 +48,7 @@ import PetShopReports from '../modules/managers/PetShop/Reports'
 import GeneratePetsFromStock from '../modules/managers/PetShop/GeneratePetsFromStock'
 import AvailableForSale from '../modules/managers/PetShop/AvailableForSale'
 import ManageStockImages from '../modules/managers/PetShop/ManageStockImages'
+import ManagerAIBreedIdentifier from '../modules/managers/PetShop/AIBreedIdentifier'
 import ReservedPets from '../modules/managers/PetShop/ReservedPets'
 import PurchasedPets from '../modules/managers/PetShop/PurchasedPets'
 import PurchasePet from '../modules/managers/PetShop/PurchasePet'
@@ -167,7 +169,8 @@ const ManagerRoutes = () => {
             <Route path="/products/add" element={<AddProduct />} />
             <Route path="/products/:id/edit" element={<AddProduct />} />
             <Route path="/categories" element={<CategoryManagement />} />
-            <Route path="/orders" element={<OrderManagement />} />
+            <Route path="/orders" element={<EcommerceOrders />} />
+            <Route path="/orders/:id" element={<OrderDetail />} />
             <Route path="/manage" element={<EcommerceManage />} />
             <Route path="/" element={<Navigate to="/manager/ecommerce/dashboard" replace />} />
           </Routes>
@@ -195,6 +198,7 @@ const ManagerRoutes = () => {
         <Route path="/petshop/*" element={
           <Routes>
             <Route path="/dashboard" element={<PetShopManagerDashboard />} />
+            <Route path="/ai-identifier" element={<ManagerAIBreedIdentifier />} />
             <Route path="/manage" element={<PetShopManage />} />
             {/* PetShop Wizard Routes */}
             <Route path="/wizard/*" element={<WizardLayoutImproved />}>

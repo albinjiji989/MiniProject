@@ -1,0 +1,28 @@
+# Core AI/ML Dependencies
+tensorflow==2.15.0
+keras==2.15.0
+numpy==1.24.3
+pillow==10.1.0
+opencv-python==4.8.1.78
+
+# Machine Learning Libraries
+scikit-learn==1.3.2  # For ML algorithms (TF-IDF, Cosine Similarity, etc.)
+scipy==1.11.4  # Scientific computing
+
+# Web Framework
+flask==3.0.0
+flask-cors==4.0.0
+
+# Utilities
+python-dotenv==1.0.0
+requests==2.31.0
+
+# Image Processing
+scikit-image==0.22.0
+
+# Cloudinary (Optional - for image backup)
+cloudinary==1.36.0
+
+# Optional but recommended
+matplotlib==3.8.2
+pandas==2.1.4

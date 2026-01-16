@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Star, ShoppingCart, Heart, Share2, ChevronRight, Truck, Shield, RotateCcw } from 'lucide-react';
 import ProductReviews from '../../components/User/ProductReviews';
@@ -9,6 +9,7 @@ import ProductReviews from '../../components/User/ProductReviews';
  */
 const ProductDetail = () => {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -21,7 +22,7 @@ const ProductDetail = () => {
   const fetchProduct = async () => {
     try {
       setLoading(true);
-      const response = await api.get(`/ecommerce/user/products/${slug}`);
+      const response = await api.get(`/ecommerce/products/${slug}`);
       setProduct(response.data.data);
     } catch (error) {
       console.error('Error fetching product:', error);
@@ -30,9 +31,18 @@ const ProductDetail = () => {
     }
   };
 
+  const handleBuyNow = () => {
+    navigate('/user/ecommerce/checkout', {
+      state: {
+        product,
+        quantity
+      }
+    });
+  };
+
   const handleAddToCart = async () => {
     try {
-      await api.post('/ecommerce/user/cart', {
+      await api.post('/ecommerce/cart', {
         productId: product._id,
         quantity
       });
@@ -45,7 +55,7 @@ const ProductDetail = () => {
 
   const handleAddToWishlist = async () => {
     try {
-      await api.post('/ecommerce/user/wishlist', {
+      await api.post('/ecommerce/wishlist', {
         productId: product._id
       });
       alert('Added to wishlist!');
@@ -139,7 +149,7 @@ const ProductDetail = () => {
                 ADD TO CART
               </button>
               <button
-                onClick={() => {/* Buy now logic */}}
+                onClick={handleBuyNow}
                 className="flex items-center justify-center gap-2 bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-orange-700 transition-colors"
               >
                 BUY NOW

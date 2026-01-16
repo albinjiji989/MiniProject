@@ -290,6 +290,20 @@ const PetShopManagerDashboard = () => {
           </Box>
         )}
         <Box sx={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Button 
+            variant="contained" 
+            onClick={() => navigate('/manager/petshop/ai-identifier')}
+            sx={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+              }
+            }}
+            startIcon={<AssessmentIcon />}
+          >
+            AI Breed Identifier
+          </Button>
           <Button size="small" variant="outlined" startIcon={<RefreshIcon />} onClick={async () => {
             // Refresh user data first
             try {

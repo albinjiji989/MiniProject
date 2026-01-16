@@ -21,7 +21,7 @@ const ProductReviews = ({ productId }) => {
         sortBy,
         ...(filter && { rating: filter })
       });
-      const response = await api.get(`/ecommerce/user/products/${productId}/reviews?${params}`);
+      const response = await api.get(`/ecommerce/products/${productId}/reviews?${params}`);
       setReviews(response.data.data);
       setRatingDistribution(response.data.ratingDistribution);
     } catch (error) {
@@ -147,7 +147,7 @@ const ReviewCard = ({ review, onUpdate }) => {
 
   const handleMarkHelpful = async () => {
     try {
-      await api.post(`/ecommerce/user/reviews/${review._id}/helpful`);
+      await api.post(`/ecommerce/reviews/${review._id}/helpful`);
       onUpdate();
     } catch (error) {
       console.error('Error marking helpful:', error);
@@ -292,7 +292,7 @@ const ReviewForm = ({ productId, onClose, onSubmit }) => {
         formData.append('images', image);
       });
 
-      await api.post('/ecommerce/user/reviews', formData, {
+      await api.post('/ecommerce/reviews', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }

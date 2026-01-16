@@ -23,6 +23,7 @@ import PetShopUserDashboard from '../pages/User/PetShop/PetShopUserDashboard'
 import BatchDetailsPage from '../pages/User/PetShop/BatchDetailsPage'
 import StockDetail from '../pages/User/PetShop/StockDetail'
 import Shop from '../pages/User/PetShop/Shop'
+import MyApplications from '../pages/User/PetShop/MyApplications'
 import PetShopUserProducts from '../pages/User/PetShop/BrowsePets'
 import PetShopUserCart from '../pages/User/PetShop/Payment'
 import PetShopUserCheckout from '../pages/User/PetShop/PaymentGateway'
@@ -33,7 +34,6 @@ import PetShopUserReviews from '../pages/User/PetShop/MyPurchasedPets'
 import PetShopUserAddress from '../pages/User/PetShop/Payment'
 import PetShopUserPaymentMethods from '../pages/User/PetShop/Payment'
 import PetShopUserProfile from '../pages/User/PetShop/UserPetShopDashboard'
-import MyApplications from '../pages/User/PetShop/MyApplications'
 import TemporaryCareUserDashboard from '../pages/User/TemporaryCare/TemporaryCareDashboard'
 import SubmitTemporaryCareApplication from '../pages/User/TemporaryCare/SubmitTemporaryCareApplication'
 import MyTemporaryCareApplications from '../pages/User/TemporaryCare/MyApplications'
@@ -48,8 +48,14 @@ import TemporaryCareUserPets from '../pages/User/TemporaryCare/TemporaryCare'
 import TemporaryCareUserReviews from '../pages/User/TemporaryCare/TemporaryCare'
 import TemporaryCareUserPayments from '../pages/User/TemporaryCare/Payment'
 import EcommerceHome from '../pages/User/EcommerceHome'
-import Shop from '../pages/User/Shop'
+import PetshopAIIdentifier from '../pages/User/PetshopAIIdentifier'
+import EcommerceShop from '../pages/User/Shop'
 import ProductDetail from '../pages/User/ProductDetail'
+import Checkout from '../pages/User/Checkout'
+import Payment from '../pages/User/Payment'
+import OrderSuccess from '../pages/User/OrderSuccess'
+import Orders from '../pages/User/Orders'
+import OrderDetail from '../pages/User/OrderDetail'
 import EcommerceUserCart from '../pages/User/Ecommerce/Cart'
 import EcommerceUserCheckout from '../pages/User/Ecommerce/Checkout'
 import EcommerceUserOrders from '../pages/User/Ecommerce/Orders'
@@ -144,6 +150,7 @@ const UserRoutes = () => {
         <Route path="/petshop/*" element={
           <Routes>
             <Route path="/dashboard" element={<PetShopUserDashboard />} />
+            <Route path="/ai-identifier" element={<PetshopAIIdentifier />} />
             <Route path="/shop" element={<Shop />} />
             <Route path="/batch/:batchId" element={<BatchDetailsPage />} />
             <Route path="/stock/:id" element={<StockDetail />} />
@@ -166,11 +173,14 @@ const UserRoutes = () => {
         <Route path="/ecommerce/*" element={
           <Routes>
             <Route path="/dashboard" element={<EcommerceHome />} />
-            <Route path="/shop" element={<Shop />} />
+            <Route path="/shop" element={<EcommerceShop />} />
             <Route path="/product/:slug" element={<ProductDetail />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/payment" element={<Payment />} />
+            <Route path="/order-success" element={<OrderSuccess />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/orders/:id" element={<OrderDetail />} />
             <Route path="/cart" element={<EcommerceUserCart />} />
-            <Route path="/checkout" element={<EcommerceUserCheckout />} />
-            <Route path="/orders" element={<EcommerceUserOrders />} />
             <Route path="/" element={<Navigate to="/user/ecommerce/dashboard" replace />} />
           </Routes>
         } />

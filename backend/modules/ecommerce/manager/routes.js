@@ -57,4 +57,9 @@ router.get('/orders/:id', orderController.getOrder);
 router.patch('/orders/:id/status', orderController.updateOrderStatus);
 router.get('/dashboard/stats', orderController.getDashboardStats);
 
+// ============ ORDER ROUTES ============
+router.get('/orders', orderController.getAllOrders);
+router.patch('/orders/:id/status', orderController.updateOrderStatus);
+router.patch('/orders/:id/tracking', orderController.addTrackingInfo);
+
 module.exports = router;

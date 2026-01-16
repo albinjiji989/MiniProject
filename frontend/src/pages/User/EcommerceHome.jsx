@@ -20,9 +20,9 @@ const EcommerceHome = () => {
         try {
             setLoading(true);
             const [categoriesRes, featuredRes, dealsRes] = await Promise.all([
-                api.get('/ecommerce/user/categories?parent=root&limit=8'),
-                api.get('/ecommerce/user/products/featured?limit=12'),
-                api.get('/ecommerce/user/products/deals?limit=8')
+                api.get('/ecommerce/categories?parent=root&limit=8'),
+                api.get('/ecommerce/products/featured?limit=12'),
+                api.get('/ecommerce/products/deals?limit=8')
             ]);
 
             setCategories(categoriesRes.data.data || []);
@@ -30,7 +30,7 @@ const EcommerceHome = () => {
             // If no featured products, fetch all active products
             let featured = featuredRes.data.data || [];
             if (featured.length === 0) {
-                const allProductsRes = await api.get('/ecommerce/user/products?limit=12&sortBy=newest');
+                const allProductsRes = await api.get('/ecommerce/products?limit=12&sortBy=newest');
                 featured = allProductsRes.data.data || [];
             }
             setFeaturedProducts(featured);

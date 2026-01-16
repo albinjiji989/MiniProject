@@ -12,16 +12,32 @@ exports.getAllOrders = async (req, res) => {
       page = 1,
       limit = 20,
       status,
+      search,
+      startDate,
+      endDate,
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = req.query;
 
-    const query = { 'items.seller': req.user.id };
+    const query = {};
     
     if (status) query.status = status;
+    if (search) {
+      query.$or = [
+        { orderNumber: { $regex: search, $options: 'i' } },
+        { 'shippingAddress.fullName': { $regex: search, $options: 'i' } }
+      ];
+    }
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+    
     const sort = { [sortBy]: sortOrder === 'desc' ? -1 : 1 };
+    
     const orders = await Order.find(query)
-      .populate('user', 'name email phone')
+      .populate('customer', 'name email phone')
       .populate('items.product', 'name images')
       .sort(sort)
       .limit(limit * 1)
@@ -29,6 +45,27 @@ exports.getAllOrders = async (req, res) => {
       .lean();
 
     const count = await Order.countDocuments(query);
+
+    // Get statistics
+    const stats = await Order.aggregate([
+      { $group: {
+        _id: null,
+        totalOrders: { $sum: 1 },
+        totalRevenue: { $sum: '$pricing.total' },
+        pendingOrders: {
+          $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
+        },
+        confirmedOrders: {
+          $sum: { $cond: [{ $eq: ['$status', 'confirmed'] }, 1, 0] }
+        },
+        shippedOrders: {
+          $sum: { $cond: [{ $eq: ['$status', 'shipped'] }, 1, 0] }
+        },
+        deliveredOrders: {
+          $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] }
+        }
+      }}
+    ]);
 
     res.json({
       success: true,
@@ -38,7 +75,8 @@ exports.getAllOrders = async (req, res) => {
         page: parseInt(page),
         pages: Math.ceil(count / limit),
         limit: parseInt(limit)
-      }
+      },
+      stats: stats[0] || {}
     });
   } catch (error) {
     console.error('Error fetching orders:', error);
@@ -54,7 +92,7 @@ exports.getAllOrders = async (req, res) => {
 exports.getOrder = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
-      .populate('user', 'name email phone')
+      .populate('customer', 'name email phone')
       .populate('items.product', 'name images pricing')
       .populate('shippingAddress');
 
@@ -62,18 +100,6 @@ exports.getOrder = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Order not found'
-      });
-    }
-
-    // Check if manager owns any items in this order
-    const hasItems = order.items.some(
-      item => item.seller?.toString() === req.user.id
-    );
-
-    if (!hasItems) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied'
       });
     }
 
@@ -95,9 +121,9 @@ exports.getOrder = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, note } = req.body;
 
-    const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+    const validStatuses = ['pending', 'confirmed', 'processing', 'packed', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'];
     
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
@@ -115,22 +141,21 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Check if manager owns any items in this order
-    const hasItems = order.items.some(
-      item => item.seller?.toString() === req.user.id
-    );
-
-    if (!hasItems) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied'
-      });
-    }
-
+    // Update status
     order.status = status;
+    order.statusHistory.push({
+      status,
+      note: note || `Order status updated to ${status}`,
+      updatedBy: req.user.id,
+      timestamp: new Date()
+    });
     
-    if (status === 'delivered') {
-      order.deliveredAt = new Date();
+    // Update shipping dates
+    if (status === 'shipped' && !order.shipping.shippedAt) {
+      order.shipping.shippedAt = new Date();
+    }
+    if (status === 'delivered' && !order.shipping.deliveredAt) {
+      order.shipping.deliveredAt = new Date();
     }
 
     await order.save();
@@ -211,6 +236,43 @@ exports.getDashboardStats = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching dashboard stats',
+      error: error.message
+    });
+  }
+};
+
+// Add tracking information
+exports.addTrackingInfo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { carrier, trackingNumber, estimatedDelivery } = req.body;
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    order.shipping.carrier = carrier;
+    order.shipping.trackingNumber = trackingNumber;
+    if (estimatedDelivery) {
+      order.shipping.estimatedDelivery = new Date(estimatedDelivery);
+    }
+
+    await order.save();
+
+    res.json({
+      success: true,
+      message: 'Tracking information added successfully',
+      data: order
+    });
+  } catch (error) {
+    console.error('Error adding tracking info:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error adding tracking information',
       error: error.message
     });
   }
