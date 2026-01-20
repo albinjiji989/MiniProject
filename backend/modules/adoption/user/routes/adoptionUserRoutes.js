@@ -9,9 +9,41 @@ const { authorize } = require('../../../../core/middleware/role');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
-// Public Routes (no auth required)
+// Optional auth middleware - attaches user if token exists, but doesn't require it
+const optionalAuth = async (req, res, next) => {
+  const token = req.header('Authorization')?.replace('Bearer ', '');
+  if (token) {
+    try {
+      const jwt = require('jsonwebtoken');
+      const User = require('../../../../core/models/User');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Fetch user from database to ensure they exist and are active
+      const user = await User.findById(decoded.user.id).select('-password');
+      
+      if (user && user.isActive) {
+        req.user = {
+          id: user._id.toString(),
+          email: user.email,
+          role: user.role
+        };
+        console.log('✅ optionalAuth - User authenticated:', req.user);
+      } else {
+        console.log('⚠️ optionalAuth - User not found or inactive');
+      }
+    } catch (error) {
+      // Token invalid or expired, continue without user
+      console.log('⚠️ optionalAuth - Token error:', error.message);
+    }
+  } else {
+    console.log('ℹ️ optionalAuth - No token provided');
+  }
+  next();
+};
+
+// Public Routes (no auth required, but user info attached if available)
 router.get('/public/pets', petController.getPublicPets);
-router.get('/public/pets/:id', petController.getPublicPetDetails);
+router.get('/public/pets/:id', optionalAuth, petController.getPublicPetDetails);
 
 // User Routes - Authenticated users only
 router.get('/pets', auth, applicationController.getAvailablePets);

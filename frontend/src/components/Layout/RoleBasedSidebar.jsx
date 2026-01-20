@@ -62,15 +62,14 @@ import {
   TrendingUp as TrendingUpIcon,
 } from '@mui/icons-material'
 import { useAuth } from '../../contexts/AuthContext'
-
 const getMenuItems = (userRole, userDetails) => {
   // Role-aware default dashboard path
   const dashboardPath = (
     userRole === 'admin' || userRole === 'super_admin'
       ? '/admin/dashboard'
       : (typeof userRole === 'string' && userRole.endsWith('_manager')
-          ? '/manager/dashboard'
-          : '/User/dashboard')
+        ? '/manager/dashboard'
+        : '/User/dashboard')
   )
 
   // Role-aware profile path
@@ -78,13 +77,12 @@ const getMenuItems = (userRole, userDetails) => {
     userRole === 'admin' || userRole === 'super_admin'
       ? '/admin/profile'
       : (typeof userRole === 'string' && userRole.endsWith('_manager')
-          ? '/manager/profile'
-          : '/User/profile')
+        ? '/manager/profile'
+        : '/User/profile')
   )
 
   const baseItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: dashboardPath, roles: ['all'] },
-    { text: 'Profile', icon: <ProfileIcon />, path: profilePath, roles: ['all'] },
   ]
 
   // Admin simplified navigation
@@ -113,7 +111,6 @@ const getMenuItems = (userRole, userDetails) => {
   // Module Managers get access to their specific module
   if (userRole.includes('_manager')) {
     const moduleItems = []
-    
     // VETERINARY MANAGER - Only veterinary-specific functions
     if (userRole === 'veterinary_manager') {
       return [
@@ -124,10 +121,9 @@ const getMenuItems = (userRole, userDetails) => {
         { text: 'Staff Management', icon: <PeopleIcon />, path: '/manager/veterinary/staff', roles: ['veterinary_manager'] },
         { text: 'Services', icon: <BusinessIcon />, path: '/manager/veterinary/services', roles: ['veterinary_manager'] },
         { text: 'Reports', icon: <AnalyticsIcon />, path: '/manager/veterinary/reports', roles: ['veterinary_manager'] },
-        { text: 'Profile', icon: <ProfileIcon />, path: '/manager/profile', roles: ['veterinary_manager'] },
       ]
     }
-    
+
     // TEMPORARY CARE MANAGER - Only temporary care-specific functions
     if (userRole === 'temporary-care_manager' || userRole === 'temporary_care_manager') {
       return [
@@ -137,10 +133,9 @@ const getMenuItems = (userRole, userDetails) => {
         { text: 'Caregivers', icon: <PeopleIcon />, path: '/manager/temporary-care/caregivers', roles: ['temporary-care_manager', 'temporary_care_manager'] },
         { text: 'Pets in Care', icon: <PetsIcon />, path: '/manager/temporary-care/pets', roles: ['temporary-care_manager', 'temporary_care_manager'] },
         { text: 'Reports', icon: <AnalyticsIcon />, path: '/manager/temporary-care/reports', roles: ['temporary-care_manager', 'temporary_care_manager'] },
-        { text: 'Profile', icon: <ProfileIcon />, path: '/manager/profile', roles: ['temporary-care_manager', 'temporary_care_manager'] },
       ]
     }
-    
+
     // ADOPTION MANAGER
     if (userRole === 'adoption_manager') {
       return [
@@ -149,10 +144,9 @@ const getMenuItems = (userRole, userDetails) => {
         { text: 'Applications', icon: <AssignmentIcon />, path: '/manager/adoption/applications', roles: ['adoption_manager'] },
         { text: 'Import (CSV)', icon: <FileUploadIcon />, path: '/manager/adoption/import', roles: ['adoption_manager'] },
         { text: 'Reports', icon: <AnalyticsIcon />, path: '/manager/adoption/reports', roles: ['adoption_manager'] },
-        { text: 'Profile', icon: <ProfileIcon />, path: '/manager/profile', roles: ['adoption_manager'] },
       ]
     }
-    
+
     // PETSHOP MANAGER
     if (userRole === 'petshop_manager') {
       return [
@@ -161,7 +155,6 @@ const getMenuItems = (userRole, userDetails) => {
         { text: 'Orders', icon: <ShoppingCartIcon />, path: '/manager/petshop/orders', roles: ['petshop_manager'] },
         { text: 'Reservations', icon: <AssignmentIcon />, path: '/manager/petshop/reservations', roles: ['petshop_manager'] },
         { text: 'Reports', icon: <AnalyticsIcon />, path: '/manager/petshop/reports', roles: ['petshop_manager'] },
-        { text: 'Profile', icon: <ProfileIcon />, path: '/manager/profile', roles: ['petshop_manager'] },
       ]
     }
 
@@ -186,18 +179,8 @@ const getMenuItems = (userRole, userDetails) => {
   if (userRole === 'public_user') {
     return [
       ...baseItems,
-      {
-        text: 'My Pets',
-        icon: <PetsIcon />,
-        children: [
-          { text: 'My Pets List', icon: <PetsIcon />, path: '/pets', roles: ['public_user'] },
-          { text: 'Add My Pet', icon: <AddIcon />, path: '/pets/add', roles: ['public_user'] },
-          { text: 'Request New Breed', icon: <AssignmentIcon />, path: '/pets/request-breed', roles: ['public_user'] },
-        ]
-      },
       { text: 'Adoption', icon: <AdoptionIcon />, path: '/adoption', roles: ['public_user'] },
       { text: 'Pet Shop', icon: <StoreIcon />, path: '/petshop', roles: ['public_user'] },
-      { text: 'My Reservations', icon: <AssignmentIcon />, path: '/User/petshop/reservations', roles: ['public_user'] },
       { text: 'Veterinary', icon: <VeterinaryIcon />, path: '/veterinary', roles: ['public_user'] },
       { text: 'E-Commerce', icon: <EcommerceIcon />, path: '/ecommerce', roles: ['public_user'] },
       { text: 'Pharmacy', icon: <PharmacyIcon />, path: '/pharmacy', roles: ['public_user'] },
@@ -272,7 +255,7 @@ const RoleBasedSidebar = ({ onClose }) => {
               <ListItemIcon sx={{ minWidth: 40 }}>
                 {item.icon}
               </ListItemIcon>
-              <ListItemText 
+              <ListItemText
                 primary={item.text}
                 primaryTypographyProps={{
                   fontSize: '0.875rem',
@@ -323,7 +306,7 @@ const RoleBasedSidebar = ({ onClose }) => {
           <ListItemIcon sx={{ minWidth: 40 }}>
             {item.icon}
           </ListItemIcon>
-          <ListItemText 
+          <ListItemText
             primary={item.text}
             primaryTypographyProps={{
               fontSize: '0.875rem',
@@ -358,7 +341,7 @@ const RoleBasedSidebar = ({ onClose }) => {
       {/* User Info */}
       <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider', backgroundColor: 'background.paper' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar 
+          <Avatar
             src={user?.profilePicture}
             sx={{ bgcolor: 'secondary.main', width: 48, height: 48, fontWeight: 700 }}
           >
@@ -409,7 +392,7 @@ const RoleBasedSidebar = ({ onClose }) => {
           <ListItemIcon sx={{ minWidth: 40, color: 'error.main' }}>
             <LogoutIcon />
           </ListItemIcon>
-          <ListItemText 
+          <ListItemText
             primary="Logout"
             primaryTypographyProps={{
               fontSize: '0.875rem',

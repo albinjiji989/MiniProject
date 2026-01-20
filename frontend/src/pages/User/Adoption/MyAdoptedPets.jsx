@@ -19,6 +19,7 @@ export default function MyAdoptedPets() {
         const raw = res?.data?.data || []
         const normalized = raw.map(p => ({
           id: p._id || p.id,
+          petCode: p.petCode || p._id || p.id,
           name: p.name || 'Pet',
           species: p.species || '-',
           breed: p.breed || '-',
@@ -105,7 +106,7 @@ export default function MyAdoptedPets() {
                   <Button 
                     size="small" 
                     variant="outlined"
-                    onClick={() => navigate(`/User/adoption/my-adopted-pets/${pet.id}`)}
+                    onClick={() => navigate(`/User/adoption/detail/${pet.petCode}`)}
                   >
                     View Details
                   </Button>

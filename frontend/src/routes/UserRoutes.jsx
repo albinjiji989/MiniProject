@@ -13,6 +13,7 @@ import AdoptionApplications from '../pages/User/Adoption/AdoptionApplications'
 import UserAdoptionPetDetails from '../pages/User/Adoption/UserAdoptedPetDetails'
 import PetDetails from '../pages/User/Adoption/PetDetails'
 import AdoptionDashboard from '../pages/User/Adoption/AdoptionDashboard'
+import MyAdoptedPets from '../pages/User/Adoption/MyAdoptedPets'
 import UserVetAppointments from '../pages/User/Veterinary/VeterinaryAppointments'
 import PetCareCalendar from '../pages/User/MyOwnedPets'
 import PetHealthRecords from '../pages/User/MyOwnedPets'
@@ -113,7 +114,7 @@ const UserRoutes = () => {
             <Route path="/history" element={<AdoptionApplications />} />
             <Route path="/pets/:id" element={<UserAdoptionPetDetails />} />
             <Route path="/detail/:id" element={<PetDetails />} />
-            <Route path="/adopted" element={<AdoptionDashboard />} />
+            <Route path="/adopted" element={<MyAdoptedPets />} />
           </Routes>
         } />
         

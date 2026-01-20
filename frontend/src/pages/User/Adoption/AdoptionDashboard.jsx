@@ -17,7 +17,10 @@ import {
   FormControl,
   InputLabel,
   Pagination,
-  Skeleton
+  Skeleton,
+  Container,
+  Paper,
+  IconButton
 } from '@mui/material'
 import {
   Search as SearchIcon,
@@ -25,11 +28,15 @@ import {
   Favorite as FavoriteIcon,
   Assignment as ApplicationIcon,
   CheckCircle as AdoptedIcon,
-  AutoAwesome as AutoAwesomeIcon
+  AutoAwesome as AutoAwesomeIcon,
+  FavoriteBorder as FavoriteBorderIcon,
+  Male as MaleIcon,
+  Female as FemaleIcon,
+  Cake as CakeIcon,
+  HealthAndSafety as HealthIcon
 } from '@mui/icons-material'
 import { adoptionAPI, resolveMediaUrl } from '../../../services/api'
 import { useNavigate, useLocation } from 'react-router-dom'
-import ModuleDashboardLayout from '../../../components/Module/ModuleDashboardLayout'
 
 const AdoptionDashboard = () => {
   const navigate = useNavigate();
@@ -106,7 +113,6 @@ const AdoptionDashboard = () => {
 
   const tabs = [
     { key: 'browse', label: 'Browse Pets', icon: <PetIcon /> },
-    { key: 'applications', label: 'My Applications', icon: <ApplicationIcon /> },
     { key: 'adopted', label: 'My Adoptions', icon: <FavoriteIcon /> },
   ]
 
@@ -119,18 +125,144 @@ const AdoptionDashboard = () => {
 
   const renderBrowse = () => (
     <Box>
+      {/* Hero Section */}
+      <Box 
+        sx={{ 
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          borderRadius: 3,
+          p: 4,
+          mb: 4,
+          color: 'white',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        <Box sx={{ position: 'relative', zIndex: 1 }}>
+          <Typography variant="h3" fontWeight={700} gutterBottom>
+            Find Your Perfect Companion 🐾
+          </Typography>
+          <Typography variant="h6" sx={{ opacity: 0.95 }}>
+            Every pet deserves a loving home. Start your adoption journey today!
+          </Typography>
+        </Box>
+        
+        {/* Decorative Elements */}
+        <Box 
+          sx={{ 
+            position: 'absolute', 
+            right: -50, 
+            top: -50, 
+            width: 200, 
+            height: 200, 
+            borderRadius: '50%',
+            bgcolor: 'rgba(255,255,255,0.1)',
+            backdropFilter: 'blur(20px)'
+          }} 
+        />
+        <Box 
+          sx={{ 
+            position: 'absolute', 
+            right: 100, 
+            bottom: -30, 
+            width: 150, 
+            height: 150, 
+            borderRadius: '50%',
+            bgcolor: 'rgba(255,255,255,0.1)',
+            backdropFilter: 'blur(20px)'
+          }} 
+        />
+      </Box>
+
+      {/* Stats Cards */}
+      <Grid container spacing={2} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={4}>
+          <Paper 
+            elevation={0}
+            onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
+            sx={{ 
+              p: 3, 
+              textAlign: 'center',
+              background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+              color: 'white',
+              borderRadius: 2,
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                transform: 'translateY(-4px)',
+                boxShadow: '0 8px 16px rgba(0,0,0,0.2)'
+              }
+            }}
+          >
+            <PetIcon sx={{ fontSize: 40, mb: 1 }} />
+            <Typography variant="h4" fontWeight={700}>{pets.length}</Typography>
+            <Typography variant="body2">Pets Waiting</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Paper 
+            elevation={0}
+            onClick={() => navigate('/User/adoption/applications')}
+            sx={{ 
+              p: 3, 
+              textAlign: 'center',
+              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+              color: 'white',
+              borderRadius: 2,
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                transform: 'translateY(-4px)',
+                boxShadow: '0 8px 16px rgba(0,0,0,0.2)'
+              }
+            }}
+          >
+            <ApplicationIcon sx={{ fontSize: 40, mb: 1 }} />
+            <Typography variant="h4" fontWeight={700}>{applications.length}</Typography>
+            <Typography variant="body2">Your Applications</Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Paper 
+            elevation={0}
+            onClick={() => navigate('/User/adoption/adopted')}
+            sx={{ 
+              p: 3, 
+              textAlign: 'center',
+              background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+              color: 'white',
+              borderRadius: 2,
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                transform: 'translateY(-4px)',
+                boxShadow: '0 8px 16px rgba(0,0,0,0.2)'
+              }
+            }}
+          >
+            <FavoriteIcon sx={{ fontSize: 40, mb: 1 }} />
+            <Typography variant="h4" fontWeight={700}>{adopted.length}</Typography>
+            <Typography variant="body2">Adopted Pets</Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+
       {/* Search Bar */}
-      <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center' }}>
+      <Paper elevation={0} sx={{ p: 2, mb: 4, borderRadius: 2, border: '2px solid', borderColor: 'divider' }}>
         <TextField
           fullWidth
-          placeholder="Search pets by name, breed, or species..."
+          placeholder="Search by name, breed, or species..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           InputProps={{
-            startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
+            startAdornment: <SearchIcon sx={{ mr: 1, color: 'primary.main', fontSize: 28 }} />
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              '& fieldset': { border: 'none' }
+            }
           }}
         />
-      </Box>
+      </Paper>
       
       {/* Pet Grid */}
       {loading ? (
@@ -138,7 +270,7 @@ const AdoptionDashboard = () => {
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Grid item xs={12} sm={6} md={4} key={i}>
               <Card>
-                <Skeleton variant="rectangular" height={180} />
+                <Skeleton variant="rectangular" height={250} />
                 <CardContent>
                   <Skeleton variant="text" sx={{ mb: 1 }} />
                   <Skeleton variant="text" width="60%" sx={{ mb: 2 }} />
@@ -158,10 +290,14 @@ const AdoptionDashboard = () => {
                     height: '100%', 
                     display: 'flex', 
                     flexDirection: 'column',
-                    transition: 'transform 0.2s, box-shadow 0.2s',
+                    borderRadius: 3,
+                    overflow: 'hidden',
+                    transition: 'all 0.3s ease',
+                    border: '2px solid transparent',
                     '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: 3
+                      transform: 'translateY(-8px)',
+                      boxShadow: '0 12px 24px rgba(0,0,0,0.15)',
+                      borderColor: 'primary.main'
                     }
                   }}
                 >
@@ -170,14 +306,9 @@ const AdoptionDashboard = () => {
                     sx={{ 
                       position: 'relative', 
                       width: '100%', 
-                      height: 180, 
+                      height: 250, 
                       bgcolor: 'grey.100', 
-                      overflow: 'hidden', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      borderBottom: '1px solid',
-                      borderColor: 'divider'
+                      overflow: 'hidden'
                     }}
                   >
                     {pet.images && pet.images.length > 0 ? (
@@ -191,80 +322,88 @@ const AdoptionDashboard = () => {
                         }} 
                       />
                     ) : (
-                      <Box sx={{ textAlign: 'center', p: 2 }}>
-                        <Box 
-                          component="img" 
-                          src="/placeholder-pet.svg" 
-                          alt="No image" 
-                          sx={{ width: 60, height: 60, opacity: 0.5, mb: 1 }} 
-                        />
-                        <Typography variant="caption" color="text.secondary">No image</Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <PetIcon sx={{ fontSize: 80, color: 'grey.300' }} />
                       </Box>
                     )}
+                    
+                    {/* Favorite Icon Overlay */}
+                    <IconButton 
+                      sx={{ 
+                        position: 'absolute', 
+                        top: 8, 
+                        right: 8,
+                        bgcolor: 'white',
+                        boxShadow: 2,
+                        '&:hover': { bgcolor: 'white', transform: 'scale(1.1)' }
+                      }}
+                    >
+                      <FavoriteBorderIcon sx={{ color: 'error.main' }} />
+                    </IconButton>
                   </Box>
                   
                   {/* Pet Info */}
-                  <CardContent sx={{ flexGrow: 1, pb: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', mb: 1 }}>
-                      <Box>
-                        <Typography variant="h6" fontWeight={600} noWrap>
-                          {pet.name || 'Unnamed Pet'}
+                  <CardContent sx={{ flexGrow: 1, p: 2.5 }}>
+                    <Typography variant="body1" color="text.secondary" gutterBottom sx={{ mb: 2 }}>
+                      {pet.breed} • {pet.species}
+                    </Typography>
+                    
+                    {/* Pet Details with Icons */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {pet.gender?.toLowerCase() === 'male' ? 
+                          <MaleIcon sx={{ color: '#2196f3', fontSize: 20 }} /> : 
+                          <FemaleIcon sx={{ color: '#e91e63', fontSize: 20 }} />
+                        }
+                        <Typography variant="body2" fontWeight={500}>
+                          {pet.gender}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary" noWrap>
-                          {pet.breed} • {pet.species}
+                      </Box>
+                      
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CakeIcon sx={{ color: '#ff9800', fontSize: 20 }} />
+                        <Typography variant="body2" fontWeight={500}>
+                          {pet.ageDisplay || `${pet.age} ${pet.ageUnit}`}
+                        </Typography>
+                      </Box>
+                      
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <HealthIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                        <Typography variant="body2" fontWeight={500}>
+                          {pet.healthStatus}
                         </Typography>
                       </Box>
                     </Box>
                     
-                    {/* Pet Details Grid */}
-                    <Box 
-                      component="dl" 
-                      sx={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: 'repeat(2, 1fr)',
-                        gap: 1,
-                        fontSize: '0.8rem',
-                        mb: 2
-                      }}
-                    >
-                      <>
-                        <dt>Gender:</dt>
-                        <dd>{pet.gender}</dd>
-                        
-                        <dt>Age:</dt>
-                        <dd>{pet.ageDisplay || `${pet.age} ${pet.ageUnit}`}</dd>
-                        
-                        <dt>Health:</dt>
-                        <dd>{pet.healthStatus}</dd>
-                        
-                        <dt>Fee:</dt>
-                        <dd>₹{pet.adoptionFee || 0}</dd>
-                      </>
-                    </Box>
-                    
                     {/* Action Buttons */}
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 'auto' }}>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
                       <Button 
-                        size="small" 
+                        fullWidth
                         variant="outlined" 
-                        sx={{ flex: 1, minWidth: 80 }}
-                        onClick={() => {
-                          console.log('View Details clicked, pet._id:', pet._id);
-                          navigate(`/User/adoption/detail/${pet._id}`);
+                        onClick={() => navigate(`/User/adoption/detail/${pet._id}`)}
+                        sx={{ 
+                          borderRadius: 2,
+                          fontWeight: 600,
+                          borderWidth: 2,
+                          '&:hover': { borderWidth: 2 }
                         }}
                       >
-                        View Details
+                        Details
                       </Button>
                       <Button 
-                        size="small" 
+                        fullWidth
                         variant="contained" 
-                        sx={{ flex: 1, minWidth: 80 }}
-                        onClick={() => {
-                          console.log('Adopt clicked, pet._id:', pet._id);
-                          navigate(`/User/adoption/wizard/${pet._id}/applicant`);
+                        onClick={() => navigate(`/User/adoption/wizard/${pet._id}/applicant`)}
+                        sx={{ 
+                          borderRadius: 2,
+                          fontWeight: 600,
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          '&:hover': {
+                            background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)'
+                          }
                         }}
                       >
-                        Adopt
+                        Adopt Me
                       </Button>
                     </Box>
                   </CardContent>
@@ -273,24 +412,24 @@ const AdoptionDashboard = () => {
             ))
           ) : (
             <Grid item xs={12}>
-              <Box 
+              <Paper 
+                elevation={0}
                 sx={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  py: 8,
-                  textAlign: 'center'
+                  p: 8,
+                  textAlign: 'center',
+                  borderRadius: 3,
+                  border: '2px dashed',
+                  borderColor: 'divider'
                 }}
               >
-                <PetIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                <Typography variant="h6" color="text.secondary" gutterBottom>
+                <PetIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+                <Typography variant="h5" fontWeight={600} color="text.secondary" gutterBottom>
                   No pets found
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  {searchTerm ? 'Try adjusting your search criteria' : 'No pets available right now'}
+                <Typography variant="body1" color="text.secondary">
+                  {searchTerm ? 'Try adjusting your search criteria' : 'Check back soon for new pets!'}
                 </Typography>
-              </Box>
+              </Paper>
             </Grid>
           )}
         </Grid>
@@ -518,19 +657,11 @@ const AdoptionDashboard = () => {
   )
 
   return (
-    <ModuleDashboardLayout
-      title="Adoption Center"
-      description="Find your perfect companion"
-      actions={actions}
-      stats={stats}
-      tabs={tabs}
-      activeTab={tab}
-      onTabChange={handleTabChange}
-    >
-      {tab === 'browse' && renderBrowse()}
-      {tab === 'applications' && renderApplications()}
-      {tab === 'adopted' && renderAdopted()}
-    </ModuleDashboardLayout>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#f8f9fa', py: 4 }}>
+      <Container maxWidth="xl">
+        {renderBrowse()}
+      </Container>
+    </Box>
   );
 };
 

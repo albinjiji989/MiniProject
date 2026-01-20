@@ -158,7 +158,6 @@ const PetshopAIIdentifier = () => {
                   </div>
                 </div>
               )}
-
               {/* Technology Info */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h3 className="text-lg font-bold text-gray-900 mb-3">

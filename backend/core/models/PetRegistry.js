@@ -20,6 +20,12 @@ const petRegistrySchema = new mongoose.Schema({
   breed: { 
     type: mongoose.Schema.Types.Mixed, // Can be ObjectId reference or string
   },
+  
+  // Basic pet information
+  gender: { type: String, enum: ['Male', 'Female', 'Unknown'], default: 'Unknown' },
+  age: { type: Number },
+  ageUnit: { type: String, enum: ['days', 'weeks', 'months', 'years'], default: 'months' },
+  color: { type: String },
 
   // Source information - where this pet lives
   source: { 

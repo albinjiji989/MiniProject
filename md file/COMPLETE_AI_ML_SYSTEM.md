@@ -82,7 +82,6 @@ Product 2: [0.0, 0.7, 0.9, 0.8, ...]  # High scores for "cat", "quality"
 - Dimensionality reduction
 
 ### Algorithm 3: Cosine Similarity
-
 **What it does:** Measures similarity between products
 
 **How it works:**

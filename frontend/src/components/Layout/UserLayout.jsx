@@ -58,7 +58,7 @@ const createCustomTheme = (isDarkMode) => createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          boxShadow: isDarkMode 
+          boxShadow: isDarkMode
             ? '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)'
             : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
           transition: 'all 0.2s ease-in-out',
@@ -95,20 +95,18 @@ const createCustomTheme = (isDarkMode) => createTheme({
     }
   }
 })
-
 const UserLayout = ({ children }) => {
   const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true) // Start open by default
   const [isDarkMode, setIsDarkMode] = useState(false)
   const isMobile = useMediaQuery('(max-width:900px)')
-  
+
   // Auto-close sidebar on mobile
   useEffect(() => {
     if (isMobile) {
       setSidebarOpen(false)
     }
   }, [isMobile])
-
   // Load theme preference from localStorage
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme')
@@ -134,7 +132,7 @@ const UserLayout = ({ children }) => {
       <CssBaseline />
       <Box sx={{ display: 'flex', minHeight: '100vh', position: 'relative' }}>
         {/* Top Navigation - Fixed */}
-        <TopNavbar 
+        <TopNavbar
           onMenuClick={handleSidebarToggle}
           user={user}
           onThemeToggle={handleThemeToggle}
@@ -178,7 +176,7 @@ const UserLayout = ({ children }) => {
             position: 'relative'
           }}
         >
-          <Box sx={{ 
+          <Box sx={{
             p: { xs: 2, sm: 3, md: 4 },
             maxWidth: '1400px',
             mx: 'auto',

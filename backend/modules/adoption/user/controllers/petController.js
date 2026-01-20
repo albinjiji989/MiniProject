@@ -12,7 +12,7 @@ const getUserAdoptedPets = async (req, res) => {
       .populate('imageIds')
       .populate('documentIds')
       .sort({ adoptionDate: -1 });
-    
+
     // Log actual database data for debugging
     if (pets.length > 0) {
       console.log('🔍 DATABASE CHECK - First adoption pet data:', {
@@ -25,7 +25,7 @@ const getUserAdoptedPets = async (req, res) => {
         imagesVirtualLength: pets[0].images?.length
       });
     }
-    
+
     // Manually populate the virtual 'images' and 'documents' fields for each pet
     for (const pet of pets) {
       console.log('📸 ADOPTION - Before populate - imageIds:', pet.imageIds?.map(id => id._id || id));
@@ -56,11 +56,11 @@ const getUserAdoptedPetDetails = async (req, res) => {
       status: 'adopted',
       isActive: true
     }).populate('imageIds').populate('documentIds');
-    
+
     if (!pet) {
       return res.status(404).json({ success: false, error: 'Pet not found' });
     }
-    
+
     // Manually populate the virtual 'images' and 'documents' fields
     await pet.populate('images');
     await pet.populate('documents');
@@ -96,8 +96,8 @@ const addMedicalHistory = async (req, res) => {
     pet.updatedBy = req.user.id;
     await pet.save();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Medical history added successfully',
       data: { pet }
     });
@@ -120,9 +120,9 @@ const getMedicalHistory = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Pet not found' });
     }
 
-    res.json({ 
-      success: true, 
-      data: { 
+    res.json({
+      success: true,
+      data: {
         petName: pet.name,
         medicalHistory: pet.medicalHistory || []
       }
@@ -136,12 +136,12 @@ const getMedicalHistory = async (req, res) => {
 const getPublicPets = async (req, res) => {
   try {
     const { page = 1, limit = 12 } = req.query;
-    
+
     // Only show pets that are available and active
     // These pets are only created by adoption managers
     // Exclude pets that are already adopted
-    const pets = await AdoptionPet.find({ 
-      status: 'available', 
+    const pets = await AdoptionPet.find({
+      status: 'available',
       isActive: true,
       adopterUserId: null // Ensure pet is not already adopted
     })
@@ -156,8 +156,8 @@ const getPublicPets = async (req, res) => {
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
-    const total = await AdoptionPet.countDocuments({ 
-      status: 'available', 
+    const total = await AdoptionPet.countDocuments({
+      status: 'available',
       isActive: true,
       adopterUserId: null // Ensure pet is not already adopted
     });
@@ -180,20 +180,71 @@ const getPublicPets = async (req, res) => {
 
 const getPublicPetDetails = async (req, res) => {
   try {
-    const pet = await AdoptionPet.findById(req.params.id)
+    const identifier = req.params.id;
+
+    console.log('🔍 getPublicPetDetails - Looking for pet:', identifier);
+    console.log('🔍 User info:', req.user ? { id: req.user.id, email: req.user.email } : 'No user');
+
+    // Try to find by petCode first, then by _id as fallback
+    let pet = await AdoptionPet.findOne({ petCode: identifier, isActive: true })
       .populate('images')
       .populate('documents')
-      .select('-createdBy -updatedBy -adopterUserId');
+      .select('-createdBy -updatedBy');
 
-    if (!pet || !pet.isActive || pet.status !== 'available') {
-      return res.status(404).json({ 
-        success: false, 
-        error: `Pet with ID ${req.params.id} not found. The pet may have been adopted by another user, removed by the adoption manager, or the link you're using may be outdated. Please go back to the pet listings and select a currently available pet.` 
+    // If not found by petCode, try by MongoDB _id
+    if (!pet) {
+      console.log('🔍 Not found by petCode, trying by _id');
+      pet = await AdoptionPet.findById(identifier)
+        .populate('images')
+        .populate('documents')
+        .select('-createdBy -updatedBy');
+    }
+
+    if (!pet || !pet.isActive) {
+      console.log('❌ Pet not found or not active');
+      return res.status(404).json({
+        success: false,
+        error: `Pet with ID ${identifier} not found. The pet may have been removed by the adoption manager, or the link you're using may be outdated. Please go back to the pet listings and select a currently available pet.`
       });
     }
 
-    res.json({ success: true, data: pet });
+    console.log('✅ Pet found:', {
+      petCode: pet.petCode,
+      name: pet.name,
+      status: pet.status,
+      adopterUserId: pet.adopterUserId
+    });
+
+    // If pet is adopted, only show to the adopter (if authenticated) or hide adopter info for public
+    if (pet.status === 'adopted') {
+      console.log('🔒 Pet is adopted, checking access');
+      // If user is authenticated and is the adopter, show full details
+      if (req.user && pet.adopterUserId) {
+        const userIdStr = req.user.id.toString();
+        const adopterIdStr = pet.adopterUserId.toString();
+        console.log('🔑 Comparing IDs:', { userId: userIdStr, adopterId: adopterIdStr, match: userIdStr === adopterIdStr });
+
+        if (userIdStr === adopterIdStr) {
+          console.log('✅ User is the adopter, showing details');
+          return res.json({ success: true, data: pet });
+        }
+      }
+      // Otherwise, pet is not available for public viewing
+      console.log('❌ User is not the adopter or not authenticated');
+      return res.status(404).json({
+        success: false,
+        error: `This pet has already been adopted and is no longer available.`
+      });
+    }
+
+    console.log('✅ Pet is available, showing details');
+    // For available pets, hide adopter info
+    const petData = pet.toObject();
+    delete petData.adopterUserId;
+
+    res.json({ success: true, data: petData });
   } catch (error) {
+    console.error('❌ Error in getPublicPetDetails:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

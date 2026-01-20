@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
-import { 
-  Star, Filter, X, ChevronDown, Sparkles, 
-  ShoppingBag, TrendingUp, Package, Search 
+import {
+  Star, Filter, X, ChevronDown, Sparkles,
+  ShoppingBag, TrendingUp, Package, Search, Brain, Tag
 } from 'lucide-react';
 import AIBreedIdentifierWithRecommendations from '../../components/Petshop/AIBreedIdentifierWithRecommendations';
 
@@ -21,6 +21,11 @@ const EcommerceShopWithAI = () => {
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({});
   const [showAIPanel, setShowAIPanel] = useState(false);
+
+  // Smart Search states
+  const [useSmartSearch, setUseSmartSearch] = useState(false);
+  const [queryAnalysis, setQueryAnalysis] = useState(null);
+  const [smartSearchLoading, setSmartSearchLoading] = useState(false);
 
   // Filter states
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || '');
@@ -53,7 +58,15 @@ const EcommerceShopWithAI = () => {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      
+
+      // Check if we should use smart search
+      const searchTerm = searchParams.get('search');
+      if (searchTerm && searchTerm.split(' ').length >= 3) {
+        // Use smart search for complex queries
+        await performSmartSearch(searchTerm);
+        return;
+      }
+
       const params = {
         page: searchParams.get('page') || 1,
         limit: 24,
@@ -70,10 +83,12 @@ const EcommerceShopWithAI = () => {
       if (searchParams.get('rating')) params.rating = searchParams.get('rating');
 
       const response = await api.get('/ecommerce/products', { params });
-      
+
       setProducts(response.data.data || []);
       setFilters(response.data.filters || {});
       setPagination(response.data.pagination || {});
+      setUseSmartSearch(false);
+      setQueryAnalysis(null);
     } catch (error) {
       console.error('Error fetching products:', error);
       setProducts([]);
@@ -82,15 +97,40 @@ const EcommerceShopWithAI = () => {
     }
   };
 
+  const performSmartSearch = async (query) => {
+    try {
+      setSmartSearchLoading(true);
+      setUseSmartSearch(true);
+
+      const response = await api.post('/ecommerce/ai/search/semantic', {
+        query: query,
+        top_k: 24
+      });
+
+      if (response.data.success) {
+        setProducts(response.data.data.results);
+        setQueryAnalysis(response.data.data.query_analysis);
+        setPagination({ total: response.data.data.results.length, page: 1, pages: 1 });
+      }
+    } catch (error) {
+      console.error('Smart search error:', error);
+      // Fallback to regular search
+      setUseSmartSearch(false);
+    } finally {
+      setSmartSearchLoading(false);
+      setLoading(false);
+    }
+  };
+
   const updateFilters = (key, value) => {
     const newParams = new URLSearchParams(searchParams);
-    
+
     if (value) {
       newParams.set(key, value);
     } else {
       newParams.delete(key);
     }
-    
+
     newParams.delete('page'); // Reset to page 1 when filters change
     setSearchParams(newParams);
   };
@@ -126,24 +166,39 @@ const EcommerceShopWithAI = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header with AI Button */}
+      {/* Header with AI Search */}
       <div className="bg-white border-b sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                {useSmartSearch ? (
+                  <Brain className="absolute left-3 top-1/2 transform -translate-y-1/2 text-indigo-600 w-5 h-5" />
+                ) : (
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                )}
                 <input
                   type="text"
-                  placeholder="Search for products..."
+                  placeholder={useSmartSearch ? "AI Smart Search: Try 'organic food for senior cats with kidney issues'" : "Search for products..."}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && updateFilters('search', searchQuery)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${useSmartSearch
+                    ? 'border-indigo-300 focus:ring-indigo-500 bg-indigo-50'
+                    : 'border-gray-300 focus:ring-blue-500'
+                    }`}
                 />
+                {useSmartSearch && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <span className="text-xs bg-indigo-600 text-white px-2 py-1 rounded-full flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      AI
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
-            
+
             <button
               onClick={() => setShowAIPanel(!showAIPanel)}
               className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700 transition-all shadow-md"
@@ -152,6 +207,43 @@ const EcommerceShopWithAI = () => {
               AI Recommendations
             </button>
           </div>
+
+          {/* AI Understanding Panel */}
+          {useSmartSearch && queryAnalysis && (
+            <div className="mt-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-3 border border-indigo-200">
+              <div className="flex items-center gap-2 mb-2">
+                <Brain className="w-4 h-4 text-indigo-600" />
+                <span className="text-sm font-semibold text-gray-900">AI Understanding:</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {queryAnalysis.entities.pet_type && (
+                  <span className="text-xs bg-white px-3 py-1 rounded-full border border-indigo-200">
+                    Pet: <strong className="capitalize">{queryAnalysis.entities.pet_type}</strong>
+                  </span>
+                )}
+                {queryAnalysis.entities.age_group && (
+                  <span className="text-xs bg-white px-3 py-1 rounded-full border border-indigo-200">
+                    Age: <strong className="capitalize">{queryAnalysis.entities.age_group}</strong>
+                  </span>
+                )}
+                {queryAnalysis.entities.health_condition && (
+                  <span className="text-xs bg-white px-3 py-1 rounded-full border border-indigo-200">
+                    Health: <strong className="capitalize">{queryAnalysis.entities.health_condition}</strong>
+                  </span>
+                )}
+                {queryAnalysis.entities.dietary_preference && (
+                  <span className="text-xs bg-white px-3 py-1 rounded-full border border-indigo-200">
+                    Diet: <strong className="capitalize">{queryAnalysis.entities.dietary_preference}</strong>
+                  </span>
+                )}
+                {queryAnalysis.entities.category && (
+                  <span className="text-xs bg-white px-3 py-1 rounded-full border border-indigo-200">
+                    Category: <strong className="capitalize">{queryAnalysis.entities.category}</strong>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -426,11 +518,10 @@ const EcommerceShopWithAI = () => {
                       <button
                         key={i}
                         onClick={() => updateFilters('page', i + 1)}
-                        className={`px-4 py-2 rounded ${
-                          pagination.page === i + 1
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-white text-gray-700 hover:bg-gray-100'
-                        }`}
+                        className={`px-4 py-2 rounded ${pagination.page === i + 1
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-gray-700 hover:bg-gray-100'
+                          }`}
                       >
                         {i + 1}
                       </button>

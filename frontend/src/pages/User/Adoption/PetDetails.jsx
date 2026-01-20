@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { 
-  Box, 
-  Container, 
-  Typography, 
-  Card, 
-  CardContent, 
-  Button, 
-  Grid, 
+import {
+  Box,
+  Container,
+  Typography,
+  Card,
+  CardContent,
+  Button,
+  Grid,
   Chip,
   CircularProgress,
   Alert,
@@ -36,7 +36,6 @@ const PetDetails = () => {
   const navigate = useNavigate()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
-  
   const [pet, setPet] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -48,13 +47,15 @@ const PetDetails = () => {
       try {
         setLoading(true)
         setError('')
-        
         // Use the public pet endpoint for available pets
         const res = await adoptionAPI.getPet(id)
         const petData = res.data?.data || res.data
         console.log('Pet data received:', petData)
+        console.log('Pet gender:', petData.gender, 'Type:', typeof petData.gender)
+        console.log('Gender lowercase:', petData.gender?.toLowerCase())
+        console.log('Is male?:', petData.gender?.toLowerCase() === 'male')
         setPet(petData)
-        
+
         // Set first image as selected
         if (petData.images && petData.images.length > 0) {
           setSelectedImage(0)
@@ -101,8 +102,8 @@ const PetDetails = () => {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       {/* Back Button */}
-      <Button 
-        startIcon={<BackIcon />} 
+      <Button
+        startIcon={<BackIcon />}
         onClick={() => navigate('/User/adoption')}
         sx={{ mb: 3 }}
       >
@@ -114,11 +115,11 @@ const PetDetails = () => {
         <Grid item xs={12} md={6}>
           <Paper elevation={2} sx={{ borderRadius: 2, overflow: 'hidden' }}>
             {/* Main Image */}
-            <Box 
-              sx={{ 
+            <Box
+              sx={{
                 position: 'relative',
-                width: '100%', 
-                height: 400, 
+                width: '100%',
+                height: 400,
                 bgcolor: 'grey.100',
                 display: 'flex',
                 alignItems: 'center',
@@ -126,9 +127,9 @@ const PetDetails = () => {
               }}
             >
               {images.length > 0 ? (
-                <img 
-                  src={resolveMediaUrl(currentImage.url || currentImage)} 
-                  alt={pet.name || 'Pet'} 
+                <img
+                  src={resolveMediaUrl(currentImage.url || currentImage)}
+                  alt={pet.name || 'Pet'}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   onError={(e) => {
                     e.currentTarget.src = '/placeholder-pet.svg'
@@ -140,14 +141,14 @@ const PetDetails = () => {
                   <Typography color="text.secondary">No image available</Typography>
                 </Box>
               )}
-              
+
               {/* Favorite Button */}
               <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
                 <Button
                   variant="contained"
                   size="small"
                   onClick={() => setIsFavorite(!isFavorite)}
-                  sx={{ 
+                  sx={{
                     bgcolor: 'white',
                     color: isFavorite ? 'error.main' : 'grey.700',
                     '&:hover': { bgcolor: 'grey.100' },
@@ -180,8 +181,8 @@ const PetDetails = () => {
                       '&:hover': { borderColor: 'primary.light' }
                     }}
                   >
-                    <img 
-                      src={resolveMediaUrl(img.url || img)} 
+                    <img
+                      src={resolveMediaUrl(img.url || img)}
                       alt={`${pet.name} ${idx + 1}`}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       onError={(e) => {
@@ -202,21 +203,18 @@ const PetDetails = () => {
               {/* Header */}
               <Box sx={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', mb: 2 }}>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="h4" fontWeight={700} gutterBottom>
-                    {pet.name || 'Unnamed Pet'}
-                  </Typography>
                   <Typography variant="h6" color="text.secondary" gutterBottom>
                     {pet.breed} • {pet.species}
                   </Typography>
                 </Box>
-                <Avatar 
-                  sx={{ 
-                    bgcolor: pet.gender === 'Male' ? 'info.main' : 'pink.400',
+                <Avatar
+                  sx={{
+                    bgcolor: pet.gender?.toLowerCase() === 'male' ? '#2196f3' : '#e91e63',
                     width: 56,
                     height: 56
                   }}
                 >
-                  {pet.gender === 'Male' ? <MaleIcon /> : <FemaleIcon />}
+                  {pet.gender?.toLowerCase() === 'male' ? <MaleIcon /> : <FemaleIcon />}
                 </Avatar>
               </Box>
 
@@ -265,13 +263,13 @@ const PetDetails = () => {
                 <Typography variant="subtitle2" fontWeight={600} gutterBottom>
                   Health Status
                 </Typography>
-                <Chip 
-                  label={pet.healthStatus || 'Unknown'} 
+                <Chip
+                  label={pet.healthStatus || 'Unknown'}
                   color={pet.healthStatus === 'Healthy' ? 'success' : 'warning'}
                   size="small"
                   sx={{ mb: 2 }}
                 />
-                
+
                 {pet.vaccinationStatus && Array.isArray(pet.vaccinationStatus) && pet.vaccinationStatus.length > 0 && (
                   <>
                     <Typography variant="subtitle2" fontWeight={600} gutterBottom>
@@ -279,7 +277,7 @@ const PetDetails = () => {
                     </Typography>
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {pet.vaccinationStatus.map((vaccine, idx) => (
-                        <Chip 
+                        <Chip
                           key={idx}
                           label={vaccine}
                           size="small"
@@ -299,7 +297,7 @@ const PetDetails = () => {
               {pet.description && (
                 <Box sx={{ mb: 3 }}>
                   <Typography variant="subtitle2" fontWeight={600} gutterBottom>
-                    About {pet.name}
+                    About This Pet
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {pet.description}
@@ -308,8 +306,8 @@ const PetDetails = () => {
               )}
 
               {/* Adoption Fee */}
-              <Box 
-                sx={{ 
+              <Box
+                sx={{
                   bgcolor: alpha(theme.palette.primary.main, 0.1),
                   p: 2,
                   borderRadius: 2,
@@ -324,18 +322,37 @@ const PetDetails = () => {
                 </Typography>
               </Box>
 
-              {/* Action Buttons */}
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <Button
-                  fullWidth
-                  variant="contained"
-                  size="large"
-                  onClick={() => navigate(`/User/adoption/wizard/${pet._id}/applicant`)}
-                  sx={{ py: 1.5 }}
+              {/* Action Buttons - Only show for available pets */}
+              {pet.status === 'adopted' ? (
+                <Box
+                  sx={{
+                    bgcolor: alpha(theme.palette.success.main, 0.1),
+                    p: 3,
+                    borderRadius: 2,
+                    textAlign: 'center'
+                  }}
                 >
-                  Apply for Adoption
-                </Button>
-              </Box>
+                  <CheckCircleIcon sx={{ fontSize: 48, color: 'success.main', mb: 1 }} />
+                  <Typography variant="h6" fontWeight={600} color="success.main" gutterBottom>
+                    This is Your Adopted Pet! 🎉
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    You adopted this pet on {pet.adoptionDate ? new Date(pet.adoptionDate).toLocaleDateString() : 'N/A'}
+                  </Typography>
+                </Box>
+              ) : (
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    size="large"
+                    onClick={() => navigate(`/User/adoption/wizard/${pet._id}/applicant`)}
+                    sx={{ py: 1.5 }}
+                  >
+                    Apply for Adoption
+                  </Button>
+                </Box>
+              )}
             </CardContent>
           </Card>
         </Grid>
