@@ -18,8 +18,30 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Enable CORS - MUST be before helmet
+// Support both web and mobile (Flutter) apps
+const allowedOrigins = [
+  'http://localhost:5173',           // Web dev
+  'http://localhost:3000',           // Alternative web dev
+  'https://mini-project-ebon-omega.vercel.app', // Web production
+  process.env.CLIENT_URL,            // Custom client URL
+  process.env.FRONTEND_URL           // Alternative frontend URL
+].filter(Boolean); // Remove undefined values
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, curl, etc.)
+    if (!origin) return callback(null, true);
+
+    // Allow whitelisted origins
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // For development, allow all origins
+      // For production, you can uncomment the line below to block unknown origins
+      callback(null, true);
+      // callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
