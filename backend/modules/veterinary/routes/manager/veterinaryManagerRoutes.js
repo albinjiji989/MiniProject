@@ -11,6 +11,11 @@ const medicalController = require('../../user/controllers/medicalRecordsControll
 const veterinaryMedicalRecordController = require('../../manager/controllers/veterinaryMedicalRecordController');
 const medicalRecordAttachmentController = require('../../manager/controllers/medicalRecordAttachmentController');
 const veterinaryAppointmentController = require('../../manager/controllers/veterinaryAppointmentController');
+const consultationController = require('../../manager/controllers/consultationController');
+const inventoryController = require('../../manager/controllers/inventoryController');
+const vaccinationController = require('../../manager/controllers/vaccinationController');
+const expenseController = require('../../manager/controllers/expenseController');
+const reportsController = require('../../manager/controllers/reportsController');
 const VeterinaryStaffInvite = require('../../manager/models/VeterinaryStaffInvite');
 const { sendMail } = require('../../../../core/utils/email');
 const User = require('../../../../core/models/User');
@@ -115,6 +120,56 @@ router.delete('/medical-records/:id', requireManagerOrWorker, veterinaryMedicalR
 router.post('/medical-records/:recordId/attachments', requireManagerOrWorker, medicalRecordAttachmentController.uploadMedicalRecordAttachments);
 router.get('/medical-records/:recordId/attachments', requireManagerOrWorker, medicalRecordAttachmentController.getMedicalRecordAttachments);
 
+// Consultation & Doctor Interface Routes
+router.get('/applications/pending', requireManager, consultationController.getPendingApplications);
+router.post('/applications/:id/accept', requireManager, [
+  body('appointmentDate').optional().isISO8601().withMessage('Valid appointment date is required'),
+  body('timeSlot').optional().notEmpty().withMessage('Time slot is required'),
+  body('notes').optional().isString().withMessage('Notes must be a string')
+], consultationController.acceptApplication);
+router.post('/applications/:id/reject', requireManager, [
+  body('reason').optional().isString().withMessage('Reason must be a string')
+], consultationController.rejectApplication);
+
+// Doctor Consultation Interface
+router.post('/consultations/:id/start', requireManagerOrWorker, consultationController.startConsultation);
+router.get('/consultations/:id', requireManagerOrWorker, consultationController.getConsultationDetails);
+router.post('/consultations/:id/complete', requireManagerOrWorker, [
+  body('diagnosis').notEmpty().withMessage('Diagnosis is required').isLength({ max: 2000 }).withMessage('Diagnosis cannot exceed 2000 characters'),
+  body('treatment').optional().isLength({ max: 2000 }).withMessage('Treatment cannot exceed 2000 characters'),
+  body('notes').optional().isLength({ max: 2000 }).withMessage('Notes cannot exceed 2000 characters'),
+  body('medications').optional().isArray().withMessage('Medications must be an array'),
+  body('procedures').optional().isArray().withMessage('Procedures must be an array'),
+  body('vaccinations').optional().isArray().withMessage('Vaccinations must be an array'),
+  body('tests').optional().isArray().withMessage('Tests must be an array'),
+  body('prescriptions').optional().isArray().withMessage('Prescriptions must be an array'),
+  body('followUpRequired').optional().isBoolean().withMessage('Follow-up required must be a boolean'),
+  body('followUpDate').optional().isISO8601().withMessage('Valid follow-up date is required'),
+  body('totalCost').optional().isFloat({ min: 0 }).withMessage('Total cost must be a positive number'),
+  body('paymentStatus').optional().isIn(['pending', 'paid', 'partially_paid', 'failed', 'refunded']).withMessage('Invalid payment status'),
+  body('amountPaid').optional().isFloat({ min: 0 }).withMessage('Amount paid must be a positive number')
+], consultationController.completeConsultation);
+
+// Complete consultation for individual pet in multiple-pet appointment
+router.post('/consultations/:id/pets/:petId/complete', requireManagerOrWorker, [
+  body('diagnosis').notEmpty().withMessage('Diagnosis is required').isLength({ max: 2000 }).withMessage('Diagnosis cannot exceed 2000 characters'),
+  body('treatment').optional().isLength({ max: 2000 }).withMessage('Treatment cannot exceed 2000 characters'),
+  body('notes').optional().isLength({ max: 2000 }).withMessage('Notes cannot exceed 2000 characters'),
+  body('medications').optional().isArray().withMessage('Medications must be an array'),
+  body('procedures').optional().isArray().withMessage('Procedures must be an array'),
+  body('vaccinations').optional().isArray().withMessage('Vaccinations must be an array'),
+  body('tests').optional().isArray().withMessage('Tests must be an array'),
+  body('prescriptions').optional().isArray().withMessage('Prescriptions must be an array'),
+  body('followUpRequired').optional().isBoolean().withMessage('Follow-up required must be a boolean'),
+  body('followUpDate').optional().isISO8601().withMessage('Valid follow-up date is required'),
+  body('totalCost').optional().isFloat({ min: 0 }).withMessage('Total cost must be a positive number'),
+  body('paymentStatus').optional().isIn(['pending', 'paid', 'partially_paid', 'failed', 'refunded']).withMessage('Invalid payment status'),
+  body('amountPaid').optional().isFloat({ min: 0 }).withMessage('Amount paid must be a positive number')
+], consultationController.completePetConsultation);
+
+// Update medical record
+router.put('/medical-records/:id/update', requireManagerOrWorker, consultationController.updateMedicalRecord);
+
 // Staff invite (OTP) and verify to create veterinary staff user with temp password
 router.post('/staff/invite', requireManager, [ body('name').notEmpty().withMessage('Name is required'), body('email').isEmail().withMessage('Valid email is required'), body('phone').optional() ], async (req, res) => {
   try {
@@ -189,5 +244,66 @@ router.post('/staff/verify', requireManager, [ body('email').isEmail().withMessa
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
+
+// ============ INVENTORY MANAGEMENT ============
+router.get('/inventory', requireManager, inventoryController.getInventoryItems);
+router.get('/inventory/alerts', requireManager, inventoryController.getInventoryAlerts);
+router.get('/inventory/stats', requireManager, inventoryController.getInventoryStats);
+router.get('/inventory/transactions', requireManager, inventoryController.getInventoryTransactions);
+router.get('/inventory/:id', requireManager, inventoryController.getInventoryItem);
+router.post('/inventory', requireManager, [
+  body('itemName').notEmpty().withMessage('Item name is required'),
+  body('category').isIn(['medicine', 'vaccine', 'equipment', 'supplies', 'food', 'other']).withMessage('Invalid category'),
+  body('quantity').isInt({ min: 0 }).withMessage('Quantity must be a positive number'),
+  body('unitPrice').isFloat({ min: 0 }).withMessage('Unit price must be a positive number')
+], inventoryController.createInventoryItem);
+router.put('/inventory/:id', requireManager, inventoryController.updateInventoryItem);
+router.post('/inventory/:id/adjust', requireManager, [
+  body('quantity').notEmpty().withMessage('Quantity is required'),
+  body('transactionType').isIn(['purchase', 'sale', 'adjustment', 'return', 'expired', 'damaged']).withMessage('Invalid transaction type')
+], inventoryController.adjustStock);
+router.delete('/inventory/:id', requireManager, inventoryController.deleteInventoryItem);
+
+// ============ VACCINATION SCHEDULES ============
+router.get('/vaccinations', requireManager, vaccinationController.getVaccinationSchedules);
+router.get('/vaccinations/due', requireManager, vaccinationController.getDueVaccinations);
+router.get('/vaccinations/stats', requireManager, vaccinationController.getVaccinationStats);
+router.get('/vaccinations/:id', requireManager, vaccinationController.getVaccinationSchedule);
+router.post('/vaccinations', requireManager, [
+  body('pet').notEmpty().withMessage('Pet ID is required'),
+  body('vaccineName').notEmpty().withMessage('Vaccine name is required'),
+  body('scheduledDate').isISO8601().withMessage('Valid scheduled date is required')
+], vaccinationController.createVaccinationSchedule);
+router.put('/vaccinations/:id', requireManager, vaccinationController.updateVaccinationSchedule);
+router.post('/vaccinations/:id/complete', requireManagerOrWorker, [
+  body('administeredDate').optional().isISO8601().withMessage('Valid administered date is required')
+], vaccinationController.completeVaccination);
+router.delete('/vaccinations/:id', requireManager, vaccinationController.deleteVaccinationSchedule);
+
+// ============ EXPENSE MANAGEMENT ============
+router.get('/expenses', requireManager, expenseController.getExpenses);
+router.get('/expenses/stats', requireManager, expenseController.getExpenseStats);
+router.get('/expenses/:id', requireManager, expenseController.getExpense);
+router.post('/expenses', requireManager, [
+  body('category').isIn(['salary', 'rent', 'utilities', 'supplies', 'equipment', 'maintenance', 'marketing', 'insurance', 'taxes', 'other']).withMessage('Invalid category'),
+  body('description').notEmpty().withMessage('Description is required'),
+  body('amount').isFloat({ min: 0 }).withMessage('Amount must be a positive number'),
+  body('expenseDate').isISO8601().withMessage('Valid expense date is required')
+], expenseController.createExpense);
+router.put('/expenses/:id', requireManager, expenseController.updateExpense);
+router.post('/expenses/:id/pay', requireManager, [
+  body('paidAmount').isFloat({ min: 0 }).withMessage('Paid amount must be a positive number')
+], expenseController.markAsPaid);
+router.delete('/expenses/:id', requireManager, expenseController.deleteExpense);
+
+// ============ REPORTS & ANALYTICS ============
+router.get('/reports/financial', requireManager, reportsController.getFinancialReport);
+router.get('/reports/appointments', requireManager, reportsController.getAppointmentAnalytics);
+router.get('/reports/patients', requireManager, reportsController.getPatientAnalytics);
+router.get('/reports/inventory', requireManager, reportsController.getInventoryReport);
+router.get('/reports/staff-performance', requireManager, reportsController.getStaffPerformanceReport);
+router.get('/reports/dashboard', requireManager, reportsController.getDashboardReport);
+
+
 
 module.exports = router;

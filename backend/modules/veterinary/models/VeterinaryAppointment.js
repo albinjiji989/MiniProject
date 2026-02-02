@@ -8,6 +8,30 @@ const veterinaryAppointmentSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  // Support for multiple pets in one appointment
+  pets: [{
+    petId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Pet',
+      required: true
+    },
+    reason: String,
+    symptoms: String,
+    medicalRecordId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'VeterinaryMedicalRecord'
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'in_progress', 'completed'],
+      default: 'pending'
+    }
+  }],
+  isMultiplePets: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   ownerId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User', 
@@ -109,31 +133,50 @@ const veterinaryAppointmentSchema = new mongoose.Schema({
   timestamps: true 
 });
 
+// Indexes for performance
+veterinaryAppointmentSchema.index({ appointmentNumber: 1 });
+veterinaryAppointmentSchema.index({ petId: 1, status: 1 });
+veterinaryAppointmentSchema.index({ ownerId: 1, status: 1 });
+veterinaryAppointmentSchema.index({ storeId: 1, appointmentDate: 1, status: 1 });
+veterinaryAppointmentSchema.index({ serviceId: 1 });
+veterinaryAppointmentSchema.index({ bookingType: 1, status: 1 });
+veterinaryAppointmentSchema.index({ appointmentDate: 1, timeSlot: 1 });
+veterinaryAppointmentSchema.index({ isMultiplePets: 1 });
+veterinaryAppointmentSchema.index({ 'pets.petId': 1 });
+
 // Generate appointment number before saving
 veterinaryAppointmentSchema.pre('save', async function(next) {
-  if (!this.appointmentNumber) {
-    // Generate a unique appointment number
-    const date = new Date();
-    const year = date.getFullYear().toString().substr(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    
-    // Generate a random 4-digit number
-    const random = Math.floor(1000 + Math.random() * 9000);
-    
-    this.appointmentNumber = `APT-${year}${month}${day}-${random}`;
-    
-    // Ensure uniqueness by checking if this number already exists
-    let existing = await this.constructor.findOne({ appointmentNumber: this.appointmentNumber });
-    let attempts = 0;
-    while (existing && attempts < 10) {
-      const newRandom = Math.floor(1000 + Math.random() * 9000);
-      this.appointmentNumber = `APT-${year}${month}${day}-${newRandom}`;
-      existing = await this.constructor.findOne({ appointmentNumber: this.appointmentNumber });
-      attempts++;
+  try {
+    if (!this.appointmentNumber) {
+      // Generate a unique appointment number
+      const date = new Date();
+      const year = date.getFullYear().toString().substr(-2);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      
+      // Generate a random 4-digit number
+      const random = Math.floor(1000 + Math.random() * 9000);
+      
+      this.appointmentNumber = `VET-${year}${month}${day}-${random}`;
+      
+      // Ensure uniqueness by checking if this number already exists
+      let existing = await this.constructor.findOne({ appointmentNumber: this.appointmentNumber });
+      let attempts = 0;
+      while (existing && attempts < 10) {
+        const newRandom = Math.floor(1000 + Math.random() * 9000);
+        this.appointmentNumber = `VET-${year}${month}${day}-${newRandom}`;
+        existing = await this.constructor.findOne({ appointmentNumber: this.appointmentNumber });
+        attempts++;
+      }
+      
+      if (attempts >= 10 && existing) {
+        throw new Error('Unable to generate unique appointment number. Please try again.');
+      }
     }
+    next();
+  } catch (error) {
+    next(error);
   }
-  next();
 });
 
 module.exports = mongoose.model('VeterinaryAppointment', veterinaryAppointmentSchema);

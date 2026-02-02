@@ -39,7 +39,7 @@ import {
   Wc as GenderIcon
 } from '@mui/icons-material';
 
-const initial = { name: '', breed: '', species: '', age: 0, ageUnit: 'months', gender: 'male', color: '', weight: 0, healthStatus: 'good', vaccinationStatus: 'not_vaccinated', description: '', adoptionFee: 0, category: '' };
+const initial = { name: '', breed: '', species: '', age: 0, ageUnit: 'months', gender: 'male', color: '', weight: 0, healthStatus: 'good', vaccinationStatus: 'not_vaccinated', description: '', adoptionFee: 0, category: '', dateOfBirth: '', dobAccuracy: 'estimated', useAge: true };
 
 const PetForm = () => {
   const navigate = useNavigate();
@@ -144,7 +144,10 @@ const PetForm = () => {
           description: p.description || '',
           adoptionFee: p.adoptionFee || 0,
           category: p.category || '',
-          petCode: p.petCode || ''
+          petCode: p.petCode || '',
+          dateOfBirth: p.dateOfBirth ? new Date(p.dateOfBirth).toISOString().split('T')[0] : '',
+          dobAccuracy: p.dobAccuracy || 'estimated',
+          useAge: !p.dateOfBirth // Default to age input if no DOB
         };
         setForm(mapped);
         
@@ -759,39 +762,97 @@ const PetForm = () => {
                 />
               </Grid>
               
-              <Grid item xs={12} md={6}>
-                <Grid container spacing={2}>
-                  <Grid item xs={8}>
+              <Grid item xs={12}>
+                <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Age Input Method:
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant={form.useAge ? 'contained' : 'outlined'}
+                    onClick={() => setForm(prev => ({ ...prev, useAge: true }))}
+                  >
+                    Use Age
+                  </Button>
+                  <Button
+                    size="small"
+                    variant={!form.useAge ? 'contained' : 'outlined'}
+                    onClick={() => setForm(prev => ({ ...prev, useAge: false }))}
+                  >
+                    Use Date of Birth
+                  </Button>
+                </Box>
+              </Grid>
+              
+              {form.useAge ? (
+                <Grid item xs={12} md={6}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={8}>
+                      <TextField 
+                        fullWidth
+                        type="number"
+                        label="Age"
+                        name="age" 
+                        value={form.age} 
+                        onChange={onChange} 
+                        InputProps={{
+                          startAdornment: <InputAdornment position="start"><AgeIcon fontSize="small" /></InputAdornment>,
+                          inputProps: { min: 0 }
+                        }}
+                        helperText="Will be converted to estimated date of birth"
+                      />
+                    </Grid>
+                    <Grid item xs={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Unit</InputLabel>
+                        <Select 
+                          name="ageUnit" 
+                          value={form.ageUnit} 
+                          onChange={onChange}
+                          label="Unit"
+                        >
+                          <MenuItem value="years">Years</MenuItem>
+                          <MenuItem value="months">Months</MenuItem>
+                          <MenuItem value="weeks">Weeks</MenuItem>
+                          <MenuItem value="days">Days</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  </Grid>
+                </Grid>
+              ) : (
+                <>
+                  <Grid item xs={12} md={6}>
                     <TextField 
                       fullWidth
-                      type="number"
-                      label="Age"
-                      name="age" 
-                      value={form.age} 
-                      onChange={onChange} 
+                      type="date"
+                      label="Date of Birth"
+                      name="dateOfBirth" 
+                      value={form.dateOfBirth} 
+                      onChange={onChange}
+                      InputLabelProps={{ shrink: true }}
                       InputProps={{
-                        inputProps: { min: 0 }
+                        startAdornment: <InputAdornment position="start"><AgeIcon fontSize="small" /></InputAdornment>,
                       }}
+                      helperText="Enter the pet's actual date of birth"
                     />
                   </Grid>
-                  <Grid item xs={4}>
+                  <Grid item xs={12} md={6}>
                     <FormControl fullWidth>
-                      <InputLabel>Unit</InputLabel>
+                      <InputLabel>DOB Accuracy</InputLabel>
                       <Select 
-                        name="ageUnit" 
-                        value={form.ageUnit} 
+                        name="dobAccuracy" 
+                        value={form.dobAccuracy} 
                         onChange={onChange}
-                        label="Unit"
+                        label="DOB Accuracy"
                       >
-                        <MenuItem value="years">Years</MenuItem>
-                        <MenuItem value="months">Months</MenuItem>
-                        <MenuItem value="weeks">Weeks</MenuItem>
-                        <MenuItem value="days">Days</MenuItem>
+                        <MenuItem value="exact">Exact - Known birth date</MenuItem>
+                        <MenuItem value="estimated">Estimated - Approximate date</MenuItem>
                       </Select>
                     </FormControl>
                   </Grid>
-                </Grid>
-              </Grid>
+                </>
+              )}
               
               {isEdit && (
                 <Grid item xs={12} md={6}>

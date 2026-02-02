@@ -602,6 +602,9 @@ const AddStock = () => {
                 <Typography variant="h6">
                   Total Stock: {ageGroups.reduce((sum, group) => sum + group.count, 0)} pets
                 </Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  Note: Age ranges will be converted to estimated dates of birth for accurate age tracking.
+                </Typography>
               </Alert>
             </Box>
           )}

@@ -41,16 +41,18 @@ const Records = () => {
           </TableHead>
           <TableBody>
             {records.length === 0 ? (
-              <TableRow><TableCell colSpan={6} align="center">No medical records found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                <Typography color="text.secondary">No medical records found</Typography>
+              </TableCell></TableRow>
             ) : (
               records.map(record => (
                 <TableRow key={record._id}>
-                  <TableCell>{format(new Date(record.completedAt), 'MMM dd, yyyy')}</TableCell>
-                  <TableCell>{record.petId?.name}</TableCell>
-                  <TableCell>{record.ownerId?.name}</TableCell>
-                  <TableCell>{record.diagnosis}</TableCell>
-                  <TableCell>{record.treatment}</TableCell>
-                  <TableCell>{record.veterinarianId?.name}</TableCell>
+                  <TableCell>{record.visitDate ? format(new Date(record.visitDate), 'MMM dd, yyyy') : 'N/A'}</TableCell>
+                  <TableCell>{record.pet?.name || 'N/A'}</TableCell>
+                  <TableCell>{record.owner?.name || 'N/A'}</TableCell>
+                  <TableCell>{record.diagnosis || 'N/A'}</TableCell>
+                  <TableCell>{record.treatment || 'N/A'}</TableCell>
+                  <TableCell>{record.staff?.name || 'N/A'}</TableCell>
                 </TableRow>
               ))
             )}

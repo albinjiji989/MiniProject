@@ -88,8 +88,14 @@ export default function StepReviewImproved() {
       const stockData = {
         // Basic info
         stockName: formData.basic?.stockName,
-        age: formData.basic?.age ? Number(formData.basic.age) : 0,
-        ageUnit: formData.basic?.ageUnit || 'months',
+        // Send either DOB or age+unit based on input method
+        ...(formData.basic?.useAge === false && formData.basic?.dateOfBirth ? {
+          dateOfBirth: formData.basic.dateOfBirth,
+          dobAccuracy: formData.basic.dobAccuracy || 'exact'
+        } : {
+          age: formData.basic?.age ? Number(formData.basic.age) : 0,
+          ageUnit: formData.basic?.ageUnit || 'months'
+        }),
         color: formData.basic?.color || '',
         size: formData.basic?.size || '',
         
@@ -227,7 +233,13 @@ export default function StepReviewImproved() {
                 <ListItem>
                   <ListItemText 
                     primary="Age" 
-                    secondary={formData.basic?.age ? `${formData.basic.age} ${formData.basic.ageUnit || 'months'}` : 'Not provided'} 
+                    secondary={
+                      formData.basic?.useAge === false && formData.basic?.dateOfBirth
+                        ? `DOB: ${new Date(formData.basic.dateOfBirth).toLocaleDateString()} ${formData.basic.dobAccuracy === 'estimated' ? '(estimated)' : ''}`
+                        : formData.basic?.age 
+                          ? `${formData.basic.age} ${formData.basic.ageUnit || 'months'}` 
+                          : 'Not provided'
+                    } 
                   />
                 </ListItem>
                 <ListItem>

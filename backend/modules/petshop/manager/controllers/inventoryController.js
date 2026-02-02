@@ -2,6 +2,7 @@ const PetInventoryItem = require('../models/PetInventoryItem');
 const PetShop = require('../models/PetShop');
 const { getStoreFilter } = require('../../../../core/utils/storeFilter');
 const path = require('path');
+const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
 
 // Inventory Management Functions
 const listInventory = async (req, res) => {
@@ -181,8 +182,7 @@ const listReservedPets = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
-const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
-// const petshopBlockchainService = require('../../../../core/services/petshopBlockchainService');
+
 const PetCodeGenerator = require('../../../../core/utils/petCodeGenerator');
 
 const createInventoryItem = async (req, res) => {
@@ -716,6 +716,26 @@ const bulkCreateInventoryItems = async (req, res) => {
         } catch (populateErr) {
           console.warn(`⚠️  Could not populate virtual 'images' field for item ${i}:`, populateErr.message);
           // This is not critical, continue with the item
+        }
+        
+        // Blockchain: Log pet creation to blockchain
+        try {
+          await petshopBlockchainService.addBlock('pet_created', {
+            petId: item._id,
+            petCode: item.petCode,
+            batchId: item.batchId,
+            managerId: req.user.id,
+            name: item.name,
+            speciesId: item.speciesId,
+            breedId: item.breedId,
+            price: item.price,
+            status: item.status,
+            createdAt: item.createdAt
+          });
+          console.log(`🔗 Blockchain: Pet creation logged for ${item.petCode}`);
+        } catch (blockchainErr) {
+          console.warn(`⚠️  Blockchain logging failed for item ${i}:`, blockchainErr.message);
+          // Non-critical, continue
         }
         
         createdItems.push(item);

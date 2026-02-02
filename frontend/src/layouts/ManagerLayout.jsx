@@ -46,7 +46,7 @@ const ManagerLayout = ({ children }) => {
   const handleProfileMenuClose = () => setAnchorEl(null)
   const handleLogout = () => { logout() }
 
-  const moduleType = (user?.role || '').replace('_manager','') || 'petshop'
+  const moduleType = (user?.role || '').replace('_manager','').replace('_', '-') || 'petshop'
   const drawer = (
     <ManagerSidebar open={!isMobile || mobileOpen} onClose={() => setMobileOpen(false)} user={user} moduleType={moduleType} />
   )

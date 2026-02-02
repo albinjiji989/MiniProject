@@ -16,10 +16,10 @@ const Bookings = () => {
         params.status = statusFilter;
       }
       
-      const response = await temporaryCareAPI.managerGetApplications(params);
-      setApplications(response.data?.data?.applications || []);
+      const response = await temporaryCareAPI.managerGetBookings(params);
+      setApplications(response.data?.data?.bookings || response.data?.data || []);
     } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to load applications');
+      setError(e?.response?.data?.message || 'Failed to load bookings');
     } finally {
       setLoading(false);
     }

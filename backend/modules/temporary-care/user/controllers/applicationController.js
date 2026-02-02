@@ -5,7 +5,6 @@ const Pet = require('../../../../core/models/Pet');
 const AdoptionPet = require('../../../adoption/manager/models/AdoptionPet');
 const { validationResult } = require('express-validator');
 const crypto = require('crypto');
-
 /**
  * Submit Temporary Care Application (Multiple Pets Supported)
  */
@@ -39,76 +38,155 @@ const submitApplication = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Care center not found or not active' });
     }
 
-    // Verify all pets belong to user (support both _id and petCode)
+    // Verify all pets exist and belong to user (support both _id and petCode)
     const petIds = pets.map(p => p.petId);
-    
+
     console.log('=== DEBUGGING PET LOOKUP ===');
     console.log('User ID:', req.user._id);
     console.log('Looking for pets with IDs:', petIds);
-    
-    // First, let's see what pets this user actually has in Pet registry
-    const userPets = await Pet.find({ owner: req.user._id, isActive: true }).select('petCode _id name');
-    console.log('User has these pets in Pet registry:', userPets.map(p => ({ petCode: p.petCode, _id: p._id, name: p.name })));
-    
-    // Also check AdoptionPet collection
-    const userAdoptionPets = await AdoptionPet.find({ petCode: { $exists: true } }).select('petCode _id name');
-    console.log('AdoptionPets with petCode:', userAdoptionPets.map(p => ({ petCode: p.petCode, _id: p._id, name: p.name })));
-    
-    // Try finding by petCode in Pet collection first
-    let petDocs = await Pet.find({ 
-      petCode: { $in: petIds }, 
-      owner: req.user._id, 
-      isActive: true 
+
+    // Strategy: Find pets from multiple sources
+    // 1. PetRegistry (centralized ownership tracking) - PRIMARY SOURCE
+    // 2. Pet collection (owned pets - purchased or registered)
+    // 3. AdoptionPet collection (adopted pets)
+    // 4. PetInventoryItem collection (purchased from petshop)
+
+    const PetInventoryItem = require('../../../petshop/manager/models/PetInventoryItem');
+    const PetReservation = require('../../../petshop/user/models/PetReservation');
+    const PetRegistry = require('../../../../core/models/PetRegistry');
+
+    let petDocs = [];
+    const foundPetIds = new Set();
+    const verifiedPetCodes = new Set(); // Pets verified via PetRegistry
+
+    // FIRST: Check PetRegistry for ownership (most reliable)
+    console.log('Checking PetRegistry for ownership...');
+    const registryEntries = await PetRegistry.find({
+      petCode: { $in: petIds },
+      currentOwnerId: req.user._id
     });
-    
-    console.log('Found by petCode in Pet:', petDocs.length, petDocs.map(p => ({ petCode: p.petCode, owner: p.owner })));
-    
-    // If not found in Pet, try AdoptionPet collection
-    if (petDocs.length < petIds.length) {
-      const foundPetCodes = petDocs.map(p => p.petCode);
-      const remainingIds = petIds.filter(id => !foundPetCodes.includes(id));
-      
-      console.log('Searching AdoptionPet for remaining IDs:', remainingIds);
-      
-      const adoptionPets = await AdoptionPet.find({ 
-        petCode: { $in: remainingIds }
-      });
-      
-      console.log('Found in AdoptionPet:', adoptionPets.length);
-      
-      // Convert AdoptionPets to Pet-like objects for validation
-      petDocs = [...petDocs, ...adoptionPets];
+    console.log('Found in PetRegistry:', registryEntries.length);
+
+    for (const entry of registryEntries) {
+      verifiedPetCodes.add(entry.petCode);
+      console.log('✓ Pet owned (via Registry):', entry.petCode);
     }
-    
-    // If not all found by petCode, try finding remaining by _id
-    if (petDocs.length < petIds.length) {
-      const foundPetCodes = petDocs.map(p => p.petCode);
-      const remainingIds = petIds.filter(id => !foundPetCodes.includes(id));
-      
-      console.log('Remaining IDs to search:', remainingIds);
-      
-      // Only query _id if the remaining IDs look like ObjectIds (24 hex chars)
-      const objectIdPattern = /^[a-f\d]{24}$/i;
-      const possibleObjectIds = remainingIds.filter(id => objectIdPattern.test(id));
-      
-      console.log('IDs that match ObjectId pattern:', possibleObjectIds);
-      
-      if (possibleObjectIds.length > 0) {
-        const petsByObjectId = await Pet.find({ 
-          _id: { $in: possibleObjectIds }, 
-          owner: req.user._id, 
-          isActive: true 
-        });
-        console.log('Found by _id:', petsByObjectId.length);
-        petDocs = [...petDocs, ...petsByObjectId];
+
+    // Now fetch actual pet documents for verified pets
+    // Search in Pet collection
+    const petsFromPetCollection = await Pet.find({
+      petCode: { $in: petIds },
+      isActive: true
+    });
+    console.log('Found in Pet collection:', petsFromPetCollection.length);
+
+    for (const pet of petsFromPetCollection) {
+      const verifiedByRegistry = verifiedPetCodes.has(pet.petCode);
+      const ownedDirectly = pet.ownerId && pet.ownerId.toString() === req.user._id.toString();
+
+      if (verifiedByRegistry || ownedDirectly) {
+        petDocs.push(pet);
+        foundPetIds.add(pet.petCode);
+        console.log('✓ Pet document added:', pet.petCode, pet.name);
       }
     }
-    
+
+    // Search in AdoptionPet collection
+    const remainingIds = petIds.filter(id => !foundPetIds.has(id));
+    if (remainingIds.length > 0) {
+      console.log('Searching AdoptionPet for remaining IDs:', remainingIds);
+
+      const adoptionPets = await AdoptionPet.find({
+        petCode: { $in: remainingIds }
+      });
+      console.log('Found in AdoptionPet:', adoptionPets.length);
+
+      for (const pet of adoptionPets) {
+        const verifiedByRegistry = verifiedPetCodes.has(pet.petCode);
+        const isAdoptedByUser = pet.adopterUserId && pet.adopterUserId.toString() === req.user._id.toString();
+
+        if (verifiedByRegistry || isAdoptedByUser) {
+          petDocs.push(pet);
+          foundPetIds.add(pet.petCode);
+          console.log('✓ AdoptionPet document added:', pet.petCode, pet.name);
+        }
+      }
+    }
+
+    // Search in PetInventoryItem (purchased from petshop)
+    const stillMissingIds = petIds.filter(id => !foundPetIds.has(id));
+    if (stillMissingIds.length > 0) {
+      console.log('Searching PetInventoryItem for remaining IDs:', stillMissingIds);
+
+      const inventoryPets = await PetInventoryItem.find({
+        petCode: { $in: stillMissingIds }
+      });
+      console.log('Found in PetInventoryItem:', inventoryPets.length);
+
+      // Check if verified via PetRegistry OR purchased via reservations
+      for (const pet of inventoryPets) {
+        const verifiedByRegistry = verifiedPetCodes.has(pet.petCode);
+
+        if (verifiedByRegistry) {
+          petDocs.push(pet);
+          foundPetIds.add(pet.petCode);
+          console.log('✓ PetInventoryItem document added (via Registry):', pet.petCode, pet.name);
+          continue;
+        }
+
+        const reservation = await PetReservation.findOne({
+          itemId: pet._id,
+          userId: req.user._id,
+          status: { $in: ['completed', 'at_owner', 'paid', 'delivered'] }
+        });
+
+        if (reservation) {
+          petDocs.push(pet);
+          foundPetIds.add(pet.petCode);
+          console.log('✓ PetInventoryItem document added (via Reservation):', pet.petCode, pet.name);
+        } else {
+          console.log('✗ PetInventoryItem not purchased by user:', pet.petCode);
+        }
+      }
+    }
+
+    // Try finding by ObjectId if still missing
+    const finalMissingIds = petIds.filter(id => !foundPetIds.has(id));
+    if (finalMissingIds.length > 0) {
+      const objectIdPattern = /^[a-f\d]{24}$/i;
+      const possibleObjectIds = finalMissingIds.filter(id => objectIdPattern.test(id));
+
+      if (possibleObjectIds.length > 0) {
+        console.log('Searching by ObjectId:', possibleObjectIds);
+
+        const petsByObjectId = await Pet.find({
+          _id: { $in: possibleObjectIds },
+          ownerId: req.user._id,
+          isActive: true
+        });
+
+        for (const pet of petsByObjectId) {
+          petDocs.push(pet);
+          foundPetIds.add(pet._id.toString());
+          console.log('✓ Found by ObjectId:', pet._id, pet.name);
+        }
+      }
+    }
+
     console.log('Total pets found:', petDocs.length, 'Expected:', petIds.length);
+    console.log('Found pet IDs:', Array.from(foundPetIds));
     console.log('=== END DEBUG ===');
-    
+
     if (petDocs.length !== petIds.length) {
-      return res.status(400).json({ success: false, message: 'One or more pets not found or not owned by you' });
+      return res.status(400).json({
+        success: false,
+        message: 'One or more pets not found or not owned by you',
+        debug: {
+          requested: petIds,
+          found: Array.from(foundPetIds),
+          missing: petIds.filter(id => !foundPetIds.has(id))
+        }
+      });
     }
 
     // Check for date conflicts for each pet
@@ -124,9 +202,9 @@ const submitApplication = async (req, res) => {
       });
 
       if (existingApplication) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Pet already has an active care application for the selected dates` 
+        return res.status(400).json({
+          success: false,
+          message: `Pet already has an active care application for the selected dates`
         });
       }
     }
@@ -329,11 +407,11 @@ const getApplicationDetails = async (req, res) => {
     for (let pet of application.pets) {
       // Try to find in Pet collection first
       let petDetails = await Pet.findOne({ petCode: pet.petId });
-      
+
       // If not found, try AdoptionPet collection
       if (!petDetails) {
         petDetails = await AdoptionPet.findOne({ petCode: pet.petId });
-        
+
         // Manually populate species and breed if they exist
         if (petDetails) {
           if (petDetails.speciesId) {
@@ -349,7 +427,7 @@ const getApplicationDetails = async (req, res) => {
           }
         }
       }
-      
+
       if (petDetails) {
         pet.petDetails = petDetails;
       }
@@ -427,7 +505,7 @@ const approvePricing = async (req, res) => {
 
     // User approves the pricing - status stays as price_determined, ready for payment
     // No status change needed, user can now proceed to payment
-    
+
     res.json({
       success: true,
       message: 'Pricing approved. You can now proceed to payment.',

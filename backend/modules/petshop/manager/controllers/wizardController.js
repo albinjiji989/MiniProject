@@ -17,9 +17,9 @@ const submitWizard = async (req, res) => {
     }
 
     const {
-      // Basic Info
-      age,
-      ageUnit = 'months',
+      // Basic Info - DOB fields (converted by middleware from age/ageUnit if needed)
+      dateOfBirth,
+      dobAccuracy,
       // Classification
       speciesId,
       breedId,
@@ -141,8 +141,8 @@ const submitWizard = async (req, res) => {
       name: stockName,
       speciesId,
       breedId,
-      age: age ? Number(age) : null,
-      ageUnit,
+      dateOfBirth,
+      dobAccuracy,
       color,
       size,
       price: Number(price),

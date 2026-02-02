@@ -2,6 +2,8 @@ const PetStock = require('../models/PetStock');
 const PetInventoryItem = require('../models/PetInventoryItem');
 const PetCodeGenerator = require('../../../../core/utils/petCodeGenerator');
 const { getStoreFilter } = require('../../../../core/utils/storeFilter');
+// Blockchain Service (NEW - Safe Addition)
+const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
 
 // List all pet stocks
 const listStocks = async (req, res) => {
@@ -160,6 +162,29 @@ const createStock = async (req, res) => {
     await stock.save();
     
     console.log(`✅ Stock batch created: ${stock.maleCount + stock.femaleCount} total pets (${stock.maleCount} male, ${stock.femaleCount} female) - Age: ${stock.age} ${stock.ageUnit}`);
+    
+    // 🔗 ADD TO BLOCKCHAIN (NEW - Safe Addition)
+    try {
+      await petshopBlockchainService.addBlock('stock_created', {
+        stockId: stock._id,
+        name: stock.name,
+        speciesId: stock.speciesId,
+        breedId: stock.breedId,
+        maleCount: stock.maleCount,
+        femaleCount: stock.femaleCount,
+        totalCount: stock.maleCount + stock.femaleCount,
+        price: stock.price,
+        age: stock.age,
+        ageUnit: stock.ageUnit,
+        createdBy: req.user.id,
+        storeId: stock.storeId,
+        timestamp: new Date()
+      });
+      console.log('✅ Stock creation added to blockchain');
+    } catch (blockchainError) {
+      console.log('⚠️ Blockchain logging failed (non-critical):', blockchainError.message);
+      // Don't fail the main operation if blockchain fails
+    }
     
     // Mark stock as released immediately so it appears on user dashboard
     // even if pet generation fails

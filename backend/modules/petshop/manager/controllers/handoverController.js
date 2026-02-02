@@ -4,6 +4,7 @@ const OwnershipHistory = require('../../../../core/models/OwnershipHistory');
 const { getStoreFilter } = require('../../../../core/utils/storeFilter');
 const { sendMail } = require('../../../../core/utils/email');
 const mongoose = require('mongoose');
+const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
 
 // Schedule handover with OTP generation (Manager version)
 const scheduleHandover = async (req, res) => {
@@ -99,6 +100,27 @@ const scheduleHandover = async (req, res) => {
     reservation.status = 'ready_pickup';
     
     await reservation.save();
+    
+    // Blockchain: Log OTP generation for handover
+    try {
+      const pet = reservation.itemId;
+      if (pet && pet._id) {
+        await petshopBlockchainService.addBlock('HANDOVER_OTP_GENERATED', {
+          petId: pet._id,
+          petCode: pet.petCode,
+          reservationId: reservation._id,
+          userId: reservation.userId._id,
+          generatedBy: req.user._id,
+          scheduledAt: scheduledAt ? new Date(scheduledAt) : new Date(),
+          location,
+          previousStatus: 'paid',
+          newStatus: 'ready_pickup'
+        });
+        console.log(`🔗 Blockchain: Handover OTP generated for ${pet.petCode}`);
+      }
+    } catch (blockchainErr) {
+      console.warn('⚠️  Blockchain logging failed:', blockchainErr.message);
+    }
     
     // Send email notification with OTP
     try {
@@ -245,6 +267,26 @@ const completeHandover = async (req, res) => {
     reservation.status = 'at_owner';
     
     await reservation.save();
+    
+    // Blockchain: Log handover completion
+    try {
+      const pet = reservation.itemId;
+      if (pet && pet._id) {
+        await petshopBlockchainService.addBlock('HANDOVER_COMPLETED', {
+          petId: pet._id,
+          petCode: pet.petCode,
+          reservationId: reservation._id,
+          userId: reservation.userId._id,
+          completedBy: req.user._id,
+          completedAt: new Date(),
+          previousStatus: 'ready_pickup',
+          newStatus: 'at_owner'
+        });
+        console.log(`🔗 Blockchain: Handover completed for ${pet.petCode}`);
+      }
+    } catch (blockchainErr) {
+      console.warn('⚠️  Blockchain logging failed:', blockchainErr.message);
+    }
     
     // Update inventory item status
     const inventoryItem = await PetInventoryItem.findById(reservation.itemId._id);

@@ -17,23 +17,18 @@ const adoptionPetSchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
-  age: {
-    type: Number,
-    required: false,
-    min: 0,
-    default: 0,
-  },
   dateOfBirth: {
-    type: Date
+    type: Date,
+    required: false
+  },
+  dobAccuracy: {
+    type: String,
+    enum: ['exact', 'estimated'],
+    default: 'estimated'
   },
   dateAdded: {
     type: Date,
     default: Date.now
-  },
-  ageUnit: {
-    type: String,
-    enum: ['years', 'months', 'weeks', 'days'],
-    default: 'months',
   },
   gender: {
     type: String,
@@ -175,29 +170,7 @@ adoptionPetSchema.virtual('documents', {
 
 // Calculate age from dateOfBirth before saving
 adoptionPetSchema.pre('save', function (next) {
-  if (this.dateOfBirth) {
-    const now = new Date();
-    const diffTime = Math.abs(now - this.dateOfBirth);
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-    // Calculate age based on the unit
-    switch (this.ageUnit) {
-      case 'days':
-        this.age = diffDays;
-        break;
-      case 'weeks':
-        this.age = Math.floor(diffDays / 7);
-        break;
-      case 'months':
-        this.age = Math.floor(diffDays / 30.44); // Average days in a month
-        break;
-      case 'years':
-        this.age = Math.floor(diffDays / 365.25); // Account for leap years
-        break;
-      default:
-        this.age = Math.floor(diffDays / 30.44); // Default to months
-    }
-  }
+  // No need to calculate age anymore - it's derived from DOB dynamically
   next();
 });
 
@@ -218,28 +191,20 @@ adoptionPetSchema.index({ species: 1, breed: 1 });
 adoptionPetSchema.index({ isDeleted: 1, isActive: 1 });
 
 // Virtual for age display
+adoptionPetSchema.virtual('age').get(function () {
+  if (!this.dateOfBirth) return 0;
+  const ageCalc = require('../../../../core/utils/ageCalculator');
+  return ageCalc.calculateAgeFromDOB(this.dateOfBirth, 'months');
+});
+
+adoptionPetSchema.virtual('ageUnit').get(function () {
+  return 'months'; // Default unit for backward compatibility
+});
+
 adoptionPetSchema.virtual('ageDisplay').get(function () {
-  const n = this.age || 0
-  switch (this.ageUnit) {
-    case 'years':
-      return `${n} year${n !== 1 ? 's' : ''}`
-    case 'months': {
-      // Support mixed years+months if months >= 12
-      const years = Math.floor(n / 12)
-      const months = n % 12
-      if (years > 0 && months > 0) {
-        return `${years} year${years !== 1 ? 's' : ''} ${months} month${months !== 1 ? 's' : ''}`
-      }
-      if (years > 0) return `${years} year${years !== 1 ? 's' : ''}`
-      return `${months} month${months !== 1 ? 's' : ''}`
-    }
-    case 'weeks':
-      return `${n} week${n !== 1 ? 's' : ''}`
-    case 'days':
-      return `${n} day${n !== 1 ? 's' : ''}`
-    default:
-      return `${n}`
-  }
+  if (!this.dateOfBirth) return 'Unknown';
+  const ageCalc = require('../../../../core/utils/ageCalculator');
+  return ageCalc.formatAge(this.dateOfBirth);
 });
 
 // Spec-friendly virtuals
@@ -329,8 +294,8 @@ adoptionPetSchema.post('save', async function(doc) {
           firstAddedSource: 'adoption_center',
           firstAddedBy: doc.createdBy,
           gender: doc.gender,
-          age: doc.age,
-          ageUnit: doc.ageUnit,
+          dateOfBirth: doc.dateOfBirth,
+          dobAccuracy: doc.dobAccuracy,
           color: doc.color
         }, {
           currentOwnerId: doc.adopterUserId,
@@ -390,8 +355,8 @@ adoptionPetSchema.post('insertMany', async function(docs) {
             firstAddedSource: 'adoption_center',
             firstAddedBy: doc.createdBy,
             gender: doc.gender,
-            age: doc.age,
-            ageUnit: doc.ageUnit,
+            dateOfBirth: doc.dateOfBirth,
+            dobAccuracy: doc.dobAccuracy,
             color: doc.color
           }, {
             currentOwnerId: doc.adopterUserId,

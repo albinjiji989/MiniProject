@@ -22,14 +22,13 @@ const petStockSchema = new mongoose.Schema({
   },
   
   // Physical Characteristics (shared across stock)
-  age: {
-    type: Number,
-    min: [0, 'Age cannot be negative']
+  dateOfBirth: {
+    type: Date
   },
-  ageUnit: {
+  dobAccuracy: {
     type: String,
-    enum: ['weeks', 'months', 'years'],
-    default: 'months'
+    enum: ['exact', 'estimated'],
+    default: 'estimated'
   },
   color: {
     type: String,
@@ -154,6 +153,23 @@ petStockSchema.virtual('femaleImages', {
   localField: 'femaleImageIds',
   foreignField: '_id',
   justOne: false
+});
+
+// Virtual for age (backward compatibility)
+petStockSchema.virtual('age').get(function () {
+  if (!this.dateOfBirth) return 0;
+  const ageCalc = require('../../../../core/utils/ageCalculator');
+  return ageCalc.calculateAgeFromDOB(this.dateOfBirth, 'months');
+});
+
+petStockSchema.virtual('ageUnit').get(function () {
+  return 'months'; // Default unit for backward compatibility
+});
+
+petStockSchema.virtual('ageDisplay').get(function () {
+  if (!this.dateOfBirth) return 'Unknown';
+  const ageCalc = require('../../../../core/utils/ageCalculator');
+  return ageCalc.formatAge(this.dateOfBirth);
 });
 
 // Include virtuals in JSON/Object outputs

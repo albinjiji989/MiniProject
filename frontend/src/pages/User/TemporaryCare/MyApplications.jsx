@@ -88,7 +88,51 @@ const MyApplications = () => {
   };
 
   const getStatusLabel = (status) => {
-    return status?.replace(/_/g, ' ').toUpperCase() || '';
+    const labels = {
+      submitted: 'Submitted',
+      price_determined: 'Price Set',
+      advance_paid: 'Advance Paid',
+      approved: 'Approved',
+      active_care: 'Pet in Care',
+      completed: 'Completed',
+      cancelled: 'Cancelled',
+      rejected: 'Rejected'
+    };
+    return labels[status] || status?.replace(/_/g, ' ').toUpperCase() || '';
+  };
+
+  const getUserNextAction = (app) => {
+    if (app.status === 'submitted') {
+      return 'Waiting for manager to set pricing';
+    }
+    if (app.status === 'price_determined') {
+      return 'Pay 50% advance to proceed';
+    }
+    if (app.status === 'advance_paid') {
+      if (!app.checkIn?.otp) {
+        return 'Waiting for check-in OTP from manager';
+      }
+      return 'Give check-in OTP to manager when you arrive';
+    }
+    if (app.status === 'active_care') {
+      if (app.paymentStatus?.final?.status !== 'completed') {
+        return 'Pay final bill to schedule pickup';
+      }
+      if (!app.checkOut?.otp) {
+        return 'Waiting for pickup OTP from manager';
+      }
+      return 'Give pickup OTP to manager when you arrive';
+    }
+    if (app.status === 'completed') {
+      return 'Care completed';
+    }
+    if (app.status === 'cancelled') {
+      return 'Application cancelled';
+    }
+    if (app.status === 'rejected') {
+      return 'Application rejected';
+    }
+    return '-';
   };
 
   const handleViewDetails = async (appId) => {
@@ -192,6 +236,7 @@ const MyApplications = () => {
                 <TableCell>Center</TableCell>
                 <TableCell>Dates</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell>What's Next?</TableCell>
                 <TableCell>Amount</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
@@ -220,93 +265,58 @@ const MyApplications = () => {
                     />
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2">
-                      ₹{app.pricing?.totalAmount?.toLocaleString() || '0'}
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', maxWidth: 200 }}>
+                      {getUserNextAction(app)}
                     </Typography>
                   </TableCell>
                   <TableCell>
+                    <Typography variant="body2">
+                      ₹{app.pricing?.totalAmount?.toLocaleString() || '0'}
+                    </Typography>
+                    {app.paymentStatus?.advance?.status === 'completed' && (
+                      <Chip label="Advance ✓" size="small" color="success" sx={{ mt: 0.5 }} />
+                    )}
+                    {app.paymentStatus?.final?.status === 'completed' && (
+                      <Chip label="Final ✓" size="small" color="success" sx={{ mt: 0.5 }} />
+                    )}
+                  </TableCell>
+                  <TableCell>
                     <Stack direction="row" spacing={1}>
+                      {/* View Details - Always available */}
                       <IconButton size="small" onClick={() => handleViewDetails(app._id)}>
                         <ViewIcon />
                       </IconButton>
                       
-                      {/* User just waits for manager to generate OTP - no action needed */}
-                      {app.status === 'advance_paid' && (
-                        <Chip 
-                          label="Awaiting Handover" 
-                          color="info" 
-                          size="small"
-                          icon={<CalendarIcon />}
-                        />
-                      )}
-                      
-                      {/* Cancel only allowed before payment */}
-                      {!['advance_paid', 'active_care', 'completed', 'cancelled', 'rejected'].includes(app.status) && (
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          onClick={() => {
-                            setSelectedApplication(app);
-                            setCancelDialogOpen(true);
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      )}
-                      
-                      {/* Approve/Reject Pricing - shown when manager has set pricing */}
-                      {app.status === 'price_determined' && app.paymentStatus.advance.status === 'pending' && (
+                      {/* Accept/Reject Price - Only when price is set */}
+                      {app.status === 'price_determined' && (
                         <>
                           <Button
                             size="small"
                             variant="contained"
                             color="success"
-                            onClick={async () => {
-                              try {
-                                await temporaryCareAPI.approvePricing(app._id);
-                                alert('Pricing approved! You can now proceed to payment.');
-                                loadApplications();
-                              } catch (err) {
-                                alert(err?.response?.data?.message || 'Failed to approve pricing');
-                              }
-                            }}
+                            startIcon={<PaymentIcon />}
+                            onClick={() => navigate(`/User/temporary-care/applications/${app._id}/payment`)}
                           >
-                            Accept Price
+                            Pay Advance
                           </Button>
                           <Button
                             size="small"
                             variant="outlined"
                             color="error"
-                            onClick={async () => {
-                              const reason = prompt('Reason for rejecting the pricing (optional):');
-                              try {
-                                await temporaryCareAPI.rejectPricing(app._id, { reason });
-                                alert('Pricing rejected. Application cancelled.');
-                                loadApplications();
-                              } catch (err) {
-                                alert(err?.response?.data?.message || 'Failed to reject pricing');
-                              }
+                            onClick={() => {
+                              setSelectedApplication(app);
+                              setCancelDialogOpen(true);
                             }}
                           >
-                            Reject Price
+                            Cancel
                           </Button>
                         </>
                       )}
                       
-                      {/* Payment buttons - shown after pricing approval */}
-                      {app.status === 'price_determined' && app.paymentStatus.advance.status === 'pending' && (
-                        <Button
-                          size="small"
-                          variant="contained"
-                          color="success"
-                          startIcon={<PaymentIcon />}
-                          onClick={() => navigate(`/User/temporary-care/applications/${app._id}/payment`)}
-                        >
-                          Pay Advance
-                        </Button>
-                      )}
-                      {app.status === 'active_care' && app.paymentStatus.final.status === 'pending' && app.finalBill && (
+                      {/* Pay Final - Only when in care and final bill generated */}
+                      {app.status === 'active_care' && 
+                       app.paymentStatus?.final?.status === 'pending' && 
+                       app.finalBill && (
                         <Button
                           size="small"
                           variant="contained"
@@ -317,6 +327,8 @@ const MyApplications = () => {
                           Pay Final
                         </Button>
                       )}
+                      
+                      {/* Feedback - Only when completed */}
                       {app.status === 'completed' && !app.feedback && (
                         <Button
                           size="small"

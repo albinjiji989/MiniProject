@@ -1,70 +1,86 @@
-import React, { useEffect, useState } from 'react'
-import { veterinaryAPI } from '../../../services/api'
+import React from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { Box, Container, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Paper, Typography } from '@mui/material'
+import { useNavigate, useLocation } from 'react-router-dom'
+import {
+  Dashboard as DashboardIcon,
+  Schedule as ScheduleIcon,
+  LocalHospital as MedicalIcon,
+  People as PeopleIcon,
+  Business as BusinessIcon,
+  Pets as PetsIcon,
+  Assessment as ReportsIcon,
+  Inventory2 as InventoryIcon,
+  AttachMoney as ExpenseIcon,
+  Vaccines as VaccinesIcon
+} from '@mui/icons-material'
+
+import VeterinaryManagerDashboard from './VeterinaryManagerDashboard'
+import Appointments from './Appointments'
+import Records from './Records'
+import Staff from './Staff'
+import Services from './Services'
+import Patients from './Patients'
+import Reports from './Reports'
+import Inventory from './Inventory'
+import Expenses from './Expenses'
+import Vaccinations from './Vaccinations'
 
 const VeterinaryManage = () => {
-  const [clinics, setClinics] = useState([])
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({ name: '' })
-  const [editing, setEditing] = useState(null)
+  const navigate = useNavigate()
+  const location = useLocation()
 
-  const load = async () => {
-    try {
-      setLoading(true)
-      const res = await veterinaryAPI.getClinics()
-      setClinics(res.data?.data?.clinics || res.data?.data || [])
-    } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to load clinics')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { load() }, [])
-
-  const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }))
-
-  const onSubmit = async (e) => {
-    e.preventDefault()
-    try {
-      setLoading(true)
-      if (editing) {
-        await veterinaryAPI.updateClinic(editing, { name: form.name })
-      } else {
-        await veterinaryAPI.createClinic({ name: form.name })
-      }
-      setForm({ name: '' })
-      setEditing(null)
-      await load()
-    } catch (e2) {
-      setError(e2?.response?.data?.message || 'Save failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (error) return <div style={{ padding: 16, color: 'red' }}>{error}</div>
+  const menuItems = [
+    { label: 'Dashboard', icon: <DashboardIcon />, path: '/manager/veterinary' },
+    { label: 'Appointments', icon: <ScheduleIcon />, path: '/manager/veterinary/appointments' },
+    { label: 'Medical Records', icon: <MedicalIcon />, path: '/manager/veterinary/records' },
+    { label: 'Patients', icon: <PetsIcon />, path: '/manager/veterinary/patients' },
+    { label: 'Staff', icon: <PeopleIcon />, path: '/manager/veterinary/staff' },
+    { label: 'Services', icon: <BusinessIcon />, path: '/manager/veterinary/services' },
+    { label: 'Inventory', icon: <InventoryIcon />, path: '/manager/veterinary/inventory' },
+    { label: 'Vaccinations', icon: <VaccinesIcon />, path: '/manager/veterinary/vaccinations' },
+    { label: 'Expenses', icon: <ExpenseIcon />, path: '/manager/veterinary/expenses' },
+    { label: 'Reports', icon: <ReportsIcon />, path: '/manager/veterinary/reports' }
+  ]
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2>Veterinary Management</h2>
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: 8, maxWidth: 360, marginBottom: 16 }}>
-        <input name="name" placeholder="Clinic Name" value={form.name} onChange={onChange} required />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="submit" disabled={loading}>{editing ? 'Update' : 'Create'}</button>
-          {editing && <button type="button" onClick={() => { setEditing(null); setForm({ name: '' }) }} disabled={loading}>Cancel</button>}
-        </div>
-      </form>
-      {loading && <div>Loading...</div>}
-      <ul>
-        {clinics.map((c) => (
-          <li key={c._id || c.id}>
-            <strong>{c.name}</strong>
-            <button onClick={() => { setEditing(c._id || c.id); setForm({ name: c.name || '' }) }} disabled={loading} style={{ marginLeft: 8 }}>Edit</button>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      {/* Sidebar */}
+      <Paper sx={{ width: 260, flexShrink: 0, borderRadius: 0 }} elevation={2}>
+        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="h6" fontWeight="bold">Veterinary Manager</Typography>
+        </Box>
+        <List>
+          {menuItems.map((item) => (
+            <ListItem key={item.path} disablePadding>
+              <ListItemButton
+                selected={location.pathname === item.path}
+                onClick={() => navigate(item.path)}
+              >
+                <ListItemIcon>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            </ListItem>
+          ))}
+        </List>
+      </Paper>
+
+      {/* Main Content */}
+      <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+        <Routes>
+          <Route index element={<VeterinaryManagerDashboard />} />
+          <Route path="appointments" element={<Appointments />} />
+          <Route path="records" element={<Records />} />
+          <Route path="patients" element={<Patients />} />
+          <Route path="staff" element={<Staff />} />
+          <Route path="services" element={<Services />} />
+          <Route path="inventory" element={<Inventory />} />
+          <Route path="vaccinations" element={<Vaccinations />} />
+          <Route path="expenses" element={<Expenses />} />
+          <Route path="reports" element={<Reports />} />
+        </Routes>
+      </Box>
+    </Box>
   )
 }
 

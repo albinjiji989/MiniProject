@@ -86,8 +86,14 @@ export default function StepReview() {
         name: nameSafe || `Unknown-${(basic.species || 'pet').toString().slice(0,12)}-${Date.now()}`,
         species: basic.species || '',
         breed: basic.breed || '',
-        age: Number(basic.age || 0),
-        ageUnit: basic.ageUnit || 'months',
+        // Send either DOB or age+unit based on input method
+        ...(basic.useAge === false && basic.dateOfBirth ? {
+          dateOfBirth: basic.dateOfBirth,
+          dobAccuracy: basic.dobAccuracy || 'exact'
+        } : {
+          age: Number(basic.age || 0),
+          ageUnit: basic.ageUnit || 'months'
+        }),
         gender: basic.gender || 'male',
         color: basic.color || 'unknown',
         weight: Number(health.weight || 0),
@@ -142,7 +148,11 @@ export default function StepReview() {
             <li><strong>Name:</strong> {basic.name || '-'}</li>
             <li><strong>Gender:</strong> {basic.gender || '-'}</li>
             <li><strong>Color:</strong> {basic.color || '-'}</li>
-            <li><strong>Age:</strong> {basic.age || 0} {basic.ageUnit || 'months'}</li>
+            <li><strong>Age:</strong> {
+              basic.useAge === false && basic.dateOfBirth 
+                ? `DOB: ${new Date(basic.dateOfBirth).toLocaleDateString()} ${basic.dobAccuracy === 'estimated' ? '(estimated)' : ''}`
+                : `${basic.age || 0} ${basic.ageUnit || 'months'}`
+            }</li>
           </ul>
         </div>
         

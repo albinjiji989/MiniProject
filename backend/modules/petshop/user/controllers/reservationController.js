@@ -6,6 +6,7 @@ const User = require('../../../../core/models/User');
 const { getStoreFilter } = require('../../../../core/utils/storeFilter');
 const { validationResult } = require('express-validator');
 const logger = require('winston');
+const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
 
 // Log controller actions with user context and operation details
 const logAction = (req, action, data = {}) => {
@@ -36,6 +37,22 @@ const createReservation = async (req, res) => {
     
     // Update pet status to reserved
     await PetInventoryItem.findByIdAndUpdate(itemId, { status: 'reserved' });
+    
+    // Blockchain: Log reservation event
+    try {
+      await petshopBlockchainService.addBlock('pet_reserved', {
+        petId: item._id,
+        petCode: item.petCode,
+        userId: req.user._id,
+        price: item.price,
+        reservationId: reservation._id,
+        previousStatus: 'available_for_sale',
+        newStatus: 'reserved'
+      });
+      console.log(`🔗 Blockchain: Pet reservation logged for ${item.petCode}`);
+    } catch (blockchainErr) {
+      console.warn('⚠️  Blockchain logging failed:', blockchainErr.message);
+    }
     
     res.status(201).json({ success: true, message: 'Reservation created', data: { reservation } })
   } catch (e) {

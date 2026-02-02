@@ -1,5 +1,5 @@
 const { validationResult } = require('express-validator');
-const VeterinaryService = require('../models/VeterinaryService');
+const VeterinaryService = require('../../models/VeterinaryService');
 
 // Create service
 const createService = async (req, res) => {
@@ -17,24 +17,38 @@ const createService = async (req, res) => {
     const { name, description, category, price, duration } = req.body;
     const storeId = req.user.storeId;
 
+    if (!storeId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Store ID is required. Please complete store setup first.' 
+      });
+    }
+
     // Check if service with same name already exists for this store
-    const existingService = await VeterinaryService.findOne({ name, storeId });
+    const existingService = await VeterinaryService.findOne({ 
+      name: { $regex: new RegExp(`^${name}$`, 'i') }, 
+      storeId,
+      isActive: true
+    });
+    
     if (existingService) {
       return res.status(400).json({ 
         success: false, 
-        message: 'A service with this name already exists' 
+        message: 'A service with this name already exists in your clinic' 
       });
     }
 
     const service = new VeterinaryService({
-      name,
-      description,
-      category,
-      price,
-      duration,
+      name: name.trim(),
+      description: description.trim(),
+      category: category || 'examination',
+      price: parseFloat(price),
+      duration: parseInt(duration),
       storeId,
-      createdBy: req.user.id,
-      status: 'active'
+      storeName: req.user.storeName || '',
+      createdBy: req.user._id,
+      status: 'active',
+      isActive: true
     });
 
     await service.save();
@@ -42,7 +56,7 @@ const createService = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Service created successfully',
-      data: service
+      data: { service }
     });
   } catch (error) {
     console.error('Create service error:', error);
@@ -78,24 +92,57 @@ const updateService = async (req, res) => {
     const updates = req.body;
     const storeId = req.user.storeId;
 
+    if (!storeId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Store ID is required' 
+      });
+    }
+
     const service = await VeterinaryService.findOne({ _id: id, storeId });
     if (!service) {
       return res.status(404).json({ success: false, message: 'Service not found' });
+    }
+
+    // If name is being updated, check for duplicates
+    if (updates.name && updates.name !== service.name) {
+      const existingService = await VeterinaryService.findOne({ 
+        name: { $regex: new RegExp(`^${updates.name}$`, 'i') }, 
+        storeId,
+        _id: { $ne: id },
+        isActive: true
+      });
+      
+      if (existingService) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'A service with this name already exists in your clinic' 
+        });
+      }
     }
 
     // Prevent updating certain fields
     delete updates.storeId;
     delete updates.createdBy;
     delete updates._id;
+    delete updates.createdAt;
+
+    // Trim string fields
+    if (updates.name) updates.name = updates.name.trim();
+    if (updates.description) updates.description = updates.description.trim();
+    
+    // Parse numeric fields
+    if (updates.price) updates.price = parseFloat(updates.price);
+    if (updates.duration) updates.duration = parseInt(updates.duration);
 
     Object.assign(service, updates);
-    service.updatedBy = req.user.id;
+    service.updatedBy = req.user._id;
     await service.save();
 
     res.json({
       success: true,
       message: 'Service updated successfully',
-      data: service
+      data: { service }
     });
   } catch (error) {
     console.error('Update service error:', error);
@@ -120,6 +167,13 @@ const deleteService = async (req, res) => {
     const { id } = req.params;
     const storeId = req.user.storeId;
 
+    if (!storeId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Store ID is required' 
+      });
+    }
+
     const service = await VeterinaryService.findOne({ _id: id, storeId });
     if (!service) {
       return res.status(404).json({ success: false, message: 'Service not found' });
@@ -127,7 +181,8 @@ const deleteService = async (req, res) => {
 
     // Soft delete by setting status to inactive
     service.status = 'inactive';
-    service.updatedBy = req.user.id;
+    service.isActive = false;
+    service.updatedBy = req.user._id;
     await service.save();
 
     res.json({
@@ -150,19 +205,27 @@ const toggleServiceStatus = async (req, res) => {
     const { id } = req.params;
     const storeId = req.user.storeId;
 
+    if (!storeId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Store ID is required' 
+      });
+    }
+
     const service = await VeterinaryService.findOne({ _id: id, storeId });
     if (!service) {
       return res.status(404).json({ success: false, message: 'Service not found' });
     }
 
     service.status = service.status === 'active' ? 'inactive' : 'active';
-    service.updatedBy = req.user.id;
+    service.isActive = service.status === 'active';
+    service.updatedBy = req.user._id;
     await service.save();
 
     res.json({
       success: true,
       message: `Service ${service.status === 'active' ? 'activated' : 'deactivated'} successfully`,
-      data: service
+      data: { service }
     });
   } catch (error) {
     console.error('Toggle service status error:', error);
@@ -178,19 +241,44 @@ const toggleServiceStatus = async (req, res) => {
 const getServices = async (req, res) => {
   try {
     const storeId = req.user.storeId;
-    const { status } = req.query;
+    
+    if (!storeId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Store ID is required. Please complete store setup first.' 
+      });
+    }
+
+    const { status, category, search } = req.query;
 
     const filter = { storeId };
+    
     if (status) {
       filter.status = status;
     }
+    
+    if (category) {
+      filter.category = category;
+    }
+    
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
 
     const services = await VeterinaryService.find(filter)
+      .populate('createdBy', 'name email')
+      .populate('updatedBy', 'name email')
       .sort({ createdAt: -1 });
 
     res.json({
       success: true,
-      data: { services }
+      data: { 
+        services,
+        total: services.length
+      }
     });
   } catch (error) {
     console.error('Get services error:', error);

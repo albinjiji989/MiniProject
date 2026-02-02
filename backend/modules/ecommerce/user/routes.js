@@ -8,6 +8,7 @@ const wishlistController = require('./wishlistController');
 const orderController = require('./orderController');
 const categoryController = require('../manager/categoryController');
 const mlRecommendationController = require('./mlRecommendationController');
+const recommendationController = require('./recommendationController');
 
 // ============ CATEGORY ROUTES (PUBLIC) ============
 router.get('/categories', categoryController.getAllCategories);
@@ -25,6 +26,10 @@ router.get('/products/:slug', productController.getProductDetails);
 router.get('/ml/recommendations', mlRecommendationController.getMLBreedRecommendations);
 router.get('/ml/similar/:productId', mlRecommendationController.getMLSimilarProducts);
 router.get('/ml/model-status', mlRecommendationController.getMLModelStatus);
+
+// ============ XAI RECOMMENDATION ROUTES (PUBLIC) ============
+// Public endpoint to explain recommendation methodology
+router.get('/recommendations/explain-weights', recommendationController.explainWeights);
 
 // ============ REVIEW ROUTES ============
 router.get('/products/:productId/reviews', reviewController.getProductReviews);
@@ -49,6 +54,22 @@ router.get('/wishlist', wishlistController.getWishlist);
 router.post('/wishlist', wishlistController.addToWishlist);
 router.delete('/wishlist/:productId', wishlistController.removeFromWishlist);
 
+
+// ============ XAI RECOMMENDATION ROUTES (PROTECTED) ============
+// Get personalized recommendations with explanations
+router.get('/recommendations', recommendationController.getRecommendations);
+
+// Track product views for recommendation engine
+router.post('/products/:productId/view', recommendationController.trackProductView);
+
+// Track recommendation interactions
+router.post('/recommendations/:productId/track', recommendationController.trackRecommendationInteraction);
+
+// Provide feedback on recommendations
+router.post('/recommendations/:productId/feedback', recommendationController.provideFeedback);
+
+// Get recommendation analytics
+router.get('/recommendations/analytics', recommendationController.getRecommendationAnalytics);
 // ============ ML RECOMMENDATION ROUTES (PROTECTED) ============
 router.get('/ml/personalized', mlRecommendationController.getPersonalizedRecommendations);
 router.post('/ml/track-interaction', mlRecommendationController.trackUserInteraction);

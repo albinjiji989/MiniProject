@@ -242,31 +242,83 @@ export default function StepBasicInfo() {
             />
           </div>
 
-          {/* Age */}
+          {/* Age / Date of Birth */}
           <div>
-            <label className="block text-sm font-medium mb-2">Age</label>
-            <div className="flex gap-2">
-              <input 
-                type="number"
-                name="age"
-                min="0"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                value={form.age || ''} 
-                onChange={onChange}
-                placeholder="0"
-              />
-              <select 
-                name="ageUnit"
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                value={form.ageUnit || 'months'} 
-                onChange={onChange}
-              >
-                <option value="days">Days</option>
-                <option value="weeks">Weeks</option>
-                <option value="months">Months</option>
-                <option value="years">Years</option>
-              </select>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium">Age / Date of Birth</label>
+              <div className="flex gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => save({ useAge: true })}
+                  className={`px-3 py-1 rounded ${
+                    form.useAge !== false
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  Age
+                </button>
+                <button
+                  type="button"
+                  onClick={() => save({ useAge: false })}
+                  className={`px-3 py-1 rounded ${
+                    form.useAge === false
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  Date of Birth
+                </button>
+              </div>
             </div>
+
+            {form.useAge !== false ? (
+              <div className="flex gap-2">
+                <input 
+                  type="number"
+                  name="age"
+                  min="0"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  value={form.age || ''} 
+                  onChange={onChange}
+                  placeholder="0"
+                />
+                <select 
+                  name="ageUnit"
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  value={form.ageUnit || 'months'} 
+                  onChange={onChange}
+                >
+                  <option value="days">Days</option>
+                  <option value="weeks">Weeks</option>
+                  <option value="months">Months</option>
+                  <option value="years">Years</option>
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="date"
+                  name="dateOfBirth"
+                  max={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={form.dateOfBirth || ''}
+                  onChange={onChange}
+                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="dobEstimated"
+                    checked={form.dobAccuracy === 'estimated'}
+                    onChange={(e) => save({ dobAccuracy: e.target.checked ? 'estimated' : 'exact' })}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="dobEstimated" className="text-sm text-gray-700">
+                    Date of birth is estimated
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

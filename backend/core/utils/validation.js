@@ -78,17 +78,6 @@ const searchNearbyPetsSchema = Joi.object({
   radius: Joi.number().min(1).max(100).optional().default(10)
 });
 
-// Validation schema for pet birthday preference
-const setPetBirthdayPreferenceSchema = Joi.object({
-  petId: Joi.string().required(),
-  petModel: Joi.string().valid('Pet', 'PetNew', 'AdoptionPet', 'PetInventoryItem').required(),
-  currentAge: Joi.object({
-    value: Joi.number().min(0).required(),
-    unit: Joi.string().valid('days', 'weeks', 'months', 'years').required()
-  }).required(),
-  preferredBirthday: Joi.number().integer().min(1).max(31).required()
-});
-
 // Generic validation function
 const validate = (schema, data) => {
   const { error, value } = schema.validate(data, { abortEarly: false });
@@ -107,6 +96,5 @@ module.exports = {
   addMedicationRecordSchema,
   addOwnershipHistorySchema,
   searchNearbyPetsSchema,
-  setPetBirthdayPreferenceSchema,
   validate
 };

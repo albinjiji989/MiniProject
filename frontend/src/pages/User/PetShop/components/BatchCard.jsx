@@ -47,6 +47,8 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
     if (typeof img === 'string') return img;
     // If it's an object with url property
     if (img.url) return img.url;
+    // If it's an object with path property
+    if (img.path) return img.path;
     // If it's an object with _id (ObjectId), we can't resolve it here, return null
     return null;
   };
@@ -58,23 +60,33 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
   
   if (isBatch) {
     // For batches, try to get separate male and female images
+    // Check maleImages array first
     if (batch.maleImages?.length > 0) {
       const imgUrl = getImageUrl(batch.maleImages[0]);
       if (imgUrl) maleImage = resolveMediaUrl(imgUrl);
+    } else if (batch.maleImageIds?.length > 0) {
+      const imgUrl = getImageUrl(batch.maleImageIds[0]);
+      if (imgUrl) maleImage = resolveMediaUrl(imgUrl);
     }
     
+    // Check femaleImages array
     if (batch.femaleImages?.length > 0) {
       const imgUrl = getImageUrl(batch.femaleImages[0]);
       if (imgUrl) femaleImage = resolveMediaUrl(imgUrl);
+    } else if (batch.femaleImageIds?.length > 0) {
+      const imgUrl = getImageUrl(batch.femaleImageIds[0]);
+      if (imgUrl) femaleImage = resolveMediaUrl(imgUrl);
     }
     
-    // Fallback to combined images array
-    if (maleImage === '/placeholder-pet.svg' && femaleImage === '/placeholder-pet.svg' && batch.images?.length > 0) {
-      const imgUrl = getImageUrl(batch.images[0]);
-      if (imgUrl) {
-        primaryImage = resolveMediaUrl(imgUrl);
-        maleImage = primaryImage;
-        femaleImage = primaryImage;
+    // Fallback to combined images array if no gender-specific images
+    if (maleImage === '/placeholder-pet.svg' && femaleImage === '/placeholder-pet.svg') {
+      if (batch.images?.length > 0) {
+        const imgUrl = getImageUrl(batch.images[0]);
+        if (imgUrl) {
+          primaryImage = resolveMediaUrl(imgUrl);
+          maleImage = primaryImage;
+          femaleImage = primaryImage;
+        }
       }
     } else {
       // Use male image as primary if available, otherwise female
@@ -147,14 +159,14 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
     >
       {/* Dual Image Section for Batches */}
       {isBatch && batch.counts && (batch.counts.male > 0 && batch.counts.female > 0) ? (
-        <Box sx={{ position: 'relative', height: 200, backgroundColor: '#f5f5f5' }}>
+        <Box sx={{ position: 'relative', height: 180, backgroundColor: '#f5f5f5' }}>
           {/* Split view: Male on left, Female on right */}
           <Grid container sx={{ height: '100%' }}>
             {/* Male Side */}
             <Grid item xs={6} sx={{ position: 'relative', borderRight: '1px solid white' }}>
               <CardMedia
                 component="img"
-                height="200"
+                height="180"
                 image={maleImage}
                 alt="Male"
                 onError={(e) => {
@@ -169,7 +181,7 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
               />
               {/* Male Badge */}
               <Chip
-                icon={<MaleIcon sx={{ fontSize: '0.9rem', color: 'white !important' }} />}
+                icon={<MaleIcon sx={{ fontSize: '0.8rem', color: 'white !important' }} />}
                 label={batch.counts.male}
                 size="small"
                 sx={{
@@ -180,7 +192,8 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
                   backgroundColor: '#2196f3',
                   color: 'white',
                   fontWeight: 600,
-                  height: 24,
+                  height: 22,
+                  fontSize: '0.75rem',
                   '& .MuiChip-label': { px: 0.5 }
                 }}
               />
@@ -190,7 +203,7 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
             <Grid item xs={6} sx={{ position: 'relative' }}>
               <CardMedia
                 component="img"
-                height="200"
+                height="180"
                 image={femaleImage}
                 alt="Female"
                 onError={(e) => {
@@ -205,7 +218,7 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
               />
               {/* Female Badge */}
               <Chip
-                icon={<FemaleIcon sx={{ fontSize: '0.9rem', color: 'white !important' }} />}
+                icon={<FemaleIcon sx={{ fontSize: '0.8rem', color: 'white !important' }} />}
                 label={batch.counts.female}
                 size="small"
                 sx={{
@@ -216,14 +229,15 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
                   backgroundColor: '#e91e63',
                   color: 'white',
                   fontWeight: 600,
-                  height: 24,
+                  height: 22,
+                  fontSize: '0.75rem',
                   '& .MuiChip-label': { px: 0.5 }
                 }}
               />
             </Grid>
           </Grid>
 
-          {/* Status Chip */}
+          {/* Total Count Chip */}
           <Chip
             label={availableCount}
             size="small"
@@ -233,7 +247,8 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
               top: 8,
               right: 8,
               fontWeight: 600,
-              height: 24
+              height: 22,
+              fontSize: '0.75rem'
             }}
           />
         </Box>
@@ -242,7 +257,7 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
         <Box sx={{ position: 'relative', overflow: 'hidden', backgroundColor: '#f5f5f5' }}>
           <CardMedia
             component="img"
-            height="200"
+            height="180"
             image={primaryImage}
             alt={breedName}
             onError={(e) => {
@@ -265,7 +280,8 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
               top: 8,
               right: 8,
               fontWeight: 600,
-              height: 24
+              height: 22,
+              fontSize: '0.75rem'
             }}
           />
 
@@ -279,7 +295,8 @@ const BatchCard = ({ batch, onSelect, onReserve, isFavorite, onFavoriteToggle })
               bottom: 8,
               left: 8,
               fontWeight: 600,
-              height: 24
+              height: 22,
+              fontSize: '0.75rem'
             }}
           />
         </Box>

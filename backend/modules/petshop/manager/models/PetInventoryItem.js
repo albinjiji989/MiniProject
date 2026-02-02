@@ -42,18 +42,14 @@ const petInventoryItemSchema = new mongoose.Schema({
   dateOfBirth: {
     type: Date
   },
+  dobAccuracy: {
+    type: String,
+    enum: ['exact', 'estimated'],
+    default: 'estimated'
+  },
   dateAdded: {
     type: Date,
     default: Date.now
-  },
-  age: {
-    type: Number,
-    min: [0, 'Age cannot be negative']
-  },
-  ageUnit: {
-    type: String,
-    enum: ['weeks', 'months', 'years'],
-    default: 'months'
   },
   color: {
     type: String,
@@ -219,29 +215,7 @@ const petInventoryItemSchema = new mongoose.Schema({
 
 // Calculate age from dateOfBirth before saving
 petInventoryItemSchema.pre('save', function(next) {
-  if (this.dateOfBirth) {
-    const now = new Date();
-    const diffTime = Math.abs(now - this.dateOfBirth);
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
-    // Calculate age based on the unit
-    switch (this.ageUnit) {
-      case 'days':
-        this.age = diffDays;
-        break;
-      case 'weeks':
-        this.age = Math.floor(diffDays / 7);
-        break;
-      case 'months':
-        this.age = Math.floor(diffDays / 30.44); // Average days in a month
-        break;
-      case 'years':
-        this.age = Math.floor(diffDays / 365.25); // Account for leap years
-        break;
-      default:
-        this.age = Math.floor(diffDays / 30.44); // Default to months
-    }
-  }
+  // No need to calculate age anymore - it's derived from DOB dynamically
   next();
 });
 
@@ -284,14 +258,40 @@ petInventoryItemSchema.post('save', async function(doc) {
         firstAddedSource: 'pet_shop',
         firstAddedBy: doc.createdBy,
         gender: doc.gender,
-        age: doc.age,
-        ageUnit: doc.ageUnit,
+        dateOfBirth: doc.dateOfBirth,
+        dobAccuracy: doc.dobAccuracy,
         color: doc.color
       }, {
         currentOwnerId: doc.createdBy, // Pet shop manager who added it
         currentLocation: doc.status === 'sold' ? 'at_owner' : 'at_petshop',
         currentStatus: doc.status === 'available_for_sale' ? 'available' : doc.status
       });
+      
+      // Add to blockchain if this is a new pet
+      if (doc.isNew) {
+        try {
+          const petshopBlockchainService = require('../../../core/services/petshopBlockchainService');
+          await petshopBlockchainService.addBlock('pet_added', {
+            petId: doc._id,
+            petCode: doc.petCode,
+            name: doc.name,
+            species: doc.speciesId,
+            breed: doc.breedId,
+            gender: doc.gender,
+            dateOfBirth: doc.dateOfBirth,
+            price: doc.price,
+            status: doc.status,
+            storeId: doc.storeId,
+            storeName: doc.storeName,
+            createdBy: doc.createdBy,
+            managedBy: doc.createdBy,
+            timestamp: new Date()
+          });
+          console.log(`🔗 Blockchain: Pet ${doc.petCode} added to blockchain`);
+        } catch (blockchainErr) {
+          console.warn('⚠️  Blockchain logging failed:', blockchainErr.message);
+        }
+      }
     }
   } catch (err) {
     console.warn('Failed to register petshop item in PetRegistry:', err.message);
@@ -322,6 +322,23 @@ petInventoryItemSchema.virtual('documents', {
   localField: 'documentIds',
   foreignField: '_id',
   justOne: false
+});
+
+// Virtual for age (backward compatibility)
+petInventoryItemSchema.virtual('age').get(function () {
+  if (!this.dateOfBirth) return 0;
+  const ageCalc = require('../../../../core/utils/ageCalculator');
+  return ageCalc.calculateAgeFromDOB(this.dateOfBirth, 'months');
+});
+
+petInventoryItemSchema.virtual('ageUnit').get(function () {
+  return 'months'; // Default unit for backward compatibility
+});
+
+petInventoryItemSchema.virtual('ageDisplay').get(function () {
+  if (!this.dateOfBirth) return 'Unknown';
+  const ageCalc = require('../../../../core/utils/ageCalculator');
+  return ageCalc.formatAge(this.dateOfBirth);
 });
 
 // Include virtuals in JSON/Object outputs

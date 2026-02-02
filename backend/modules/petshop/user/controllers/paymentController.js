@@ -1983,6 +1983,34 @@ const completeHandover = async (req, res) => {
       // Don't fail the handover if pet creation fails, but log the error
     }
     
+    // 🔗 ADD TO BLOCKCHAIN (NEW - Safe Addition)
+    try {
+      await petshopBlockchainService.addBlock(
+        'HANDOVER_COMPLETED',
+        inventoryItem._id,
+        inventoryItem.petCode,
+        req.user._id,
+        inventoryItem.managerId,
+        {
+          handoverDate: new Date(),
+          reservationCode: reservation.reservationCode,
+          buyerName: req.user.name || 'User',
+          buyerEmail: req.user.email,
+          petName: inventoryItem.name,
+          breed: inventoryItem.breed,
+          species: inventoryItem.species,
+          otpVerified: true,
+          handoverMethod: reservation.handover?.method || 'pickup',
+          handoverLocation: reservation.handover?.location?.address || 'Store Pickup',
+          ownershipTransferred: true
+        }
+      );
+      console.log('✅ Handover completion added to blockchain:', inventoryItem.petCode);
+    } catch (blockchainError) {
+      console.log('⚠️ Blockchain logging failed (non-critical):', blockchainError.message);
+      // Don't fail the main operation if blockchain fails
+    }
+
     // Send completion email
     try {
       await sendMail({

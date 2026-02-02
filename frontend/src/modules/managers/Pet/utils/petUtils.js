@@ -1,6 +1,39 @@
 // Utility functions for pet management
 
-export const formatPetAge = (age, ageUnit) => {
+export const formatPetAge = (age, ageUnit, ageDisplay, dateOfBirth) => {
+  // Prefer ageDisplay if available (comes from backend virtual)
+  if (ageDisplay && ageDisplay !== 'Unknown') {
+    return ageDisplay;
+  }
+  
+  // Calculate from dateOfBirth if available
+  if (dateOfBirth) {
+    const dob = new Date(dateOfBirth);
+    const now = new Date();
+    const diffTime = Math.abs(now - dob);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    const years = Math.floor(diffDays / 365.25);
+    const months = Math.floor(diffDays / 30.44);
+    const weeks = Math.floor(diffDays / 7);
+    
+    if (years >= 1) {
+      const remainingMonths = Math.floor((diffDays % 365.25) / 30.44);
+      if (remainingMonths > 0) {
+        return `${years} year${years !== 1 ? 's' : ''} ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}`;
+      }
+      return `${years} year${years !== 1 ? 's' : ''}`;
+    }
+    if (months >= 1) {
+      return `${months} month${months !== 1 ? 's' : ''}`;
+    }
+    if (weeks >= 1) {
+      return `${weeks} week${weeks !== 1 ? 's' : ''}`;
+    }
+    return `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+  }
+  
+  // Fallback to age + ageUnit
   if (!age || !ageUnit) return 'Unknown';
   
   switch (ageUnit) {

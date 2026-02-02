@@ -67,6 +67,7 @@ function App() {
         case 'veterinary_manager':
           console.log('Veterinary manager, redirecting to veterinary dashboard');
           return '/manager/veterinary/dashboard';
+        case 'temporary-care_manager':
         case 'temporary_care_manager':
           console.log('Temporary care manager, redirecting to temporary care dashboard');
           return '/manager/temporary-care/dashboard';

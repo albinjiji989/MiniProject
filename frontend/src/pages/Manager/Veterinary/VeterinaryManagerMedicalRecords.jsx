@@ -17,56 +17,8 @@ export default function VeterinaryManagerMedicalRecords() {
   const loadMedicalRecords = async () => {
     setLoading(true);
     try {
-      // In a real implementation, this would fetch actual medical records
-      // For now, we'll use sample data
-      const sampleRecords = [
-        {
-          _id: '1',
-          pet: { name: 'Buddy', species: 'Dog', breed: 'Golden Retriever' },
-          owner: { name: 'John Doe' },
-          veterinary: { name: 'Paws & Claws Clinic' },
-          visitDate: '2023-06-15T10:00:00Z',
-          visitType: 'routine_checkup',
-          diagnosis: 'Healthy checkup, all vitals normal',
-          cost: 75.00,
-          status: 'completed'
-        },
-        {
-          _id: '2',
-          pet: { name: 'Whiskers', species: 'Cat', breed: 'Siamese' },
-          owner: { name: 'Jane Smith' },
-          veterinary: { name: 'Feline Friends Veterinary' },
-          visitDate: '2023-06-16T14:30:00Z',
-          visitType: 'vaccination',
-          diagnosis: 'Annual vaccinations updated',
-          cost: 45.00,
-          status: 'completed'
-        },
-        {
-          _id: '3',
-          pet: { name: 'Rex', species: 'Dog', breed: 'German Shepherd' },
-          owner: { name: 'Mike Johnson' },
-          veterinary: { name: 'Paws & Claws Clinic' },
-          visitDate: '2023-06-17T09:15:00Z',
-          visitType: 'consultation',
-          diagnosis: 'Minor laceration on paw, cleaned and bandaged',
-          cost: 120.00,
-          status: 'in_progress'
-        },
-        {
-          _id: '4',
-          pet: { name: 'Luna', species: 'Cat', breed: 'Persian' },
-          owner: { name: 'Sarah Wilson' },
-          veterinary: { name: 'Feline Friends Veterinary' },
-          visitDate: '2023-06-18T11:00:00Z',
-          visitType: 'follow_up',
-          diagnosis: 'Follow-up on previous respiratory infection',
-          cost: 60.00,
-          status: 'scheduled'
-        }
-      ];
-      
-      setMedicalRecords(sampleRecords);
+      const response = await veterinaryAPI.managerGetMedicalRecords();
+      setMedicalRecords(response.data?.data?.records || []);
     } catch (error) {
       console.error('Failed to load medical records:', error);
     } finally {
@@ -76,9 +28,9 @@ export default function VeterinaryManagerMedicalRecords() {
 
   const filteredRecords = medicalRecords.filter(record => {
     const matchesSearch = 
-      record.pet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.owner.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.diagnosis.toLowerCase().includes(searchTerm.toLowerCase());
+      (record.pet?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (record.owner?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (record.diagnosis || '').toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesFilter = filter === 'all' || record.visitType === filter;
     
@@ -95,21 +47,19 @@ export default function VeterinaryManagerMedicalRecords() {
       consultation: 'Consultation',
       other: 'Other'
     };
-    return types[visitType] || visitType;
+    return types[visitType] || visitType || 'N/A';
   };
-
-  
 
   const getStatusBadge = (status) => {
     switch (status?.toLowerCase()) {
-      case 'completed':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Completed</span>;
-      case 'in_progress':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">In Progress</span>;
-      case 'scheduled':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Scheduled</span>;
+      case 'paid':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Paid</span>;
+      case 'partially_paid':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Partially Paid</span>;
+      case 'pending':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Pending</span>;
       default:
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{status}</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{status || 'N/A'}</span>;
     }
   };
 
@@ -125,6 +75,10 @@ export default function VeterinaryManagerMedicalRecords() {
       { value: 'other', label: 'Other' }
     ];
   };
+
+  const completedRecords = medicalRecords.filter(r => r.paymentStatus === 'paid').length;
+  const emergencyRecords = medicalRecords.filter(r => r.visitType === 'emergency').length;
+  const totalRevenue = medicalRecords.reduce((sum, record) => sum + (record.totalCost || 0), 0);
 
   return (
     <ManagerModuleLayout
@@ -184,7 +138,7 @@ export default function VeterinaryManagerMedicalRecords() {
                   Owner
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date & Clinic
+                  Visit Date
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Type
@@ -218,33 +172,31 @@ export default function VeterinaryManagerMedicalRecords() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                          <span className="text-indigo-800 font-medium">{record.pet.name.charAt(0)}</span>
+                          <span className="text-indigo-800 font-medium">{record.pet?.name?.charAt(0) || 'P'}</span>
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{record.pet.name}</div>
-                          <div className="text-sm text-gray-500">{record.pet.species} - {record.pet.breed}</div>
+                          <div className="text-sm font-medium text-gray-900">{record.pet?.name || 'N/A'}</div>
+                          <div className="text-sm text-gray-500">{record.pet?.species || 'N/A'} - {record.pet?.breed || 'N/A'}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{record.owner.name}</div>
+                      <div className="text-sm text-gray-900">{record.owner?.name || 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{new Date(record.visitDate).toLocaleDateString()}</div>
-                      <div className="text-sm text-gray-500">{record.veterinary.name}</div>
+                      <div className="text-sm text-gray-900">{record.visitDate ? new Date(record.visitDate).toLocaleDateString() : 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{getVisitTypeLabel(record.visitType)}</div>
-                      
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {record.diagnosis}
+                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
+                      {record.diagnosis || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {record.cost ? `$${record.cost.toFixed(2)}` : 'N/A'}
+                      ${record.totalCost ? record.totalCost.toFixed(2) : '0.00'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(record.status)}
+                      {getStatusBadge(record.paymentStatus)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
@@ -306,11 +258,9 @@ export default function VeterinaryManagerMedicalRecords() {
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Completed</dt>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Paid</dt>
                   <dd className="flex items-baseline">
-                    <div className="text-2xl font-semibold text-gray-900">
-                      {medicalRecords.filter(r => r.status === 'completed').length}
-                    </div>
+                    <div className="text-2xl font-semibold text-gray-900">{completedRecords}</div>
                   </dd>
                 </dl>
               </div>
@@ -330,9 +280,7 @@ export default function VeterinaryManagerMedicalRecords() {
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Emergency Cases</dt>
                   <dd className="flex items-baseline">
-                    <div className="text-2xl font-semibold text-gray-900">
-                      {medicalRecords.filter(r => r.visitType === 'emergency').length}
-                    </div>
+                    <div className="text-2xl font-semibold text-gray-900">{emergencyRecords}</div>
                   </dd>
                 </dl>
               </div>
@@ -352,9 +300,7 @@ export default function VeterinaryManagerMedicalRecords() {
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Total Revenue</dt>
                   <dd className="flex items-baseline">
-                    <div className="text-2xl font-semibold text-gray-900">
-                      ${medicalRecords.reduce((sum, record) => sum + (record.cost || 0), 0).toFixed(2)}
-                    </div>
+                    <div className="text-2xl font-semibold text-gray-900">${totalRevenue.toFixed(2)}</div>
                   </dd>
                 </dl>
               </div>

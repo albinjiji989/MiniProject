@@ -196,23 +196,30 @@ const ProfessionalApplicationDashboard = () => {
       return;
     }
 
-    try {
-      setOtpVerifying(true);
-      await temporaryCareAPI.verifyHandoverOTP({
-        applicationId: selectedAppForOtp._id,
-        otp: otpInput
-      });
-      alert('Pet handover completed successfully! Pet is now in your care.');
-      setVerifyOtpDialogOpen(false);
-      setOtpInput('');
-      setSelectedAppForOtp(null);
-      loadDashboardData();
-      setDetailsDialogOpen(false);
-    } catch (err) {
-      console.error('Error verifying OTP:', err);
-      alert(err?.response?.data?.message || 'Failed to verify OTP. Please check the code and try again.');
-    } finally {
-      setOtpVerifying(false);
+    // Determine if this is check-in or checkout based on application status
+    const isCheckout = selectedAppForOtp?.status === 'active_care';
+
+    if (isCheckout) {
+      await handleVerifyCheckoutOTP();
+    } else {
+      try {
+        setOtpVerifying(true);
+        await temporaryCareAPI.verifyHandoverOTP({
+          applicationId: selectedAppForOtp._id,
+          otp: otpInput
+        });
+        alert('Pet handover completed successfully! Pet is now in your care.');
+        setVerifyOtpDialogOpen(false);
+        setOtpInput('');
+        setSelectedAppForOtp(null);
+        loadDashboardData();
+        setDetailsDialogOpen(false);
+      } catch (err) {
+        console.error('Error verifying OTP:', err);
+        alert(err?.response?.data?.message || 'Failed to verify OTP. Please check the code and try again.');
+      } finally {
+        setOtpVerifying(false);
+      }
     }
   };
 
@@ -233,6 +240,60 @@ const ProfessionalApplicationDashboard = () => {
     }
   };
 
+  // Checkout/Pickup OTP functions
+  const handleGenerateCheckoutOTP = async (application) => {
+    try {
+      const response = await temporaryCareAPI.managerRecordCheckOut(application._id, {
+        petId: application.pets[0]?.petId, // For now, use first pet
+        condition: {
+          description: 'Ready for pickup',
+          healthStatus: 'healthy'
+        }
+      });
+      const otpData = response.data?.data;
+      setGeneratedOTP({
+        otp: otpData.checkOutOtp,
+        applicationNumber: application.applicationNumber,
+        type: 'checkout'
+      });
+      setOtpDialogOpen(true);
+      loadDashboardData();
+    } catch (err) {
+      console.error('Error generating checkout OTP:', err);
+      alert(err?.response?.data?.message || 'Failed to generate checkout OTP');
+    }
+  };
+
+  const handleVerifyCheckoutOTP = async () => {
+    if (!otpInput || otpInput.length !== 6) {
+      alert('Please enter a valid 6-digit OTP');
+      return;
+    }
+
+    try {
+      setOtpVerifying(true);
+      await temporaryCareAPI.managerRecordCheckOut(selectedAppForOtp._id, {
+        petId: selectedAppForOtp.pets[0]?.petId,
+        condition: {
+          description: 'Pet picked up',
+          healthStatus: 'healthy'
+        },
+        otp: otpInput
+      });
+      alert('Pet checkout completed successfully! Pet has been returned to owner.');
+      setVerifyOtpDialogOpen(false);
+      setOtpInput('');
+      setSelectedAppForOtp(null);
+      loadDashboardData();
+      setDetailsDialogOpen(false);
+    } catch (err) {
+      console.error('Error verifying checkout OTP:', err);
+      alert(err?.response?.data?.message || 'Failed to verify checkout OTP. Please check the code and try again.');
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
   const getStatusColor = (status) => {
     const colors = {
       submitted: 'warning',
@@ -250,15 +311,49 @@ const ProfessionalApplicationDashboard = () => {
   const getStatusLabel = (status) => {
     const labels = {
       submitted: 'New Application',
-      price_determined: 'Price Set',
-      advance_paid: 'Advance Paid',
+      price_determined: 'Awaiting Payment',
+      advance_paid: 'Ready for Check-in',
       approved: 'Approved',
-      active_care: 'In Care',
+      active_care: 'Pet in Care',
       completed: 'Completed',
       cancelled: 'Cancelled',
       rejected: 'Rejected'
     };
     return labels[status] || status;
+  };
+
+  const getNextAction = (app) => {
+    if (app.status === 'submitted') {
+      return 'Set pricing';
+    }
+    if (app.status === 'price_determined') {
+      return 'Waiting for user to pay advance';
+    }
+    if (app.status === 'advance_paid') {
+      if (!app.checkIn?.otp) {
+        return 'Generate check-in OTP';
+      }
+      if (!app.checkIn?.otpUsed) {
+        return 'Verify check-in OTP';
+      }
+      return 'Waiting for check-in';
+    }
+    if (app.status === 'active_care') {
+      if (app.paymentStatus?.final?.status !== 'completed') {
+        return 'Waiting for final payment';
+      }
+      if (!app.checkOut?.otp) {
+        return 'Generate pickup OTP';
+      }
+      if (!app.checkOut?.otpUsed) {
+        return 'Verify pickup OTP';
+      }
+      return 'Ready for pickup';
+    }
+    if (app.status === 'completed') {
+      return 'Completed';
+    }
+    return '-';
   };
 
   const renderStatsCards = () => (
@@ -372,6 +467,7 @@ const ProfessionalApplicationDashboard = () => {
               <TableCell>Pets</TableCell>
               <TableCell>Duration</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell>Next Action</TableCell>
               <TableCell>Amount</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
@@ -379,7 +475,7 @@ const ProfessionalApplicationDashboard = () => {
           <TableBody>
             {filteredApplications.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 8 }}>
+                <TableCell colSpan={8} align="center" sx={{ py: 8 }}>
                   <Typography color="text.secondary">No applications found</Typography>
                 </TableCell>
               </TableRow>
@@ -437,13 +533,21 @@ const ProfessionalApplicationDashboard = () => {
                     />
                   </TableCell>
                   <TableCell>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                      {getNextAction(app)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
                     {app.pricing?.totalAmount ? (
                       <Box>
                         <Typography variant="body2" fontWeight="600">
                           ₹{app.pricing.totalAmount.toLocaleString()}
                         </Typography>
-                        {app.payments?.advance?.paid && (
+                        {app.paymentStatus?.advance?.status === 'completed' && (
                           <Chip label="Advance Paid" size="small" color="success" sx={{ mt: 0.5 }} />
+                        )}
+                        {app.paymentStatus?.final?.status === 'completed' && (
+                          <Chip label="Final Paid" size="small" color="success" sx={{ mt: 0.5 }} />
                         )}
                       </Box>
                     ) : (
@@ -453,6 +557,7 @@ const ProfessionalApplicationDashboard = () => {
                     )}
                   </TableCell>
                   <TableCell align="right">
+                    {/* View Details - Always available */}
                     <Tooltip title="View Details">
                       <IconButton
                         size="small"
@@ -462,6 +567,8 @@ const ProfessionalApplicationDashboard = () => {
                         <ViewIcon />
                       </IconButton>
                     </Tooltip>
+
+                    {/* Step 1: Set Pricing */}
                     {app.status === 'submitted' && (
                       <Tooltip title="Set Pricing">
                         <IconButton
@@ -476,30 +583,78 @@ const ProfessionalApplicationDashboard = () => {
                         </IconButton>
                       </Tooltip>
                     )}
-                    {app.status === 'advance_paid' && (
-                      <>
-                        <Tooltip title="Generate OTP for Handover">
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={() => handleGenerateOTP(app)}
-                          >
-                            <AddIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Verify OTP from User">
-                          <IconButton
-                            size="small"
-                            color="success"
-                            onClick={() => {
-                              setSelectedAppForOtp(app);
-                              setVerifyOtpDialogOpen(true);
-                            }}
-                          >
-                            <CheckIcon />
-                          </IconButton>
-                        </Tooltip>
-                      </>
+
+                    {/* Step 2: After user pays advance - Generate Check-in OTP */}
+                    {app.status === 'advance_paid' && !app.checkIn?.otp && (
+                      <Tooltip title="Generate Check-in OTP">
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          onClick={() => handleGenerateOTP(app)}
+                        >
+                          <AddIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+
+                    {/* Step 3: Verify Check-in OTP (only show if OTP generated) */}
+                    {app.status === 'advance_paid' && app.checkIn?.otp && !app.checkIn?.otpUsed && (
+                      <Tooltip title="Verify Check-in OTP">
+                        <IconButton
+                          size="small"
+                          color="success"
+                          onClick={() => {
+                            setSelectedAppForOtp(app);
+                            setVerifyOtpDialogOpen(true);
+                          }}
+                        >
+                          <CheckIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+
+                    {/* Step 4: Pet in care - Generate Pickup OTP (only after final payment) */}
+                    {app.status === 'active_care' && 
+                     app.paymentStatus?.final?.status === 'completed' && 
+                     !app.checkOut?.otp && (
+                      <Tooltip title="Generate Pickup OTP">
+                        <IconButton
+                          size="small"
+                          color="warning"
+                          onClick={() => handleGenerateCheckoutOTP(app)}
+                        >
+                          <AddIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+
+                    {/* Step 5: Verify Pickup OTP (only show if OTP generated) */}
+                    {app.status === 'active_care' && 
+                     app.checkOut?.otp && 
+                     !app.checkOut?.otpUsed && (
+                      <Tooltip title="Verify Pickup OTP">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => {
+                            setSelectedAppForOtp(app);
+                            setVerifyOtpDialogOpen(true);
+                          }}
+                        >
+                          <CheckIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+
+                    {/* Show waiting message if user hasn't paid */}
+                    {app.status === 'active_care' && 
+                     app.paymentStatus?.final?.status !== 'completed' && (
+                      <Chip 
+                        label="Waiting for final payment" 
+                        size="small" 
+                        color="info"
+                        sx={{ ml: 1 }}
+                      />
                     )}
                   </TableCell>
                 </TableRow>
@@ -895,7 +1050,7 @@ const ApplicationDetailsDialog = ({ open, onClose, application, onUpdate, onActi
           </>
         )}
         
-        {/* Reject/Cancel only allowed before payment */}
+        {/* Reject - Only allowed before payment */}
         {!['approved', 'advance_paid', 'active_care', 'completed', 'cancelled', 'rejected'].includes(application.status) && (
           <Button 
             variant="outlined" 
@@ -903,17 +1058,7 @@ const ApplicationDetailsDialog = ({ open, onClose, application, onUpdate, onActi
             startIcon={<RejectIcon />}
             onClick={() => onAction('reject')}
           >
-            Reject
-          </Button>
-        )}
-        {!['advance_paid', 'active_care', 'completed', 'cancelled', 'rejected'].includes(application.status) && (
-          <Button 
-            variant="outlined" 
-            color="error"
-            startIcon={<RejectIcon />}
-            onClick={() => onAction('cancel')}
-          >
-            Cancel
+            Reject Application
           </Button>
         )}
       </DialogActions>

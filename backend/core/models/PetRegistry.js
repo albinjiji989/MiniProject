@@ -23,8 +23,8 @@ const petRegistrySchema = new mongoose.Schema({
   
   // Basic pet information
   gender: { type: String, enum: ['Male', 'Female', 'Unknown'], default: 'Unknown' },
-  age: { type: Number },
-  ageUnit: { type: String, enum: ['days', 'weeks', 'months', 'years'], default: 'months' },
+  dateOfBirth: { type: Date },
+  dobAccuracy: { type: String, enum: ['exact', 'estimated'], default: 'estimated' },
   color: { type: String },
 
   // Source information - where this pet lives
@@ -133,6 +133,23 @@ petRegistrySchema.virtual('documents', {
   localField: 'documentIds',
   foreignField: '_id',
   justOne: false
+});
+
+// Virtual for age (backward compatibility)
+petRegistrySchema.virtual('age').get(function () {
+  if (!this.dateOfBirth) return 0;
+  const ageCalc = require('../utils/ageCalculator');
+  return ageCalc.calculateAgeFromDOB(this.dateOfBirth, 'months');
+});
+
+petRegistrySchema.virtual('ageUnit').get(function () {
+  return 'months'; // Default unit for backward compatibility
+});
+
+petRegistrySchema.virtual('ageDisplay').get(function () {
+  if (!this.dateOfBirth) return 'Unknown';
+  const ageCalc = require('../utils/ageCalculator');
+  return ageCalc.formatAge(this.dateOfBirth);
 });
 
 // Include virtuals in JSON/Object outputs

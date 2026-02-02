@@ -29,6 +29,7 @@ export default function SimpleVeterinaryPetSelection() {
       // Process user-created pets
       if (ownedRes.status === 'fulfilled') {
         const userPets = Array.isArray(ownedRes.value.data?.data) ? ownedRes.value.data.data : (ownedRes.value.data?.data?.pets || []);
+        console.log('Owned pets:', userPets);
         userPets.forEach(pet => {
           allPets.push({
             ...pet,
@@ -43,6 +44,7 @@ export default function SimpleVeterinaryPetSelection() {
       // Process adopted pets
       if (adoptedRes.status === 'fulfilled') {
         const adoptedPets = Array.isArray(adoptedRes.value.data?.data) ? adoptedRes.value.data.data : (adoptedRes.value.data?.data?.pets || []);
+        console.log('Adopted pets:', adoptedPets);
         adoptedPets.forEach(pet => {
           allPets.push({
             ...pet,
@@ -53,24 +55,47 @@ export default function SimpleVeterinaryPetSelection() {
         });
       }
 
-      // Process purchased pets
+      // Process purchased pets - handle multiple possible response structures
       if (purchasedRes.status === 'fulfilled') {
-        const purchasedPets = Array.isArray(purchasedRes.value.data?.data?.pets) ? purchasedRes.value.data.data.pets : (purchasedRes.value.data?.data || []);
+        console.log('Purchased pets raw response:', purchasedRes.value.data);
+        
+        let purchasedPets = [];
+        
+        // Try different response structures
+        if (Array.isArray(purchasedRes.value.data?.data?.pets)) {
+          purchasedPets = purchasedRes.value.data.data.pets;
+        } else if (Array.isArray(purchasedRes.value.data?.data)) {
+          purchasedPets = purchasedRes.value.data.data;
+        } else if (Array.isArray(purchasedRes.value.data?.pets)) {
+          purchasedPets = purchasedRes.value.data.pets;
+        } else if (Array.isArray(purchasedRes.value.data)) {
+          purchasedPets = purchasedRes.value.data;
+        }
+        
+        console.log('Purchased pets processed:', purchasedPets);
+        
         purchasedPets.forEach(pet => {
+          // Handle case where pet might be nested in petId
+          const petData = pet.petId || pet;
           allPets.push({
-            ...pet,
+            ...petData,
             source: 'purchased',
             sourceLabel: 'Purchased Pet',
             tags: ['purchased']
           });
         });
+      } else {
+        console.error('Failed to fetch purchased pets:', purchasedRes.reason);
       }
+
+      console.log('All pets combined:', allPets);
 
       // Remove duplicates based on petCode or _id
       const uniquePets = allPets.filter((pet, index, self) => 
         index === self.findIndex(p => (p.petCode || p._id) === (pet.petCode || pet._id))
       );
 
+      console.log('Unique pets:', uniquePets);
       setPets(uniquePets);
     } catch (error) {
       console.error('Failed to load pets:', error);

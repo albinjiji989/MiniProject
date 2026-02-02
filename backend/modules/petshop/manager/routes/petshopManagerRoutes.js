@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth, authorizeModule } = require('../../../../core/middleware/auth');
+const { convertAgeToDOB } = require('../../../../core/middleware/ageConversion');
 const { body } = require('express-validator');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -100,9 +101,9 @@ router.post('/store-name-change', auth, storeNameChangeController.createStoreNam
 
 // Inventory Management
 router.get('/inventory', auth, authorizeModule('petshop'), inventoryController.listInventory);
-router.post('/inventory', auth, authorizeModule('petshop'), inventoryController.createInventoryItem);
+router.post('/inventory', auth, authorizeModule('petshop'), convertAgeToDOB, inventoryController.createInventoryItem);
 router.get('/inventory/:id', auth, authorizeModule('petshop'), inventoryController.getInventoryItemById);
-router.put('/inventory/:id', auth, authorizeModule('petshop'), inventoryController.updateInventoryItem);
+router.put('/inventory/:id', auth, authorizeModule('petshop'), convertAgeToDOB, inventoryController.updateInventoryItem);
 router.delete('/inventory/:id', auth, authorizeModule('petshop'), inventoryController.deleteInventoryItem);
 router.post('/inventory/bulk', auth, authorizeModule('petshop'), inventoryController.bulkCreateInventoryItems);
 
@@ -118,7 +119,7 @@ router.delete('/inventory/:id/images/:imageId', auth, authorizeModule('petshop')
 router.post('/inventory/publish-bulk', auth, authorizeModule('petshop'), inventoryManagementController.bulkPublishInventoryItems);
 
 // Bulk Create Stock Items
-router.post('/stocks/bulk', auth, authorizeModule('petshop'), inventoryController.bulkCreateStockItems);
+router.post('/stocks/bulk', auth, authorizeModule('petshop'), convertAgeToDOB, inventoryController.bulkCreateStockItems);
 
 // Reserved Pets Management
 router.get('/inventory/reserved', auth, authorizeModule('petshop'), inventoryController.listReservedPets);
@@ -164,18 +165,18 @@ router.post('/reservations/:id/approve-payment', auth, authorizeModule('petshop'
 
 // Stock Management Routes
 router.get('/stocks', auth, authorizeModule('petshop'), stockController.listStocks);
-router.post('/stocks', auth, authorizeModule('petshop'), stockController.createStock);
+router.post('/stocks', auth, authorizeModule('petshop'), convertAgeToDOB, stockController.createStock);
 router.get('/stocks/:id', auth, authorizeModule('petshop'), stockController.getStockById);
-router.put('/stocks/:id', auth, authorizeModule('petshop'), stockController.updateStock);
+router.put('/stocks/:id', auth, authorizeModule('petshop'), convertAgeToDOB, stockController.updateStock);
 router.delete('/stocks/:id', auth, authorizeModule('petshop'), stockController.deleteStock);
-router.post('/stocks/generate-pets', auth, authorizeModule('petshop'), stockController.generatePetsFromStock);
+router.post('/stocks/generate-pets', auth, authorizeModule('petshop'), convertAgeToDOB, stockController.generatePetsFromStock);
 
 // Stock Image Management Routes
 router.post('/stocks/:id/images', auth, authorizeModule('petshop'), upload.single('file'), stockController.uploadStockImages);
 router.delete('/stocks/:stockId/images/:imageId', auth, authorizeModule('petshop'), stockController.removeStockImage);
 
 // Wizard Routes - for creating pet stocks with bulk generation
-router.post('/wizard/submit', auth, authorizeModule('petshop'), wizardController.submitWizard);
+router.post('/wizard/submit', auth, authorizeModule('petshop'), convertAgeToDOB, wizardController.submitWizard);
 router.get('/wizard/state', auth, wizardController.getWizardState);
 router.post('/wizard/step', auth, wizardController.saveWizardStep);
 

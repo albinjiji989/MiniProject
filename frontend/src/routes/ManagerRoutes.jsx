@@ -240,7 +240,6 @@ const ManagerRoutes = () => {
             {/* Legacy routes (backward compatibility) */}
             <Route path="/manage" element={<TemporaryCareManage />} />
             <Route path="/requests" element={<TemporaryCareManagerRequests />} />
-            <Route path="/caregivers" element={<TemporaryCareManagerCaregivers />} />
             <Route path="/bookings" element={<TemporaryCareBookings />} />
             <Route path="/facilities" element={<TemporaryCareFacilities />} />
             <Route path="/pets" element={<TemporaryCarePetsInCare />} />

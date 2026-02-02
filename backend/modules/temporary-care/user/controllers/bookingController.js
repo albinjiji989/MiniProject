@@ -12,12 +12,12 @@ const CareReview = require('../../models/CareReview');
 exports.getAvailableServices = async (req, res) => {
   try {
     const { category } = req.query;
-    
+
     const query = { isActive: true };
     if (category) query.category = category;
-    
+
     const services = await ServiceType.find(query).sort({ 'pricing.basePrice': 1 });
-    
+
     res.json({
       success: true,
       data: services
@@ -39,9 +39,9 @@ exports.getUserPets = async (req, res) => {
       ],
       status: { $in: ['available', 'adopted', 'owned'] }
     })
-    .select('name species breed age gender profileImage healthStatus vaccinationStatus')
-    .lean();
-    
+      .select('name species breed age gender profileImage healthStatus vaccinationStatus')
+      .lean();
+
     res.json({
       success: true,
       data: pets
@@ -56,12 +56,12 @@ exports.getUserPets = async (req, res) => {
 exports.calculatePrice = async (req, res) => {
   try {
     const { serviceTypeId, startDate, endDate, duration } = req.body;
-    
+
     const service = await ServiceType.findById(serviceTypeId);
     if (!service || !service.isActive) {
       return res.status(404).json({ success: false, message: 'Service not available' });
     }
-    
+
     let durationValue = duration?.value;
     if (!durationValue && startDate && endDate) {
       const start = new Date(startDate);
@@ -69,7 +69,7 @@ exports.calculatePrice = async (req, res) => {
       const diffTime = Math.abs(end - start);
       durationValue = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // days
     }
-    
+
     // Calculate base amount
     let baseAmount = 0;
     if (service.pricing.priceUnit === 'per_day') {
@@ -79,7 +79,7 @@ exports.calculatePrice = async (req, res) => {
     } else {
       baseAmount = service.pricing.basePrice;
     }
-    
+
     // Add additional charges
     let additionalCharges = 0;
     if (service.pricing.additionalCharges) {
@@ -91,16 +91,16 @@ exports.calculatePrice = async (req, res) => {
         }
       });
     }
-    
+
     // Calculate tax (assuming 18% GST)
     const taxPercentage = 18;
     const subtotal = baseAmount + additionalCharges;
     const taxAmount = (subtotal * taxPercentage) / 100;
-    
+
     const totalAmount = subtotal + taxAmount;
     const advanceAmount = (totalAmount * service.pricing.advancePercentage) / 100;
     const remainingAmount = totalAmount - advanceAmount;
-    
+
     res.json({
       success: true,
       data: {
@@ -136,7 +136,7 @@ exports.createBooking = async (req, res) => {
       address,
       specialRequirements
     } = req.body;
-    
+
     // Validate pet ownership
     const pet = await Pet.findOne({
       _id: petId,
@@ -145,20 +145,20 @@ exports.createBooking = async (req, res) => {
         { 'owner.userId': req.user.id }
       ]
     });
-    
+
     if (!pet) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'You can only book temporary care for your own pets' 
+      return res.status(403).json({
+        success: false,
+        message: 'You can only book temporary care for your own pets'
       });
     }
-    
+
     // Validate service type
     const service = await ServiceType.findById(serviceTypeId);
     if (!service || !service.isActive) {
       return res.status(404).json({ success: false, message: 'Service not available' });
     }
-    
+
     // Check for booking conflicts
     const conflictingBooking = await CareBooking.findOne({
       petId,
@@ -170,20 +170,20 @@ exports.createBooking = async (req, res) => {
         }
       ]
     });
-    
+
     if (conflictingBooking) {
       return res.status(400).json({
         success: false,
         message: 'Your pet already has a booking during this period'
       });
     }
-    
+
     // Calculate pricing
     const start = new Date(startDate);
     const end = new Date(endDate);
     const diffTime = Math.abs(end - start);
     const durationInDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     let baseAmount = 0;
     if (service.pricing.priceUnit === 'per_day') {
       baseAmount = service.pricing.basePrice * durationInDays;
@@ -192,7 +192,7 @@ exports.createBooking = async (req, res) => {
     } else {
       baseAmount = service.pricing.basePrice;
     }
-    
+
     let additionalChargesAmount = 0;
     const additionalCharges = [];
     if (service.pricing.additionalCharges) {
@@ -210,20 +210,20 @@ exports.createBooking = async (req, res) => {
         });
       });
     }
-    
+
     const subtotal = baseAmount + additionalChargesAmount;
     const taxPercentage = 18;
     const taxAmount = (subtotal * taxPercentage) / 100;
     const totalAmount = subtotal + taxAmount;
     const advanceAmount = (totalAmount * service.pricing.advancePercentage) / 100;
     const remainingAmount = totalAmount - advanceAmount;
-    
+
     // Create location object
     const location = {
       type: locationType || 'facility',
       address: locationType === 'customer_home' ? address : undefined
     };
-    
+
     // Create booking
     const booking = await CareBooking.create({
       userId: req.user.id,
@@ -252,11 +252,11 @@ exports.createBooking = async (req, res) => {
       status: 'pending_payment',
       storeId: req.user.storeId
     });
-    
+
     const populatedBooking = await CareBooking.findById(booking._id)
       .populate('petId', 'name species breed profileImage')
       .populate('serviceType');
-    
+
     res.status(201).json({
       success: true,
       message: 'Booking created successfully. Please proceed with payment.',
@@ -272,10 +272,10 @@ exports.createBooking = async (req, res) => {
 exports.getUserBookings = async (req, res) => {
   try {
     const { page = 1, limit = 10, status } = req.query;
-    
+
     const query = { userId: req.user.id };
     if (status) query.status = status;
-    
+
     const bookings = await CareBooking.find(query)
       .populate('petId', 'name species breed profileImage')
       .populate('serviceType', 'name category')
@@ -283,9 +283,9 @@ exports.getUserBookings = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
-    
+
     const count = await CareBooking.countDocuments(query);
-    
+
     res.json({
       success: true,
       data: bookings,
@@ -308,15 +308,15 @@ exports.getBookingDetails = async (req, res) => {
       _id: req.params.id,
       userId: req.user.id
     })
-    .populate('petId')
-    .populate('serviceType')
-    .populate('assignedCaregivers.caregiver', 'name email phone profilePicture')
-    .populate('activityLog.performedBy', 'name');
-    
+      .populate('petId')
+      .populate('serviceType')
+      .populate('assignedCaregivers.caregiver', 'name email phone profilePicture')
+      .populate('activityLog.performedBy', 'name');
+
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
-    
+
     res.json({
       success: true,
       data: booking
@@ -331,23 +331,23 @@ exports.getBookingDetails = async (req, res) => {
 exports.cancelBooking = async (req, res) => {
   try {
     const { reason } = req.body;
-    
+
     const booking = await CareBooking.findOne({
       _id: req.params.id,
       userId: req.user.id
     });
-    
+
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
-    
+
     if (!booking.canBeCancelled()) {
       return res.status(400).json({
         success: false,
         message: 'Booking cannot be cancelled. It must be at least 24 hours before the start date.'
       });
     }
-    
+
     // Calculate refund amount based on cancellation policy
     let refundAmount = 0;
     if (booking.paymentStatus.advance.status === 'completed') {
@@ -358,7 +358,7 @@ exports.cancelBooking = async (req, res) => {
         refundAmount = booking.pricing.advanceAmount * 0.5; // 50% refund
       }
     }
-    
+
     booking.status = 'cancelled';
     booking.cancellation = {
       cancelledAt: new Date(),
@@ -367,9 +367,9 @@ exports.cancelBooking = async (req, res) => {
       refundAmount,
       refundStatus: refundAmount > 0 ? 'pending' : undefined
     };
-    
+
     await booking.save();
-    
+
     res.json({
       success: true,
       message: 'Booking cancelled successfully',
@@ -388,29 +388,29 @@ exports.cancelBooking = async (req, res) => {
 exports.submitReview = async (req, res) => {
   try {
     const { ratings, title, comment, pros, cons, wouldRecommend, staffRatings, images } = req.body;
-    
+
     const booking = await CareBooking.findOne({
       _id: req.params.id,
       userId: req.user.id,
       status: 'completed'
     });
-    
+
     if (!booking) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Booking not found or not completed yet' 
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found or not completed yet'
       });
     }
-    
+
     // Check if review already exists
     const existingReview = await CareReview.findOne({ bookingId: booking._id });
     if (existingReview) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Review already submitted for this booking' 
+      return res.status(400).json({
+        success: false,
+        message: 'Review already submitted for this booking'
       });
     }
-    
+
     const review = await CareReview.create({
       bookingId: booking._id,
       userId: req.user.id,
@@ -426,7 +426,7 @@ exports.submitReview = async (req, res) => {
       status: 'approved', // Auto-approve for verified bookings
       storeId: booking.storeId
     });
-    
+
     // Update booking with review
     booking.review = {
       rating: ratings.overall,
@@ -434,7 +434,7 @@ exports.submitReview = async (req, res) => {
       reviewedAt: new Date()
     };
     await booking.save();
-    
+
     // Update staff performance if staff ratings provided
     if (staffRatings && staffRatings.length > 0) {
       for (const sr of staffRatings) {
@@ -444,7 +444,7 @@ exports.submitReview = async (req, res) => {
         }
       }
     }
-    
+
     res.status(201).json({
       success: true,
       message: 'Review submitted successfully',
@@ -460,16 +460,16 @@ exports.submitReview = async (req, res) => {
 exports.verifyHandoverOTP = async (req, res) => {
   try {
     const { type, otp } = req.body; // type: 'dropOff' or 'pickup'
-    
+
     const booking = await CareBooking.findOne({
       _id: req.params.id,
       userId: req.user.id
     });
-    
+
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
-    
+
     let handoverType;
     if (type === 'dropOff') {
       handoverType = booking.handover.dropOff;
@@ -478,35 +478,35 @@ exports.verifyHandoverOTP = async (req, res) => {
     } else {
       return res.status(400).json({ success: false, message: 'Invalid handover type' });
     }
-    
+
     if (!handoverType.otp || !handoverType.otp.code) {
       return res.status(400).json({ success: false, message: 'OTP not generated' });
     }
-    
+
     if (handoverType.otp.verified) {
       return res.status(400).json({ success: false, message: 'OTP already verified' });
     }
-    
+
     if (new Date() > new Date(handoverType.otp.expiresAt)) {
       return res.status(400).json({ success: false, message: 'OTP expired' });
     }
-    
+
     if (handoverType.otp.code !== otp) {
       return res.status(400).json({ success: false, message: 'Invalid OTP' });
     }
-    
+
     // Verify OTP
     handoverType.otp.verified = true;
     handoverType.otp.verifiedAt = new Date();
     handoverType.actualTime = new Date();
     handoverType.completedBy = req.user.id;
-    
+
     // Update booking status
     if (type === 'dropOff' && booking.status === 'confirmed') {
       booking.status = 'in_progress';
     } else if (type === 'pickup' && booking.status === 'in_progress') {
       booking.status = 'completed';
-      
+
       // Update staff availability
       for (const ac of booking.assignedCaregivers) {
         const staff = await CareStaff.findOne({ userId: ac.caregiver });
@@ -516,9 +516,9 @@ exports.verifyHandoverOTP = async (req, res) => {
         }
       }
     }
-    
+
     await booking.save();
-    
+
     res.json({
       success: true,
       message: `${type === 'dropOff' ? 'Drop-off' : 'Pickup'} verified successfully`,
@@ -537,13 +537,13 @@ exports.getBookingTimeline = async (req, res) => {
       _id: req.params.id,
       userId: req.user.id
     })
-    .populate('activityLog.performedBy', 'name profilePicture')
-    .select('activityLog status createdAt handover');
-    
+      .populate('activityLog.performedBy', 'name profilePicture')
+      .select('activityLog status createdAt handover');
+
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
-    
+
     res.json({
       success: true,
       data: {

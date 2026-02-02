@@ -37,11 +37,11 @@ const getApplications = async (req, res) => {
       for (let pet of application.pets) {
         // Try to find in Pet collection first
         let petDetails = await Pet.findOne({ petCode: pet.petId });
-        
+
         // If not found, try AdoptionPet collection
         if (!petDetails) {
           petDetails = await AdoptionPet.findOne({ petCode: pet.petId });
-          
+
           // Manually populate species and breed if they exist
           if (petDetails) {
             if (petDetails.speciesId) {
@@ -57,7 +57,7 @@ const getApplications = async (req, res) => {
             }
           }
         }
-        
+
         if (petDetails) {
           pet.petDetails = petDetails;
         }
@@ -104,11 +104,11 @@ const getApplicationDetails = async (req, res) => {
     for (let pet of application.pets) {
       // Try to find in Pet collection first
       let petDetails = await Pet.findOne({ petCode: pet.petId });
-      
+
       // If not found, try AdoptionPet collection
       if (!petDetails) {
         petDetails = await AdoptionPet.findOne({ petCode: pet.petId });
-        
+
         // Manually populate species and breed if they exist
         if (petDetails) {
           if (petDetails.speciesId) {
@@ -124,7 +124,7 @@ const getApplicationDetails = async (req, res) => {
           }
         }
       }
-      
+
       if (petDetails) {
         pet.petDetails = petDetails;
       }
@@ -300,7 +300,7 @@ const approveOrRejectApplication = async (req, res) => {
     }
 
     // For reject/cancel, allow any status except completed, already cancelled, or already rejected
-    const statusFilter = action === 'reject' 
+    const statusFilter = action === 'reject'
       ? { $nin: ['completed', 'cancelled', 'rejected', 'active_care'] }
       : { $in: ['advance_paid'] }; // Approve only when advance is paid
 
@@ -311,11 +311,11 @@ const approveOrRejectApplication = async (req, res) => {
     });
 
     if (!application) {
-      return res.status(404).json({ 
-        success: false, 
-        message: action === 'approve' 
-          ? 'Application not found or advance payment not completed' 
-          : 'Application not found or cannot be processed' 
+      return res.status(404).json({
+        success: false,
+        message: action === 'approve'
+          ? 'Application not found or advance payment not completed'
+          : 'Application not found or cannot be processed'
       });
     }
 
@@ -334,9 +334,9 @@ const approveOrRejectApplication = async (req, res) => {
     if (action === 'approve') {
       // Verify advance payment is completed
       if (application.status !== 'advance_paid') {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Advance payment must be completed before approval' 
+        return res.status(400).json({
+          success: false,
+          message: 'Advance payment must be completed before approval'
         });
       }
 
@@ -499,6 +499,63 @@ const recordCheckInCondition = async (req, res) => {
 
     await application.save();
 
+    // Update pet status to show "In Temporary Care"
+    const Pet = require('../../../../core/models/Pet');
+    const AdoptionPet = require('../../../adoption/manager/models/AdoptionPet');
+    const PetInventoryItem = require('../../../petshop/manager/models/PetInventoryItem');
+
+    for (const pet of application.pets) {
+      const petCode = pet.petId;
+
+      // Try updating in Pet collection
+      await Pet.updateMany(
+        { petCode: petCode },
+        {
+          $set: {
+            temporaryCareStatus: {
+              inCare: true,
+              applicationId: application._id,
+              centerId: center._id,
+              checkInDate: new Date(),
+              originalSource: 'pet'
+            }
+          }
+        }
+      );
+
+      // Try updating in AdoptionPet collection
+      await AdoptionPet.updateMany(
+        { petCode: petCode },
+        {
+          $set: {
+            temporaryCareStatus: {
+              inCare: true,
+              applicationId: application._id,
+              centerId: center._id,
+              checkInDate: new Date(),
+              originalSource: 'adoption'
+            }
+          }
+        }
+      );
+
+      // Try updating in PetInventoryItem collection
+      await PetInventoryItem.updateMany(
+        { petCode: petCode },
+        {
+          $set: {
+            temporaryCareStatus: {
+              inCare: true,
+              applicationId: application._id,
+              centerId: center._id,
+              checkInDate: new Date(),
+              originalSource: 'petshop'
+            }
+          }
+        }
+      );
+    }
+
     res.json({
       success: true,
       message: 'Check-in recorded successfully',
@@ -540,8 +597,8 @@ const addDailyCareLog = async (req, res) => {
 
     // Find existing log for this date and pet
     const existingLogIndex = application.dailyCareLogs.findIndex(
-      log => log.date.toDateString() === new Date(date).toDateString() && 
-             log.petId.toString() === petId
+      log => log.date.toDateString() === new Date(date).toDateString() &&
+        log.petId.toString() === petId
     );
 
     const logData = {
@@ -717,16 +774,6 @@ const recordCheckOut = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Application not found or not in active care' });
     }
 
-    // Verify final payment if bill generated
-    if (application.finalBill && application.finalBill.finalAmountDue > 0) {
-      if (application.paymentStatus.final.status !== 'completed') {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Final payment must be completed before check-out' 
-        });
-      }
-    }
-
     // Find and update kennel assignment
     const kennelAssignment = application.kennelAssignments.find(
       ka => ka.petId.toString() === petId
@@ -742,7 +789,7 @@ const recordCheckOut = async (req, res) => {
       };
     }
 
-    // Generate check-out OTP if not provided
+    // Generate check-out OTP if not provided (no payment check here)
     if (!otp) {
       const checkOutOtp = crypto.randomInt(100000, 999999).toString();
       application.checkOut = {
@@ -753,16 +800,96 @@ const recordCheckOut = async (req, res) => {
       };
       await application.save();
 
+      // Populate user and center info for email
+      await application.populate('userId', 'email name phone');
+      await application.populate('centerId', 'name');
+
+      console.log('📧 Preparing to send pickup OTP email...');
+      console.log('Application ID:', application._id);
+      console.log('User:', application.userId);
+      console.log('Center:', application.centerId);
+
+      // Send OTP via email to USER
+      const userEmail = application.userId?.email;
+      const userName = application.userId?.name || 'User';
+      const centerName = application.centerId?.name || 'Temporary Care Center';
+      const otpExpiry = application.checkOut.otpExpiresAt;
+
+      if (!userEmail) {
+        console.error('❌ No user email found!');
+        return res.json({
+          success: true,
+          message: 'Pickup OTP generated but email not sent (no user email)',
+          data: { application, checkOutOtp }
+        });
+      }
+
+      console.log('📧 Sending pickup OTP to:', userEmail);
+
+      const subject = `🐾 Pet Pickup OTP - ${checkOutOtp}`;
+      const html = `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;background:#0b0f1a;padding:24px;color:#e6e9ef;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border-radius:16px;overflow:hidden;">
+          <tr><td style="padding:28px;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;">
+            <h1 style="margin:0;font-size:20px;">🐾 Pet Pickup OTP</h1>
+          </td></tr>
+          <tr><td style="padding:24px 28px;color:#e6e9ef;">
+            <p style="margin:0 0 16px;">Hi <b>${userName}</b>,</p>
+            <p style="margin:0 0 24px;">Your pet is ready for pickup at <b>${centerName}</b>! Please verify this OTP with the staff member when you arrive:</p>
+            
+            <div style="background:rgba(239,68,68,0.15);border:2px dashed rgba(245,158,11,0.6);border-radius:12px;padding:20px;text-align:center;margin:20px 0;">
+              <p style="margin:0;font-size:13px;color:#9ca3af;">Your Pickup OTP</p>
+              <div style="font-size:36px;font-weight:bold;color:#ef4444;letter-spacing:8px;margin:12px 0;">${checkOutOtp}</div>
+              <p style="margin:0;font-size:12px;color:#6b7280;">Valid for 24 hours</p>
+            </div>
+
+            <div style="background:rgba(251,191,36,0.1);border-left:4px solid #fbbf24;padding:12px 16px;margin:20px 0;">
+              <p style="margin:0;font-size:13px;"><b>⏰ Expires:</b> ${otpExpiry.toLocaleString()}</p>
+            </div>
+
+            <p style="margin:16px 0 8px;"><b>Before Pickup:</b></p>
+            <ul style="margin:0;padding-left:20px;line-height:1.8;">
+              <li>Ensure final payment is completed</li>
+              <li>Bring a valid ID</li>
+              <li>Show this OTP to the care center staff</li>
+              <li>Complete the checkout paperwork</li>
+            </ul>
+
+            <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;">If you didn't request pickup, please contact us immediately.</p>
+          </td></tr>
+          <tr><td style="padding:16px 28px;text-align:center;font-size:11px;color:#6b7280;border-top:1px solid rgba(255,255,255,0.1);">
+            <p style="margin:0;">Pet Connect Temporary Care System &copy; ${new Date().getFullYear()}</p>
+          </td></tr>
+        </table>
+      </div>`;
+
+      // Send email (non-blocking)
+      try {
+        await sendMail({ to: userEmail, subject, html });
+        console.log('✅ Pickup OTP email sent successfully to:', userEmail);
+      } catch (err) {
+        console.error('❌ Failed to send pickup OTP email:', err);
+      }
+
       return res.json({
         success: true,
-        message: 'Check-out OTP generated',
-        data: { application, checkOutOtp }
+        message: `Pickup OTP sent to ${userEmail}. User must pay final bill before pickup.`,
+        data: { application, checkOutOtp, emailSent: userEmail }
       });
     }
 
     // Verify OTP if provided
     if (application.checkOut.otp && application.checkOut.otp !== otp) {
       return res.status(400).json({ success: false, message: 'Invalid check-out OTP' });
+    }
+
+    // NOW verify final payment before completing checkout
+    if (application.finalBill && application.finalBill.finalAmountDue > 0) {
+      if (application.paymentStatus.final.status !== 'completed') {
+        return res.status(400).json({
+          success: false,
+          message: 'Final payment must be completed before completing check-out. Please ask user to pay the final bill first.'
+        });
+      }
     }
 
     // Mark as completed
@@ -774,41 +901,37 @@ const recordCheckOut = async (req, res) => {
 
     await application.save();
 
-    // Update pets' status back to "with user" after checkout
-    const PetRegistry = require('../../../../core/models/PetRegistry');
+    // Clear temporary care status from all pet collections
     const Pet = require('../../../../core/models/Pet');
     const AdoptionPet = require('../../../adoption/manager/models/AdoptionPet');
-    
-    for (const petEntry of application.pets) {
-      let pet = await Pet.findOne({ petCode: petEntry.petId });
-      if (!pet) {
-        pet = await AdoptionPet.findOne({ petCode: petEntry.petId });
-      }
+    const PetInventoryItem = require('../../../petshop/manager/models/PetInventoryItem');
 
-      if (pet) {
-        // Clear temporary care status
-        pet.temporaryCareStatus = {
-          inCare: false,
-          applicationId: null,
-          centerId: null,
-          startDate: null,
-          endDate: new Date()
-        };
-        
-        // Update pet's current status back to "with user"
-        pet.currentStatus = 'with user';
-        
-        await pet.save();
-        
-        // Also update in PetRegistry
-        await PetRegistry.findOneAndUpdate(
-          { petCode: petEntry.petId },
-          { 
-            currentStatus: 'with user',
-            currentLocation: 'With Owner'
-          }
-        );
-      }
+    for (const pet of application.pets) {
+      const petCode = pet.petId;
+
+      // Clear status in Pet collection
+      await Pet.updateMany(
+        { petCode: petCode },
+        {
+          $unset: { temporaryCareStatus: "" }
+        }
+      );
+
+      // Clear status in AdoptionPet collection
+      await AdoptionPet.updateMany(
+        { petCode: petCode },
+        {
+          $unset: { temporaryCareStatus: "" }
+        }
+      );
+
+      // Clear status in PetInventoryItem collection
+      await PetInventoryItem.updateMany(
+        { petCode: petCode },
+        {
+          $unset: { temporaryCareStatus: "" }
+        }
+      );
     }
 
     res.json({
@@ -956,7 +1079,7 @@ const generateHandoverOTP = async (req, res) => {
     const userEmail = application.userId.email;
     const userName = application.userId.name || 'User';
     const centerName = application.centerId?.name || 'Temporary Care Center';
-    
+
     const subject = `🐾 Pet Handover OTP - ${otp}`;
     const html = `<div style="font-family:Inter,Segoe UI,Arial,sans-serif;background:#0b0f1a;padding:24px;color:#e6e9ef;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);border-radius:16px;overflow:hidden;">
@@ -1063,7 +1186,7 @@ const verifyHandoverOTP = async (req, res) => {
 
     // Update pets' temporary care status AND currentStatus
     const PetRegistry = require('../../../../core/models/PetRegistry');
-    
+
     for (const petEntry of application.pets) {
       let pet = await Pet.findOne({ petCode: petEntry.petId });
       if (!pet) {
@@ -1078,16 +1201,16 @@ const verifyHandoverOTP = async (req, res) => {
           centerId: application.centerId,
           startDate: new Date()
         };
-        
+
         // Update pet's current status to "in care"
         pet.currentStatus = 'in care';
-        
+
         await pet.save();
-        
+
         // Also update in PetRegistry for consistency
         await PetRegistry.findOneAndUpdate(
           { petCode: petEntry.petId },
-          { 
+          {
             currentStatus: 'in care',
             currentLocation: `Temporary Care - ${center.centerName || 'Care Center'}`
           }

@@ -87,6 +87,27 @@ const approveApplication = async (req, res) => {
     application.approvalNotes = approvalNotes;
     application.addStatusHistory('approved', req.user._id, approvalNotes);
     await application.save();
+    
+    // Blockchain: Log application approval
+    try {
+      const pet = await PetInventoryItem.findById(application.petInventoryItemId);
+      if (pet) {
+        await petshopBlockchainService.addBlock('APPLICATION_APPROVED', {
+          petId: pet._id,
+          petCode: pet.petCode,
+          applicationId: application._id,
+          userId: application.userId,
+          approvedBy: req.user._id,
+          previousStatus: 'pending',
+          newStatus: 'approved',
+          price: application.paymentAmount,
+          approvalNotes
+        });
+        console.log(`🔗 Blockchain: Application approved for ${pet.petCode}`);
+      }
+    } catch (blockchainErr) {
+      console.warn('⚠️  Blockchain logging failed:', blockchainErr.message);
+    }
 
     // TODO: Send approval email with payment link
 
@@ -136,6 +157,26 @@ const rejectApplication = async (req, res) => {
     application.rejectionReason = rejectionReason;
     application.addStatusHistory('rejected', req.user._id, rejectionReason);
     await application.save();
+    
+    // Blockchain: Log application rejection
+    try {
+      const pet = await PetInventoryItem.findById(application.petInventoryItemId);
+      if (pet) {
+        await petshopBlockchainService.addBlock('APPLICATION_REJECTED', {
+          petId: pet._id,
+          petCode: pet.petCode,
+          applicationId: application._id,
+          userId: application.userId,
+          rejectedBy: req.user._id,
+          previousStatus: 'pending',
+          newStatus: 'rejected',
+          rejectionReason
+        });
+        console.log(`🔗 Blockchain: Application rejected for ${pet.petCode}`);
+      }
+    } catch (blockchainErr) {
+      console.warn('⚠️  Blockchain logging failed:', blockchainErr.message);
+    }
 
     // TODO: Send rejection email
 
@@ -184,6 +225,28 @@ const scheduleHandover = async (req, res) => {
     application.handoverLocation = handoverLocation || 'Pet Shop';
     application.addStatusHistory('scheduled', req.user._id, `Handover scheduled for ${scheduledDate} ${scheduledTime}`);
     await application.save();
+    
+    // Blockchain: Log scheduling
+    try {
+      const pet = await PetInventoryItem.findById(application.petInventoryItemId);
+      if (pet) {
+        await petshopBlockchainService.addBlock('HANDOVER_SCHEDULED', {
+          petId: pet._id,
+          petCode: pet.petCode,
+          applicationId: application._id,
+          userId: application.userId,
+          scheduledBy: req.user._id,
+          scheduledDate: new Date(scheduledDate),
+          scheduledTime,
+          handoverLocation,
+          previousStatus: 'paid',
+          newStatus: 'scheduled'
+        });
+        console.log(`🔗 Blockchain: Handover scheduled for ${pet.petCode}`);
+      }
+    } catch (blockchainErr) {
+      console.warn('⚠️  Blockchain logging failed:', blockchainErr.message);
+    }
 
     // Send OTP email to user
     let emailSent = false;

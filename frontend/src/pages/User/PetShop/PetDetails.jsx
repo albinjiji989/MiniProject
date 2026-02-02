@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Box, Container, Typography, Grid, Card, CardContent, CardMedia, Chip, Button, CircularProgress, Alert, TextField, Rating, Divider, Stack } from '@mui/material'
 import { petShopAPI, apiClient, resolveMediaUrl, blockchainAPI } from '../../../services/api'
 import { Pets as PetsIcon, ArrowBack as BackIcon } from '@mui/icons-material'
+import BlockchainVerificationBadge from '../../../components/Blockchain/BlockchainVerificationBadge'
 
 const PetDetails = () => {
   const { id } = useParams()
@@ -177,6 +178,13 @@ const PetDetails = () => {
           </CardMedia>
         )}
         <CardContent>
+          {/* Blockchain Verification Badge - NEW COMPONENT */}
+          {item.petCode && (
+            <Box sx={{ mb: 3 }}>
+              <BlockchainVerificationBadge petCode={item.petCode} />
+            </Box>
+          )}
+          
           {/* Blockchain status and event history */}
           <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Blockchain Verification</Typography>

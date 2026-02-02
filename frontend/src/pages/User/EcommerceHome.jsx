@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { ChevronRight, Star, TrendingUp, Zap } from 'lucide-react';
+import AIRecommendations from '../../modules/ecommerce/components/AIRecommendations';
 
 /**
  * User Ecommerce Home - Flipkart Style
@@ -71,72 +72,10 @@ const EcommerceHome = () => {
                 </div>
             </div>
 
-            {/* AI Features Section */}
-            <div className="bg-gradient-to-r from-purple-50 to-blue-50 py-12">
+            {/* AI-Powered Recommendations */}
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 py-12">
                 <div className="max-w-7xl mx-auto px-4">
-                    <div className="flex items-center gap-3 mb-6">
-                        <Sparkles className="w-8 h-8 text-purple-600" />
-                        <h2 className="text-2xl font-bold text-gray-900">AI-Powered Shopping</h2>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {/* Visual Search */}
-                        <Link
-                            to="/user/ecommerce/visual-search"
-                            className="bg-white rounded-lg p-6 hover:shadow-xl transition-shadow border-2 border-transparent hover:border-purple-300"
-                        >
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                                    <Camera className="w-6 h-6 text-purple-600" />
-                                </div>
-                                <h3 className="text-lg font-bold text-gray-900">Visual Search</h3>
-                            </div>
-                            <p className="text-gray-600 mb-4">
-                                Upload a photo to find similar products instantly
-                            </p>
-                            <div className="flex items-center text-purple-600 font-semibold">
-                                Try it now <ChevronRight className="w-4 h-4 ml-1" />
-                            </div>
-                        </Link>
-
-                        {/* Bundle Generator */}
-                        <Link
-                            to="/user/ecommerce/bundle-generator"
-                            className="bg-white rounded-lg p-6 hover:shadow-xl transition-shadow border-2 border-transparent hover:border-blue-300"
-                        >
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                                    <Gift className="w-6 h-6 text-blue-600" />
-                                </div>
-                                <h3 className="text-lg font-bold text-gray-900">Bundle Generator</h3>
-                            </div>
-                            <p className="text-gray-600 mb-4">
-                                Get personalized starter kits for your pet
-                            </p>
-                            <div className="flex items-center text-blue-600 font-semibold">
-                                Create bundle <ChevronRight className="w-4 h-4 ml-1" />
-                            </div>
-                        </Link>
-
-                        {/* Smart Search */}
-                        <Link
-                            to="/user/ecommerce/smart-search"
-                            className="bg-white rounded-lg p-6 hover:shadow-xl transition-shadow border-2 border-transparent hover:border-indigo-300"
-                        >
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                                    <Brain className="w-6 h-6 text-indigo-600" />
-                                </div>
-                                <h3 className="text-lg font-bold text-gray-900">Smart Search</h3>
-                            </div>
-                            <p className="text-gray-600 mb-4">
-                                Search using natural language - AI understands you
-                            </p>
-                            <div className="flex items-center text-indigo-600 font-semibold">
-                                Search now <ChevronRight className="w-4 h-4 ml-1" />
-                            </div>
-                        </Link>
-                    </div>
+                    <AIRecommendations />
                 </div>
             </div>
 
@@ -190,6 +129,13 @@ const EcommerceHome = () => {
                     </div>
                 </div>
             )}
+
+            {/* AI-Powered Recommendations */}
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 py-12">
+                <div className="max-w-7xl mx-auto px-4">
+                    <AIRecommendations />
+                </div>
+            </div>
 
             {/* Featured Products */}
             {featuredProducts.length > 0 ? (

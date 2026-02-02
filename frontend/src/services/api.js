@@ -665,6 +665,44 @@ export const veterinaryAPI = {
   
   // User medical records
   userListMedicalRecordsForPet: (petId) => api.get(`/veterinary/user/pets/${petId}/medical-records`),
+  
+  // ============ INVENTORY MANAGEMENT ============
+  managerGetInventory: (params) => api.get('/veterinary/manager/inventory', { params }),
+  managerGetInventoryItem: (id) => api.get(`/veterinary/manager/inventory/${id}`),
+  managerCreateInventoryItem: (payload) => api.post('/veterinary/manager/inventory', payload),
+  managerUpdateInventoryItem: (id, payload) => api.put(`/veterinary/manager/inventory/${id}`, payload),
+  managerDeleteInventoryItem: (id) => api.delete(`/veterinary/manager/inventory/${id}`),
+  managerAdjustInventoryStock: (id, payload) => api.post(`/veterinary/manager/inventory/${id}/adjust`, payload),
+  managerGetInventoryAlerts: () => api.get('/veterinary/manager/inventory/alerts'),
+  managerGetInventoryStats: () => api.get('/veterinary/manager/inventory/stats'),
+  managerGetInventoryTransactions: (params) => api.get('/veterinary/manager/inventory/transactions', { params }),
+  
+  // ============ VACCINATION SCHEDULES ============
+  managerGetVaccinations: (params) => api.get('/veterinary/manager/vaccinations', { params }),
+  managerGetVaccination: (id) => api.get(`/veterinary/manager/vaccinations/${id}`),
+  managerCreateVaccination: (payload) => api.post('/veterinary/manager/vaccinations', payload),
+  managerUpdateVaccination: (id, payload) => api.put(`/veterinary/manager/vaccinations/${id}`, payload),
+  managerDeleteVaccination: (id) => api.delete(`/veterinary/manager/vaccinations/${id}`),
+  managerCompleteVaccination: (id, payload) => api.post(`/veterinary/manager/vaccinations/${id}/complete`, payload),
+  managerGetDueVaccinations: () => api.get('/veterinary/manager/vaccinations/due'),
+  managerGetVaccinationStats: () => api.get('/veterinary/manager/vaccinations/stats'),
+  
+  // ============ EXPENSE MANAGEMENT ============
+  managerGetExpenses: (params) => api.get('/veterinary/manager/expenses', { params }),
+  managerGetExpense: (id) => api.get(`/veterinary/manager/expenses/${id}`),
+  managerCreateExpense: (payload) => api.post('/veterinary/manager/expenses', payload),
+  managerUpdateExpense: (id, payload) => api.put(`/veterinary/manager/expenses/${id}`, payload),
+  managerDeleteExpense: (id) => api.delete(`/veterinary/manager/expenses/${id}`),
+  managerMarkExpenseAsPaid: (id, payload) => api.post(`/veterinary/manager/expenses/${id}/pay`, payload),
+  managerGetExpenseStats: (params) => api.get('/veterinary/manager/expenses/stats', { params }),
+  
+  // ============ REPORTS & ANALYTICS ============
+  managerGetFinancialReport: (params) => api.get('/veterinary/manager/reports/financial', { params }),
+  managerGetAppointmentAnalytics: (params) => api.get('/veterinary/manager/reports/appointments', { params }),
+  managerGetPatientAnalytics: (params) => api.get('/veterinary/manager/reports/patients', { params }),
+  managerGetInventoryReport: () => api.get('/veterinary/manager/reports/inventory'),
+  managerGetStaffPerformanceReport: (params) => api.get('/veterinary/manager/reports/staff-performance', { params }),
+  managerGetDashboardReport: () => api.get('/veterinary/manager/reports/dashboard'),
 }
 
 // Pet System APIs

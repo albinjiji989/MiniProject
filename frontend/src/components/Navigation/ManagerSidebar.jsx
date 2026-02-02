@@ -32,7 +32,9 @@ import {
   ExpandLess,
   ExpandMore,
   ChevronLeft as ChevronLeftIcon,
-  ShoppingCart
+  ShoppingCart,
+  People as StaffIcon,
+  Analytics as AnalyticsIcon
 } from '@mui/icons-material'
 import { useNavigate, useLocation } from 'react-router-dom'
 
@@ -181,8 +183,8 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
         {
           title: 'Dashboard',
           icon: <DashboardIcon />,
-          path: '/manager/dashboard',
-          active: location.pathname === '/manager/dashboard'
+          path: '/manager/temporary-care/dashboard',
+          active: location.pathname === '/manager/temporary-care/dashboard'
         },
         {
           title: 'Bookings',
@@ -195,12 +197,6 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
           icon: <StoreIcon />,
           path: '/manager/temporary-care/facilities',
           active: location.pathname.includes('/facilities')
-        },
-        {
-          title: 'Caregivers',
-          icon: <StaffIcon />,
-          path: '/manager/temporary-care/caregivers',
-          active: location.pathname.includes('/caregivers')
         },
         {
           title: 'Pets in Care',

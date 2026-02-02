@@ -3,6 +3,7 @@ const PetInventoryItem = require('../../manager/models/PetInventoryItem');
 const Image = require('../../../../core/models/Image');
 const Document = require('../../../../core/models/Document');
 const cloudinary = require('cloudinary').v2;
+const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
 
 // Configure Cloudinary
 cloudinary.config({
@@ -186,6 +187,22 @@ const submitPurchaseApplication = async (req, res) => {
     petItem.reservedBy = req.user._id;
     petItem.reservedDate = new Date();
     await petItem.save();
+    
+    // Blockchain: Log purchase application (reservation)
+    try {
+      await petshopBlockchainService.addBlock('pet_reserved', {
+        petId: petItem._id,
+        petCode: petItem.petCode,
+        userId: req.user._id,
+        price: petItem.price,
+        applicationId: application._id,
+        previousStatus: 'available_for_sale',
+        newStatus: 'reserved'
+      });
+      console.log(`🔗 Blockchain: Purchase application logged for ${petItem.petCode}`);
+    } catch (blockchainErr) {
+      console.warn('⚠️  Blockchain logging failed:', blockchainErr.message);
+    }
 
     // Update stock available count
     const PetStock = require('../../manager/models/PetStock');

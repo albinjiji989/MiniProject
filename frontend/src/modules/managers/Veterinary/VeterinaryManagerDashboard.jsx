@@ -11,7 +11,12 @@ import {
   IconButton,
   Chip,
   CircularProgress,
-  Alert
+  Alert,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody
 } from '@mui/material'
 import {
   Schedule as ScheduleIcon,
@@ -27,6 +32,7 @@ import {
 import { veterinaryAPI } from '../../../services/api'
 import StoreNameSetupDialog from '../../../components/Manager/StoreNameSetupDialog'
 import { useAuth } from '../../../contexts/AuthContext'
+import { format } from 'date-fns'
 
 const VeterinaryManagerDashboard = () => {
   const navigate = useNavigate()
@@ -285,10 +291,28 @@ const VeterinaryManagerDashboard = () => {
       <Card>
         <CardContent>
           {stats?.recentAppointments?.length > 0 ? (
-            <Box>
-              {/* Appointment list will go here */}
-              <Typography color="text.secondary">Recent appointments will appear here</Typography>
-            </Box>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Pet</TableCell>
+                  <TableCell>Owner</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Status</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {stats.recentAppointments.map((apt) => (
+                  <TableRow key={apt._id}>
+                    <TableCell>{apt.petId?.name || 'N/A'}</TableCell>
+                    <TableCell>{apt.ownerId?.name || 'N/A'}</TableCell>
+                    <TableCell>{format(new Date(apt.appointmentDate), 'MMM dd, yyyy')}</TableCell>
+                    <TableCell>
+                      <Chip label={apt.status} size="small" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           ) : (
             <Typography color="text.secondary" textAlign="center" py={4}>
               No recent appointments

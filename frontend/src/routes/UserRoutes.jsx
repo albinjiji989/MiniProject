@@ -80,6 +80,7 @@ import VeterinaryUserBookingForm from '../pages/User/Veterinary/VeterinaryBookAp
 import VeterinaryUserBookingDetails from '../pages/User/Veterinary/SimpleVeterinaryAppointmentDetails'
 import VeterinaryUserMedicalRecords from '../pages/User/Veterinary/VeterinaryMedicalRecords'
 import VeterinaryUserPrescriptions from '../pages/User/Veterinary/Veterinary'
+import VeterinaryUserPetSelection from '../pages/User/Veterinary/SimpleVeterinaryPetSelection'
 import PublicUserDashboard from '../pages/User/PublicUserDashboard'
 
 import { useAuth } from '../contexts/AuthContext'
@@ -134,6 +135,7 @@ const UserRoutes = () => {
         <Route path="/veterinary/*" element={
           <Routes>
             <Route path="/dashboard" element={<VeterinaryUserDashboard />} />
+            <Route path="/select-pet" element={<VeterinaryUserPetSelection />} />
             <Route path="/appointments" element={<VeterinaryUserAppointments />} />
             <Route path="/appointments/schedule" element={<VeterinaryUserSchedule />} />
             <Route path="/appointments/book" element={<VeterinaryUserBooking />} />

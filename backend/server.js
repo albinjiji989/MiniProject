@@ -114,6 +114,8 @@ app.use('/api/pet-audit', require('./core/routes/petAuditRoutes'));
 app.use('/api/adoption', require('./modules/adoption/routes'));
 app.use('/api/petshop/manager', require('./modules/petshop/manager/routes/petshopManagerRoutes'));
 app.use('/api/petshop/user', require('./modules/petshop/user/routes/petshopUserRoutes'));
+// PetShop Blockchain Routes (NEW - Safe Addition with SHA-256)
+app.use('/api/petshop/blockchain', require('./modules/petshop/core/routes/petshopBlockchainRoutes'));
 app.use('/api/temporary-care', require('./modules/temporary-care/routes'));
 app.use('/api/veterinary', require('./modules/veterinary/routes'));
 app.use('/api/pharmacy', require('./modules/pharmacy/routes'));

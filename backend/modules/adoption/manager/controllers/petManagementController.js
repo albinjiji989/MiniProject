@@ -147,7 +147,8 @@ const getManagerPets = async (req, res) => {
       } else if (sortBy === 'breed') {
         sortObj = { breed: sortDirection };
       } else if (sortBy === 'age') {
-        sortObj = { age: sortDirection };
+        // Sort by dateOfBirth instead (inverse direction since older DOB = older pet)
+        sortObj = { dateOfBirth: sortDirection === 1 ? -1 : 1 };
       }
     }
     
@@ -1112,12 +1113,13 @@ const importPetsCSV = async (req, res) => {
         // gender is required
         const gender = normalize(row, 'gender');
         if (!gender) missingFields.push('gender');
-        // age is required
+        // age OR dateOfBirth is required
         const age = normalize(row, 'age');
-        if (!age) missingFields.push('age');
-        // ageUnit is required
+        const dateOfBirth = normalize(row, 'dateOfBirth');
+        if (!age && !dateOfBirth) missingFields.push('age or dateOfBirth');
+        // ageUnit is required if age is provided
         const ageUnit = normalize(row, 'ageUnit');
-        if (!ageUnit) missingFields.push('ageUnit');
+        if (age && !ageUnit) missingFields.push('ageUnit (required when age is provided)');
         // weight is required
         const weight = normalize(row, 'weight');
         if (!weight) missingFields.push('weight');
@@ -1171,50 +1173,66 @@ const importPetsCSV = async (req, res) => {
         // Color handling (OPTIONAL)
         processedData.color = normalize(row, 'color') || 'unknown';
 
-        // Age handling (REQUIRED)
-        const ageValue = normalize(row, 'age');
-        if (ageValue) {
-          const ageNum = Number(ageValue);
-          if (!isNaN(ageNum) && ageNum >= 0) {
-            processedData.age = ageNum;
+        // Date of Birth handling - either direct DOB or convert from age+ageUnit
+        const dobValue = normalize(row, 'dateOfBirth');
+        if (dobValue) {
+          // Direct DOB provided
+          const dob = new Date(dobValue);
+          if (!isNaN(dob.getTime())) {
+            processedData.dateOfBirth = dob;
+            processedData.dobAccuracy = 'exact';
           } else {
             results.failed.push({
               row: rowNumber,
               data: row,
-              reason: `Invalid age value: ${ageValue}. Must be a positive number`
+              reason: `Invalid date of birth: ${dobValue}`
             });
             continue;
           }
         } else {
-          results.failed.push({
-            row: rowNumber,
-            data: row,
-            reason: 'Age is required'
-          });
-          continue;
-        }
-
-        // Age unit handling (REQUIRED)
-        const ageUnitValue = normalize(row, 'ageUnit');
-        if (ageUnitValue) {
-          const ageUnitLower = ageUnitValue.toLowerCase();
-          if (['months', 'years', 'weeks', 'days'].includes(ageUnitLower)) {
-            processedData.ageUnit = ageUnitLower;
-          } else {
-            results.failed.push({
-              row: rowNumber,
-              data: row,
-              reason: `Invalid age unit: ${ageUnitValue}. Must be 'months', 'years', 'weeks', or 'days'`
-            });
-            continue;
+          // Convert age+ageUnit to estimated DOB
+          const ageValue = normalize(row, 'age');
+          const ageUnitValue = normalize(row, 'ageUnit');
+          
+          if (ageValue) {
+            const ageNum = Number(ageValue);
+            if (!isNaN(ageNum) && ageNum >= 0) {
+              // Validate age unit
+              if (ageUnitValue) {
+                const ageUnitLower = ageUnitValue.toLowerCase();
+                if (['months', 'years', 'weeks', 'days'].includes(ageUnitLower)) {
+                  // Convert to DOB
+                  const ageCalc = require('../../../../core/utils/ageCalculator');
+                  const estimatedDOB = ageCalc.convertAgeToDOB(ageNum, ageUnitLower);
+                  if (estimatedDOB) {
+                    processedData.dateOfBirth = estimatedDOB;
+                    processedData.dobAccuracy = 'estimated';
+                  }
+                } else {
+                  results.failed.push({
+                    row: rowNumber,
+                    data: row,
+                    reason: `Invalid age unit: ${ageUnitValue}. Must be 'months', 'years', 'weeks', or 'days'`
+                  });
+                  continue;
+                }
+              } else {
+                results.failed.push({
+                  row: rowNumber,
+                  data: row,
+                  reason: 'Age unit is required when age is provided'
+                });
+                continue;
+              }
+            } else {
+              results.failed.push({
+                row: rowNumber,
+                data: row,
+                reason: `Invalid age value: ${ageValue}. Must be a positive number`
+              });
+              continue;
+            }
           }
-        } else {
-          results.failed.push({
-            row: rowNumber,
-            data: row,
-            reason: 'Age unit is required'
-          });
-          continue;
         }
 
         // Vaccination status handling (OPTIONAL)
@@ -1432,6 +1450,7 @@ const downloadCSVPetTemplate = (req, res) => {
       'color',
       'age',
       'ageUnit',
+      'dateOfBirth',
       'vaccinationStatus',
       'weight',
       'healthStatus',
@@ -1440,8 +1459,13 @@ const downloadCSVPetTemplate = (req, res) => {
       'adoptionFee'
     ];
     
+    // Add comment explaining new DOB-based system
+    const comment = '# NOTE: Provide either (age + ageUnit) OR dateOfBirth. If dateOfBirth is provided, age/ageUnit will be ignored.\n';
+    const exampleRow = '# Example: Labrador,Dog,Companion Animals,Buddy,male,golden,6,months,,up_to_date,25,healthy,friendly,Friendly dog,100\n';
+    const exampleDOBRow = '# Example with DOB: Labrador,Dog,Companion Animals,Max,male,brown,,,2023-06-15,up_to_date,30,healthy,calm,Calm dog,150\n';
+    
     // Create CSV content with headers only
-    const csvContent = headers.join(',') + '\n';
+    const csvContent = comment + exampleRow + exampleDOBRow + headers.join(',') + '\n';
     
     // Set headers for file download
     res.setHeader('Content-Type', 'text/csv');

@@ -8,6 +8,7 @@ const reportingController = require('../controllers/reportingController');
 const storeController = require('../controllers/storeController');
 const { auth } = require('../../../../core/middleware/auth');
 const { authorize } = require('../../../../core/middleware/role');
+const { convertAgeToDOB } = require('../../../../core/middleware/ageConversion');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -19,7 +20,7 @@ router.put('/me/store', auth, authorize('adoption_manager'), storeController.upd
 router.get('/pets', auth, authorize('adoption_manager'), petManagementController.getManagerPets);
 router.get('/pets/download-template', auth, authorize('adoption_manager'), petManagementController.downloadCSVPetTemplate);
 router.get('/pets/:id', auth, authorize('adoption_manager'), petManagementController.getPetById);
-router.put('/pets/:id', auth, authorize('adoption_manager'), petManagementController.updatePet);
+router.put('/pets/:id', auth, authorize('adoption_manager'), convertAgeToDOB, petManagementController.updatePet);
 router.get('/pets/:id/media', auth, authorize('adoption_manager'), petManagementController.getPetMedia);
 router.get('/reports', auth, authorize('adoption_manager'), reportingController.getManagerReports);
 
@@ -35,7 +36,7 @@ router.post('/pets/publish', auth, authorize('adoption_manager'), petManagementC
 
 // REST aliases per specification
 // POST /adoption/pets → Add pet for adoption (Manager)
-router.post('/pets', auth, authorize('adoption_manager'), petManagementController.createPet);
+router.post('/pets', auth, authorize('adoption_manager'), convertAgeToDOB, petManagementController.createPet);
 // DELETE /adoption/pets/:id → Delete pet (Manager) - Hard delete by default
 router.delete('/pets/:id', auth, authorize('adoption_manager'), petManagementController.deletePet);
 // Soft delete endpoint

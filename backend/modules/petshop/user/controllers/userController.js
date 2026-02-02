@@ -314,7 +314,8 @@ const getUserPurchasedPets = async (req, res) => {
         currentStatus: itemData.status || 'purchased',
         source: 'petshop',
         sourceLabel: 'Purchased from Pet Shop',
-        acquiredDate: r.updatedAt
+        acquiredDate: r.updatedAt,
+        temporaryCareStatus: itemData.temporaryCareStatus // Add temporary care status
       };
       
       console.log('Adding pet to map:', petData.petCode, 'with', petData.images?.length || 0, 'images');
@@ -381,7 +382,8 @@ const getUserPurchasedPets = async (req, res) => {
         currentStatus: registryPet.currentStatus || 'purchased',
         source: 'petshop',
         sourceLabel: 'Purchased from Pet Shop',
-        acquiredDate: registryPet.lastTransferAt || registryPet.createdAt
+        acquiredDate: registryPet.lastTransferAt || registryPet.createdAt,
+        temporaryCareStatus: itemData.temporaryCareStatus // Add temporary care status
       };
       
       console.log('Registry pet data:', petData.petCode, 'has', petData.images?.length || 0, 'images');

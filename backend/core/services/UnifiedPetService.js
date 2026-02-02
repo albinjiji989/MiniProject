@@ -51,8 +51,8 @@ class UnifiedPetService {
     currentLocation,
     currentStatus,
     gender,
-    age,
-    ageUnit,
+    dateOfBirth,
+    dobAccuracy,
     color,
     sourceReferences = {},
     actorUserId
@@ -73,8 +73,8 @@ class UnifiedPetService {
         firstAddedSource,
         firstAddedBy,
         gender,
-        age,
-        ageUnit,
+        dateOfBirth,
+        dobAccuracy,
         color,
         createdBy: actorUserId,
         updatedBy: actorUserId,
@@ -387,7 +387,7 @@ class UnifiedPetService {
         ageRange: {
           min: stock.age || 0,
           max: stock.age || (stock.age || 12),
-          unit: stock.ageUnit || 'months'
+          unit: 'months'
         },
         counts: batchCounts,
         samplePets: [],
@@ -431,8 +431,8 @@ class UnifiedPetService {
           speciesId: stock.speciesId,
           breedId: stock.breedId,
           gender: 'Male',
-          age: stock.age,
-          ageUnit: stock.ageUnit,
+          dateOfBirth: stock.dateOfBirth,
+          dobAccuracy: stock.dobAccuracy,
           color: stock.color,
           size: stock.size,
           price: stock.price,
@@ -464,8 +464,8 @@ class UnifiedPetService {
           currentLocation: 'at_petshop',
           currentStatus: pet.status || 'available_for_sale',
           gender: pet.gender,
-          age: pet.age,
-          ageUnit: pet.ageUnit,
+          dateOfBirth: pet.dateOfBirth,
+          dobAccuracy: pet.dobAccuracy,
           color: pet.color,
           sourceReferences: {
             petShopItemId: pet._id
@@ -513,8 +513,8 @@ class UnifiedPetService {
           speciesId: stock.speciesId,
           breedId: stock.breedId,
           gender: 'Female',
-          age: stock.age,
-          ageUnit: stock.ageUnit,
+          dateOfBirth: stock.dateOfBirth,
+          dobAccuracy: stock.dobAccuracy,
           color: stock.color,
           size: stock.size,
           price: stock.price,
@@ -546,8 +546,8 @@ class UnifiedPetService {
           currentLocation: 'at_petshop',
           currentStatus: pet.status || 'available_for_sale',
           gender: pet.gender,
-          age: pet.age,
-          ageUnit: pet.ageUnit,
+          dateOfBirth: pet.dateOfBirth,
+          dobAccuracy: pet.dobAccuracy,
           color: pet.color,
           sourceReferences: {
             petShopItemId: pet._id

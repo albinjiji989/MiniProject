@@ -337,7 +337,8 @@ const MyOwnedPets = () => {
             top: 8, 
             left: 8, 
             zIndex: 1,
-            bgcolor: pet.source === 'core' ? 'success.main' : 
+            bgcolor: pet.temporaryCareStatus?.inCare ? 'error.main' :
+                    pet.source === 'core' ? 'success.main' : 
                     pet.source === 'petshop' ? 'primary.main' : 
                     pet.source === 'adoption' ? 'warning.main' : 'grey.500',
             color: 'white',
@@ -348,7 +349,8 @@ const MyOwnedPets = () => {
             fontWeight: 'bold'
           }}
         >
-          {pet.source === 'core' ? 'USER ADDED' : 
+          {pet.temporaryCareStatus?.inCare ? 'IN TEMPORARY CARE' :
+           pet.source === 'core' ? 'USER ADDED' : 
            pet.source === 'petshop' ? 'PET SHOP' : 
            pet.source === 'adoption' ? 'ADOPTION' : 
            pet.source?.toUpperCase()}

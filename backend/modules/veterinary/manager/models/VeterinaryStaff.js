@@ -1,16 +1,6 @@
-const mongoose = require('mongoose');
+// This file re-exports the main VeterinaryStaff model to avoid duplication
+// All veterinary staff should use the same model regardless of who creates them
 
-const veterinaryStaffSchema = new mongoose.Schema({
-  name: { type: String, required: true, trim: true },
-  email: { type: String, required: true, lowercase: true, trim: true },
-  phone: { type: String, required: true, trim: true },
-  role: { type: String, enum: ['doctor', 'nurse', 'assistant', 'reception'], default: 'assistant' },
-  storeId: { type: String, required: true, index: true },
-  storeName: { type: String, default: '' },
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  isActive: { type: Boolean, default: true }
-}, { timestamps: true });
+const VeterinaryStaff = require('../../models/VeterinaryStaff');
 
-module.exports = mongoose.model('VeterinaryStaff', veterinaryStaffSchema);
-
-
+module.exports = VeterinaryStaff;
