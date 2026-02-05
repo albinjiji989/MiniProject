@@ -71,71 +71,82 @@ class InventoryDataProcessor:
             if variant_id:
                 item_match['items.variant'] = variant_id
             
-            # Aggregate sales from orders collection
-            pipeline = [
-                {
-                    '$match': {
-                        'createdAt': {'$gte': start_date, '$lte': end_date},
-                        'status': {'$in': ['confirmed', 'processing', 'packed', 'shipped', 'delivered']}
-                    }
-                },
-                {'$unwind': '$items'},
-                {'$match': item_match},
-                {
-                    '$group': {
-                        '_id': {
-                            '$dateToString': {
-                                'format': '%Y-%m-%d',
-                                'date': '$createdAt'
-                            }
-                        },
-                        'units_sold': {'$sum': '$items.quantity'},
-                        'revenue': {'$sum': '$items.total'},
-                        'orders_count': {'$sum': 1},
-                        'avg_price': {'$avg': '$items.price'}
-                    }
-                },
-                {'$sort': {'_id': 1}}
-            ]
+            # Fetch orders directly (MongoDB Atlas compatible - avoid complex aggregation)
+            orders = list(self.db.orders.find({
+                'createdAt': {'$gte': start_date, '$lte': end_date},
+                'status': {'$in': ['confirmed', 'processing', 'packed', 'shipped', 'delivered']},
+                'items.product': product_id
+            }, {
+                'createdAt': 1,
+                'items': 1
+            }))
             
-            results = list(self.db.orders.aggregate(pipeline))
+            # Process in Python to extract matching items
+            results = []
+            for order in orders:
+                for item in order.get('items', []):
+                    if item.get('product') == product_id:
+                        if variant_id is None or item.get('variant') == variant_id:
+                            results.append({
+                                'createdAt': order['createdAt'],
+                                'quantity': item.get('quantity', 0),
+                                'total': item.get('total', 0),
+                                'price': item.get('price', 0)
+                            })
             
             # Get returns/refunds data
-            returns_pipeline = [
-                {
-                    '$match': {
-                        'createdAt': {'$gte': start_date, '$lte': end_date},
-                        'status': {'$in': ['returned', 'refunded', 'cancelled']}
-                    }
-                },
-                {'$unwind': '$items'},
-                {'$match': item_match},
-                {
-                    '$group': {
-                        '_id': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$createdAt'}},
-                        'returns_count': {'$sum': '$items.quantity'}
-                    }
-                }
-            ]
-            returns_results = list(self.db.orders.aggregate(returns_pipeline))
+            returns_orders = list(self.db.orders.find({
+                'createdAt': {'$gte': start_date, '$lte': end_date},
+                'status': {'$in': ['returned', 'refunded', 'cancelled']},
+                'items.product': product_id
+            }, {
+                'createdAt': 1,
+                'items': 1
+            }))
             
-            # Convert to DataFrame
+            returns_results = []
+            for order in returns_orders:
+                for item in order.get('items', []):
+                    if item.get('product') == product_id:
+                        if variant_id is None or item.get('variant') == variant_id:
+                            returns_results.append({
+                                'createdAt': order['createdAt'],
+                                'quantity': item.get('quantity', 0)
+                            })
+            
+            # Convert to DataFrame and process dates in Python (Atlas compatible)
             if not results:
                 logger.warning(f"No sales data found for product {product_id}{variant_info}")
                 return self._create_empty_dataframe(start_date, end_date)
             
+            # Create DataFrame from results
             df = pd.DataFrame(results)
-            df.rename(columns={'_id': 'date'}, inplace=True)
+            df['date'] = pd.to_datetime(df['createdAt']).dt.date
+            
+            # Group by date
+            df = df.groupby('date').agg({
+                'quantity': 'sum',
+                'total': 'sum',
+                'price': 'mean'
+            }).reset_index()
+            df.columns = ['date', 'units_sold', 'revenue', 'avg_price']
+            df['orders_count'] = df.groupby('date')['date'].transform('count')
             df['date'] = pd.to_datetime(df['date'])
             
-            # Merge returns data
+            # Process returns data
             if returns_results:
                 returns_df = pd.DataFrame(returns_results)
-                returns_df.rename(columns={'_id': 'date'}, inplace=True)
+                returns_df['date'] = pd.to_datetime(returns_df['createdAt']).dt.date
+                returns_df = returns_df.groupby('date').agg({'quantity': 'sum'}).reset_index()
+                returns_df.columns = ['date', 'returns_count']
                 returns_df['date'] = pd.to_datetime(returns_df['date'])
                 df = df.merge(returns_df, on='date', how='left')
             
-            df['returns_count'] = df.get('returns_count', 0).fillna(0)
+            # Fix: Check if column exists before calling fillna
+            if 'returns_count' not in df.columns:
+                df['returns_count'] = 0
+            else:
+                df['returns_count'] = df['returns_count'].fillna(0)
             df['net_units_sold'] = df['units_sold'] - df['returns_count']
             
             # Fill missing dates with 0 sales
@@ -208,9 +219,9 @@ class InventoryDataProcessor:
                     price = product.get('pricing', {}).get('salePrice') or product.get('pricing', {}).get('basePrice', 0)
                 
                 return {
-                    '_id': product['_id'],
+                    '_id': str(product['_id']),
                     'name': product.get('name', 'Unknown'),
-                    'variant_id': variant_id,
+                    'variant_id': str(variant_id) if variant_id else None,
                     'current_stock': stock,
                     'reserved_stock': reserved,
                     'available_stock': stock - reserved,
@@ -220,7 +231,7 @@ class InventoryDataProcessor:
                     'current_price': price,
                     'discount': product.get('pricing', {}).get('discount', {}),
                     'status': product.get('status', 'unknown'),
-                    'category': product.get('category'),
+                    'category': str(product.get('category')) if product.get('category') else None,
                     'pet_type': product.get('petType', []),
                     'has_variants': product.get('hasVariants', False),
                     'expiry_date': product.get('attributes', {}).get('expiryDate'),
@@ -273,7 +284,7 @@ class InventoryDataProcessor:
             result = []
             for product in products:
                 result.append({
-                    '_id': product['_id'],
+                    '_id': str(product['_id']),  # Convert ObjectId to string
                     'name': product.get('name', 'Unknown'),
                     'current_stock': product.get('inventory', {}).get('stock', 0),
                     'reserved_stock': product.get('inventory', {}).get('reserved', 0),
@@ -285,8 +296,8 @@ class InventoryDataProcessor:
                     'base_price': product.get('pricing', {}).get('basePrice', 0),
                     'cost_price': product.get('pricing', {}).get('costPrice', 0),
                     'status': product.get('status', 'unknown'),
-                    'store_id': product.get('storeId'),
-                    'category': str(product.get('category', '')) if product.get('category') else None,
+                    'store_id': str(product.get('storeId')) if product.get('storeId') else None,  # Convert ObjectId to string
+                    'category': str(product.get('category')) if product.get('category') else None,  # Convert to string
                     'pet_type': product.get('petType', [])
                 })
             
@@ -321,42 +332,38 @@ class InventoryDataProcessor:
             if not products_in_category:
                 return self._create_empty_dataframe(start_date, end_date)
             
-            pipeline = [
-                {
-                    '$match': {
-                        'createdAt': {'$gte': start_date, '$lte': end_date},
-                        'status': {'$in': ['confirmed', 'processing', 'packed', 'shipped', 'delivered']}
-                    }
-                },
-                {'$unwind': '$items'},
-                {
-                    '$match': {
-                        'items.product': {'$in': products_in_category}
-                    }
-                },
-                {
-                    '$group': {
-                        '_id': {
-                            '$dateToString': {
-                                'format': '%Y-%m-%d',
-                                'date': '$createdAt'
-                            }
-                        },
-                        'units_sold': {'$sum': '$items.quantity'},
-                        'revenue': {'$sum': '$items.total'},
-                        'orders_count': {'$sum': 1}
-                    }
-                },
-                {'$sort': {'_id': 1}}
-            ]
+            # MongoDB Atlas compatible - use direct queries
+            orders = list(self.db.orders.find({
+                'createdAt': {'$gte': start_date, '$lte': end_date},
+                'status': {'$in': ['confirmed', 'processing', 'packed', 'shipped', 'delivered']}
+            }, {
+                'createdAt': 1,
+                'items': 1
+            }))
             
-            results = list(self.db.orders.aggregate(pipeline))
+            # Process in Python
+            results = []
+            for order in orders:
+                for item in order.get('items', []):
+                    if item.get('product') in products_in_category:
+                        results.append({
+                            'createdAt': order['createdAt'],
+                            'quantity': item.get('quantity', 0),
+                            'total': item.get('total', 0)
+                        })
             
             if not results:
                 return self._create_empty_dataframe(start_date, end_date)
             
+            # Process dates in Python
             df = pd.DataFrame(results)
-            df.rename(columns={'_id': 'date'}, inplace=True)
+            df['date'] = pd.to_datetime(df['createdAt']).dt.date
+            df = df.groupby('date').agg({
+                'quantity': 'sum',
+                'total': 'sum'
+            }).reset_index()
+            df.columns = ['date', 'units_sold', 'revenue']
+            df['orders_count'] = df.groupby('date')['date'].transform('count')
             df['date'] = pd.to_datetime(df['date'])
             df = self._fill_missing_dates(df, start_date, end_date)
             
@@ -446,15 +453,21 @@ class InventoryDataProcessor:
         })
     
     def _fill_missing_dates(self, df, start_date, end_date):
-        """Fill missing dates with 0 values"""
-        # Create full date range
+        """Fill missing dates with 0 values, preserving existing data"""
+        # Create full date range and normalize to remove time component
         full_range = pd.date_range(start=start_date, end=end_date, freq='D')
+        full_df = pd.DataFrame({'date': full_range})
+        full_df['date'] = pd.to_datetime(full_df['date']).dt.normalize()
         
-        # Set date as index and reindex
-        df = df.set_index('date')
-        df = df.reindex(full_range, fill_value=0)
-        df = df.reset_index()
-        df.rename(columns={'index': 'date'}, inplace=True)
+        # Normalize dates in existing dataframe
+        df['date'] = pd.to_datetime(df['date']).dt.normalize()
+        
+        # Merge with existing data, filling missing dates with 0
+        df = full_df.merge(df, on='date', how='left')
+        
+        # Fill NaN values with 0 for numeric columns
+        numeric_columns = df.select_dtypes(include=['float64', 'int64']).columns
+        df[numeric_columns] = df[numeric_columns].fillna(0)
         
         return df
     
@@ -513,30 +526,37 @@ class InventoryDataProcessor:
                     variant_id = ObjectId(variant_id)
                 item_match['items.variant'] = variant_id
             
-            # Get price from orders (actual selling price)
-            pipeline = [
-                {'$match': {
-                    'createdAt': {'$gte': start_date, '$lte': end_date},
-                    'status': {'$nin': ['cancelled']}
-                }},
-                {'$unwind': '$items'},
-                {'$match': item_match},
-                {'$group': {
-                    '_id': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$createdAt'}},
-                    'avg_price': {'$avg': '$items.price'},
-                    'min_price': {'$min': '$items.price'},
-                    'max_price': {'$max': '$items.price'}
-                }},
-                {'$sort': {'_id': 1}}
-            ]
+            # Get price from orders (MongoDB Atlas compatible)
+            orders = list(self.db.orders.find({
+                'createdAt': {'$gte': start_date, '$lte': end_date},
+                'status': {'$nin': ['cancelled']},
+                'items.product': product_id
+            }, {
+                'createdAt': 1,
+                'items': 1
+            }))
             
-            results = list(self.db.orders.aggregate(pipeline))
+            # Process in Python
+            results = []
+            for order in orders:
+                for item in order.get('items', []):
+                    if item.get('product') == product_id:
+                        if variant_id is None or item.get('variant') == variant_id:
+                            results.append({
+                                'createdAt': order['createdAt'],
+                                'price': item.get('price', 0)
+                            })
             
             if not results:
                 return pd.DataFrame()
             
+            # Process dates in Python
             df = pd.DataFrame(results)
-            df.rename(columns={'_id': 'date'}, inplace=True)
+            df['date'] = pd.to_datetime(df['createdAt']).dt.date
+            df = df.groupby('date').agg({
+                'price': ['mean', 'min', 'max']
+            }).reset_index()
+            df.columns = ['date', 'avg_price', 'min_price', 'max_price']
             df['date'] = pd.to_datetime(df['date'])
             
             # Calculate price change percentage
@@ -654,6 +674,90 @@ class InventoryDataProcessor:
         except Exception as e:
             logger.error(f"Error saving prediction to DB: {str(e)}")
             return False
+    
+    def get_category_average_sales(self, category, pet_type=None, days=30):
+        """
+        Get average sales for products in the same category.
+        Used for AI predictions when product has no sales history.
+        
+        Args:
+            category: Product category
+            pet_type: Optional pet type filter
+            days: Days to look back
+            
+        Returns:
+            dict with category average metrics
+        """
+        try:
+            # Convert category string back to ObjectId for MongoDB query
+            if isinstance(category, str) and category:
+                try:
+                    category = ObjectId(category)
+                except:
+                    pass  # Keep as string if not valid ObjectId
+            
+            # Build query for similar products
+            query = {'category': category, 'status': 'active'}
+            if pet_type:
+                query['petType'] = {'$in': [pet_type]}
+            
+            # Get all products in category
+            category_products = list(self.db.products.find(query, {'_id': 1}))
+            
+            if not category_products:
+                return {'daily_avg': 1.0, 'total_sold': 0, 'products_count': 0}
+            
+            product_ids = [p['_id'] for p in category_products]
+            
+            # Get sales for all category products
+            cutoff_date = datetime.now() - timedelta(days=days)
+            
+            pipeline = [
+                {
+                    '$match': {
+                        'productId': {'$in': product_ids},
+                        'createdAt': {'$gte': cutoff_date}
+                    }
+                },
+                {
+                    '$group': {
+                        '_id': None,
+                        'total_quantity': {'$sum': '$quantity'},
+                        'total_revenue': {'$sum': {'$multiply': ['$quantity', '$unitPrice']}}
+                    }
+                }
+            ]
+            
+            result = list(self.db.purchase_tracking.aggregate(pipeline))
+            
+            if result:
+                total_qty = result[0].get('total_quantity', 0)
+                total_rev = result[0].get('total_revenue', 0)
+                daily_avg = total_qty / days
+                avg_per_product = daily_avg / len(product_ids) if product_ids else 1.0
+                
+                return {
+                    'daily_avg': round(daily_avg, 2),
+                    'daily_avg_per_product': round(max(avg_per_product, 0.5), 2),  # At least 0.5/day
+                    'total_sold': total_qty,
+                    'total_revenue': total_rev,
+                    'products_count': len(product_ids),
+                    'avg_price': total_rev / total_qty if total_qty > 0 else 0
+                }
+            
+            # No sales in category - use conservative estimate
+            return {
+                'daily_avg': 0.5,  # Conservative baseline
+                'daily_avg_per_product': 0.5,
+                'total_sold': 0,
+                'total_revenue': 0,
+                'products_count': len(product_ids),
+                'avg_price': 0
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting category averages: {str(e)}")
+            return {'daily_avg': 1.0, 'daily_avg_per_product': 1.0, 'total_sold': 0, 'products_count': 0}
     
     def close(self):
         """Close database connection"""

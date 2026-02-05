@@ -13,6 +13,8 @@ sentence-transformers==2.2.2  # Pre-trained NLP models for semantic search
 # Time Series & Forecasting (Inventory Prediction)
 prophet==1.1.5  # Facebook Prophet for demand forecasting
 statsmodels==0.14.1  # ARIMA, Holt-Winters exponential smoothing
+xgboost==2.0.3  # Gradient Boosting for demand prediction
+lightgbm==4.1.0  # LightGBM for fast tree-based learning
 
 # Web Framework
 flask==3.0.0

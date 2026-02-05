@@ -90,19 +90,21 @@ exports.getAllPredictions = async (req, res) => {
     const sellerId = req.user.id;
     const { save = false } = req.query;
 
-    console.log(`[Inventory Predictions] Analyzing products for user ${sellerId}`);
+    console.log(`[Inventory Predictions] Analyzing products for user ${sellerId}, storeId: ${storeId}`);
 
     const result = await InventoryMLService.analyzeAllProducts(storeId, save === 'true');
 
     if (result.success) {
-      console.log(`[Inventory Predictions] ML service returned ${result.data?.total_analyzed || 0} products`);
+      console.log(`✅ [Inventory Predictions] ML service SUCCESS - returned ${result.data?.total_analyzed || 0} products`);
       return res.json({
         success: true,
-        data: result.data
+        data: result.data,
+        mlService: true,
+        message: 'Real AI/ML predictions'
       });
     }
 
-    console.log('[Inventory Predictions] ML service unavailable, using fallback');
+    console.log('⚠️ [Inventory Predictions] ML service FAILED:', result.error);
     
     // Fallback: Get products from DB and create mock predictions
     const products = await Product.find({ 
@@ -115,10 +117,16 @@ exports.getAllPredictions = async (req, res) => {
 
     console.log(`[Inventory Predictions] Found ${products.length} products in database`);
 
-    // Generate professional mock predictions
+    // ⚠️ FALLBACK: Generate basic predictions from database (NOT using ML)
+    console.warn('⚠️ Using FALLBACK mode - predictions are basic calculations, NOT real AI/ML');
+    
     const mockProducts = products.length > 0 ? products.map(p => {
       const availStock = (p.inventory?.stock || 0) - (p.inventory?.reserved || 0);
       const urgency = availStock < 10 ? 'critical' : availStock < 20 ? 'high' : availStock < 40 ? 'medium' : 'low';
+      
+      // Simple calculations based on current stock only
+      const dailyAvg = Math.max(1, availStock / 30); // Rough estimate
+      const daysUntilStockout = availStock > 0 ? Math.floor(availStock / dailyAvg) : 0;
       
       return {
         product_id: p._id,
@@ -127,38 +135,48 @@ exports.getAllPredictions = async (req, res) => {
         available_stock: availStock,
         success: true,
         sales_velocity: {
-          daily_avg_30d: 1 + Math.random() * 4,
-          weekly_total: Math.floor(7 + Math.random() * 25),
-          monthly_total: Math.floor(30 + Math.random() * 100),
-          return_rate: Math.random() * 3
+          daily_avg_30d: dailyAvg,
+          weekly_total: Math.floor(dailyAvg * 7),
+          monthly_total: Math.floor(dailyAvg * 30),
+          return_rate: 0
         },
         stockout_prediction: {
-          days_until_stockout: Math.floor(Math.random() * 28) + 5,
-          confidence_score: 70 + Math.random() * 25,
+          days_until_stockout: daysUntilStockout,
+          confidence_score: 50, // Low confidence for basic calc
           urgency: urgency
         },
         restock_recommendation: {
-          suggested_quantity: Math.floor(Math.random() * 60) + 30,
+          suggested_quantity: Math.floor(dailyAvg * 30), // 30 days worth
           urgency: urgency,
-          message: urgency === 'critical' ? 'Immediate restock needed' : 'Stock level adequate',
+          message: urgency === 'critical' 
+            ? '⚠️ BASIC CALCULATION - Start Python ML service for accurate predictions' 
+            : 'Basic calculation - ML service offline',
           perishable_product: false
         },
         demand_forecast: {
-          next_7_days: Math.floor(Math.random() * 20) + 10,
-          next_30_days: Math.floor(Math.random() * 80) + 40,
-          total_demand: Math.floor(Math.random() * 100) + 50,
-          accuracy_score: 75 + Math.floor(Math.random() * 20),
-          model_used: 'Linear Regression',
+          next_7_days: Math.floor(dailyAvg * 7),
+          next_30_days: Math.floor(dailyAvg * 30),
+          total_demand: Math.floor(dailyAvg * 30),
+          accuracy_score: 50, // Low accuracy warning
+          model_used: 'Simple Division (Fallback)',
           price_adjustment_applied: false
         },
         is_new_product: false,
         analyzed_at: new Date().toISOString(),
-        insights: urgency === 'critical' ? [{
-          severity: 'critical',
+        model_info: {
+          version: '0.0.1',
+          algorithm: 'fallback_basic_calc',
+          confidence: 50,
+          data_points_used: 0,
+          ml_models_used: ['none'],
+          anomalies_detected: false
+        },
+        insights: [{
+          severity: 'warning',
           icon: '⚠️',
-          title: 'Low Stock Alert',
-          message: 'Current stock level is critically low. Consider immediate restock.'
-        }] : []
+          title: 'ML Service Offline',
+          message: 'These are basic calculations only. Start Python ML service for real AI predictions.'
+        }]
       };
     }) : exports._generateDemoProducts();
 
@@ -181,7 +199,11 @@ exports.getAllPredictions = async (req, res) => {
       success: true,
       data: responseData,
       fallback: true,
-      message: products.length > 0 ? 'Using database fallback analysis' : 'Using demo data'
+      mlService: false,
+      warning: '⚠️ ML SERVICE OFFLINE - Showing basic calculations only. Start Python service for real AI predictions.',
+      message: products.length > 0 
+        ? '⚠️ FALLBACK: Basic calculations from database (NOT AI/ML)' 
+        : '⚠️ DEMO DATA: No products found and ML service offline'
     });
   } catch (error) {
     console.error('Error in getAllPredictions:', error);

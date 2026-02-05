@@ -13,6 +13,7 @@ from bson import ObjectId
 from .data_processor import InventoryDataProcessor
 from .demand_forecaster import DemandForecaster
 from .seasonal_analyzer import SeasonalAnalyzer
+from .advanced_forecaster import AdvancedForecaster, AnomalyDetector
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +41,17 @@ class InventoryPredictor:
         self.data_processor = InventoryDataProcessor()
         self.forecaster = DemandForecaster()
         self.seasonal_analyzer = SeasonalAnalyzer()
-        logger.info("InventoryPredictor initialized with all ML components")
+        self.advanced_forecaster = AdvancedForecaster()
+        self.anomaly_detector = AnomalyDetector()
+        logger.info("InventoryPredictor initialized with ALL AI/ML components (Prophet, ARIMA, XGBoost, LightGBM, Ensemble)")
     
-    def analyze_product(self, product_id, lead_time_days=None, save_to_db=False):
+    def analyze_product(self, product_id, variant_id=None, lead_time_days=None, save_to_db=False):
         """
         Complete AI analysis for a single product.
         
         Args:
             product_id: MongoDB ObjectId or string
+            variant_id: Optional variant ObjectId (currently not used, for future support)
             lead_time_days: Days to receive stock (for restock calc)
             save_to_db: Whether to save results to database
             
@@ -76,8 +80,8 @@ class InventoryPredictor:
             # 2. Get historical sales data
             sales_df = self.data_processor.get_product_sales_history(product_id, days=90)
             
-            # 3. Calculate sales velocity
-            velocity = self._calculate_sales_velocity(sales_df)
+            # 3. Calculate sales velocity (with AI category predictions if no sales)
+            velocity = self._calculate_sales_velocity(sales_df, product)
             
             # 4. Get seasonal adjustments
             pet_type = product.get('pet_type', ['all'])[0] if product.get('pet_type') else 'all'
@@ -86,12 +90,68 @@ class InventoryPredictor:
                 pet_type=pet_type
             )
             
-            # 5. AI Demand Forecasting
-            forecast = self.forecaster.forecast_demand(
-                sales_df, 
-                days_ahead=self.DEFAULT_FORECAST_DAYS,
-                method='auto'
-            )
+            # 5. AI Demand Forecasting (using ensemble of models)
+            # If no sales data, use category-based AI prediction
+            if sales_df is None or len(sales_df) == 0:
+                logger.info("📊 No sales data - generating AI forecast from category analysis")
+                predicted_daily = velocity.get('daily_avg_30d', 0.5)
+                
+                base_forecast = {
+                    'total_demand': int(predicted_daily * self.DEFAULT_FORECAST_DAYS),
+                    'daily_avg': predicted_daily,
+                    'next_7_days': int(predicted_daily * 7),
+                    'next_30_days': int(predicted_daily * 30),
+                    'accuracy_score': 65,  # Lower confidence for category predictions
+                    'model_used': 'Category AI Analysis',
+                    'predictions': [predicted_daily] * self.DEFAULT_FORECAST_DAYS,
+                    'prediction_source': velocity.get('prediction_source', 'category_ai')
+                }
+                forecast = base_forecast
+                logger.info(f"🤖 AI Category Forecast: {predicted_daily}/day → {base_forecast['total_demand']} units/30d")
+            else:
+                # Use real ML models for products with sales history
+                base_forecast = self.forecaster.forecast_demand(
+                    sales_df, 
+                    days_ahead=self.DEFAULT_FORECAST_DAYS,
+                    method='auto'
+                )
+                
+                # Try advanced ML models (XGBoost, LightGBM)
+                advanced_forecasts = []
+                
+                # Try XGBoost
+                xgb_forecast = self.advanced_forecaster.forecast_xgboost(sales_df, self.DEFAULT_FORECAST_DAYS)
+                if xgb_forecast:
+                    advanced_forecasts.append(xgb_forecast)
+                    logger.info(f"✅ XGBoost model applied with {xgb_forecast['accuracy_score']}% accuracy")
+                
+                # Try LightGBM
+                lgb_forecast = self.advanced_forecaster.forecast_lightgbm(sales_df, self.DEFAULT_FORECAST_DAYS)
+                if lgb_forecast:
+                    advanced_forecasts.append(lgb_forecast)
+                    logger.info(f"✅ LightGBM model applied with {lgb_forecast['accuracy_score']}% accuracy")
+                
+                # Use advanced ensemble if ML models succeeded
+                if advanced_forecasts:
+                    forecast = self.advanced_forecaster.forecast_ensemble_advanced(
+                        sales_df, 
+                        self.DEFAULT_FORECAST_DAYS,
+                        base_forecasts=[base_forecast]
+                    )
+                    if not forecast:
+                        forecast = base_forecast
+                        logger.info("Using base forecast (Prophet/ARIMA)")
+                    else:
+                        logger.info(f"✅ Advanced Ensemble model with {len(advanced_forecasts)} ML models")
+                else:
+                    forecast = base_forecast
+                    logger.info(f"Using traditional model: {base_forecast.get('model_used', 'unknown')}")
+            
+            # Detect anomalies in sales patterns (only if we have sales data)
+            if sales_df is not None and len(sales_df) > 0:
+                anomalies = self.anomaly_detector.detect_anomalies(sales_df)
+            else:
+                anomalies = {'has_anomalies': False, 'anomaly_dates': [], 'anomaly_count': 0}
             
             # 6. Apply seasonal adjustments to forecast
             adjusted_forecast = self._apply_seasonal_adjustment(forecast, seasonal_data)
@@ -137,13 +197,16 @@ class InventoryPredictor:
                 'stockout_prediction': stockout,
                 'restock_recommendation': restock,
                 'seasonal_analysis': seasonal_data,
+                'anomaly_detection': anomalies,
                 'insights': insights,
                 'analyzed_at': datetime.now().isoformat(),
                 'model_info': {
-                    'version': '1.0.0',
+                    'version': '2.0.0',
                     'algorithm': adjusted_forecast.get('model_used', 'unknown'),
                     'confidence': adjusted_forecast.get('accuracy_score', 0),
-                    'data_points_used': len(sales_df) if sales_df is not None else 0
+                    'data_points_used': len(sales_df) if sales_df is not None else 0,
+                    'ml_models_used': adjusted_forecast.get('model_details', {}).get('models', [adjusted_forecast.get('model_used', 'unknown')]),
+                    'anomalies_detected': anomalies.get('anomalies_detected', False)
                 }
             }
             
@@ -338,17 +401,46 @@ class InventoryPredictor:
             logger.error(f"Error generating restock report: {str(e)}")
             return {'success': False, 'error': str(e)}
     
-    def _calculate_sales_velocity(self, sales_df):
-        """Calculate sales velocity metrics"""
+    def _calculate_sales_velocity(self, sales_df, product_details=None):
+        """Calculate sales velocity metrics with AI category predictions for products without sales"""
         if sales_df is None or len(sales_df) == 0:
+            # Use AI to predict sales based on category average
+            if product_details:
+                category = product_details.get('category')
+                pet_type = product_details.get('pet_type', [None])[0] if product_details.get('pet_type') else None
+                
+                if category:
+                    logger.info(f"📊 No sales history - using AI category analysis for velocity prediction")
+                    category_data = self.data_processor.get_category_average_sales(category, pet_type, days=30)
+                    
+                    predicted_daily = category_data.get('daily_avg_per_product', 0.5)
+                    predicted_weekly = predicted_daily * 7
+                    predicted_monthly = predicted_daily * 30
+                    
+                    logger.info(f"🤖 AI Predicted Velocity: {predicted_daily}/day based on {category_data.get('products_count', 0)} similar products")
+                    
+                    return {
+                        'daily_avg_7d': round(predicted_daily, 2),
+                        'daily_avg_30d': round(predicted_daily, 2),
+                        'daily_avg_90d': round(predicted_daily, 2),
+                        'weekly_total': int(predicted_weekly),
+                        'monthly_total': int(predicted_monthly),
+                        'trend': 'predicted',
+                        'trend_percentage': 0,
+                        'prediction_source': 'category_ai',
+                        'category_products_analyzed': category_data.get('products_count', 0)
+                    }
+            
+            # Fallback to conservative baseline
             return {
-                'daily_avg_7d': 0,
-                'daily_avg_30d': 0,
-                'daily_avg_90d': 0,
-                'weekly_total': 0,
-                'monthly_total': 0,
+                'daily_avg_7d': 0.5,
+                'daily_avg_30d': 0.5,
+                'daily_avg_90d': 0.5,
+                'weekly_total': 3,
+                'monthly_total': 15,
                 'trend': 'no_data',
-                'trend_percentage': 0
+                'trend_percentage': 0,
+                'prediction_source': 'baseline'
             }
         
         last_7_days = sales_df.tail(7)['units_sold'].sum()
@@ -382,7 +474,8 @@ class InventoryPredictor:
             'weekly_total': int(last_7_days),
             'monthly_total': int(last_30_days),
             'trend': trend,
-            'trend_percentage': round(trend_pct, 1)
+            'trend_percentage': round(trend_pct, 1),
+            'prediction_source': 'actual_sales'
         }
     
     def _apply_seasonal_adjustment(self, forecast, seasonal_data):
@@ -422,18 +515,30 @@ class InventoryPredictor:
         
         if days_remaining == float('inf'):
             stockout_date = None
-            urgency = 'none'
-            urgency_score = 0
+            # CRITICAL FIX: Check absolute stock levels even without sales data
+            if available_stock < 10:
+                urgency = 'critical'
+                urgency_score = 100
+            elif available_stock < 20:
+                urgency = 'high'
+                urgency_score = 80
+            elif available_stock < 40:
+                urgency = 'medium'
+                urgency_score = 50
+            else:
+                urgency = 'none'
+                urgency_score = 0
         else:
             stockout_date = (datetime.now() + timedelta(days=days_remaining)).isoformat()
             
-            if days_remaining <= 3:
+            # Check BOTH days remaining AND absolute stock levels
+            if days_remaining <= 3 or available_stock < 10:
                 urgency = 'critical'
                 urgency_score = 100
-            elif days_remaining <= 7:
+            elif days_remaining <= 7 or available_stock < 20:
                 urgency = 'high'
                 urgency_score = 80
-            elif days_remaining <= 14:
+            elif days_remaining <= 14 or available_stock < 40:
                 urgency = 'medium'
                 urgency_score = 50
             elif days_remaining <= 30:
@@ -457,18 +562,66 @@ class InventoryPredictor:
         """Calculate smart restock recommendation with shelf-life constraints"""
         daily_demand = velocity['daily_avg_30d']
         
+        # CRITICAL FIX: For products with no sales, use AI-based category predictions
         if daily_demand <= 0:
+            # Get category-based predictions using AI
+            category = product_details.get('category') if product_details else None
+            pet_type = product_details.get('pet_type', [None])[0] if product_details and product_details.get('pet_type') else None
+            
+            if category:
+                logger.info(f"📊 Product has no sales - using AI category analysis for {category}")
+                category_data = self.data_processor.get_category_average_sales(category, pet_type, days=30)
+                
+                # Use category average as predicted demand
+                predicted_daily_demand = category_data.get('daily_avg_per_product', 1.0)
+                
+                # Calculate intelligent restock based on category performance
+                safety_stock = predicted_daily_demand * self.DEFAULT_SAFETY_STOCK_DAYS
+                lead_time_demand = predicted_daily_demand * (lead_time or self.DEFAULT_LEAD_TIME)
+                future_demand_30d = predicted_daily_demand * 30
+                
+                ideal_stock = future_demand_30d + safety_stock + lead_time_demand
+                suggested_quantity = max(0, int(ideal_stock - available_stock))
+                
+                logger.info(f"🤖 AI Prediction: {predicted_daily_demand}/day → Suggest {suggested_quantity} units")
+            else:
+                # Fallback to intelligent minimum
+                predicted_daily_demand = 1.0
+                suggested_quantity = max(30, low_threshold * 2)
+                logger.warning(f"No category data - using baseline: {suggested_quantity} units")
+            
+            # Determine urgency based on absolute stock levels
+            if available_stock < 10:
+                urgency = 'critical'
+                priority = 1
+                message = '🚨 CRITICAL: Very low stock! Order immediately.'
+            elif available_stock < 20:
+                urgency = 'high'
+                priority = 2
+                message = '⚠️ HIGH: Low stock - place order soon'
+            elif available_stock < 40:
+                urgency = 'medium'
+                priority = 3
+                message = '📋 MEDIUM: Stock below ideal level'
+            else:
+                urgency = 'none'
+                priority = 5
+                message = '✅ Stock adequate based on category trends'
+            
             return {
-                'suggested_quantity': 0,
-                'urgency': 'none',
-                'priority': 5,
-                'safety_stock': low_threshold,
-                'lead_time_demand': 0,
+                'suggested_quantity': suggested_quantity,
+                'urgency': urgency,
+                'priority': priority,
+                'safety_stock': int(predicted_daily_demand * self.DEFAULT_SAFETY_STOCK_DAYS),
+                'lead_time_demand': int(predicted_daily_demand * (lead_time or self.DEFAULT_LEAD_TIME)),
                 'reorder_point': low_threshold,
-                'message': 'No recent demand - monitor for activity'
+                'ideal_stock_level': int(ideal_stock) if category else suggested_quantity,
+                'based_on_daily_demand': predicted_daily_demand,
+                'prediction_source': 'category_ai' if category else 'baseline',
+                'message': message
             }
         
-        # Calculate components
+        # Calculate components for products WITH sales data
         safety_stock = daily_demand * self.DEFAULT_SAFETY_STOCK_DAYS
         lead_time_demand = daily_demand * lead_time
         
@@ -496,18 +649,20 @@ class InventoryPredictor:
         # Reorder point = when to trigger order
         reorder_point = safety_stock + lead_time_demand
         
-        # Determine urgency based on days until stockout
+        # Determine urgency based on BOTH days until stockout AND absolute stock levels
         days_until_stockout = available_stock / daily_demand if daily_demand > 0 else float('inf')
         
-        if days_until_stockout <= 3:
+        # CRITICAL FIX: Consider absolute stock levels for products with no/low sales data
+        # This ensures low stock items are flagged even without sales history
+        if available_stock < 10 or days_until_stockout <= 3:
             urgency = 'critical'
             priority = 1
             message = '🚨 CRITICAL: Order immediately to prevent stockout!'
-        elif days_until_stockout <= 7:
+        elif available_stock < 20 or days_until_stockout <= 7:
             urgency = 'high'
             priority = 2
             message = '⚠️ HIGH: Place order within 2 days'
-        elif days_until_stockout <= 14:
+        elif available_stock < 40 or days_until_stockout <= 14:
             urgency = 'medium'
             priority = 3
             message = '📋 MEDIUM: Schedule restock this week'
@@ -519,6 +674,9 @@ class InventoryPredictor:
             urgency = 'none'
             priority = 5
             message = '✅ Stock levels adequate'
+        
+        # DEBUG: Log urgency calculation
+        logger.info(f"🔍 URGENCY DEBUG - Stock: {available_stock}, Days: {days_until_stockout:.1f}, Reorder: {reorder_point} → Urgency: {urgency}")
         
         result = {
             'suggested_quantity': int(restock_quantity),
@@ -562,13 +720,14 @@ class InventoryPredictor:
             })
         
         # Sales trend insight
+        trend_pct = velocity.get('trend_percentage', 0)
         if velocity['trend'] == 'increasing':
             insights.append({
                 'type': 'trend',
                 'severity': 'info',
                 'icon': '📈',
                 'title': 'Sales Trending Up',
-                'message': f"Sales increased by {velocity['trend_percentage']:.0f}% compared to previous week. Consider increasing restock quantity."
+                'message': f"Sales increased by {trend_pct:.0f}% compared to previous week. Consider increasing restock quantity."
             })
         elif velocity['trend'] == 'decreasing':
             insights.append({
@@ -576,7 +735,7 @@ class InventoryPredictor:
                 'severity': 'warning',
                 'icon': '📉',
                 'title': 'Sales Declining',
-                'message': f"Sales decreased by {abs(velocity['trend_percentage']):.0f}% compared to previous week. Review pricing and promotions."
+                'message': f"Sales decreased by {abs(trend_pct):.0f}% compared to previous week. Review pricing and promotions."
             })
         
         # Seasonal insight

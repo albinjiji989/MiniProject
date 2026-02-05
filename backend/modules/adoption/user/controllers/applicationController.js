@@ -272,8 +272,11 @@ const submitApplication = async (req, res) => {
     }
 
     // Normalize documents from body (supports [string], [{url}], or full document objects)
+    console.log('🔍 Document Debug - req.body.documents:', req.body?.documents);
+    console.log('🔍 Document Debug - applicationData.documents:', applicationData?.documents);
     const rawDocs = Array.isArray(req.body?.documents) ? req.body.documents
                   : (Array.isArray(applicationData?.documents) ? applicationData.documents : [])
+    console.log('🔍 Document Debug - rawDocs:', rawDocs);
     const documents = rawDocs
       .map(d => {
         if (typeof d === 'string') {
@@ -365,6 +368,7 @@ const submitApplication = async (req, res) => {
       uploadedAt: doc.uploadedAt instanceof Date && !isNaN(doc.uploadedAt.getTime()) ? doc.uploadedAt : 
                  (typeof doc.uploadedAt === 'string' ? new Date(doc.uploadedAt) : new Date(doc.uploadedAt || Date.now()))
     }));
+    console.log('🔍 Document Debug - finalDocuments:', finalDocuments);
     // Validate the structure of finalDocuments
     if (Array.isArray(finalDocuments)) {
       finalDocuments.forEach((doc, index) => {
@@ -425,7 +429,18 @@ const submitApplication = async (req, res) => {
       documents: validatedFinalDocuments
     });
 
+    console.log('🔍 Document Debug - Application before save:', {
+      documentsCount: validatedFinalDocuments.length,
+      documents: validatedFinalDocuments
+    });
+
     await application.save();
+
+    console.log('🔍 Document Debug - Application after save:', {
+      id: application._id,
+      documentsCount: application.documents?.length,
+      documents: application.documents
+    });
 
     // Blockchain: Log application submission event
     try {

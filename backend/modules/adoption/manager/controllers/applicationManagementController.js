@@ -106,7 +106,10 @@ const approveApplication = async (req, res) => {
     }
 
     // Manager-side document checklist enforcement
+    console.log('🔍 Approval Debug - application.documents:', application.documents);
+    console.log('🔍 Approval Debug - application.applicationData?.documents:', application.applicationData?.documents);
     const docCount = ((application.documents || []).length) || ((application.applicationData?.documents || []).length) || 0
+    console.log('🔍 Approval Debug - docCount:', docCount);
     if (docCount <= 0) {
       return res.status(400).json({
         success: false,

@@ -52,6 +52,20 @@ const InventoryPredictions = () => {
       setPredictions(predictionsRes.data.data);
       setSeasonalData(seasonalRes.data.data);
 
+      // DEBUG: Log product urgencies
+      console.log('📊 PREDICTIONS DATA:', predictionsRes.data.data);
+      if (predictionsRes.data.data?.products) {
+        predictionsRes.data.data.products.forEach(p => {
+          console.log(`Product: ${p.product_name}, Stock: ${p.available_stock}, Urgency: ${p.restock_recommendation?.urgency}`);
+        });
+      }
+
+      // Check if using fallback mode (not real ML)
+      if (predictionsRes.data.fallback === true || predictionsRes.data.mlService === false) {
+        console.warn('⚠️ FALLBACK MODE:', predictionsRes.data.warning || predictionsRes.data.message);
+        setError(predictionsRes.data.warning || '⚠️ ML Service offline - showing basic calculations only');
+      }
+
     } catch (err) {
       console.error('Error loading inventory data:', err);
       setError(err.response?.data?.message || 'Failed to load inventory predictions');
@@ -124,6 +138,9 @@ const InventoryPredictions = () => {
   const mediumItems = products.filter(
     p => p && p.success && p.restock_recommendation?.urgency === 'medium'
   );
+  const lowItems = products.filter(
+    p => p && p.success && p.restock_recommendation?.urgency === 'low'
+  );
   
   // Check if we have any data to show
   const hasData = products.length > 0;
@@ -192,14 +209,54 @@ const InventoryPredictions = () => {
         </div>
       )}
 
-      {/* Error Banner */}
+      {/* Error/Warning Banner */}
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-          <p className="text-red-800">{error}</p>
+        <div className={`mb-6 rounded-lg p-4 flex items-start gap-3 ${
+          error.includes('⚠️') || error.includes('FALLBACK') || error.includes('offline')
+            ? 'bg-orange-50 border border-orange-200'
+            : 'bg-red-50 border border-red-200'
+        }`}>
+          <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+            error.includes('⚠️') || error.includes('FALLBACK') || error.includes('offline')
+              ? 'text-orange-600'
+              : 'text-red-600'
+          }`} />
+          <div className="flex-grow">
+            <p className={`font-medium mb-1 ${
+              error.includes('⚠️') || error.includes('FALLBACK') || error.includes('offline')
+                ? 'text-orange-900'
+                : 'text-red-900'
+            }`}>
+              {error.includes('⚠️') || error.includes('FALLBACK') 
+                ? '⚠️ Using Basic Calculations (Not AI/ML)'
+                : 'Error Loading Predictions'
+              }
+            </p>
+            <p className={`text-sm ${
+              error.includes('⚠️') || error.includes('FALLBACK') || error.includes('offline')
+                ? 'text-orange-800'
+                : 'text-red-800'
+            }`}>
+              {error}
+            </p>
+            {(error.includes('⚠️') || error.includes('FALLBACK') || error.includes('offline')) && (
+              <div className="mt-2 text-sm text-orange-700">
+                <strong>To get real AI/ML predictions:</strong>
+                <ol className="ml-4 mt-1 list-decimal">
+                  <li>Open terminal in <code className="bg-orange-100 px-1 rounded">python-ai-ml</code> folder</li>
+                  <li>Run: <code className="bg-orange-100 px-1 rounded">python app.py</code></li>
+                  <li>Click "Refresh" button above</li>
+                </ol>
+              </div>
+            )}
+          </div>
           <button 
-            onClick={() => loadData()}
-            className="ml-auto text-red-600 hover:text-red-800 text-sm font-medium"
+            onClick={() => loadData(true)}
+            className={`ml-auto px-3 py-1 rounded text-sm font-medium transition-colors ${
+              error.includes('⚠️') || error.includes('FALLBACK') || error.includes('offline')
+                ? 'text-orange-600 hover:bg-orange-100'
+                : 'text-red-600 hover:bg-red-100'
+            }`}
           >
             Retry
           </button>
@@ -207,61 +264,73 @@ const InventoryPredictions = () => {
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* Total Products */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* Urgent Actions Required */}
+        <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-xl shadow-sm p-6 border-2 border-red-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 bg-red-500 rounded-lg">
+              <AlertCircle className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold text-red-700">
+                {criticalItems.length + highItems.length}
+              </h3>
+              <p className="text-sm text-red-600 font-medium">Urgent Restocks Needed</p>
+            </div>
+          </div>
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between text-red-700">
+              <span>🚨 Critical (Stock &lt; 10)</span>
+              <strong>{criticalItems.length}</strong>
+            </div>
+            <div className="flex justify-between text-orange-700">
+              <span>⚠️ High (Stock &lt; 20)</span>
+              <strong>{highItems.length}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Products Monitored */}
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+          <div className="flex items-center gap-3 mb-4">
             <div className="p-3 bg-blue-100 rounded-lg">
               <Package className="w-6 h-6 text-blue-600" />
             </div>
-            <span className="text-sm text-gray-500">Total</span>
+            <div>
+              <h3 className="text-2xl font-bold text-gray-900">
+                {totalAnalyzed}
+              </h3>
+              <p className="text-sm text-gray-600 font-medium">Total Products</p>
+            </div>
           </div>
-          <h3 className="text-3xl font-bold text-gray-900">
-            {dashboard?.summary?.totalProducts || 0}
-          </h3>
-          <p className="text-gray-600 text-sm mt-1">Products Tracked</p>
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between text-gray-700">
+              <span>📊 Medium Priority</span>
+              <strong>{mediumItems.length}</strong>
+            </div>
+            <div className="flex justify-between text-green-700">
+              <span>✅ Healthy Stock</span>
+              <strong>{lowItems.length}</strong>
+            </div>
+          </div>
         </div>
 
-        {/* Critical Stock */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-red-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-red-100 rounded-lg">
-              <AlertCircle className="w-6 h-6 text-red-600" />
+        {/* Restock Value */}
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-sm p-6 border-2 border-blue-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 bg-blue-500 rounded-lg">
+              <ShoppingCart className="w-6 h-6 text-white" />
             </div>
-            <span className="text-sm text-red-600 font-medium">Critical</span>
-          </div>
-          <h3 className="text-3xl font-bold text-red-600">
-            {predictions?.critical_items ?? criticalItems.length}
-          </h3>
-          <p className="text-gray-600 text-sm mt-1">Need Immediate Restock</p>
-        </div>
-
-        {/* Low Stock */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-orange-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-orange-100 rounded-lg">
-              <AlertTriangle className="w-6 h-6 text-orange-600" />
+            <div>
+              <h3 className="text-2xl font-bold text-blue-700">
+                {[...criticalItems, ...highItems].reduce((sum, p) => sum + (p.restock_recommendation?.suggested_quantity || 0), 0)}
+              </h3>
+              <p className="text-sm text-blue-600 font-medium">Units to Order</p>
             </div>
-            <span className="text-sm text-orange-600 font-medium">High Priority</span>
           </div>
-          <h3 className="text-3xl font-bold text-orange-600">
-            {predictions?.high_priority_items ?? highItems.length}
-          </h3>
-          <p className="text-gray-600 text-sm mt-1">Restock This Week</p>
-        </div>
-
-        {/* Healthy Stock */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-green-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-3 bg-green-100 rounded-lg">
-              <CheckCircle className="w-6 h-6 text-green-600" />
-            </div>
-            <span className="text-sm text-green-600 font-medium">Healthy</span>
-          </div>
-          <h3 className="text-3xl font-bold text-green-600">
-            {dashboard?.summary?.healthyStock || 0}
-          </h3>
-          <p className="text-gray-600 text-sm mt-1">Adequate Stock</p>
+          <p className="text-xs text-blue-600">
+            Recommended for critical &amp; high priority items
+          </p>
         </div>
       </div>
 
@@ -331,6 +400,19 @@ const InventoryPredictions = () => {
                     Medium ({mediumItems.length})
                   </div>
                 </button>
+                <button
+                  onClick={() => setActiveTab('low')}
+                  className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
+                    activeTab === 'low'
+                      ? 'text-green-600 border-b-2 border-green-600 bg-green-50'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    <CheckCircle className="w-4 h-4" />
+                    Low ({lowItems.length})
+                  </div>
+                </button>
               </div>
             </div>
 
@@ -338,7 +420,8 @@ const InventoryPredictions = () => {
             <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
               {(activeTab === 'critical' ? criticalItems 
                 : activeTab === 'high' ? highItems 
-                : mediumItems
+                : activeTab === 'medium' ? mediumItems
+                : lowItems
               ).length === 0 ? (
                 <div className="p-8 text-center">
                   <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
@@ -346,13 +429,16 @@ const InventoryPredictions = () => {
                     No {activeTab} priority items
                   </h3>
                   <p className="text-gray-600">
-                    Great! Your inventory is in good shape.
+                    {activeTab === 'low' 
+                      ? 'No products with healthy stock levels currently.' 
+                      : 'Great! Your inventory is in good shape.'}
                   </p>
                 </div>
               ) : (
                 (activeTab === 'critical' ? criticalItems 
                   : activeTab === 'high' ? highItems 
-                  : mediumItems
+                  : activeTab === 'medium' ? mediumItems
+                  : lowItems
                 ).map((product) => (
                   <ProductPredictionCard
                     key={product.product_id}
@@ -398,48 +484,6 @@ const InventoryPredictions = () => {
                     {predictions.timestamp ? new Date(predictions.timestamp).toLocaleTimeString() : 'Just now'}
                   </span>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* Seasonal Analysis */}
-          {seasonalData && (
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <div className="flex items-center gap-3 mb-4">
-                <Calendar className="w-6 h-6 text-purple-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Seasonal Insights</h3>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-                  <span className="text-gray-600">Current Season</span>
-                  <span className="font-semibold text-purple-700 capitalize">
-                    {seasonalData.seasonal_analysis?.current_season || 'Normal'}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-gray-600">Demand Factor</span>
-                  <span className={`font-semibold ${
-                    (seasonalData.seasonal_analysis?.combined_adjustment_factor || 1) > 1
-                      ? 'text-green-600'
-                      : 'text-gray-700'
-                  }`}>
-                    {((seasonalData.seasonal_analysis?.combined_adjustment_factor || 1) * 100).toFixed(0)}%
-                  </span>
-                </div>
-
-                {seasonalData.event_impact?.has_event && (
-                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <div className="flex items-center gap-2 text-yellow-800 font-medium mb-1">
-                      <Zap className="w-4 h-4" />
-                      {seasonalData.event_impact.event_name}
-                    </div>
-                    <p className="text-sm text-yellow-700">
-                      {seasonalData.event_impact.recommendation}
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -504,6 +548,7 @@ const ProductPredictionCard = ({
   const restock = product.restock_recommendation;
   const velocity = product.sales_velocity;
   const forecast = product.demand_forecast;
+  const modelInfo = product.model_info || {};
   
   // New features from critical fixes
   const isNewProduct = product.is_new_product || false;
@@ -513,66 +558,53 @@ const ProductPredictionCard = ({
   const priceAdjusted = forecast?.price_adjustment_applied || false;
   const priceImpact = forecast?.price_impact;
 
+  // AI/ML Model Details
+  const mlModels = modelInfo.ml_models_used || [modelInfo.algorithm || 'unknown'];
+  const confidence = modelInfo.confidence || 0;
+  const anomaliesDetected = modelInfo.anomalies_detected || false;
+  const modelDetails = forecast?.model_details || {};
+
   return (
-    <div className="p-4 hover:bg-gray-50 transition-colors">
+    <div className="p-4 border-l-4 hover:bg-gray-50 transition-colors" style={{borderLeftColor: urgency === 'critical' ? '#dc2626' : urgency === 'high' ? '#ea580c' : urgency === 'medium' ? '#ca8a04' : '#16a34a'}}>
       {/* Main Row */}
       <div 
         className="flex items-center gap-4 cursor-pointer"
         onClick={onToggle}
       >
-        {/* Urgency Icon */}
-        <div className="flex-shrink-0">
-          {getUrgencyIcon(urgency)}
-        </div>
-
         {/* Product Info */}
         <div className="flex-grow min-w-0">
-          <div className="flex items-center gap-2">
-            <h4 className="font-medium text-gray-900 truncate">
-              {product.product_name}
-            </h4>
-            {/* Badges for new features */}
-            {isNewProduct && (
-              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-                NEW
-              </span>
-            )}
-            {isPerishable && (
-              <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">
-                ⏳ PERISHABLE
-              </span>
-            )}
-            {priceAdjusted && (
-              <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">
-                💰 PRICE ADJUSTED
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
-            <span>Stock: <strong className={product.available_stock < 10 ? 'text-red-600' : 'text-gray-900'}>
-              {product.available_stock}
-            </strong></span>
-            <span>Daily Avg: <strong>{velocity?.daily_avg_30d?.toFixed(1) || 0}</strong></span>
-            {returnRate > 0 && (
-              <span className="text-orange-600">Return: <strong>{returnRate.toFixed(1)}%</strong></span>
+          <h4 className="font-semibold text-gray-900 text-lg mb-1">
+            {product.product_name}
+          </h4>
+          <div className="flex items-center gap-6 text-sm">
+            <div className="flex items-center gap-2">
+              <Package className="w-4 h-4 text-gray-400" />
+              <span className="text-gray-600">Current Stock:</span>
+              <strong className={`text-lg ${product.available_stock < 10 ? 'text-red-600' : product.available_stock < 20 ? 'text-orange-600' : 'text-gray-900'}`}>
+                {product.available_stock} units
+              </strong>
+            </div>
+            {restock?.suggested_quantity > 0 && (
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-4 h-4 text-blue-500" />
+                <span className="text-gray-600">Recommended:</span>
+                <strong className="text-lg text-blue-600">+{restock.suggested_quantity} units</strong>
+              </div>
             )}
           </div>
         </div>
 
-        {/* Days Until Stockout */}
-        <div className="text-right flex-shrink-0">
-          {stockout?.days_until_stockout ? (
-            <div className={`text-lg font-bold ${
-              stockout.days_until_stockout <= 3 ? 'text-red-600' 
-                : stockout.days_until_stockout <= 7 ? 'text-orange-600'
-                : 'text-gray-900'
-            }`}>
-              {Math.round(stockout.days_until_stockout)}d
-            </div>
-          ) : (
-            <div className="text-gray-400">--</div>
-          )}
-          <div className="text-xs text-gray-500">until stockout</div>
+        {/* Action Badge */}
+        <div className={`px-4 py-2 rounded-lg font-medium text-sm ${
+          urgency === 'critical' ? 'bg-red-100 text-red-800' :
+          urgency === 'high' ? 'bg-orange-100 text-orange-800' :
+          urgency === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+          'bg-green-100 text-green-800'
+        }`}>
+          {urgency === 'critical' ? '🚨 Order Now' :
+           urgency === 'high' ? '⚠️ Order Soon' :
+           urgency === 'medium' ? '📋 Monitor' :
+           '✅ Healthy'}
         </div>
 
         {/* Expand Arrow */}
@@ -583,120 +615,106 @@ const ProductPredictionCard = ({
 
       {/* Expanded Details */}
       {expanded && (
-        <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
-          {/* Shelf Life Warning */}
-          {shelfLifeWarning && (
-            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex items-center gap-2 text-yellow-800 font-medium mb-1">
-                <AlertTriangle className="w-4 h-4" />
-                Perishable Product Warning
-              </div>
-              <p className="text-sm text-yellow-700">{shelfLifeWarning}</p>
+        <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
+          {/* Recommendation Message */}
+          {restock?.message && (
+            <div className={`p-3 rounded-lg text-sm font-medium ${
+              urgency === 'critical' ? 'bg-red-50 text-red-700' :
+              urgency === 'high' ? 'bg-orange-50 text-orange-700' :
+              'bg-blue-50 text-blue-700'
+            }`}>
+              {restock.message}
             </div>
           )}
           
-          {/* Price Impact Notice */}
-          {priceImpact?.has_recent_change && (
-            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <div className="flex items-center gap-2 text-purple-800 font-medium mb-1">
-                <TrendingUp className="w-4 h-4" />
-                Price Change Detected
+          {/* Stock Details Grid */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-xs text-gray-500 mb-1">Average Daily Sales</div>
+              <div className="text-lg font-bold text-gray-900">
+                {velocity?.daily_avg_30d > 0 
+                  ? <>{velocity.daily_avg_30d.toFixed(1)} {velocity.prediction_source === 'category_ai' && <span className="text-xs text-purple-600">(AI)</span>}</>
+                  : <span className="text-sm text-gray-500">0.0</span>
+                }
               </div>
-              <p className="text-sm text-purple-700">{priceImpact.message}</p>
             </div>
-          )}
-          
-          {/* New Product Notice */}
-          {isNewProduct && (
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center gap-2 text-blue-800 font-medium mb-1">
-                <Activity className="w-4 h-4" />
-                New Product
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-xs text-gray-500 mb-1">30-Day Forecast</div>
+              <div className="text-lg font-bold text-gray-900">
+                {forecast?.total_demand > 0 
+                  ? <>{forecast.total_demand} units {forecast.prediction_source === 'category_ai' && <span className="text-xs text-purple-600">(AI)</span>}</>
+                  : <span className="text-sm text-gray-500">0 units</span>
+                }
               </div>
-              <p className="text-sm text-blue-700">
-                Predictions based on category average. Accuracy will improve with more sales data.
-              </p>
             </div>
-          )}
-          
-          {/* Insights */}
-          {product.insights && product.insights.length > 0 && (
-            <div className="space-y-2">
-              {product.insights.map((insight, idx) => (
-                <div 
-                  key={idx}
-                  className={`p-3 rounded-lg text-sm ${
-                    insight.severity === 'critical' ? 'bg-red-50 text-red-800' 
-                      : insight.severity === 'high' ? 'bg-orange-50 text-orange-800'
-                      : 'bg-blue-50 text-blue-800'
-                  }`}
-                >
-                  <span className="mr-2">{insight.icon}</span>
-                  <strong>{insight.title}:</strong> {insight.message}
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-xs text-gray-500 mb-1">Ideal Stock Level</div>
+              <div className="text-lg font-bold text-gray-900">
+                {restock?.ideal_stock_level || 30} units
+              </div>
+            </div>
+          </div>
+
+          {/* Why This Recommendation */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <h5 className="text-sm font-semibold text-blue-900 mb-2 flex items-center gap-2">
+              <Brain className="w-4 h-4" />
+              Why Order {restock?.suggested_quantity || 0} Units?
+            </h5>
+            <ul className="text-xs text-blue-800 space-y-1 ml-5 list-disc">
+              <li>Current stock ({product.available_stock}) is below safe levels</li>
+              {velocity?.prediction_source === 'category_ai' ? (
+                <li>AI prediction based on {velocity.category_products_analyzed || 'similar'} products in same category ({velocity.daily_avg_30d?.toFixed(1)}/day)</li>
+              ) : velocity?.daily_avg_30d > 0 ? (
+                <li>Based on actual sales data ({velocity.daily_avg_30d.toFixed(1)}/day)</li>
+              ) : (
+                <li>Conservative baseline estimate for new products</li>
+              )}
+              <li>Ensures 30-day supply to prevent stockouts</li>
+              {restock?.safety_stock && <li>Includes safety buffer of {restock.safety_stock} units</li>}
+            </ul>
+          </div>
+
+          {/* Real Sales Analytics */}
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-3">
+            <h5 className="text-sm font-semibold text-purple-900 mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Purchase Analytics (Last 30 Days)
+            </h5>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white rounded p-2">
+                <div className="text-xs text-gray-500">Total Sold</div>
+                <div className="text-lg font-bold text-gray-900">{velocity?.monthly_total || 0}</div>
+                <div className="text-xs text-gray-500">units</div>
+              </div>
+              <div className="bg-white rounded p-2">
+                <div className="text-xs text-gray-500">Weekly Average</div>
+                <div className="text-lg font-bold text-gray-900">{velocity?.weekly_total || 0}</div>
+                <div className="text-xs text-gray-500">units/week</div>
+              </div>
+              <div className="bg-white rounded p-2">
+                <div className="text-xs text-gray-500">Sales Trend</div>
+                <div className={`text-sm font-bold ${
+                  velocity?.trend === 'increasing' ? 'text-green-600' :
+                  velocity?.trend === 'decreasing' ? 'text-red-600' :
+                  'text-gray-600'
+                }`}>
+                  {velocity?.trend === 'increasing' ? '📈 Up' :
+                   velocity?.trend === 'decreasing' ? '📉 Down' :
+                   '➡️ Stable'}
+                  {velocity?.trend_percentage ? ` ${Math.abs(velocity.trend_percentage).toFixed(0)}%` : ''}
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-gray-900">
-                {restock?.suggested_quantity || 0}
               </div>
-              <div className="text-xs text-gray-500">Suggested Restock</div>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-gray-900">
-                {velocity?.weekly_total || 0}
+              <div className="bg-white rounded p-2">
+                <div className="text-xs text-gray-500">Prediction Method</div>
+                <div className="text-xs font-medium text-purple-700">
+                  {velocity?.prediction_source === 'actual_sales' ? '✅ Real Data' :
+                   velocity?.prediction_source === 'category_ai' ? '🤖 AI Estimated' :
+                   '📊 Baseline'}
+                </div>
               </div>
-              <div className="text-xs text-gray-500">Weekly Sales</div>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-gray-900">
-                {forecast?.total_demand || 0}
-              </div>
-              <div className="text-xs text-gray-500">30-Day Forecast</div>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-gray-900">
-                {forecast?.accuracy_score || 0}%
-              </div>
-              <div className="text-xs text-gray-500">AI Confidence</div>
             </div>
           </div>
-
-          {/* AI Model Info */}
-          <div className="flex items-center justify-between text-xs text-gray-500 bg-gray-50 rounded-lg p-2">
-            <span className="flex items-center gap-1">
-              <Brain className="w-3 h-3" />
-              Model: {forecast?.model_used || 'N/A'}
-            </span>
-            <span>
-              Analyzed: {new Date(product.analyzed_at).toLocaleString()}
-            </span>
-          </div>
-
-          {/* Action Button */}
-          {product.product_id && !product.product_id.toString().startsWith('demo') ? (
-            <Link
-              to={`/manager/ecommerce/products/${product.product_id}/edit`}
-              className="flex items-center justify-center gap-2 w-full p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Package className="w-4 h-4" />
-              Update Inventory
-              <ExternalLink className="w-4 h-4" />
-            </Link>
-          ) : (
-            <Link
-              to="/manager/ecommerce/products/add"
-              className="flex items-center justify-center gap-2 w-full p-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <Package className="w-4 h-4" />
-              Add Real Product
-              <ExternalLink className="w-4 h-4" />
-            </Link>
-          )}
         </div>
       )}
     </div>
