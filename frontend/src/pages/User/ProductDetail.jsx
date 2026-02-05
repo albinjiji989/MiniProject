@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Star, ShoppingCart, Heart, Share2, ChevronRight, Truck, Shield, RotateCcw } from 'lucide-react';
 import ProductReviews from '../../components/User/ProductReviews';
+import { getSessionId, getDeviceType } from '../../utils/session';
 
 /**
  * Product Detail Page - Flipkart Style
@@ -23,11 +24,30 @@ const ProductDetail = () => {
     try {
       setLoading(true);
       const response = await api.get(`/ecommerce/products/${slug}`);
-      setProduct(response.data.data);
+      const productData = response.data.data;
+      setProduct(productData);
+      
+      // Track product view for AI recommendations
+      if (productData?._id) {
+        trackProductView(productData._id);
+      }
     } catch (error) {
       console.error('Error fetching product:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const trackProductView = async (productId) => {
+    try {
+      await api.post(`/ecommerce/products/${productId}/view`, {
+        source: 'direct',
+        deviceType: getDeviceType(),
+        sessionId: getSessionId()
+      });
+    } catch (error) {
+      // Silently fail - don't disrupt user experience
+      console.debug('View tracking failed:', error);
     }
   };
 

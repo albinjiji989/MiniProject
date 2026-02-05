@@ -15,6 +15,7 @@ from modules.adoption.species_identifier import AdoptionSpeciesIdentifier
 from utils.image_processor import ImageProcessor
 from utils.cloudinary_uploader import CloudinaryUploader
 from routes.recommendation_routes import recommendation_bp
+from routes.inventory_routes import inventory_bp
 
 # Configure logging
 logging.basicConfig(
@@ -62,8 +63,22 @@ def home():
             'petshop_breed': '/api/petshop/identify-breed',
             'petshop_species': '/api/petshop/identify-species',
             'adoption_identify': '/api/adoption/identify',
+            'inventory_predict': '/api/inventory/analyze/<product_id>',
+            'inventory_all': '/api/inventory/analyze/all',
+            'inventory_critical': '/api/inventory/critical-items',
+            'inventory_report': '/api/inventory/restock-report',
+            'inventory_forecast': '/api/inventory/forecast/<product_id>',
+            'inventory_seasonal': '/api/inventory/seasonal-analysis',
             'health': '/health'
-        }
+        },
+        'features': [
+            'Pet Breed Identification',
+            'Species Classification',
+            'Adoption Matching',
+            'Inventory AI Predictions',
+            'Demand Forecasting',
+            'Seasonal Analysis'
+        ]
     })
 
 @app.route('/health', methods=['GET'])
@@ -331,6 +346,19 @@ def breed_suggestions():
 # Register ML Recommendation Blueprint
 app.register_blueprint(recommendation_bp)
 
+# Register Adoption Matching Blueprint
+from routes.adoption_routes import adoption_bp
+app.register_blueprint(adoption_bp)
+
+# Register Inventory Prediction Blueprint (AI/ML Auto-Restock)
+app.register_blueprint(inventory_bp, url_prefix='/api/inventory')
+logger.info("✅ Inventory Prediction API registered at /api/inventory")
+
+# Register E-commerce AI Recommendations Blueprint
+from routes.ecommerce_routes import ecommerce_bp
+app.register_blueprint(ecommerce_bp)
+logger.info("✅ E-commerce AI Recommendations API registered at /api/ecommerce")
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors"""
@@ -352,6 +380,16 @@ if __name__ == '__main__':
     logger.info("🤖 Pet Care AI/ML Service Starting...")
     logger.info("=" * 60)
     
+    # Test MongoDB connection
+    try:
+        logger.info("Testing MongoDB connection...")
+        from config.database import get_db
+        db = get_db()
+        logger.info("✅ MongoDB connection successful")
+    except Exception as e:
+        logger.error(f"❌ MongoDB connection failed: {str(e)}")
+        logger.error("Recommendation features will not work!")
+    
     # Initialize models on startup
     try:
         logger.info("Initializing AI models...")
@@ -369,5 +407,6 @@ if __name__ == '__main__':
     app.run(
         host=app.config['FLASK_HOST'],
         port=app.config['FLASK_PORT'],
-        debug=app.config['DEBUG']
+        debug=app.config['DEBUG'],
+        use_reloader=False  # Disable reloader to avoid loading models twice
     )

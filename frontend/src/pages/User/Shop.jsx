@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Filter, Grid, List, Star, Heart, ShoppingCart, ChevronDown } from 'lucide-react';
+import { getSessionId, getDeviceType } from '../../utils/session';
 
 /**
  * Shop Page - Browse All Products (Flipkart Style)
  */
 const Shop = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -20,6 +22,18 @@ const Shop = () => {
     search: searchParams.get('search') || ''
   });
   const [pagination, setPagination] = useState({});
+
+  const trackProductClick = async (productId) => {
+    try {
+      await api.post(`/ecommerce/products/${productId}/view`, {
+        source: filters.search ? 'search' : filters.category ? 'category' : 'shop',
+        deviceType: getDeviceType(),
+        sessionId: getSessionId()
+      });
+    } catch (error) {
+      console.debug('Click tracking failed:', error);
+    }
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -221,7 +235,12 @@ const Shop = () => {
                   : 'space-y-4'
                 }>
                   {products.map((product) => (
-                    <ProductCard key={product._id} product={product} viewMode={viewMode} />
+                    <ProductCard 
+                      key={product._id} 
+                      product={product} 
+                      viewMode={viewMode}
+                      onProductClick={trackProductClick}
+                    />
                   ))}
                 </div>
 
@@ -253,16 +272,23 @@ const Shop = () => {
 };
 
 // Product Card Component
-const ProductCard = ({ product, viewMode }) => {
+const ProductCard = ({ product, viewMode, onProductClick }) => {
   const finalPrice = product.pricing?.salePrice || product.pricing?.basePrice || 0;
   const discount = product.pricing?.salePrice && product.pricing?.basePrice
     ? Math.round(((product.pricing.basePrice - product.pricing.salePrice) / product.pricing.basePrice) * 100)
     : 0;
 
+  const handleClick = () => {
+    if (onProductClick) {
+      onProductClick(product._id);
+    }
+  };
+
   if (viewMode === 'list') {
     return (
       <Link
         to={`/user/ecommerce/product/${product.slug}`}
+        onClick={handleClick}
         className="bg-white rounded-lg p-4 hover:shadow-lg transition-shadow border border-gray-200 flex gap-4"
       >
         <img
@@ -301,6 +327,7 @@ const ProductCard = ({ product, viewMode }) => {
   return (
     <Link
       to={`/user/ecommerce/product/${product.slug}`}
+      onClick={handleClick}
       className="bg-white rounded-lg overflow-hidden hover:shadow-xl transition-shadow border border-gray-200 group"
     >
       <div className="relative">

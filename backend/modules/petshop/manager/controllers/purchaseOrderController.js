@@ -1,5 +1,5 @@
 const PurchaseOrder = require('../models/PurchaseOrder');
-const petshopBlockchainService = require('../../../../core/services/petshopBlockchainService');
+const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
 const PetInventoryItem = require('../models/PetInventoryItem');
 const User = require('../../../core/models/User');
 const { getStoreFilter } = require('../../../core/utils/storeFilter');

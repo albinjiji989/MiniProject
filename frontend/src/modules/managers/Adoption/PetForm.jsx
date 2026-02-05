@@ -39,7 +39,32 @@ import {
   Wc as GenderIcon
 } from '@mui/icons-material';
 
-const initial = { name: '', breed: '', species: '', age: 0, ageUnit: 'months', gender: 'male', color: '', weight: 0, healthStatus: 'good', vaccinationStatus: 'not_vaccinated', description: '', adoptionFee: 0, category: '', dateOfBirth: '', dobAccuracy: 'estimated', useAge: true };
+const initial = { 
+  name: '', breed: '', species: '', age: 0, ageUnit: 'months', gender: 'male', color: '', weight: 0, 
+  healthStatus: 'good', vaccinationStatus: 'not_vaccinated', description: '', adoptionFee: 0, category: '', 
+  dateOfBirth: '', dobAccuracy: 'estimated', useAge: true,
+  // Compatibility Profile
+  compatibilityProfile: {
+    size: 'medium',
+    energyLevel: 3,
+    exerciseNeeds: 'moderate',
+    trainingNeeds: 'moderate',
+    trainedLevel: 'untrained',
+    childFriendlyScore: 5,
+    petFriendlyScore: 5,
+    strangerFriendlyScore: 5,
+    minHomeSize: 0,
+    needsYard: false,
+    canLiveInApartment: true,
+    groomingNeeds: 'moderate',
+    estimatedMonthlyCost: 100,
+    temperamentTags: [],
+    noiseLevel: 'moderate',
+    canBeLeftAlone: true,
+    maxHoursAlone: 8,
+    requiresExperiencedOwner: false
+  }
+};
 
 const PetForm = () => {
   const navigate = useNavigate();
@@ -147,7 +172,28 @@ const PetForm = () => {
           petCode: p.petCode || '',
           dateOfBirth: p.dateOfBirth ? new Date(p.dateOfBirth).toISOString().split('T')[0] : '',
           dobAccuracy: p.dobAccuracy || 'estimated',
-          useAge: !p.dateOfBirth // Default to age input if no DOB
+          useAge: !p.dateOfBirth, // Default to age input if no DOB
+          // Load compatibility profile
+          compatibilityProfile: p.compatibilityProfile || {
+            size: 'medium',
+            energyLevel: 3,
+            exerciseNeeds: 'moderate',
+            trainingNeeds: 'moderate',
+            trainedLevel: 'untrained',
+            childFriendlyScore: 5,
+            petFriendlyScore: 5,
+            strangerFriendlyScore: 5,
+            minHomeSize: 0,
+            needsYard: false,
+            canLiveInApartment: true,
+            groomingNeeds: 'moderate',
+            estimatedMonthlyCost: 100,
+            temperamentTags: [],
+            noiseLevel: 'moderate',
+            canBeLeftAlone: true,
+            maxHoursAlone: 8,
+            requiresExperiencedOwner: false
+          }
         };
         setForm(mapped);
         
@@ -220,6 +266,19 @@ const PetForm = () => {
 
   const onChange = (e) => {
     const { name, value } = e.target;
+    
+    // Handle nested compatibilityProfile fields
+    if (name.startsWith('compatibilityProfile.')) {
+      const fieldName = name.split('.')[1];
+      setForm(prev => ({
+        ...prev,
+        compatibilityProfile: {
+          ...prev.compatibilityProfile,
+          [fieldName]: isNaN(value) ? value : Number(value)
+        }
+      }));
+      return;
+    }
     
     // Special handling for species, breed, and category - they must be updated together
     if (name === 'species' || name === 'breed' || name === 'category') {
@@ -526,23 +585,37 @@ const PetForm = () => {
         vaccinationStatus: form.vaccinationStatus || 'not_vaccinated',
         description: form.description || '',
         adoptionFee: Number(form.adoptionFee) || 0,
-        category: form.category || ''
+        category: form.category || '',
+        // Include Smart Matching Profile
+        compatibilityProfile: form.compatibilityProfile || {
+          size: 'medium',
+          energyLevel: 3,
+          exerciseNeeds: 'moderate',
+          trainingNeeds: 'moderate',
+          trainedLevel: 'untrained',
+          childFriendlyScore: 5,
+          petFriendlyScore: 5,
+          strangerFriendlyScore: 5,
+          minHomeSize: 0,
+          needsYard: false,
+          canLiveInApartment: true,
+          groomingNeeds: 'moderate',
+          estimatedMonthlyCost: 100,
+          noiseLevel: 'moderate',
+          canBeLeftAlone: true,
+          maxHoursAlone: 8,
+          requiresExperiencedOwner: false
+        }
       };
       
       setDebugInfo(`Submitting ${isEdit ? 'update' : 'create'} request...`);
       
       let res;
       if (isEdit) {
-        // For updates, only send changed fields to avoid overwriting with defaults
-        const changedFields = {};
-        Object.keys(payload).forEach(key => {
-          if (payload[key] !== initial[key]) {
-            changedFields[key] = payload[key];
-          }
-        });
-        res = await apiClient.put(`/adoption/manager/pets/${id}`, changedFields);
+        // For updates, include full payload with compatibilityProfile
+        res = await adoptionAPI.managerUpdatePet(id, payload);
       } else {
-        res = await apiClient.post('/adoption/manager/pets', payload);
+        res = await adoptionAPI.managerCreatePet(payload);
       }
       
       const petId = res.data?.data?._id || res.data?.data?.id || id;
@@ -933,6 +1006,391 @@ const PetForm = () => {
                   value={form.description} 
                   onChange={onChange} 
                 />
+              </Grid>
+
+              {/* Smart Matching Profile Section */}
+              <Grid item xs={12}>
+                <Box sx={{ mt: 4, mb: 2, p: 3, bgcolor: '#f5f7fa', borderRadius: 2, border: '2px solid #e3f2fd' }}>
+                  <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, color: 'primary.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    🎯 Smart Matching Profile
+                  </Typography>
+                  <Alert severity="info" sx={{ mb: 3 }}>
+                    <Typography variant="body2">
+                      <strong>Important:</strong> Assess THIS specific pet's behavior and needs. Don't rely on breed stereotypes! 
+                      These details help match the pet with the right adopter for a successful adoption.
+                    </Typography>
+                  </Alert>
+
+                  <Grid container spacing={3}>
+                    {/* Size */}
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Size (Observed)</InputLabel>
+                        <Select
+                          name="compatibilityProfile.size"
+                          value={form.compatibilityProfile?.size || 'medium'}
+                          onChange={onChange}
+                          label="Size (Observed)"
+                        >
+                          <MenuItem value="small">Small (0-20 lbs)</MenuItem>
+                          <MenuItem value="medium">Medium (20-60 lbs)</MenuItem>
+                          <MenuItem value="large">Large (60+ lbs)</MenuItem>
+                        </Select>
+                        <FormHelperText>Actual size category of this pet</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    {/* Energy Level */}
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Energy Level (25% of match)</InputLabel>
+                        <Select
+                          name="compatibilityProfile.energyLevel"
+                          value={form.compatibilityProfile?.energyLevel || 3}
+                          onChange={onChange}
+                          label="Energy Level (25% of match)"
+                        >
+                          <MenuItem value={1}>1 - Very Low (sleeps most of day)</MenuItem>
+                          <MenuItem value={2}>2 - Low (calm, relaxed)</MenuItem>
+                          <MenuItem value={3}>3 - Moderate (balanced)</MenuItem>
+                          <MenuItem value={4}>4 - High (active, playful)</MenuItem>
+                          <MenuItem value={5}>5 - Very High (needs constant activity)</MenuItem>
+                        </Select>
+                        <FormHelperText>Observed energy & activity level</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    {/* Exercise Needs */}
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Exercise Needs</InputLabel>
+                        <Select
+                          name="compatibilityProfile.exerciseNeeds"
+                          value={form.compatibilityProfile?.exerciseNeeds || 'moderate'}
+                          onChange={onChange}
+                          label="Exercise Needs"
+                        >
+                          <MenuItem value="minimal">Minimal (short walks)</MenuItem>
+                          <MenuItem value="moderate">Moderate (daily walks)</MenuItem>
+                          <MenuItem value="high">High (long walks/runs)</MenuItem>
+                          <MenuItem value="very_high">Very High (constant exercise)</MenuItem>
+                        </Select>
+                        <FormHelperText>Daily exercise requirements</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    {/* Child Friendly Score */}
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Good with Children (20% of match)</InputLabel>
+                        <Select
+                          name="compatibilityProfile.childFriendlyScore"
+                          value={form.compatibilityProfile?.childFriendlyScore || 5}
+                          onChange={onChange}
+                          label="Good with Children (20% of match)"
+                        >
+                          <MenuItem value={0}>0 - Not Safe (aggressive with kids)</MenuItem>
+                          <MenuItem value={1}>1 - Very Poor</MenuItem>
+                          <MenuItem value={2}>2 - Poor (not recommended)</MenuItem>
+                          <MenuItem value={3}>3 - Fair (supervision needed)</MenuItem>
+                          <MenuItem value={4}>4 - Below Average</MenuItem>
+                          <MenuItem value={5}>5 - Average (okay with older kids)</MenuItem>
+                          <MenuItem value={6}>6 - Above Average</MenuItem>
+                          <MenuItem value={7}>7 - Good (gentle with kids)</MenuItem>
+                          <MenuItem value={8}>8 - Very Good</MenuItem>
+                          <MenuItem value={9}>9 - Excellent (very patient)</MenuItem>
+                          <MenuItem value={10}>10 - Perfect (therapy-pet level)</MenuItem>
+                        </Select>
+                        <FormHelperText>Test with supervised child visits</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    {/* Pet Friendly Score */}
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Good with Other Pets (20% of match)</InputLabel>
+                        <Select
+                          name="compatibilityProfile.petFriendlyScore"
+                          value={form.compatibilityProfile?.petFriendlyScore || 5}
+                          onChange={onChange}
+                          label="Good with Other Pets (20% of match)"
+                        >
+                          <MenuItem value={0}>0 - Not Safe (aggressive)</MenuItem>
+                          <MenuItem value={1}>1 - Very Poor</MenuItem>
+                          <MenuItem value={2}>2 - Poor (fights with pets)</MenuItem>
+                          <MenuItem value={3}>3 - Fair (cautious)</MenuItem>
+                          <MenuItem value={4}>4 - Below Average</MenuItem>
+                          <MenuItem value={5}>5 - Average (neutral)</MenuItem>
+                          <MenuItem value={6}>6 - Above Average</MenuItem>
+                          <MenuItem value={7}>7 - Good (friendly)</MenuItem>
+                          <MenuItem value={8}>8 - Very Good</MenuItem>
+                          <MenuItem value={9}>9 - Excellent (loves other pets)</MenuItem>
+                          <MenuItem value={10}>10 - Perfect (pack animal)</MenuItem>
+                        </Select>
+                        <FormHelperText>Observe during playgroups</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    {/* Stranger Friendly */}
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Good with Strangers</InputLabel>
+                        <Select
+                          name="compatibilityProfile.strangerFriendlyScore"
+                          value={form.compatibilityProfile?.strangerFriendlyScore || 5}
+                          onChange={onChange}
+                          label="Good with Strangers"
+                        >
+                          <MenuItem value={0}>0 - Aggressive</MenuItem>
+                          <MenuItem value={3}>3 - Fearful/Shy</MenuItem>
+                          <MenuItem value={5}>5 - Average (warms up)</MenuItem>
+                          <MenuItem value={7}>7 - Friendly</MenuItem>
+                          <MenuItem value={10}>10 - Loves everyone</MenuItem>
+                        </Select>
+                        <FormHelperText>Behavior with new people</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    {/* Training Needs */}
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Training Needs (15% of match)</InputLabel>
+                        <Select
+                          name="compatibilityProfile.trainingNeeds"
+                          value={form.compatibilityProfile?.trainingNeeds || 'moderate'}
+                          onChange={onChange}
+                          label="Training Needs (15% of match)"
+                        >
+                          <MenuItem value="low">Low (well-behaved)</MenuItem>
+                          <MenuItem value="moderate">Moderate (basic training)</MenuItem>
+                          <MenuItem value="high">High (needs extensive training)</MenuItem>
+                        </Select>
+                        <FormHelperText>Training effort required</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    {/* Current Training Level */}
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Current Training Level</InputLabel>
+                        <Select
+                          name="compatibilityProfile.trainedLevel"
+                          value={form.compatibilityProfile?.trainedLevel || 'untrained'}
+                          onChange={onChange}
+                          label="Current Training Level"
+                        >
+                          <MenuItem value="untrained">Untrained</MenuItem>
+                          <MenuItem value="basic">Basic (sit, stay, come)</MenuItem>
+                          <MenuItem value="intermediate">Intermediate (leash, house trained)</MenuItem>
+                          <MenuItem value="advanced">Advanced (therapy/service level)</MenuItem>
+                        </Select>
+                        <FormHelperText>What the pet already knows</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    {/* Requires Experienced Owner */}
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Owner Experience Needed</InputLabel>
+                        <Select
+                          name="compatibilityProfile.requiresExperiencedOwner"
+                          value={form.compatibilityProfile?.requiresExperiencedOwner ? 'true' : 'false'}
+                          onChange={(e) => {
+                            const val = e.target.value === 'true';
+                            setForm(prev => ({
+                              ...prev,
+                              compatibilityProfile: {
+                                ...prev.compatibilityProfile,
+                                requiresExperiencedOwner: val
+                              }
+                            }));
+                          }}
+                          label="Owner Experience Needed"
+                        >
+                          <MenuItem value="false">Beginner Friendly</MenuItem>
+                          <MenuItem value="true">Experienced Owner Required</MenuItem>
+                        </Select>
+                        <FormHelperText>First-time owners vs experienced</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    {/* Living Space Requirements */}
+                    <Grid item xs={12}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: 'primary.main' }}>
+                        Living Space Requirements (20% of match)
+                      </Typography>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Needs Yard</InputLabel>
+                        <Select
+                          name="compatibilityProfile.needsYard"
+                          value={form.compatibilityProfile?.needsYard ? 'true' : 'false'}
+                          onChange={(e) => {
+                            const val = e.target.value === 'true';
+                            setForm(prev => ({
+                              ...prev,
+                              compatibilityProfile: {
+                                ...prev.compatibilityProfile,
+                                needsYard: val
+                              }
+                            }));
+                          }}
+                          label="Needs Yard"
+                        >
+                          <MenuItem value="false">No Yard Required</MenuItem>
+                          <MenuItem value="true">Yard Required</MenuItem>
+                        </Select>
+                        <FormHelperText>Must have outdoor space?</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Can Live in Apartment</InputLabel>
+                        <Select
+                          name="compatibilityProfile.canLiveInApartment"
+                          value={form.compatibilityProfile?.canLiveInApartment ? 'true' : 'false'}
+                          onChange={(e) => {
+                            const val = e.target.value === 'true';
+                            setForm(prev => ({
+                              ...prev,
+                              compatibilityProfile: {
+                                ...prev.compatibilityProfile,
+                                canLiveInApartment: val
+                              }
+                            }));
+                          }}
+                          label="Can Live in Apartment"
+                        >
+                          <MenuItem value="true">Yes - Apartment Friendly</MenuItem>
+                          <MenuItem value="false">No - Needs House/Farm</MenuItem>
+                        </Select>
+                        <FormHelperText>Suitable for apartment living?</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        type="number"
+                        label="Minimum Home Size (sq ft)"
+                        name="compatibilityProfile.minHomeSize"
+                        value={form.compatibilityProfile?.minHomeSize || 0}
+                        onChange={onChange}
+                        InputProps={{
+                          inputProps: { min: 0 }
+                        }}
+                        helperText="0 = no minimum required"
+                      />
+                    </Grid>
+
+                    {/* Care Requirements */}
+                    <Grid item xs={12}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: 'primary.main' }}>
+                        Care Requirements (10% of match - Budget)
+                      </Typography>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Grooming Needs</InputLabel>
+                        <Select
+                          name="compatibilityProfile.groomingNeeds"
+                          value={form.compatibilityProfile?.groomingNeeds || 'moderate'}
+                          onChange={onChange}
+                          label="Grooming Needs"
+                        >
+                          <MenuItem value="low">Low (brush occasionally)</MenuItem>
+                          <MenuItem value="moderate">Moderate (weekly grooming)</MenuItem>
+                          <MenuItem value="high">High (professional grooming)</MenuItem>
+                        </Select>
+                        <FormHelperText>Grooming time & cost</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        type="number"
+                        label="Estimated Monthly Cost ($)"
+                        name="compatibilityProfile.estimatedMonthlyCost"
+                        value={form.compatibilityProfile?.estimatedMonthlyCost || 100}
+                        onChange={onChange}
+                        InputProps={{
+                          startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                          inputProps: { min: 0 }
+                        }}
+                        helperText="Food, vet, grooming, supplies"
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} md={4}>
+                      <FormControl fullWidth>
+                        <InputLabel>Noise Level</InputLabel>
+                        <Select
+                          name="compatibilityProfile.noiseLevel"
+                          value={form.compatibilityProfile?.noiseLevel || 'moderate'}
+                          onChange={onChange}
+                          label="Noise Level"
+                        >
+                          <MenuItem value="quiet">Quiet (rarely makes noise)</MenuItem>
+                          <MenuItem value="moderate">Moderate (occasional barks/meows)</MenuItem>
+                          <MenuItem value="vocal">Vocal (frequently loud)</MenuItem>
+                        </Select>
+                        <FormHelperText>Important for apartments</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    {/* Behavioral Traits */}
+                    <Grid item xs={12}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: 'primary.main' }}>
+                        Behavioral Traits (10% of match - Preferences)
+                      </Typography>
+                    </Grid>
+
+                    <Grid item xs={12} md={6}>
+                      <FormControl fullWidth>
+                        <InputLabel>Can Be Left Alone</InputLabel>
+                        <Select
+                          name="compatibilityProfile.canBeLeftAlone"
+                          value={form.compatibilityProfile?.canBeLeftAlone ? 'true' : 'false'}
+                          onChange={(e) => {
+                            const val = e.target.value === 'true';
+                            setForm(prev => ({
+                              ...prev,
+                              compatibilityProfile: {
+                                ...prev.compatibilityProfile,
+                                canBeLeftAlone: val
+                              }
+                            }));
+                          }}
+                          label="Can Be Left Alone"
+                        >
+                          <MenuItem value="true">Yes - Independent</MenuItem>
+                          <MenuItem value="false">No - Separation Anxiety</MenuItem>
+                        </Select>
+                        <FormHelperText>Handles being alone?</FormHelperText>
+                      </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        type="number"
+                        label="Maximum Hours Alone"
+                        name="compatibilityProfile.maxHoursAlone"
+                        value={form.compatibilityProfile?.maxHoursAlone || 8}
+                        onChange={onChange}
+                        InputProps={{
+                          inputProps: { min: 0, max: 24 }
+                        }}
+                        helperText="How many hours per day can be left alone"
+                      />
+                    </Grid>
+                  </Grid>
+                </Box>
               </Grid>
               
               {/* Image Upload Section */}

@@ -147,37 +147,9 @@ const PetshopAIIdentifier = () => {
                         {(identifiedPet.confidence * 100).toFixed(1)}%
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Stock Status</p>
-                      <p className={`font-bold ${
-                        identifiedPet.stockAvailable ? 'text-green-600' : 'text-yellow-600'
-                      }`}>
-                        {identifiedPet.stockAvailable ? '✅ Available' : '⚠️ Not in Stock'}
-                      </p>
-                    </div>
                   </div>
                 </div>
               )}
-              {/* Technology Info */}
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-3">
-                  AI Technology
-                </h3>
-                <div className="space-y-2 text-sm text-gray-600">
-                  <p>
-                    <strong>Model:</strong> MobileNetV2
-                  </p>
-                  <p>
-                    <strong>Accuracy:</strong> 80-90% for common breeds
-                  </p>
-                  <p>
-                    <strong>Speed:</strong> Results in under 1 second
-                  </p>
-                  <p>
-                    <strong>Training:</strong> 14M+ images from ImageNet
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         </div>

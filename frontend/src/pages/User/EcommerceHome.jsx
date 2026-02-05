@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
-import { ChevronRight, Star, TrendingUp, Zap } from 'lucide-react';
+import { ChevronRight, Star, TrendingUp, Zap, ShoppingBag, ShoppingCart, Heart, Package } from 'lucide-react';
 import AIRecommendations from '../../modules/ecommerce/components/AIRecommendations';
 
 /**
@@ -63,17 +63,34 @@ const EcommerceHome = () => {
                     <p className="text-xl mb-8 text-blue-100">
                         Quality products at unbeatable prices
                     </p>
-                    <Link
-                        to="/user/ecommerce/shop"
-                        className="inline-block bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
-                    >
-                        Shop Now
-                    </Link>
+                    <div className="flex flex-wrap gap-4">
+                        <Link
+                            to="/user/ecommerce/shop"
+                            className="inline-flex items-center gap-2 bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
+                        >
+                            <ShoppingBag className="w-5 h-5" />
+                            Shop Now
+                        </Link>
+                        <Link
+                            to="/user/ecommerce/orders"
+                            className="inline-flex items-center gap-2 bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-600 transition-colors border border-blue-500"
+                        >
+                            <Package className="w-5 h-5" />
+                            My Orders
+                        </Link>
+                        <Link
+                            to="/user/ecommerce/cart"
+                            className="inline-flex items-center gap-2 bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-600 transition-colors border border-blue-500"
+                        >
+                            <ShoppingCart className="w-5 h-5" />
+                            Cart
+                        </Link>
+                    </div>
                 </div>
             </div>
 
-            {/* AI-Powered Recommendations */}
-            <div className="bg-gradient-to-r from-purple-50 to-pink-50 py-12">
+            {/* AI/ML Recommendations */}
+            <div className="bg-white py-12">
                 <div className="max-w-7xl mx-auto px-4">
                     <AIRecommendations />
                 </div>
@@ -129,13 +146,6 @@ const EcommerceHome = () => {
                     </div>
                 </div>
             )}
-
-            {/* AI-Powered Recommendations */}
-            <div className="bg-gradient-to-r from-purple-50 to-pink-50 py-12">
-                <div className="max-w-7xl mx-auto px-4">
-                    <AIRecommendations />
-                </div>
-            </div>
 
             {/* Featured Products */}
             {featuredProducts.length > 0 ? (

@@ -38,7 +38,7 @@ export default function StepAvailability() {
   }
 
   const next = () => navigate('/manager/adoption/wizard/review')
-  const back = () => navigate('/manager/adoption/wizard/health')
+  const back = () => navigate('/manager/adoption/wizard/matching')
 
   return (
     <div className="space-y-6">

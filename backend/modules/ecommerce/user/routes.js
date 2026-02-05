@@ -7,8 +7,26 @@ const cartController = require('./cartController');
 const wishlistController = require('./wishlistController');
 const orderController = require('./orderController');
 const categoryController = require('../manager/categoryController');
-const mlRecommendationController = require('./mlRecommendationController');
-const recommendationController = require('./recommendationController');
+const aiRecommendationController = require('./controllers/aiRecommendationController');
+
+// Optional auth middleware - attaches user if token exists, but doesn't block request
+const optionalAuth = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (token) {
+      const jwt = require('jsonwebtoken');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const User = require('../../../core/models/User');
+      const user = await User.findById(decoded.user.id).select('-password');
+      if (user && user.isActive) {
+        req.user = user;
+      }
+    }
+  } catch (error) {
+    // Silently fail - user remains undefined
+  }
+  next();
+};
 
 // ============ CATEGORY ROUTES (PUBLIC) ============
 router.get('/categories', categoryController.getAllCategories);
@@ -21,15 +39,13 @@ router.get('/products/featured', productController.getFeaturedProducts);
 router.get('/products/deals', productController.getDeals);
 router.get('/products/search-suggestions', productController.getSearchSuggestions);
 router.get('/products/:slug', productController.getProductDetails);
+router.post('/products/:productId/view', optionalAuth, aiRecommendationController.trackView);
 
-// ============ ML RECOMMENDATION ROUTES (PUBLIC) ============
-router.get('/ml/recommendations', mlRecommendationController.getMLBreedRecommendations);
-router.get('/ml/similar/:productId', mlRecommendationController.getMLSimilarProducts);
-router.get('/ml/model-status', mlRecommendationController.getMLModelStatus);
-
-// ============ XAI RECOMMENDATION ROUTES (PUBLIC) ============
-// Public endpoint to explain recommendation methodology
-router.get('/recommendations/explain-weights', recommendationController.explainWeights);
+// ============ AI/ML RECOMMENDATION ROUTES (PUBLIC) ============
+router.get('/ai/recommendations', optionalAuth, aiRecommendationController.getRecommendations);
+router.get('/ai/recommendations/best-sellers', aiRecommendationController.getBestSellers);
+router.get('/ai/recommendations/trending', aiRecommendationController.getTrending);
+router.get('/ai/recommendations/most-bought', aiRecommendationController.getMostBought);
 
 // ============ REVIEW ROUTES ============
 router.get('/products/:productId/reviews', reviewController.getProductReviews);
@@ -54,26 +70,10 @@ router.get('/wishlist', wishlistController.getWishlist);
 router.post('/wishlist', wishlistController.addToWishlist);
 router.delete('/wishlist/:productId', wishlistController.removeFromWishlist);
 
-
-// ============ XAI RECOMMENDATION ROUTES (PROTECTED) ============
-// Get personalized recommendations with explanations
-router.get('/recommendations', recommendationController.getRecommendations);
-
-// Track product views for recommendation engine
-router.post('/products/:productId/view', recommendationController.trackProductView);
-
-// Track recommendation interactions
-router.post('/recommendations/:productId/track', recommendationController.trackRecommendationInteraction);
-
-// Provide feedback on recommendations
-router.post('/recommendations/:productId/feedback', recommendationController.provideFeedback);
-
-// Get recommendation analytics
-router.get('/recommendations/analytics', recommendationController.getRecommendationAnalytics);
-// ============ ML RECOMMENDATION ROUTES (PROTECTED) ============
-router.get('/ml/personalized', mlRecommendationController.getPersonalizedRecommendations);
-router.post('/ml/track-interaction', mlRecommendationController.trackUserInteraction);
-router.post('/ml/train-model', mlRecommendationController.trainRecommendationModel); // Admin only in production
+// ============ AI/ML RECOMMENDATION TRACKING (PROTECTED) ============
+router.post('/ai/recommendations/track-view', aiRecommendationController.trackView);
+router.post('/ai/recommendations/track-click', aiRecommendationController.trackClick);
+router.post('/ai/recommendations/track-purchase', aiRecommendationController.trackPurchase);
 
 // ============ ORDER ROUTES ============
 router.get('/orders', orderController.getUserOrders);

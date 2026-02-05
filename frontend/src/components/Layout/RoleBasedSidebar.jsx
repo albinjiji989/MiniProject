@@ -320,56 +320,6 @@ const RoleBasedSidebar = ({ onClose }) => {
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Logo/Header */}
-      <Box sx={{
-        p: 3,
-        background: 'linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(147,51,234,0.12) 100%)',
-        borderBottom: '1px solid',
-        borderColor: 'divider'
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar sx={{ bgcolor: 'primary.main', width: 44, height: 44, boxShadow: 1 }}>
-            <PetsIcon />
-          </Avatar>
-          <Box>
-            <Typography variant="subtitle2" sx={{ color: 'text.secondary', mb: 0.25 }}>Pet Welfare</Typography>
-            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: 0.2 }}>{getPortalTitle()}</Typography>
-          </Box>
-        </Box>
-      </Box>
-
-      {/* User Info */}
-      <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider', backgroundColor: 'background.paper' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar
-            src={user?.profilePicture}
-            sx={{ bgcolor: 'secondary.main', width: 48, height: 48, fontWeight: 700 }}
-          >
-            {user?.name?.charAt(0)?.toUpperCase()}
-          </Avatar>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
-              {user?.name || 'Manager'}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              {user?.email}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 1, flexWrap: 'wrap' }}>
-              <Chip label={(user?.role || '').replace('_', ' ')} size="small" color="primary" variant="outlined" />
-              {user?.assignedModule && (
-                <Chip label={user.assignedModule} size="small" color="secondary" variant="outlined" />
-              )}
-              {(user?.role || '').includes('_manager') && (
-                <>
-                  <Chip label={`ID: ${user?.storeId || '—'}`} size="small" variant="outlined" />
-                  <Chip label={`Name: ${user?.storeName || '—'}`} size="small" variant="outlined" />
-                </>
-              )}
-            </Box>
-          </Box>
-        </Box>
-      </Box>
-
       {/* Navigation */}
       <Box sx={{ flex: 1, overflow: 'auto' }}>
         <List sx={{ px: 2, py: 1.5 }}>

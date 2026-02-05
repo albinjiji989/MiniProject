@@ -51,6 +51,49 @@ const userSchema = new mongoose.Schema({
   mustChangePassword: { type: Boolean, default: false },
   resetPasswordToken: { type: String, default: null },
   resetPasswordExpires: { type: Date, default: null },
+  
+  // Adoption Profile for Smart Matching
+  adoptionProfile: {
+    // Living Situation
+    homeType: { type: String, enum: ['apartment', 'house', 'farm', 'condo', 'other'], default: null },
+    homeSize: { type: Number, default: null }, // sq ft
+    hasYard: { type: Boolean, default: false },
+    yardSize: { type: String, enum: ['none', 'small', 'medium', 'large'], default: 'none' },
+    
+    // Lifestyle
+    activityLevel: { type: Number, min: 1, max: 5, default: 3 }, // 1=sedentary, 5=very active
+    workSchedule: { type: String, enum: ['home_all_day', 'part_time', 'full_time', 'frequent_travel'], default: 'full_time' },
+    hoursAlonePerDay: { type: Number, default: 8 }, // hours pet would be alone
+    
+    // Experience
+    experienceLevel: { type: String, enum: ['first_time', 'some_experience', 'experienced', 'expert'], default: 'first_time' },
+    previousPets: [{ type: String }], // Array of species
+    
+    // Family Composition
+    hasChildren: { type: Boolean, default: false },
+    childrenAges: [{ type: Number }], // Array of ages
+    hasOtherPets: { type: Boolean, default: false },
+    otherPetsTypes: [{ type: String }], // ['dog', 'cat', etc]
+    
+    // Budget
+    monthlyBudget: { type: Number, default: null }, // Monthly pet care budget
+    maxAdoptionFee: { type: Number, default: null },
+    
+    // Preferences
+    preferredSpecies: [{ type: String }],
+    preferredSize: [{ type: String, enum: ['small', 'medium', 'large'] }],
+    preferredAgeRange: { min: Number, max: Number },
+    preferredEnergyLevel: { type: Number, min: 1, max: 5 }, // 1=low, 5=high
+    
+    // Special Considerations
+    willingToTrainPet: { type: Boolean, default: true },
+    canHandleSpecialNeeds: { type: Boolean, default: false },
+    allergies: [{ type: String }],
+    
+    // Profile Completion
+    profileComplete: { type: Boolean, default: false },
+    profileCompletedAt: { type: Date, default: null }
+  },
 }, { timestamps: true });
 
 // Hash password if modified

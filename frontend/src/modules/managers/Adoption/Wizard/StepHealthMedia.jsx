@@ -221,7 +221,7 @@ export default function StepHealthMedia() {
     saveLocal({ [name]: value || '' })
   }
 
-  const next = () => navigate('/manager/adoption/wizard/availability')
+  const next = () => navigate('/manager/adoption/wizard/matching')
   const back = () => navigate('/manager/adoption/wizard/basic')
 
   return (

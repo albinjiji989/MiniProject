@@ -212,7 +212,7 @@ const PurchaseApplications = () => {
   const statusCounts = {
     all: applications.length,
     pending: applications.filter(a => a.status === 'pending' || a.status === 'under_review').length,
-    approved: applications.filter(a => a.status === 'approved').length,
+    approved: applications.filter(a => a.status === 'approved' || a.status === 'payment_pending').length,
     paid: applications.filter(a => a.status === 'paid').length,
     scheduled: applications.filter(a => a.status === 'scheduled').length,
     completed: applications.filter(a => a.status === 'completed').length
@@ -248,11 +248,25 @@ const PurchaseApplications = () => {
           <Tab label={`All (${statusCounts.all})`} value="all" />
           <Tab label={`Pending (${statusCounts.pending})`} value="pending" />
           <Tab label={`Approved (${statusCounts.approved})`} value="approved" />
-          <Tab label={`Paid (${statusCounts.paid})`} value="paid" />
+          <Tab 
+            label={
+              <Badge badgeContent={statusCounts.paid} color="error" max={99}>
+                {`Paid (${statusCounts.paid})`}
+              </Badge>
+            } 
+            value="paid" 
+          />
           <Tab label={`Scheduled (${statusCounts.scheduled})`} value="scheduled" />
           <Tab label={`Completed (${statusCounts.completed})`} value="completed" />
         </Tabs>
       </Paper>
+
+      {/* Info Alert for Paid Status */}
+      {filterStatus === 'paid' && statusCounts.paid > 0 && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <strong>{statusCounts.paid}</strong> application{statusCounts.paid > 1 ? 's have' : ' has'} completed payment and {statusCounts.paid > 1 ? 'are' : 'is'} ready for handover scheduling. Click "Schedule Handover" to set up the pet collection appointment.
+        </Alert>
+      )}
 
       {/* Applications List */}
       {applications.length === 0 ? (
@@ -324,6 +338,14 @@ const PurchaseApplications = () => {
                               Reject
                             </Button>
                           </>
+                        )}
+
+                        {(app.status === 'approved' || app.status === 'payment_pending') && (
+                          <Chip 
+                            label={app.status === 'payment_pending' ? '⏳ Waiting for Payment' : '✓ Approved - Awaiting Payment'} 
+                            color="warning"
+                            size="small"
+                          />
                         )}
 
                         {app.status === 'paid' && (

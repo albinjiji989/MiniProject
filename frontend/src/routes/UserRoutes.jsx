@@ -14,6 +14,8 @@ import UserAdoptionPetDetails from '../pages/User/Adoption/UserAdoptedPetDetails
 import PetDetails from '../pages/User/Adoption/PetDetails'
 import AdoptionDashboard from '../pages/User/Adoption/AdoptionDashboard'
 import MyAdoptedPets from '../pages/User/Adoption/MyAdoptedPets'
+import AdoptionProfileWizard from '../pages/User/Adoption/AdoptionProfileWizard'
+import SmartMatches from '../pages/User/Adoption/SmartMatches'
 import UserVetAppointments from '../pages/User/Veterinary/VeterinaryAppointments'
 import PetCareCalendar from '../pages/User/MyOwnedPets'
 import PetHealthRecords from '../pages/User/MyOwnedPets'
@@ -107,6 +109,8 @@ const UserRoutes = () => {
         <Route path="/adoption/*" element={
           <Routes>
             <Route path="/" element={<AdoptionDashboard />} />
+            <Route path="/profile-wizard" element={<AdoptionProfileWizard />} />
+            <Route path="/smart-matches" element={<SmartMatches />} />
             <Route path="/applications" element={<UserAdoptionApplications />} />
             <Route path="/applications/:id" element={<UserAdoptionApplicationDetails />} />
             <Route path="/wizard/*" element={<UserAdoptionWizard />} />

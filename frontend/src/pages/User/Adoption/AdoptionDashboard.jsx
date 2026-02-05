@@ -47,6 +47,8 @@ const AdoptionDashboard = () => {
   const [adopted, setAdopted] = useState([]);
   const [tab, setTab] = useState('browse');
   const [searchTerm, setSearchTerm] = useState('');
+  const [profileStatus, setProfileStatus] = useState(null);
+  const [error, setError] = useState('');
   
   // Filter pets based on search term
   const filteredPets = pets.filter(pet => 
@@ -73,16 +75,20 @@ const AdoptionDashboard = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [petsRes, applicationsRes, adoptedRes] = await Promise.all([
+      const [petsRes, applicationsRes, adoptedRes, profileRes] = await Promise.all([
         adoptionAPI.listPets(),
         adoptionAPI.listMyRequests(),
-        adoptionAPI.getMyAdoptedPets()
+        adoptionAPI.getMyAdoptedPets(),
+        adoptionAPI.getAdoptionProfileStatus()
       ]);
 
       console.log('Fetched pets:', petsRes.data.data.pets);
       setPets(petsRes.data.data.pets || []);
       setApplications(applicationsRes.data.data || []);
-      setAdopted(adoptedRes.data.data || [])
+      setAdopted(adoptedRes.data.data || []);
+      if (profileRes.data.success) {
+        setProfileStatus(profileRes.data.data);
+      }
     } catch (error) {
       console.error('Error fetching adoption data:', error);
       setError('Failed to load adoption data');
@@ -175,6 +181,121 @@ const AdoptionDashboard = () => {
 
       {/* Stats Cards */}
       <Grid container spacing={2} sx={{ mb: 4 }}>
+        {/* AI Profile Widget */}
+        {profileStatus && !profileStatus.isComplete && (
+          <Grid item xs={12}>
+            <Paper 
+              elevation={2}
+              sx={{ 
+                p: 3,
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                borderRadius: 2,
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: '0 8px 16px rgba(0,0,0,0.2)'
+                }
+              }}
+              onClick={() => navigate('/user/adoption/profile-wizard')}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <AutoAwesomeIcon sx={{ fontSize: 40, mr: 2 }} />
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      🎯 Unlock AI-Powered Matches!
+                    </Typography>
+                    <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                      Complete your profile to get personalized pet recommendations
+                    </Typography>
+                  </Box>
+                </Box>
+                <Button 
+                  variant="contained" 
+                  sx={{ 
+                    bgcolor: 'white', 
+                    color: '#667eea',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' }
+                  }}
+                >
+                  Complete Profile
+                </Button>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box sx={{ flexGrow: 1 }}>
+                  <Typography variant="caption" sx={{ mb: 0.5, display: 'block' }}>
+                    Profile {profileStatus.completionPercentage}% Complete
+                  </Typography>
+                  <Box sx={{ 
+                    height: 8, 
+                    bgcolor: 'rgba(255,255,255,0.3)', 
+                    borderRadius: 4,
+                    overflow: 'hidden'
+                  }}>
+                    <Box sx={{ 
+                      width: `${profileStatus.completionPercentage}%`, 
+                      height: '100%', 
+                      bgcolor: 'white',
+                      transition: 'width 0.3s ease'
+                    }} />
+                  </Box>
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                  {profileStatus.completedFields}/{profileStatus.totalFields}
+                </Typography>
+              </Box>
+            </Paper>
+          </Grid>
+        )}
+
+        {/* AI Smart Matches Widget */}
+        {profileStatus && profileStatus.isComplete && (
+          <Grid item xs={12}>
+            <Paper 
+              elevation={2}
+              sx={{ 
+                p: 3,
+                background: 'linear-gradient(135deg, #4caf50 0%, #8bc34a 100%)',
+                color: 'white',
+                borderRadius: 2,
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: '0 8px 16px rgba(0,0,0,0.2)'
+                }
+              }}
+              onClick={() => navigate('/user/adoption/smart-matches')}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <AutoAwesomeIcon sx={{ fontSize: 40, mr: 2 }} />
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      ✅ Profile Complete! View Your Top Matches
+                    </Typography>
+                    <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                      See AI-powered recommendations based on your lifestyle
+                    </Typography>
+                  </Box>
+                </Box>
+                <Button 
+                  variant="contained" 
+                  sx={{ 
+                    bgcolor: 'white', 
+                    color: '#4caf50',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' }
+                  }}
+                >
+                  View Matches
+                </Button>
+              </Box>
+            </Paper>
+          </Grid>
+        )}
+        
         <Grid item xs={12} sm={4}>
           <Paper 
             elevation={0}

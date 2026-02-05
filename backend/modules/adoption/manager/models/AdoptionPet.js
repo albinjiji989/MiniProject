@@ -107,6 +107,44 @@ const adoptionPetSchema = new mongoose.Schema({
     description: String,
     veterinarian: String,
   }],
+  
+  // Smart Matching Attributes
+  compatibilityProfile: {
+    // Size Classification
+    size: { type: String, enum: ['small', 'medium', 'large'], default: 'medium' },
+    
+    // Energy & Activity
+    energyLevel: { type: Number, min: 1, max: 5, default: 3 }, // 1=very low, 5=very high
+    exerciseNeeds: { type: String, enum: ['minimal', 'moderate', 'high', 'very_high'], default: 'moderate' },
+    
+    // Training & Behavior
+    trainingNeeds: { type: String, enum: ['low', 'moderate', 'high'], default: 'moderate' },
+    trainedLevel: { type: String, enum: ['untrained', 'basic', 'intermediate', 'advanced'], default: 'untrained' },
+    
+    // Social Compatibility Scores (1-10)
+    childFriendlyScore: { type: Number, min: 0, max: 10, default: 5 },
+    petFriendlyScore: { type: Number, min: 0, max: 10, default: 5 },
+    strangerFriendlyScore: { type: Number, min: 0, max: 10, default: 5 },
+    
+    // Living Requirements
+    minHomeSize: { type: Number, default: 0 }, // sq ft
+    needsYard: { type: Boolean, default: false },
+    canLiveInApartment: { type: Boolean, default: true },
+    
+    // Care Requirements
+    groomingNeeds: { type: String, enum: ['low', 'moderate', 'high'], default: 'moderate' },
+    estimatedMonthlyCost: { type: Number, default: 100 }, // USD
+    
+    // Behavioral Traits
+    temperamentTags: [{ type: String }], // ['calm', 'playful', 'protective', etc]
+    noiseLevel: { type: String, enum: ['quiet', 'moderate', 'vocal'], default: 'moderate' },
+    
+    // Special Notes
+    canBeLeftAlone: { type: Boolean, default: true },
+    maxHoursAlone: { type: Number, default: 8 },
+    requiresExperiencedOwner: { type: Boolean, default: false }
+  },
+  
   isActive: {
     type: Boolean,
     default: true,

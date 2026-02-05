@@ -22,6 +22,7 @@ export default function StepReview() {
       const basic = data.basic || {}
       const health = data.health || {}
       const avail = data.availability || {}
+      const matching = data.compatibilityProfile || {}
 
       // Map wizard data to backend AdoptionPet model
       const toUrlArray = (arr) => {
@@ -105,6 +106,8 @@ export default function StepReview() {
         status: (avail.availabilityStatus || 'available').toLowerCase(),
         images: imagesData, // Now includes isPrimary flag
         documents: docsData,
+        // Include smart matching profile
+        compatibilityProfile: matching
       }
       
       console.log('🔍 Pet payload being submitted:', { 
@@ -132,6 +135,7 @@ export default function StepReview() {
   const basic = data.basic || {}
   const health = data.health || {}
   const avail = data.availability || {}
+  const matching = data.compatibilityProfile || {}
 
   return (
     <div className="space-y-6">
@@ -172,6 +176,17 @@ export default function StepReview() {
           <ul className="text-sm space-y-1">
             <li><strong>Status:</strong> <span className="capitalize font-semibold text-purple-600">{avail.availabilityStatus || 'available'}</span></li>
             <li><strong>Adoption Fee:</strong> ₹{Number(avail.adoptionFee||0).toLocaleString()}</li>
+          </ul>
+        </div>
+
+        <div className="border rounded-lg p-4 bg-gray-50">
+          <h3 className="font-semibold mb-3 text-orange-700">🎯 Smart Matching</h3>
+          <ul className="text-sm space-y-1">
+            <li><strong>Energy:</strong> {matching.energyLevel || '-'}/5</li>
+            <li><strong>Size:</strong> {matching.size || '-'}</li>
+            <li><strong>Good w/ Kids:</strong> {matching.childFriendlyScore || '-'}/10</li>
+            <li><strong>Good w/ Pets:</strong> {matching.petFriendlyScore || '-'}/10</li>
+            <li><strong>Monthly Cost:</strong> ₹{Number(matching.estimatedMonthlyCost||0).toLocaleString()}</li>
           </ul>
         </div>
       </div>

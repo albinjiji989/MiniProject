@@ -238,11 +238,22 @@ petInventoryItemSchema.pre('save', async function(next) {
   }
 })
 
+// Pre-save: Track if this is a new document
+petInventoryItemSchema.pre('save', function(next) {
+  this.wasNew = this.isNew;
+  console.log(`📝 Pre-save: Pet ${this.petCode || 'NO-CODE'} - wasNew: ${this.wasNew}`);
+  next();
+});
+
 // Post-save: register in centralized PetRegistry
 petInventoryItemSchema.post('save', async function(doc) {
+  console.log(`📦 Post-save hook triggered for pet ${doc.petCode || 'NO-CODE'} - wasNew: ${doc.wasNew}`);
+  
   try {
     // Only register if petCode exists and this is a new document or has a relevant status
-    if (doc.petCode && (doc.isNew || ['available_for_sale', 'in_petshop', 'sold'].includes(doc.status))) {
+    if (doc.petCode && (doc.wasNew || ['available_for_sale', 'in_petshop', 'sold'].includes(doc.status))) {
+      console.log(`✅ Conditions met for pet ${doc.petCode} - proceeding with registry and blockchain`);
+      
       const PetRegistry = require('../../../../core/models/PetRegistry');
       
       // Register the pet in the centralized registry
@@ -267,11 +278,14 @@ petInventoryItemSchema.post('save', async function(doc) {
         currentStatus: doc.status === 'available_for_sale' ? 'available' : doc.status
       });
       
-      // Add to blockchain if this is a new pet
-      if (doc.isNew) {
+      console.log(`✅ Pet ${doc.petCode} registered in PetRegistry`);
+      
+      // Add to blockchain if this was a new pet
+      if (doc.wasNew) {
+        console.log(`🔗 Attempting to add pet ${doc.petCode} to blockchain...`);
         try {
-          const petshopBlockchainService = require('../../../core/services/petshopBlockchainService');
-          await petshopBlockchainService.addBlock('pet_added', {
+          const petshopBlockchainService = require('../../core/services/petshopBlockchainService');
+          const blockResult = await petshopBlockchainService.addBlock('pet_added', {
             petId: doc._id,
             petCode: doc.petCode,
             name: doc.name,
@@ -287,14 +301,20 @@ petInventoryItemSchema.post('save', async function(doc) {
             managedBy: doc.createdBy,
             timestamp: new Date()
           });
-          console.log(`🔗 Blockchain: Pet ${doc.petCode} added to blockchain`);
+          console.log(`✅ Blockchain: Pet ${doc.petCode} added to blockchain - Block #${blockResult.index}`);
         } catch (blockchainErr) {
-          console.warn('⚠️  Blockchain logging failed:', blockchainErr.message);
+          console.error('❌ Blockchain logging failed:', blockchainErr.message);
+          console.error('Blockchain error stack:', blockchainErr.stack);
         }
+      } else {
+        console.log(`⏭️  Skipping blockchain - wasNew: ${doc.wasNew}`);
       }
+    } else {
+      console.log(`⏭️  Skipping post-save processing for pet ${doc.petCode || 'NO-CODE'} - petCode: ${!!doc.petCode}, wasNew: ${doc.wasNew}, status: ${doc.status}`);
     }
   } catch (err) {
-    console.warn('Failed to register petshop item in PetRegistry:', err.message);
+    console.error('❌ Failed in post-save hook:', err.message);
+    console.error('Error stack:', err.stack);
   }
 });
 

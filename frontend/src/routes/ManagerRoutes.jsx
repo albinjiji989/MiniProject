@@ -15,6 +15,7 @@ import EcommerceOrders from '../pages/Manager/EcommerceOrders'
 import OrderDetail from '../pages/User/OrderDetail'
 import EcommerceManage from '../pages/Manager/EcommerceManage'
 import CategoryManagement from '../pages/Manager/CategoryManagement'
+import InventoryPredictions from '../pages/Manager/InventoryPredictions'
 
 // E-Commerce Manager Components (NEW - all using pages/Manager/)
 // Old imports removed - using new components from pages/Manager/
@@ -36,6 +37,7 @@ import PaymentHistory from '../modules/managers/Adoption/PaymentHistory'
 import AdoptionWizardLayout from '../modules/managers/Adoption/Wizard/WizardLayout'
 import AdoptionStepBasic from '../modules/managers/Adoption/Wizard/StepBasicInfo'
 import AdoptionStepHealth from '../modules/managers/Adoption/Wizard/StepHealthMedia'
+import AdoptionStepMatching from '../modules/managers/Adoption/Wizard/StepMatching'
 import AdoptionStepAvailability from '../modules/managers/Adoption/Wizard/StepAvailability'
 import AdoptionStepReview from '../modules/managers/Adoption/Wizard/StepReview'
 import PetShopManagerDashboard from '../modules/managers/PetShop/PetShopManagerDashboard'
@@ -144,6 +146,7 @@ const ManagerRoutes = () => {
               <Route path="start" element={<Navigate to="/manager/adoption/wizard/basic" replace />} />
               <Route path="basic" element={<AdoptionStepBasic />} />
               <Route path="health" element={<AdoptionStepHealth />} />
+              <Route path="matching" element={<AdoptionStepMatching />} />
               <Route path="availability" element={<AdoptionStepAvailability />} />
               <Route path="review" element={<AdoptionStepReview />} />
             </Route>
@@ -171,6 +174,7 @@ const ManagerRoutes = () => {
             <Route path="/categories" element={<CategoryManagement />} />
             <Route path="/orders" element={<EcommerceOrders />} />
             <Route path="/orders/:id" element={<OrderDetail />} />
+            <Route path="/inventory-predictions" element={<InventoryPredictions />} />
             <Route path="/manage" element={<EcommerceManage />} />
             <Route path="/" element={<Navigate to="/manager/ecommerce/dashboard" replace />} />
           </Routes>

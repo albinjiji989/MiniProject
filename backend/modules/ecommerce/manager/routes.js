@@ -5,6 +5,7 @@ const categoryController = require('./categoryController');
 const productController = require('./productController');
 const orderController = require('./orderController');
 const imageController = require('./imageController');
+const inventoryController = require('./inventoryController');
 
 // Middleware: All routes require authentication and ecommerce module access
 router.use(auth);
@@ -56,10 +57,17 @@ router.get('/orders', orderController.getAllOrders);
 router.get('/orders/:id', orderController.getOrder);
 router.patch('/orders/:id/status', orderController.updateOrderStatus);
 router.get('/dashboard/stats', orderController.getDashboardStats);
-
-// ============ ORDER ROUTES ============
-router.get('/orders', orderController.getAllOrders);
-router.patch('/orders/:id/status', orderController.updateOrderStatus);
 router.patch('/orders/:id/tracking', orderController.addTrackingInfo);
+
+// ============ INVENTORY AI/ML PREDICTION ROUTES ============
+router.get('/inventory/health', inventoryController.checkMLHealth);
+router.get('/inventory/dashboard', inventoryController.getInventoryDashboard);
+router.get('/inventory/predictions', inventoryController.getAllPredictions);
+router.get('/inventory/critical', inventoryController.getCriticalItems);
+router.get('/inventory/restock-report', inventoryController.getRestockReport);
+router.get('/inventory/seasonal', inventoryController.getSeasonalAnalysis);
+router.get('/inventory/predict/:productId', inventoryController.getProductPrediction);
+router.get('/inventory/forecast/:productId', inventoryController.getDemandForecast);
+router.get('/inventory/velocity/:productId', inventoryController.getSalesVelocity);
 
 module.exports = router;

@@ -373,6 +373,25 @@ exports.verifyPaymentAndCreateOrder = async (req, res) => {
           'analytics.revenue': item.total
         }
       });
+      
+      // Track purchase for AI/ML recommendations
+      try {
+        const UserProductInteraction = require('./models/UserProductInteraction');
+        await UserProductInteraction.findOneAndUpdate(
+          { userId: req.user.id, productId: item.product._id || item.product },
+          {
+            $inc: { purchased: item.quantity },
+            $set: { 
+              lastPurchased: new Date(),
+              lastPrice: item.price
+            }
+          },
+          { upsert: true, new: true }
+        );
+      } catch (trackError) {
+        console.error('Failed to track purchase for ML:', trackError);
+        // Don't fail the order if tracking fails
+      }
     }
 
     // Clear cart if not buy now
@@ -492,6 +511,25 @@ exports.createCODOrder = async (req, res) => {
           'analytics.purchases': 1
         }
       });
+      
+      // Track purchase for AI/ML recommendations
+      try {
+        const UserProductInteraction = require('./models/UserProductInteraction');
+        await UserProductInteraction.findOneAndUpdate(
+          { userId: req.user.id, productId: item.product._id || item.product },
+          {
+            $inc: { purchased: item.quantity },
+            $set: { 
+              lastPurchased: new Date(),
+              lastPrice: item.price
+            }
+          },
+          { upsert: true, new: true }
+        );
+      } catch (trackError) {
+        console.error('Failed to track purchase for ML:', trackError);
+        // Don't fail the order if tracking fails
+      }
     }
 
     // Clear cart if not buy now

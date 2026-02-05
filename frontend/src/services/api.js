@@ -253,11 +253,20 @@ export const adoptionAPI = {
   searchPets: (params) => api.get('/adoption/user/public/pets', { params }), // same as list with filters
   // Pets (manager)
   managerCreatePet: (payload) => api.post('/adoption/manager/pets', payload),
+  managerUpdatePet: (id, payload) => api.put(`/adoption/manager/pets/${id}`, payload),
+  managerGetPet: (id) => api.get(`/adoption/manager/pets/${id}`),
 
   // Requests (applications)
   submitRequest: (payload) => api.post('/adoption/user/applications', payload),
   listMyRequests: () => api.get('/adoption/user/applications/my'),
   getMyRequest: (id) => api.get(`/adoption/user/applications/${id}`),
+  
+  // Smart Matching & Profile
+  updateAdoptionProfile: (profileData) => api.post('/adoption/user/profile/adoption', profileData),
+  getAdoptionProfile: () => api.get('/adoption/user/profile/adoption'),
+  getAdoptionProfileStatus: () => api.get('/adoption/user/profile/adoption/status'),
+  getSmartMatches: (params) => api.get('/adoption/user/matches/smart', { params }),
+  getPetMatch: (petId) => api.get(`/adoption/user/matches/pet/${petId}`),
   cancelMyRequest: (id) => api.put(`/adoption/user/applications/${id}/cancel`),
   managerListRequests: (params) => api.get('/adoption/manager/applications', { params }),
   managerPatchRequest: (id, { status, notes, reason }) => api.patch(`/adoption/manager/applications/${id}`, { status, notes, reason }),

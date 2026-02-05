@@ -4,6 +4,7 @@ import { useNavigate, Outlet, useLocation } from 'react-router-dom'
 const STEPS = [
   { key: 'basic', label: 'Basic Info', path: '/manager/adoption/wizard/basic' },
   { key: 'health', label: 'Health & Media', path: '/manager/adoption/wizard/health' },
+  { key: 'matching', label: 'Smart Matching', path: '/manager/adoption/wizard/matching' },
   { key: 'availability', label: 'Adoption Fee', path: '/manager/adoption/wizard/availability' },
   { key: 'review', label: 'Review & Submit', path: '/manager/adoption/wizard/review' },
 ]
@@ -20,7 +21,7 @@ export default function WizardLayout() {
     <div className="max-w-5xl mx-auto">
       <h2 className="text-2xl font-bold mb-2">Add Adoption Pet</h2>
       <p className="text-sm text-gray-600 mb-4">Complete each step to add a pet to the adoption center.</p>
-      <div className="grid grid-cols-4 gap-2 mb-6">
+      <div className="grid grid-cols-5 gap-2 mb-6">
         {STEPS.map((s, idx) => (
           <button
             key={s.key}

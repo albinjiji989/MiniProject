@@ -26,9 +26,13 @@ import {
   FilterList as FilterIcon,
   Add as AddIcon,
   Pets as PetsIcon,
+  EmojiEvents,
+  AutoAwesome,
+  Close
 } from '@mui/icons-material'
 import { useAuth } from '../../../contexts/AuthContext'
 import { apiClient, resolveMediaUrl } from '../../../services/api'
+import { Dialog, DialogTitle, DialogContent, DialogActions, Alert, LinearProgress } from '@mui/material'
 
 const Adoption = () => {
   const { user, logout } = useAuth()
@@ -41,6 +45,11 @@ const Adoption = () => {
   const [limit, setLimit] = React.useState(12)
   const [total, setTotal] = React.useState(0)
   const [filters, setFilters] = React.useState({ species: '', breed: '', gender: '', age: '' })
+  
+  // Profile state
+  const [profileStatus, setProfileStatus] = React.useState(null)
+  const [showWelcomeDialog, setShowWelcomeDialog] = React.useState(false)
+  const [dismissedWelcome, setDismissedWelcome] = React.useState(false)
 
   const handleBackToDashboard = () => {
     navigate('/user/dashboard')
@@ -87,6 +96,7 @@ const Adoption = () => {
       try {
         setLoading(true)
         await loadPets()
+        await loadProfileStatus()
       } catch (e) {
         // handled in loadPets
       } finally {
@@ -95,6 +105,34 @@ const Adoption = () => {
     }
     loadInitial()
   }, [loadPets])
+
+  const loadProfileStatus = async () => {
+    try {
+      const res = await apiClient.get('/adoption/user/profile/adoption/status')
+      if (res.data.success) {
+        setProfileStatus(res.data.data)
+        
+        // Show welcome dialog if profile not complete and not dismissed
+        const dismissed = localStorage.getItem('adoption_welcome_dismissed')
+        if (!res.data.data.isComplete && !dismissed) {
+          setShowWelcomeDialog(true)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading profile status:', error)
+    }
+  }
+
+  const handleDismissWelcome = () => {
+    setShowWelcomeDialog(false)
+    localStorage.setItem('adoption_welcome_dismissed', 'true')
+    setDismissedWelcome(true)
+  }
+
+  const handleStartProfile = () => {
+    setShowWelcomeDialog(false)
+    navigate('/user/adoption/profile-wizard')
+  }
 
   const applyFilters = () => { setPage(1); loadPets() }
 
@@ -112,6 +150,106 @@ const Adoption = () => {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4, mt: 4 }}>
+        {/* Welcome Dialog for First-Time Visitors */}
+        <Dialog open={showWelcomeDialog} onClose={handleDismissWelcome} maxWidth="sm" fullWidth>
+          <DialogTitle>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <AutoAwesome sx={{ fontSize: 40, color: '#4caf50', mr: 2 }} />
+                <Typography variant="h6">Get AI-Powered Pet Matches!</Typography>
+              </Box>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              Complete your adoption profile to receive personalized pet recommendations based on your lifestyle, living situation, and preferences.
+            </Typography>
+            
+            <Box sx={{ bgcolor: '#f5f5f5', p: 2, borderRadius: 2, mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                We'll ask about:
+              </Typography>
+              <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                <li>🏠 Your living space (home type, size, yard)</li>
+                <li>🏃 Your activity level and daily schedule</li>
+                <li>👨‍👩‍👧‍👦 Family composition (children, other pets)</li>
+                <li>💰 Budget for adoption and pet care</li>
+                <li>❤️ Your pet preferences</li>
+              </Box>
+            </Box>
+
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Takes only 3-5 minutes! You can browse pets now and complete your profile anytime to unlock AI matches.
+            </Alert>
+
+            <Typography variant="body2" color="text.secondary">
+              Your profile helps us recommend pets that truly match your lifestyle, increasing adoption success rates by up to 40%!
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, pt: 0 }}>
+            <Button onClick={handleDismissWelcome} color="inherit">
+              Maybe Later
+            </Button>
+            <Button 
+              variant="contained" 
+              onClick={handleStartProfile}
+              startIcon={<EmojiEvents />}
+              sx={{ bgcolor: '#4caf50' }}
+            >
+              Complete Profile Now
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Profile Completion Banner */}
+        {profileStatus && !profileStatus.isComplete && !dismissedWelcome && (
+          <Alert 
+            severity="info" 
+            sx={{ mb: 3 }}
+            action={
+              <Button 
+                size="small" 
+                onClick={() => navigate('/user/adoption/profile-wizard')}
+                sx={{ color: '#fff', borderColor: '#fff' }}
+                variant="outlined"
+              >
+                Complete Now
+              </Button>
+            }
+          >
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                🎯 Unlock AI-Powered Matches! Profile {profileStatus.completionPercentage}% Complete
+              </Typography>
+              <LinearProgress 
+                variant="determinate" 
+                value={profileStatus.completionPercentage} 
+                sx={{ 
+                  height: 8, 
+                  borderRadius: 4,
+                  bgcolor: 'rgba(255,255,255,0.3)',
+                  '& .MuiLinearProgress-bar': { bgcolor: '#fff' }
+                }}
+              />
+              <Typography variant="caption" sx={{ mt: 0.5, display: 'block' }}>
+                Complete your profile to see personalized match scores on every pet!
+              </Typography>
+            </Box>
+          </Alert>
+        )}
+
+        {/* Profile Complete Success Banner */}
+        {profileStatus && profileStatus.isComplete && (
+          <Alert severity="success" sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              ✅ Profile Complete! You can now see AI match scores for all pets.
+            </Typography>
+            <Typography variant="caption">
+              Click "AI Smart Matches" to see your top recommendations, or browse below to see match scores for each pet.
+            </Typography>
+          </Alert>
+        )}
+
         {/* Header */}
         <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Box>
@@ -124,7 +262,32 @@ const Adoption = () => {
           </Box>
           
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <TextField size="small" label="Species" value={filters.species} onChange={(e)=>setFilters(f=>({...f, species:e.target.value}))} />
+            <Button 
+              variant="contained" 
+              startIcon={<AutoAwesome />} 
+              sx={{ 
+                bgcolor: 'linear-gradient(45deg, #4caf50 30%, #8bc34a 90%)',
+                background: 'linear-gradient(45deg, #4caf50 30%, #8bc34a 90%)',
+                boxShadow: '0 3px 5px 2px rgba(76, 175, 80, .3)',
+              }} 
+              onClick={() => navigate('/user/adoption/smart-matches')}
+            >
+              AI Smart Matches
+            </Button>
+            <Button 
+              variant="outlined" 
+              startIcon={<EmojiEvents />} 
+              sx={{ borderColor: '#4caf50', color: '#4caf50' }} 
+              onClick={() => navigate('/user/adoption/profile-wizard')}
+            >
+              Complete Profile
+            </Button>
+          </Box>
+        </Box>
+        
+        {/* Filters */}
+        <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          <TextField size="small" label="Species" value={filters.species} onChange={(e)=>setFilters(f=>({...f, species:e.target.value}))} />
             <TextField size="small" label="Breed" value={filters.breed} onChange={(e)=>setFilters(f=>({...f, breed:e.target.value}))} />
             <FormControl size="small" sx={{ minWidth: 120 }}>
               <InputLabel id="gender">Gender</InputLabel>
@@ -146,7 +309,6 @@ const Adoption = () => {
             </FormControl>
             <Button variant="outlined" startIcon={<FilterIcon />} sx={{ borderColor: '#4caf50', color: '#4caf50' }} onClick={applyFilters}>Apply</Button>
           </Box>
-        </Box>
 
         {/* Stats */}
         <Grid container spacing={3} sx={{ mb: 4 }}>

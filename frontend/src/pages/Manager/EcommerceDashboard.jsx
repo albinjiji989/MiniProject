@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import {
   ShoppingBag, Package, TrendingUp, DollarSign,
-  ShoppingCart, AlertCircle, Eye, Star
+  ShoppingCart, AlertCircle, Eye, Star, Brain
 } from 'lucide-react';
 
 /**
@@ -86,7 +86,7 @@ const EcommerceDashboard = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
         <Link
           to="/manager/ecommerce/products/add"
           className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-all"
@@ -112,6 +112,15 @@ const EcommerceDashboard = () => {
           <ShoppingCart className="w-8 h-8 mb-2" />
           <h3 className="font-semibold text-lg">Orders</h3>
           <p className="text-sm text-purple-100">View all orders</p>
+        </Link>
+
+        <Link
+          to="/manager/ecommerce/inventory-predictions"
+          className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-all"
+        >
+          <Brain className="w-8 h-8 mb-2" />
+          <h3 className="font-semibold text-lg">AI Predictions</h3>
+          <p className="text-sm text-indigo-100">Smart inventory</p>
         </Link>
 
         <Link

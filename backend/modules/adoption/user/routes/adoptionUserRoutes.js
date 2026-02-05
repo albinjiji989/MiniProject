@@ -4,6 +4,7 @@ const applicationController = require('../controllers/applicationController');
 const paymentController = require('../controllers/paymentController');
 const petController = require('../controllers/petController');
 const certificateController = require('../controllers/certificateController'); // Add this import
+const matchingController = require('../controllers/matchingController'); // Smart matching
 const { auth } = require('../../../../core/middleware/auth');
 const { authorize } = require('../../../../core/middleware/role');
 const multer = require('multer');
@@ -44,6 +45,13 @@ const optionalAuth = async (req, res, next) => {
 // Public Routes (no auth required, but user info attached if available)
 router.get('/public/pets', petController.getPublicPets);
 router.get('/public/pets/:id', optionalAuth, petController.getPublicPetDetails);
+
+// Smart Matching Routes (AI/ML)
+router.post('/profile/adoption', auth, matchingController.updateAdoptionProfile);
+router.get('/profile/adoption', auth, matchingController.getAdoptionProfile);
+router.get('/profile/adoption/status', auth, matchingController.getProfileStatus);
+router.get('/matches/smart', auth, matchingController.getSmartMatches);
+router.get('/matches/pet/:petId', auth, matchingController.calculatePetMatch);
 
 // User Routes - Authenticated users only
 router.get('/pets', auth, applicationController.getAvailablePets);
