@@ -84,6 +84,9 @@ app.use('/api/users', require('./core/routes/user/users'));
 app.use('/api/profile', require('./core/routes/user/profile'));
 app.use('/api/modules', require('./core/routes/pet/modulesRoutes'));
 
+// AI/ML Routes (Python Railway Service)
+app.use('/api/ai', require('./core/routes/aiRoutes'));
+
 // Admin Routes
 app.use('/api/admin/species', require('./core/routes/admin/species'));
 app.use('/api/admin/breeds', require('./core/routes/admin/breeds'));
