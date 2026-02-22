@@ -1,0 +1,37 @@
+{
+  "name": "petwelfare-e2e-tests",
+  "version": "1.0.0",
+  "description": "End-to-end tests for Ecommerce and Temporary Care modules",
+  "scripts": {
+    "test": "playwright test functional-tests.spec.js --config=playwright.config.cjs",
+    "test:smoke": "playwright test smoke-tests.spec.js --config=playwright.config.cjs",
+    "test:functional": "playwright test functional-tests.spec.js --config=playwright.config.cjs",
+    "test:all": "playwright test --config=playwright.config.cjs",
+    "test:headed": "playwright test functional-tests.spec.js --config=playwright.config.cjs --headed",
+    "test:debug": "playwright test functional-tests.spec.js --config=playwright.config.cjs --debug",
+    "test:ui": "playwright test --config=playwright.config.cjs --ui",
+    "test:chromium": "playwright test --config=playwright.config.cjs --project=chromium",
+    "test:ecommerce": "playwright test --config=playwright.config.cjs e2e/ecommerce",
+    "test:temporary-care": "playwright test --config=playwright.config.cjs e2e/temporary-care",
+    "test:report": "npm run test:functional && npm run report",
+    "report": "playwright show-report",
+    "report:open": "playwright show-report playwright-report",
+    "trace": "playwright show-trace",
+    "trace:last": "playwright show-trace test-results/**/trace.zip",
+    "videos:list": "find test-results -name '*.webm' -type f",
+    "clean": "rm -rf test-results playwright-report",
+    "codegen": "playwright codegen http://localhost:5173",
+    "install:browsers": "playwright install"
+  },
+  "keywords": [
+    "playwright",
+    "e2e",
+    "testing",
+    "automation"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.56.1"
+  }
+}
