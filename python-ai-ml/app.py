@@ -27,7 +27,18 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 app.config.from_object(config['development'])
-CORS(app)  # Enable CORS for Node.js backend integration
+
+# Configure CORS for Node.js backend and frontend
+# Get allowed origins from environment or use defaults
+cors_origins = os.getenv('CORS_ORIGINS', '').split(',') if os.getenv('CORS_ORIGINS') else [
+    'http://localhost:3000',  # Local frontend
+    'http://localhost:5000',  # Local backend
+    'https://mini-project-ebon-omega.vercel.app',  # Production backend
+    'http://mini-project-6ot9.vercel.app',  # Production frontend
+    'https://mini-project-6ot9.vercel.app'  # Production frontend (https)
+]
+
+CORS(app, origins=cors_origins, supports_credentials=True)
 
 # Initialize AI services
 petshop_identifier = PetshopBreedIdentifier()

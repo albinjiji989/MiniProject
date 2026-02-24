@@ -38,6 +38,7 @@ env.bak/
 # Environment
 .env
 .env.local
+render-env-vars.txt
 
 # Logs
 *.log
