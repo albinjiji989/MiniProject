@@ -5,7 +5,7 @@ import {
   Star, Filter, X, ChevronDown, Sparkles,
   ShoppingBag, TrendingUp, Package, Search, Brain, Tag
 } from 'lucide-react';
-import AIBreedIdentifierWithRecommendations from '../../components/Petshop/AIBreedIdentifierWithRecommendations';
+import AIBreedIdentifierWithRecommendations from '../../components/PetShop/AIBreedIdentifierWithRecommendations';
 
 /**
  * Enhanced Ecommerce Shop with AI-Powered Breed Recommendations

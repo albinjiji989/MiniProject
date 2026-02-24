@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Sparkles, Plus } from 'lucide-react';
-import AIBreedIdentifierWithStock from '../../../components/Petshop/AIBreedIdentifierWithStock';
+import AIBreedIdentifierWithStock from '../../../components/PetShop/AIBreedIdentifierWithStock';
 
 /**
  * Manager Petshop AI Identifier Page
