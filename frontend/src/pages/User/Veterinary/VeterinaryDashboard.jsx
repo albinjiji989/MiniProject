@@ -239,10 +239,10 @@ export default function VeterinaryDashboard() {
           </Button>
           <Button 
             variant="outlined" 
-            startIcon={<EventIcon />}
-            onClick={() => navigate('/user/veterinary/select-pet')}
+            startIcon={<HospitalIcon />}
+            onClick={() => navigate('/user/veterinary/medical-history')}
           >
-            Book Appointment
+            Medical History
           </Button>
         </Box>
       </Box>

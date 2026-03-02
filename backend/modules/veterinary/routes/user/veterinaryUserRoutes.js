@@ -3,6 +3,7 @@ const { body } = require('express-validator');
 const { auth } = require('../../../../core/middleware/auth');
 const medicalController = require('../../user/controllers/medicalRecordsController');
 const veterinaryUserController = require('../../user/controllers/veterinaryUserController');
+const medicalHistoryUserController = require('../../user/controllers/medicalHistoryUserController');
 
 const router = express.Router();
 
@@ -19,5 +20,18 @@ router.post('/appointments/:id/cancel', auth, veterinaryUserController.cancelApp
 
 // User can view medical records for their pets; creation is manager-side
 router.get('/pets/:petId/medical-records', auth, medicalController.listRecordsForPet);
+
+// ============ COMPREHENSIVE MEDICAL HISTORY FOR USERS ============
+// Get all user's pets with medical history summary
+router.get('/medical-history/pets', auth, medicalHistoryUserController.getUserPetsMedicalHistory);
+
+// Get comprehensive medical history for a specific pet (timeline, vaccinations, etc.)
+router.get('/medical-history/pet/:petId', auth, medicalHistoryUserController.getUserPetMedicalHistory);
+
+// Get detailed medical record
+router.get('/medical-history/record/:recordId', auth, medicalHistoryUserController.getUserMedicalRecordDetail);
+
+// Download/export medical record (for sharing with other vets)
+router.get('/medical-history/record/:recordId/download', auth, medicalHistoryUserController.downloadMedicalRecord);
 
 module.exports = router;

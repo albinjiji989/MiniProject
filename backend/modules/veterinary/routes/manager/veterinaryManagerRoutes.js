@@ -16,6 +16,7 @@ const inventoryController = require('../../manager/controllers/inventoryControll
 const vaccinationController = require('../../manager/controllers/vaccinationController');
 const expenseController = require('../../manager/controllers/expenseController');
 const reportsController = require('../../manager/controllers/reportsController');
+const medicalHistoryController = require('../../manager/controllers/medicalHistoryController');
 const VeterinaryStaffInvite = require('../../manager/models/VeterinaryStaffInvite');
 const { sendMail } = require('../../../../core/utils/email');
 const User = require('../../../../core/models/User');
@@ -303,6 +304,22 @@ router.get('/reports/patients', requireManager, reportsController.getPatientAnal
 router.get('/reports/inventory', requireManager, reportsController.getInventoryReport);
 router.get('/reports/staff-performance', requireManager, reportsController.getStaffPerformanceReport);
 router.get('/reports/dashboard', requireManager, reportsController.getDashboardReport);
+
+// ============ COMPREHENSIVE MEDICAL HISTORY (Professional Level) ============
+// Get comprehensive medical history for a specific pet with timeline
+router.get('/medical-history/pet/:petId', requireManagerOrWorker, medicalHistoryController.getPetMedicalHistory);
+
+// Get detailed medical record with full information
+router.get('/medical-history/record/:recordId', requireManagerOrWorker, medicalHistoryController.getDetailedMedicalRecord);
+
+// Search medical records with advanced filters
+router.get('/medical-history/search', requireManagerOrWorker, medicalHistoryController.searchMedicalRecords);
+
+// Get medical records dashboard statistics (industry-level insights)
+router.get('/medical-history/dashboard/stats', requireManager, medicalHistoryController.getMedicalRecordsDashboard);
+
+// Export medical records for reports
+router.get('/medical-history/export', requireManager, medicalHistoryController.exportMedicalRecords);
 
 
 

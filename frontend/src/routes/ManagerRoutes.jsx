@@ -106,6 +106,11 @@ import VetWizardLayout from '../modules/managers/Veterinary/Wizard/WizardLayout'
 import VetStepBasics from '../modules/managers/Veterinary/Wizard/StepBasics'
 import VetStepTests from '../modules/managers/Veterinary/Wizard/StepTestsInjections'
 import VetStepMedications from '../modules/managers/Veterinary/Wizard/StepMedicationsReview'
+// NEW Comprehensive Veterinary Manager Components
+import VeterinaryManagerComprehensiveMedicalRecords from '../pages/Manager/Veterinary/VeterinaryManagerComprehensiveMedicalRecords'
+import VeterinaryMedicalRecordDetailView from '../pages/Manager/Veterinary/VeterinaryMedicalRecordDetailView'
+import ComprehensiveMedicalRecords from '../modules/managers/Veterinary/ComprehensiveMedicalRecords'
+import PetMedicalTimeline from '../modules/managers/Veterinary/PetMedicalTimeline'
 import AdoptionManage from '../modules/managers/Adoption/Manage'
 import PharmacyManage from '../modules/managers/Pharmacy/Manage'
 import RescueManage from '../modules/managers/Rescue/Manage'
@@ -263,6 +268,12 @@ const ManagerRoutes = () => {
             <Route path="/appointments/:id" element={<VeterinaryManagerAppointmentDetails />} />
             <Route path="/services" element={<VeterinaryManagerServices />} />
             <Route path="/records" element={<VeterinaryManagerMedicalRecords />} />
+            {/* NEW Comprehensive Medical Records */}
+            <Route path="/medical-records-comprehensive" element={<VeterinaryManagerComprehensiveMedicalRecords />} />
+            <Route path="/medical-records/:id/view" element={<VeterinaryMedicalRecordDetailView />} />
+            {/* Medical History Routes */}
+            <Route path="/medical-records" element={<ComprehensiveMedicalRecords />} />
+            <Route path="/pet/:petId/timeline" element={<PetMedicalTimeline />} />
             <Route path="/records/new" element={<VeterinaryManagerMedicalRecordForm />} />
             <Route path="/records/:id/edit" element={<VeterinaryManagerMedicalRecordForm />} />
             <Route path="/records/:id" element={<VeterinaryManagerMedicalRecordDetail />} />

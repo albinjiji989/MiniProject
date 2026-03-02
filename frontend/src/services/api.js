@@ -712,6 +712,20 @@ export const veterinaryAPI = {
   managerGetInventoryReport: () => api.get('/veterinary/manager/reports/inventory'),
   managerGetStaffPerformanceReport: (params) => api.get('/veterinary/manager/reports/staff-performance', { params }),
   managerGetDashboardReport: () => api.get('/veterinary/manager/reports/dashboard'),
+
+  // ============ COMPREHENSIVE MEDICAL HISTORY (Professional/Industry Level) ============
+  // Manager Side - Professional Medical History with Timeline
+  managerGetPetMedicalHistory: (petId) => api.get(`/veterinary/manager/medical-history/pet/${petId}`),
+  managerGetDetailedMedicalRecord: (recordId) => api.get(`/veterinary/manager/medical-history/record/${recordId}`),
+  managerSearchMedicalRecords: (params) => api.get('/veterinary/manager/medical-history/search', { params }),
+  managerGetMedicalHistoryDashboard: () => api.get('/veterinary/manager/medical-history/dashboard/stats'),
+  managerExportMedicalRecords: (params) => api.get('/veterinary/manager/medical-history/export', { params }),
+
+  // User Side - Comprehensive Medical History Access
+  userGetPetsMedicalHistory: () => api.get('/veterinary/user/medical-history/pets'),
+  userGetPetMedicalHistory: (petId) => api.get(`/veterinary/user/medical-history/pet/${petId}`),
+  userGetMedicalRecordDetail: (recordId) => api.get(`/veterinary/user/medical-history/record/${recordId}`),
+  userDownloadMedicalRecord: (recordId) => api.get(`/veterinary/user/medical-history/record/${recordId}/download`),
 }
 
 // Pet System APIs

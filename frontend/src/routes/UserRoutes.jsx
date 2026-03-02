@@ -83,6 +83,11 @@ import VeterinaryUserBookingDetails from '../pages/User/Veterinary/SimpleVeterin
 import VeterinaryUserMedicalRecords from '../pages/User/Veterinary/VeterinaryMedicalRecords'
 import VeterinaryUserPrescriptions from '../pages/User/Veterinary/Veterinary'
 import VeterinaryUserPetSelection from '../pages/User/Veterinary/SimpleVeterinaryPetSelection'
+// NEW Comprehensive Veterinary Components
+import ComprehensiveVeterinaryBooking from '../pages/User/Veterinary/ComprehensiveVeterinaryBooking'
+import ComprehensiveUserVeterinaryDashboard from '../pages/User/Veterinary/ComprehensiveUserVeterinaryDashboard'
+import UserPetsMedicalHistory from '../pages/User/Veterinary/UserPetsMedicalHistory'
+import UserPetMedicalHistoryDetail from '../pages/User/Veterinary/UserPetMedicalHistoryDetail'
 import PublicUserDashboard from '../pages/User/PublicUserDashboard'
 
 import { useAuth } from '../contexts/AuthContext'
@@ -139,15 +144,20 @@ const UserRoutes = () => {
         <Route path="/veterinary/*" element={
           <Routes>
             <Route path="/dashboard" element={<VeterinaryUserDashboard />} />
+            <Route path="/comprehensive-dashboard" element={<ComprehensiveUserVeterinaryDashboard />} />
             <Route path="/select-pet" element={<VeterinaryUserPetSelection />} />
             <Route path="/appointments" element={<VeterinaryUserAppointments />} />
             <Route path="/appointments/schedule" element={<VeterinaryUserSchedule />} />
             <Route path="/appointments/book" element={<VeterinaryUserBooking />} />
+            <Route path="/book" element={<ComprehensiveVeterinaryBooking />} />
             <Route path="/appointments/book/:clinicId" element={<VeterinaryUserBookingForm />} />
             <Route path="/appointments/:id" element={<VeterinaryUserBookingDetails />} />
             <Route path="/services" element={<VeterinaryUserServices />} />
             <Route path="/clinics" element={<VeterinaryUserClinics />} />
             <Route path="/medical-records" element={<VeterinaryUserMedicalRecords />} />
+            {/* Medical History Routes */}
+            <Route path="/medical-history" element={<UserPetsMedicalHistory />} />
+            <Route path="/medical-history/:petId" element={<UserPetMedicalHistoryDetail />} />
             <Route path="/prescriptions" element={<VeterinaryUserPrescriptions />} />
             <Route path="/" element={<Navigate to="/user/veterinary/dashboard" replace />} />
           </Routes>

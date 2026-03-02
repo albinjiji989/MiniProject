@@ -266,7 +266,9 @@ exports.verifyPaymentAndCreateOrder = async (req, res) => {
       amount
     } = req.body;
 
-    console.log('Verifying payment:', { razorpay_order_id, razorpay_payment_id });
+    console.log('Verifying payment - Full request body:', JSON.stringify(req.body, null, 2));
+    console.log('Payment details:', { razorpay_order_id, razorpay_payment_id, razorpay_signature });
+    console.log('RAZORPAY_KEY_SECRET exists:', !!process.env.RAZORPAY_KEY_SECRET);
 
     // Verify payment signature
     const isValid = paymentService.verifyPayment(
@@ -275,12 +277,28 @@ exports.verifyPaymentAndCreateOrder = async (req, res) => {
       razorpay_payment_id
     );
 
+    console.log('Signature verification result:', isValid);
+
     if (!isValid) {
+      console.error('Payment signature verification failed');
       return res.status(400).json({
         success: false,
-        message: 'Invalid payment signature'
+        message: 'Invalid payment signature - verification failed'
       });
     }
+
+    // Normalize shipping address fields (Flutter uses different field names)
+    const normalizedShippingAddress = {
+      fullName: shippingAddress.fullName || shippingAddress.name || req.user.name,
+      phone: shippingAddress.phone || req.user.phone,
+      addressLine1: shippingAddress.addressLine1 || shippingAddress.street,
+      city: shippingAddress.city,
+      state: shippingAddress.state,
+      pincode: shippingAddress.pincode || shippingAddress.postalCode,
+      country: shippingAddress.country || 'India'
+    };
+
+    console.log('Normalized shipping address:', normalizedShippingAddress);
 
     // Verify stock availability
     for (const item of items) {
@@ -321,15 +339,7 @@ exports.verifyPaymentAndCreateOrder = async (req, res) => {
       customer: req.user.id,
       orderNumber: `ORD${Date.now()}`,
       items: orderItems,
-      shippingAddress: {
-        fullName: shippingAddress.name || req.user.name,
-        phone: shippingAddress.phone || req.user.phone,
-        addressLine1: shippingAddress.street,
-        city: shippingAddress.city,
-        state: shippingAddress.state,
-        pincode: shippingAddress.pincode,
-        country: shippingAddress.country || 'India'
-      },
+      shippingAddress: normalizedShippingAddress,
       pricing: {
         subtotal,
         tax,
@@ -427,6 +437,19 @@ exports.createCODOrder = async (req, res) => {
 
     console.log('Creating COD order:', { userId: req.user.id, itemCount: items.length });
 
+    // Normalize shipping address fields (Flutter uses different field names)
+    const normalizedShippingAddress = {
+      fullName: shippingAddress.fullName || shippingAddress.name || req.user.name,
+      phone: shippingAddress.phone || req.user.phone,
+      addressLine1: shippingAddress.addressLine1 || shippingAddress.street,
+      city: shippingAddress.city,
+      state: shippingAddress.state,
+      pincode: shippingAddress.pincode || shippingAddress.postalCode,
+      country: shippingAddress.country || 'India'
+    };
+
+    console.log('Normalized shipping address:', normalizedShippingAddress);
+
     // Verify stock availability
     for (const item of items) {
       const product = await Product.findById(item.product._id || item.product);
@@ -466,15 +489,7 @@ exports.createCODOrder = async (req, res) => {
       customer: req.user.id,
       orderNumber: `ORD${Date.now()}`,
       items: orderItems,
-      shippingAddress: {
-        fullName: shippingAddress.name || req.user.name,
-        phone: shippingAddress.phone || req.user.phone,
-        addressLine1: shippingAddress.street,
-        city: shippingAddress.city,
-        state: shippingAddress.state,
-        pincode: shippingAddress.pincode,
-        country: shippingAddress.country || 'India'
-      },
+      shippingAddress: normalizedShippingAddress,
       pricing: {
         subtotal,
         tax,

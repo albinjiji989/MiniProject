@@ -282,6 +282,27 @@ const VeterinaryManagerDashboard = () => {
             </CardContent>
           </Card>
         </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card 
+            sx={{ cursor: 'pointer', '&:hover': { boxShadow: 6 } }}
+            onClick={() => navigate('/manager/veterinary/medical-records')}
+          >
+            <CardContent>
+              <Box display="flex" alignItems="center" gap={2}>
+                <AnalyticsIcon color="secondary" sx={{ fontSize: 40 }} />
+                <Box>
+                  <Typography variant="subtitle1" fontWeight="bold">
+                    Medical History
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Complete records
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
 
       {/* Recent Activity */}

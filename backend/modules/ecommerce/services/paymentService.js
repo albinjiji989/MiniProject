@@ -34,11 +34,22 @@ exports.createOrder = async (amount, currency = 'INR', notes = {}) => {
  */
 exports.verifyPayment = (signature, orderId, paymentId) => {
   try {
+    console.log('PaymentService.verifyPayment called with:');
+    console.log('  Signature:', signature);
+    console.log('  Order ID:', orderId);
+    console.log('  Payment ID:', paymentId);
+    
     const text = `${orderId}|${paymentId}`;
+    console.log('  Text to hash:', text);
+    
     const generated_signature = crypto
       .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
       .update(text)
       .digest('hex');
+    
+    console.log('  Generated signature:', generated_signature);
+    console.log('  Received signature:', signature);
+    console.log('  Match:', generated_signature === signature);
 
     return generated_signature === signature;
   } catch (error) {
