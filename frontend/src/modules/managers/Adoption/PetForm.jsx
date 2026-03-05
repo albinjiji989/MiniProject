@@ -22,7 +22,8 @@ import {
   CircularProgress, 
   IconButton, 
   Tooltip,
-  Avatar
+  Avatar,
+  Autocomplete
 } from '@mui/material';
 import { 
   ArrowBack as BackIcon, 
@@ -43,6 +44,7 @@ const initial = {
   name: '', breed: '', species: '', age: 0, ageUnit: 'months', gender: 'male', color: '', weight: 0, 
   healthStatus: 'good', vaccinationStatus: 'not_vaccinated', description: '', adoptionFee: 0, category: '', 
   dateOfBirth: '', dobAccuracy: 'estimated', useAge: true,
+  temperamentTags: [], // Behavioral tags like 'aggressive', 'friendly', 'calm', etc.
   // Compatibility Profile
   compatibilityProfile: {
     size: 'medium',
@@ -58,7 +60,6 @@ const initial = {
     canLiveInApartment: true,
     groomingNeeds: 'moderate',
     estimatedMonthlyCost: 100,
-    temperamentTags: [],
     noiseLevel: 'moderate',
     canBeLeftAlone: true,
     maxHoursAlone: 8,
@@ -173,6 +174,7 @@ const PetForm = () => {
           dateOfBirth: p.dateOfBirth ? new Date(p.dateOfBirth).toISOString().split('T')[0] : '',
           dobAccuracy: p.dobAccuracy || 'estimated',
           useAge: !p.dateOfBirth, // Default to age input if no DOB
+          temperamentTags: p.temperamentTags || [], // Load behavioral tags
           // Load compatibility profile
           compatibilityProfile: p.compatibilityProfile || {
             size: 'medium',
@@ -188,7 +190,6 @@ const PetForm = () => {
             canLiveInApartment: true,
             groomingNeeds: 'moderate',
             estimatedMonthlyCost: 100,
-            temperamentTags: [],
             noiseLevel: 'moderate',
             canBeLeftAlone: true,
             maxHoursAlone: 8,
@@ -586,6 +587,7 @@ const PetForm = () => {
         description: form.description || '',
         adoptionFee: Number(form.adoptionFee) || 0,
         category: form.category || '',
+        temperamentTags: form.temperamentTags || [], // CRITICAL for aggressive detection
         // Include Smart Matching Profile
         compatibilityProfile: form.compatibilityProfile || {
           size: 'medium',
@@ -808,10 +810,9 @@ const PetForm = () => {
                     onChange={onChange}
                     label="Vaccination Status"
                   >
-                    <MenuItem value="fully_vaccinated">Fully Vaccinated</MenuItem>
-                    <MenuItem value="partially_vaccinated">Partially Vaccinated</MenuItem>
+                    <MenuItem value="up_to_date">Fully Vaccinated (Up to Date)</MenuItem>
+                    <MenuItem value="partial">Partially Vaccinated</MenuItem>
                     <MenuItem value="not_vaccinated">Not Vaccinated</MenuItem>
-                    <MenuItem value="unknown">Unknown</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -1348,6 +1349,79 @@ const PetForm = () => {
                       <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: 'primary.main' }}>
                         Behavioral Traits (10% of match - Preferences)
                       </Typography>
+                    </Grid>
+
+                    {/* TEMPERAMENT TAGS - CRITICAL FOR MATCHING */}
+                    <Grid item xs={12}>
+                      <Autocomplete
+                        multiple
+                        freeSolo
+                        options={[
+                          'Friendly',
+                          'Gentle',
+                          'Calm',
+                          'Playful',
+                          'Energetic',
+                          'Active',
+                          'Lazy',
+                          'Independent',
+                          'Affectionate',
+                          'Cuddly',
+                          'Protective',
+                          'Loyal',
+                          'Shy',
+                          'Anxious',
+                          'Confident',
+                          'Timid',
+                          'Bold',
+                          'Social',
+                          'Reserved',
+                          'Quiet',
+                          'Vocal',
+                          'AGGRESSIVE',
+                          'Bites',
+                          'Dangerous',
+                          'Territorial',
+                          'Dominant'
+                        ]}
+                        value={form.temperamentTags || []}
+                        onChange={(e, newValue) => {
+                          setForm(prev => ({
+                            ...prev,
+                            temperamentTags: newValue
+                          }));
+                        }}
+                        renderTags={(value, getTagProps) =>
+                          value.map((option, index) => {
+                            const isWarning = 
+                              option.toLowerCase().includes('aggressive') ||
+                              option.toLowerCase().includes('bites') ||
+                              option.toLowerCase().includes('dangerous');
+                            
+                            return (
+                              <Chip 
+                                variant="filled" 
+                                label={option} 
+                                {...getTagProps({ index })}
+                                color={isWarning ? 'error' : 'primary'}
+                                sx={{ fontWeight: isWarning ? 700 : 400 }}
+                              />
+                            );
+                          })
+                        }
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Temperament & Behavior Tags ⚠️"
+                            placeholder="Select or type tags (e.g., Friendly, Gentle, AGGRESSIVE)"
+                            helperText={
+                              <Box component="span">
+                                <strong style={{ color: '#d32f2f' }}>IMPORTANT:</strong> Tags like "Aggressive", "Bites", or "Dangerous" will significantly reduce match scores and prevent "Best Match" status. Be honest for safety!
+                              </Box>
+                            }
+                          />
+                        )}
+                      />
                     </Grid>
 
                     <Grid item xs={12} md={6}>

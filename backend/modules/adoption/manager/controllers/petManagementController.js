@@ -302,6 +302,15 @@ const createPet = async (req, res) => {
       console.error('Blockchain logging failed for PET_CREATED:', blockchainErr);
     }
     
+    // ML: Check if this is a new breed and trigger retrain if needed
+    try {
+      const { checkNewBreedAdded } = require('../../services/mlRetrainService');
+      checkNewBreedAdded(result.adoptionPet.breed); // fire-and-forget (non-blocking)
+    } catch (mlErr) {
+      // Non-critical — don't fail pet creation
+      console.warn('ML new-breed check skipped:', mlErr?.message);
+    }
+    
     // Process images and documents - we'll handle them separately now
     let images = sanitizeMedia(ensureArray(req.body?.images), false)
     let documents = sanitizeMedia(ensureArray(req.body?.documents), true)

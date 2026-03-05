@@ -5,6 +5,7 @@ const paymentController = require('../controllers/paymentController');
 const petController = require('../controllers/petController');
 const certificateController = require('../controllers/certificateController'); // Add this import
 const matchingController = require('../controllers/matchingController'); // Smart matching
+const trackingController = require('../controllers/trackingController'); // ML tracking
 const { auth } = require('../../../../core/middleware/auth');
 const { authorize } = require('../../../../core/middleware/role');
 const multer = require('multer');
@@ -52,6 +53,19 @@ router.get('/profile/adoption', auth, matchingController.getAdoptionProfile);
 router.get('/profile/adoption/status', auth, matchingController.getProfileStatus);
 router.get('/matches/smart', auth, matchingController.getSmartMatches);
 router.get('/matches/pet/:petId', auth, matchingController.calculatePetMatch);
+
+// NEW: Hybrid ML Recommendation Routes (Phase 4)
+router.get('/matches/hybrid', auth, matchingController.getHybridMatches);
+router.get('/matches/compare-algorithms', auth, matchingController.compareAlgorithms);
+router.get('/ml/stats', auth, matchingController.getMLStats);
+router.get('/ml/production-metrics', auth, matchingController.getProductionMetrics);
+
+// ML Tracking Routes (for collaborative filtering and model training)
+router.post('/interaction', auth, trackingController.trackInteraction);
+router.get('/interaction/history', auth, trackingController.getUserInteractionHistory);
+router.get('/interaction/stats/:petId', auth, trackingController.getPetInteractionStats);
+router.post('/feedback/:petId', auth, trackingController.submitAdoptionFeedback);
+router.post('/report-return/:petId', auth, trackingController.reportAdoptionReturn);
 
 // User Routes - Authenticated users only
 router.get('/pets', auth, applicationController.getAvailablePets);

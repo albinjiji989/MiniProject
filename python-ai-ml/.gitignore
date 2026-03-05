@@ -68,3 +68,6 @@ htmlcov/
 
 # TensorFlow
 .keras/
+
+
+petfinder-adoption-prediction/

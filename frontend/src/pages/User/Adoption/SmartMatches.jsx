@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient, resolveMediaUrl } from '../../../services/api';
+import AlgorithmInsights from '../../../components/Adoption/AlgorithmInsights';
 import {
   Box,
   Container,
@@ -17,13 +18,10 @@ import {
   CircularProgress,
   IconButton,
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText
+  Divider,
+  Stack,
+  Paper
 } from '@mui/material';
 import {
   Favorite,
@@ -34,17 +32,25 @@ import {
   Refresh,
   EmojiEvents,
   Star,
-  Close
+  Close,
+  Pets,
+  Home,
+  TrendingUp,
+  Psychology
 } from '@mui/icons-material';
 
 const SmartMatches = () => {
   const navigate = useNavigate();
+  
+  // State management
   const [loading, setLoading] = useState(true);
   const [matches, setMatches] = useState([]);
   const [profileStatus, setProfileStatus] = useState(null);
   const [selectedPet, setSelectedPet] = useState(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState('');
+  const [mlServiceAvailable, setMlServiceAvailable] = useState(true);
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
 
   useEffect(() => {
     loadSmartMatches();
@@ -54,10 +60,8 @@ const SmartMatches = () => {
   const loadProfileStatus = async () => {
     try {
       const res = await apiClient.get('/adoption/user/profile/adoption');
-      console.log('Profile API Response:', res.data);
       if (res.data.success) {
         setProfileStatus(res.data.data);
-        console.log('Profile data set:', res.data.data);
       }
     } catch (error) {
       console.error('Error loading profile status:', error);
@@ -68,21 +72,48 @@ const SmartMatches = () => {
     try {
       setLoading(true);
       setError('');
-      const res = await apiClient.get('/adoption/user/matches/smart?topN=10');
+      
+      const res = await apiClient.get('/adoption/user/matches/hybrid', {
+        params: {
+          topN: 20,
+          algorithm: 'hybrid'
+        }
+      });
       
       if (res.data.success) {
-        if (res.data.data.needsProfile) {
+        if (res.data.data?.needsProfile || res.data.needsProfile) {
           navigate('/user/adoption/profile-wizard');
           return;
         }
-        setMatches(res.data.data.matches || []);
+        
+        const recommendations = res.data.data?.recommendations || 
+                              res.data.data?.matches || 
+                              res.data?.matches || 
+                              [];
+        
+        console.log('📊 Received recommendations:', recommendations.length);
+        console.log('📝 First recommendation:', recommendations[0]);
+        console.log('📊 FULL API RESPONSE:', res.data.data);
+        
+        setMatches(recommendations);
+        setMlServiceAvailable(res.data.data?.source !== 'fallback');
+        
+        if (recommendations.length === 0) {
+          setError('No pets available at this time. Please check back later or try updating your preferences.');
+        }
+      } else {
+        setError(res.data.message || 'Failed to load matches');
       }
     } catch (error) {
       console.error('Error loading matches:', error);
-      if (error.response?.data?.needsProfile) {
+      
+      if (error.response?.data?.needsProfile || error.response?.status === 400) {
         navigate('/user/adoption/profile-wizard');
       } else {
-        setError(error.response?.data?.message || 'Failed to load matches');
+        const errorMsg = error.response?.data?.message || 
+                        error.message || 
+                        'Failed to load matches. Please try again.';
+        setError(errorMsg);
       }
     } finally {
       setLoading(false);
@@ -90,17 +121,16 @@ const SmartMatches = () => {
   };
 
   const viewMatchDetails = async (pet) => {
-    // Reload profile to ensure we have latest data
     await loadProfileStatus();
     setSelectedPet(pet);
     setDetailsOpen(true);
   };
 
   const getMatchColor = (score) => {
-    if (score >= 85) return '#4caf50'; // Green
-    if (score >= 70) return '#2196f3'; // Blue
-    if (score >= 55) return '#ff9800'; // Orange
-    return '#f44336'; // Red
+    if (score >= 85) return '#4caf50';
+    if (score >= 70) return '#2196f3';
+    if (score >= 55) return '#ff9800';
+    return '#f44336';
   };
 
   const getMatchLabel = (score) => {
@@ -110,13 +140,67 @@ const SmartMatches = () => {
     return 'Fair Match';
   };
 
+  const getConfidenceLabel = (confidence) => {
+    if (confidence >= 90) return 'Very High';
+    if (confidence >= 70) return 'High';
+    if (confidence >= 50) return 'Medium';
+    return 'Low';
+  };
+
+  // Extract pet data handling both flat and nested structures
+  const extractPetData = (match) => {
+    const pet = match.pet || match;
+    
+    // Get images array
+    const images = pet.images || [];
+    
+    // Get match scores with multiple fallbacks
+    const hybridScore = match.hybridScore || 
+                       match.match_score || 
+                       match.matchScore || 
+                       pet.hybridScore || 
+                       pet.match_score || 
+                       pet.matchScore || 
+                       70; // Default score
+    
+    // Get match details
+    const matchDetails = match.match_details || match.matchDetails || {};
+    
+    return {
+      id: pet._id || pet.id || match.petId || `pet-${Date.now()}-${Math.random()}`,
+      name: match.petName || pet.petName || pet.name || 'Lovely Pet',  // Support both petName and name
+      breed: pet.breed || 'Mixed Breed',
+      species: pet.species || 'Pet',
+      gender: pet.gender || 'Unknown',
+      age: pet.age || '',
+      color: pet.color || '',
+      weight: pet.weight || '',
+      description: pet.description || 'This lovely pet is looking for a forever home.',
+      adoptionFee: pet.adoptionFee || 0,
+      vaccinationStatus: pet.vaccinationStatus || 'unknown',
+      images: images,
+      compatibilityProfile: pet.compatibilityProfile || {},
+      temperamentTags: pet.temperamentTags || [],
+      hybridScore: hybridScore,
+      matchDetails: matchDetails,
+      algorithmScores: match.algorithmScores || {},
+      explanations: match.explanations || matchDetails.match_reasons || [],
+      confidence: match.confidence || 50,
+      clusterName: match.clusterName || '',
+      successProbability: match.successProbability || 0,
+      weights: match.weights || {}
+    };
+  };
+
   if (loading) {
     return (
       <Container maxWidth="xl" sx={{ py: 8, textAlign: 'center' }}>
-        <CircularProgress size={60} />
-        <Typography sx={{ mt: 2 }}>Finding your perfect matches...</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Our AI is analyzing {matches.length > 0 ? matches.length : 'available'} pets
+        <CircularProgress size={60} sx={{ color: '#4caf50' }} />
+        <Typography sx={{ mt: 2, fontSize: '1.1rem', fontWeight: 500 }}>
+          🔍 Finding your perfect companion...
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Our AI is analyzing compatibility with available pets
         </Typography>
       </Container>
     );
@@ -124,57 +208,164 @@ const SmartMatches = () => {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-        <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <EmojiEvents sx={{ fontSize: 40, color: '#ffd700', mr: 2 }} />
-            <Typography variant="h4" sx={{ fontWeight: 700 }}>
-              Your Smart Matches
+      {/* Header Section */}
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+          <Box
+            sx={{
+              bgcolor: '#4caf50',
+              borderRadius: 3,
+              p: 2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <Star sx={{ fontSize: 40, color: '#fff' }} />
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5 }}>
+              Your Best Matches
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              AI-powered recommendations based on your lifestyle and preferences
             </Typography>
           </Box>
-          <Typography variant="body1" color="text.secondary">
-            AI-powered recommendations based on your lifestyle and preferences
-          </Typography>
-        </Box>
-
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button
-            variant="outlined"
-            startIcon={<Settings />}
-            onClick={() => navigate('/user/adoption/profile-wizard')}
-          >
-            Update Profile
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<Refresh />}
-            onClick={loadSmartMatches}
-          >
-            Refresh
-          </Button>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={<Settings />}
+              onClick={() => navigate('/user/adoption/profile-wizard')}
+              sx={{ 
+                textTransform: 'none',
+                borderRadius: 2,
+                fontWeight: 600
+              }}
+            >
+              Update Profile
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Refresh />}
+              onClick={loadSmartMatches}
+              sx={{ 
+                textTransform: 'none',
+                borderRadius: 2,
+                fontWeight: 600,
+                bgcolor: '#4caf50',
+                '&:hover': { bgcolor: '#45a049' }
+              }}
+            >
+              Refresh
+            </Button>
+          </Box>
         </Box>
       </Box>
 
-      {/* Profile Completion Banner */}
-      {profileStatus && !profileStatus.isComplete && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          Your profile is {profileStatus.completionPercentage}% complete. 
-          <Button size="small" onClick={() => navigate('/user/adoption/profile-wizard')} sx={{ ml: 2 }}>
-            Complete Now
-          </Button>
+      {/* AI System Status Banner */}
+      {mlServiceAvailable && (
+        <Alert 
+          severity="success" 
+          icon={<Psychology />}
+          sx={{ 
+            mb: 3,
+            borderRadius: 2,
+            '& .MuiAlert-message': { width: '100%' }
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                🤖 AI-Powered Recommendations Active
+              </Typography>
+              <Typography variant="caption">
+                Using 4 advanced algorithms: Profile Matching • Collaborative Filtering • Success Prediction • Personality Clustering
+              </Typography>
+            </Box>
+            <Button 
+              size="small" 
+              onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+              sx={{ textTransform: 'none', ml: 2 }}
+            >
+              {showTechnicalDetails ? 'Hide Details' : 'How it Works'}
+            </Button>
+          </Box>
+          
+          {showTechnicalDetails && (
+            <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #e0e0e0' }}>
+              <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, mb: 1 }}>
+                Our hybrid AI combines 4 machine learning algorithms:
+              </Typography>
+              <Grid container spacing={1}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Box sx={{ bgcolor: '#e3f2fd', p: 1.5, borderRadius: 1 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#2196f3' }}>
+                      📊 Profile Matching (30%)
+                    </Typography>
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      Compares your lifestyle with pet needs
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Box sx={{ bgcolor: '#e8f5e9', p: 1.5, borderRadius: 1 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#4caf50' }}>
+                      👥 Collaborative (30%)
+                    </Typography>
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      Based on similar user preferences
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Box sx={{ bgcolor: '#f3e5f5', p: 1.5, borderRadius: 1 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#9c27b0' }}>
+                      🎯 Success Predictor (25%)
+                    </Typography>
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      Predicts adoption success rate
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Box sx={{ bgcolor: '#fff3e0', p: 1.5, borderRadius: 1 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: '#ff9800' }}>
+                      🏷️ Clustering (15%)
+                    </Typography>
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      Personality type matching
+                    </Typography>
+                  </Box>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </Alert>
+      )}
+
+      {!mlServiceAvailable && (
+        <Alert severity="warning" icon={<Info />} sx={{ mb: 3, borderRadius: 2 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+            📊 Content-Based Match Algorithm Active
+          </Typography>
+          <Typography variant="caption">
+            AI/ML service is temporarily unavailable. Using profile-based compatibility matching (Weighted Multi-Criteria Decision Analysis). 
+            This algorithm scores pets based on: living space compatibility (20%), activity level match (25%), experience requirements (15%), 
+            family safety (20%), budget (10%), and preferences (10%).
+          </Typography>
         </Alert>
       )}
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setError('')}>
           {error}
         </Alert>
       )}
 
       {/* Matches Grid */}
       {matches.length === 0 ? (
-        <Card sx={{ p: 4, textAlign: 'center' }}>
+        <Card sx={{ p: 4, textAlign: 'center', borderRadius: 3 }}>
+          <Pets sx={{ fontSize: 80, color: '#e0e0e0', mb: 2 }} />
           <Typography variant="h6" sx={{ mb: 2 }}>
             No matches found
           </Typography>
@@ -185,56 +376,103 @@ const SmartMatches = () => {
           <Button
             variant="contained"
             onClick={() => navigate('/user/adoption')}
-            sx={{ bgcolor: '#4caf50' }}
+            sx={{ 
+              bgcolor: '#4caf50',
+              textTransform: 'none',
+              fontWeight: 600,
+              borderRadius: 2
+            }}
           >
             View All Available Pets
           </Button>
         </Card>
       ) : (
         <>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            Found {matches.length} perfect matches for you! 🎯
-          </Typography>
+          <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              🎯 Found {matches.length} perfect matches for you!
+            </Typography>
+            {mlServiceAvailable && (
+              <Chip 
+                icon={<TrendingUp />}
+                label="AI-Sorted by Best Match"
+                color="success"
+                size="small"
+              />
+            )}
+          </Box>
 
           <Grid container spacing={3}>
-            {matches.map((pet, index) => {
-              const matchScore = pet.match_score || 0;
-              const matchDetails = pet.match_details || {};
-              const topReasons = matchDetails.match_reasons || [];
-              const warnings = matchDetails.warnings || [];
+            {matches.map((match, index) => {
+              const pet = extractPetData(match);
+              const matchScore = pet.hybridScore;
+              
+              // DEBUG: Log actual scores
+              if (index < 5) {
+                console.log(`🐾 Pet ${index + 1}:`, {
+                  name: pet.name,
+                  breed: pet.breed,
+                  matchScore: matchScore,
+                  raw_match: match,
+                  warnings: pet.matchDetails?.warnings
+                });
+              }
+              
+              const topReasons = pet.explanations || 
+                               pet.matchDetails.match_reasons || 
+                               pet.matchDetails.reasons || 
+                               [];
+              const warnings = pet.matchDetails.warnings || [];
+              
+              const primaryImage = pet.images.length > 0 
+                ? resolveMediaUrl(
+                    typeof pet.images[0] === 'string' 
+                      ? pet.images[0] 
+                      : (pet.images[0].url || pet.images[0].path || pet.images[0]._id || '')
+                  )
+                : '/placeholder-pet.svg';
+                
+              // Only show "Best Match" if it's first AND has score >= 85
+              const isBestMatch = index === 0 && matchScore >= 85;
 
               return (
-                <Grid item xs={12} sm={6} md={4} key={pet._id || pet.id}>
+                <Grid item xs={12} sm={6} md={4} key={pet.id || index}>
                   <Card 
                     sx={{ 
                       height: '100%', 
                       display: 'flex', 
-                      flexDirection: 'column', 
-                      position: 'relative',
+                      flexDirection: 'column',
                       borderRadius: 3,
                       overflow: 'hidden',
-                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      border: index === 0 ? '2px solid #ffd700' : '1px solid #e0e0e0',
+                      transition: 'all 0.3s ease',
+                      border: isBestMatch ? '2px solid #ffd700' : '1px solid #e0e0e0',
                       '&:hover': {
-                        transform: 'translateY(-12px)',
-                        boxShadow: index === 0 
-                          ? '0 20px 40px rgba(255, 215, 0, 0.3)' 
-                          : '0 16px 32px rgba(0,0,0,0.12)'
+                        transform: 'translateY(-8px)',
+                        boxShadow: isBestMatch 
+                          ? '0 20px 40px rgba(255, 215, 0, 0.3)'
+                          : '0 12px 24px rgba(0,0,0,0.15)',
                       }
                     }}
                   >
-                    {/* Image Container with Overlay */}
-                    <Box sx={{ position: 'relative', height: 280 }}>
+                    {/* Image Section */}
+                    <Box sx={{ position: 'relative', paddingTop: '75%' }}>
                       <CardMedia
                         component="img"
-                        image={resolveMediaUrl(pet.images?.[0]?.url || pet.image || '/placeholder-pet.svg')}
+                        image={primaryImage}
                         alt={pet.breed}
                         sx={{ 
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
                           height: '100%',
                           objectFit: 'cover',
                           cursor: 'pointer'
                         }}
-                        onClick={() => viewMatchDetails(pet)}
+                        onClick={() => viewMatchDetails(match)}
+                        onError={(e) => {
+                          e.target.src = '/placeholder-pet.svg';
+                        }}
                       />
                       
                       {/* Gradient Overlay */}
@@ -245,38 +483,29 @@ const SmartMatches = () => {
                           left: 0,
                           right: 0,
                           bottom: 0,
-                          background: 'linear-gradient(180deg, rgba(0,0,0,0.3) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.6) 100%)',
+                          background: 'linear-gradient(180deg, rgba(0,0,0,0.4) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.7) 100%)',
                           pointerEvents: 'none'
                         }}
                       />
 
-                      {/* Top Left - Rank Badge (only for top 3) */}
-                      {index === 0 && (
-                        <Box
+                      {/* Best Match Badge */}
+                      {isBestMatch && (
+                        <Chip
+                          icon={<EmojiEvents />}
+                          label="Best Match"
                           sx={{
                             position: 'absolute',
                             top: 12,
                             left: 12,
                             bgcolor: '#ffd700',
                             color: '#000',
-                            borderRadius: 2,
-                            px: 2,
-                            py: 0.5,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 0.5,
                             fontWeight: 700,
-                            fontSize: '0.9rem',
                             boxShadow: '0 4px 12px rgba(255, 215, 0, 0.5)',
-                            zIndex: 2
                           }}
-                        >
-                          <span>🏆</span>
-                          <span>Best Match</span>
-                        </Box>
+                        />
                       )}
 
-                      {/* Top Right - Match Score */}
+                      {/* Match Score Badge */}
                       <Box
                         sx={{
                           position: 'absolute',
@@ -287,8 +516,6 @@ const SmartMatches = () => {
                           px: 1.5,
                           py: 0.5,
                           backdropFilter: 'blur(10px)',
-                          border: '1px solid rgba(255,255,255,0.3)',
-                          zIndex: 2
                         }}
                       >
                         <Typography 
@@ -303,7 +530,7 @@ const SmartMatches = () => {
                         </Typography>
                       </Box>
 
-                      {/* Bottom Info Bar */}
+                      {/* Pet Name Overlay */}
                       <Box
                         sx={{
                           position: 'absolute',
@@ -312,7 +539,6 @@ const SmartMatches = () => {
                           right: 0,
                           color: 'white',
                           p: 2,
-                          zIndex: 2
                         }}
                       >
                         <Chip
@@ -323,29 +549,32 @@ const SmartMatches = () => {
                             color: '#fff',
                             fontWeight: 700,
                             fontSize: '0.75rem',
-                            height: 26,
                             mb: 1,
                             boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
                           }}
                         />
-                        <Typography variant="body1" sx={{ fontWeight: 600, textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                        <Typography variant="h6" sx={{ fontWeight: 700, textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
+                          {pet.name}
+                        </Typography>
+                        <Typography variant="body2" sx={{ opacity: 0.95, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
                           {pet.breed}
                         </Typography>
-                        <Typography variant="body2" sx={{ opacity: 0.95, fontSize: '0.85rem', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+                        <Typography variant="caption" sx={{ opacity: 0.9, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
                           {pet.species} • {pet.gender} {pet.age ? `• ${pet.age}` : ''}
                         </Typography>
                       </Box>
                     </Box>
 
-                    <CardContent sx={{ flexGrow: 1, p: 2.5, pb: 1.5 }}>
+                    {/* Card Content */}
+                    <CardContent sx={{ flexGrow: 1, p: 2.5 }}>
                       {/* Match Progress Bar */}
-                      <Box sx={{ mb: 2.5 }}>
+                      <Box sx={{ mb: 2 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666', fontSize: '0.75rem' }}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>
                             Compatibility Score
                           </Typography>
-                          <Typography variant="caption" sx={{ fontWeight: 700, color: getMatchColor(matchScore), fontSize: '0.75rem' }}>
-                            {matchScore}%
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: getMatchColor(matchScore) }}>
+                            {getMatchLabel(matchScore)}
                           </Typography>
                         </Box>
                         <LinearProgress
@@ -358,19 +587,38 @@ const SmartMatches = () => {
                             '& .MuiLinearProgress-bar': {
                               backgroundColor: getMatchColor(matchScore),
                               borderRadius: 4,
-                              backgroundImage: `linear-gradient(90deg, ${getMatchColor(matchScore)}, ${getMatchColor(matchScore)}ee)`
                             }
                           }}
                         />
                       </Box>
 
+                      {/* Quick Stats */}
+                      <Grid container spacing={1} sx={{ mb: 2 }}>
+                        <Grid item xs={6}>
+                          <Box sx={{ bgcolor: '#f8f9fa', p: 1, borderRadius: 1, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">Age</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                              {pet.age || 'N/A'}
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Box sx={{ bgcolor: '#f8f9fa', p: 1, borderRadius: 1, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">Fee</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                              ${pet.adoptionFee || 0}
+                            </Typography>
+                          </Box>
+                        </Grid>
+                      </Grid>
+
                       {/* Top Match Reasons */}
                       {topReasons.length > 0 && (
                         <Box sx={{ mb: 2 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 700, mb: 1.5, color: '#333', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <span>✨</span> Why This Match Works
+                          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, fontSize: '0.85rem' }}>
+                            ✨ Why This Works
                           </Typography>
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <Stack spacing={0.5}>
                             {topReasons.slice(0, 2).map((reason, idx) => (
                               <Box 
                                 key={idx} 
@@ -379,17 +627,31 @@ const SmartMatches = () => {
                                   alignItems: 'flex-start', 
                                   bgcolor: '#f8f9fa',
                                   p: 1,
-                                  borderRadius: 1.5,
-                                  border: '1px solid #e9ecef'
+                                  borderRadius: 1
                                 }}
                               >
-                                <CheckCircle sx={{ fontSize: 16, color: '#4caf50', mr: 1, mt: 0.2, flexShrink: 0 }} />
-                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem', lineHeight: 1.5 }}>
-                                  {reason}
+                                <CheckCircle sx={{ fontSize: 16, color: '#4caf50', mr: 0.5, mt: 0.2, flexShrink: 0 }} />
+                                <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+                                  {typeof reason === 'string' ? reason : reason.text || reason.reason || ''}
                                 </Typography>
                               </Box>
                             ))}
-                          </Box>
+                          </Stack>
+                        </Box>
+                      )}
+
+                      {/* Confidence Indicator */}
+                      {pet.confidence > 0 && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Confidence:
+                          </Typography>
+                          <Chip 
+                            label={`${getConfidenceLabel(pet.confidence)} (${pet.confidence}%)`}
+                            size="small"
+                            color={pet.confidence >= 70 ? 'success' : 'default'}
+                            sx={{ height: 20, fontSize: '0.7rem' }}
+                          />
                         </Box>
                       )}
 
@@ -397,65 +659,54 @@ const SmartMatches = () => {
                       {warnings.length > 0 && (
                         <Alert 
                           severity="warning" 
-                          icon={false}
+                          icon={<Warning sx={{ fontSize: 16 }} />}
                           sx={{ 
-                            py: 0.75, 
-                            px: 1.5,
+                            py: 0.5, 
+                            px: 1,
                             fontSize: '0.75rem',
-                            bgcolor: '#fff8e1',
-                            border: '1px solid #ffe082',
-                            borderRadius: 1.5
                           }}
                         >
-                          <Typography variant="caption" sx={{ fontSize: '0.75rem', lineHeight: 1.4 }}>
-                            ⚠️ {warnings[0]}
+                          <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                            {warnings[0]}
                           </Typography>
                         </Alert>
                       )}
                     </CardContent>
 
-                    <CardActions sx={{ p: 2.5, pt: 0, gap: 1 }}>
+                    {/* Action Buttons */}
+                    <CardActions sx={{ p: 2, pt: 0, gap: 1 }}>
                       <Button
                         fullWidth
-                        size="large"
+                        size="medium"
                         variant="outlined"
-                        onClick={() => viewMatchDetails(pet)}
+                        onClick={() => viewMatchDetails(match)}
                         startIcon={<Info />}
                         sx={{ 
-                          borderColor: '#e0e0e0',
-                          color: '#666',
-                          fontWeight: 600,
-                          borderRadius: 2,
                           textTransform: 'none',
-                          '&:hover': { 
-                            borderColor: '#bdbdbd',
-                            bgcolor: '#fafafa'
-                          }
+                          fontWeight: 600,
+                          borderRadius: 2
                         }}
                       >
-                        View Details
+                        Details
                       </Button>
                       <Button
                         fullWidth
-                        size="large"
+                        size="medium"
                         variant="contained"
-                        onClick={() => navigate(`/user/adoption/wizard/${pet._id || pet.id}`)}
+                        onClick={() => navigate(`/user/adoption/wizard/${pet.id}`)}
                         startIcon={<Favorite />}
                         sx={{ 
                           bgcolor: getMatchColor(matchScore),
-                          boxShadow: `0 4px 14px ${getMatchColor(matchScore)}40`,
+                          textTransform: 'none',
                           fontWeight: 700,
                           borderRadius: 2,
-                          textTransform: 'none',
                           '&:hover': {
                             bgcolor: getMatchColor(matchScore),
-                            filter: 'brightness(0.92)',
-                            boxShadow: `0 6px 20px ${getMatchColor(matchScore)}50`,
-                            transform: 'translateY(-2px)'
+                            filter: 'brightness(0.9)'
                           }
                         }}
                       >
-                        Apply Now
+                        Apply
                       </Button>
                     </CardActions>
                   </Card>
@@ -466,7 +717,7 @@ const SmartMatches = () => {
         </>
       )}
 
-      {/* Match Details Dialog */}
+      {/* Pet Details Dialog */}
       <Dialog 
         open={detailsOpen} 
         onClose={() => setDetailsOpen(false)} 
@@ -479,342 +730,403 @@ const SmartMatches = () => {
           }
         }}
       >
-        {selectedPet && (
-          <>
-            {/* Header with Pet Image */}
-            <Box sx={{ position: 'relative' }}>
-              <CardMedia
-                component="img"
-                image={resolveMediaUrl(selectedPet.images?.[0]?.url || selectedPet.image || '/placeholder-pet.svg')}
-                alt={selectedPet.breed}
-                sx={{ 
-                  height: 280,
-                  objectFit: 'cover'
-                }}
-              />
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  background: 'linear-gradient(180deg, rgba(0,0,0,0.5) 0%, transparent 40%, rgba(0,0,0,0.7) 100%)'
-                }}
-              />
-              
-              <IconButton
-                onClick={() => setDetailsOpen(false)}
-                sx={{
-                  position: 'absolute',
-                  top: 12,
-                  right: 12,
-                  bgcolor: 'white',
-                  '&:hover': { bgcolor: '#f5f5f5' }
-                }}
-              >
-                <Close />
-              </IconButton>
+        {selectedPet && (() => {
+          const pet = extractPetData(selectedPet);
+          const primaryImage = pet.images.length > 0 
+            ? resolveMediaUrl(pet.images[0].url)
+            : '/placeholder-pet.svg';
 
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 12,
-                  left: 12,
-                  bgcolor: getMatchColor(selectedPet.match_score),
-                  color: 'white',
-                  borderRadius: 2,
-                  px: 2,
-                  py: 1,
-                  boxShadow: 3
-                }}
-              >
-                <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1 }}>
-                  {selectedPet.match_score}%
-                </Typography>
-                <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 700 }}>
-                  MATCH
-                </Typography>
-              </Box>
-
-              <Box
-                sx={{
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  p: 3,
-                  color: 'white'
-                }}
-              >
-                <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5, textShadow: '0 2px 8px rgba(0,0,0,0.8)' }}>
-                  {selectedPet.breed}
-                </Typography>
-                <Typography variant="body1" sx={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
-                  {selectedPet.species} • {selectedPet.gender} • {selectedPet.age || 'Age unknown'}
-                </Typography>
-              </Box>
-            </Box>
-
-            <DialogContent sx={{ p: 3 }}>
-              {/* Quick Stats */}
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                {selectedPet.color && (
-                  <Grid item xs={6} sm={3}>
-                    <Box sx={{ textAlign: 'center', bgcolor: '#f8f9fa', p: 1.5, borderRadius: 2 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{selectedPet.color}</Typography>
-                      <Typography variant="caption" color="text.secondary">Color</Typography>
-                    </Box>
-                  </Grid>
-                )}
-                {selectedPet.weight && (
-                  <Grid item xs={6} sm={3}>
-                    <Box sx={{ textAlign: 'center', bgcolor: '#f8f9fa', p: 1.5, borderRadius: 2 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{selectedPet.weight} kg</Typography>
-                      <Typography variant="caption" color="text.secondary">Weight</Typography>
-                    </Box>
-                  </Grid>
-                )}
-                <Grid item xs={6} sm={3}>
-                  <Box sx={{ textAlign: 'center', bgcolor: '#f8f9fa', p: 1.5, borderRadius: 2 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {selectedPet.vaccinationStatus === 'up_to_date' ? '✓ Yes' : selectedPet.vaccinationStatus === 'partial' ? '~ Partial' : '✗ No'}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">Vaccinated</Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={6} sm={3}>
-                  <Box sx={{ textAlign: 'center', bgcolor: '#f8f9fa', p: 1.5, borderRadius: 2 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>${selectedPet.adoptionFee || 0}</Typography>
-                    <Typography variant="caption" color="text.secondary">Fee</Typography>
-                  </Box>
-                </Grid>
-              </Grid>
-
-              {/* Success Prediction */}
-              {selectedPet.match_details?.success_probability && (
-                <Alert 
-                  severity="success" 
-                  icon={false}
-                  sx={{ mb: 3, bgcolor: `${getMatchColor(selectedPet.match_score)}15`, border: `2px solid ${getMatchColor(selectedPet.match_score)}` }}
+          return (
+            <>
+              {/* Header with Image */}
+              <Box sx={{ position: 'relative' }}>
+                <CardMedia
+                  component="img"
+                  image={primaryImage}
+                  alt={pet.breed}
+                  sx={{ 
+                    height: 300,
+                    objectFit: 'cover'
+                  }}
+                />
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'linear-gradient(180deg, rgba(0,0,0,0.5) 0%, transparent 50%, rgba(0,0,0,0.7) 100%)'
+                  }}
+                />
+                
+                <IconButton
+                  onClick={() => setDetailsOpen(false)}
+                  sx={{
+                    position: 'absolute',
+                    top: 12,
+                    right: 12,
+                    bgcolor: 'white',
+                    '&:hover': { bgcolor: '#f5f5f5' }
+                  }}
                 >
-                  <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                    🎯 {selectedPet.match_details.success_probability}% Success Rate
-                  </Typography>
-                  <Typography variant="body2">
-                    High compatibility for successful adoption
-                  </Typography>
-                </Alert>
-              )}
+                  <Close />
+                </IconButton>
 
-              {/* Description */}
-              {selectedPet.description && (
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-                    About {selectedPet.breed}
+                {/* Match Score Badge */}
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 12,
+                    left: 12,
+                    bgcolor: getMatchColor(pet.hybridScore),
+                    color: 'white',
+                    borderRadius: 2,
+                    px: 2,
+                    py: 1,
+                    boxShadow: 3
+                  }}
+                >
+                  <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1 }}>
+                    {pet.hybridScore}%
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#666', lineHeight: 1.7 }}>
-                    {selectedPet.description}
+                  <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 700 }}>
+                    MATCH
                   </Typography>
                 </Box>
-              )}
 
-              {/* Your Profile vs Pet Needs - Compact */}
-              <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-                Compatibility Overview
-              </Typography>
-              
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6}>
-                  <Box sx={{ bgcolor: '#e3f2fd', p: 2, borderRadius: 2, height: '100%' }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, color: '#1976d2' }}>
-                      👤 Your Profile
-                    </Typography>
-                    {profileStatus?.adoptionProfile ? (
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        <Typography variant="body2">
-                          <strong>Home:</strong> {profileStatus.adoptionProfile.homeType} ({profileStatus.adoptionProfile.homeSize})
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Activity:</strong> {profileStatus.adoptionProfile.activityLevel}
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Experience:</strong> {profileStatus.adoptionProfile.experienceLevel}
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Children:</strong> {profileStatus.adoptionProfile.hasChildren ? 'Yes' : 'No'}
-                        </Typography>
-                        {profileStatus.adoptionProfile.monthlyBudget && (
-                          <Typography variant="body2">
-                            <strong>Budget:</strong> ${profileStatus.adoptionProfile.monthlyBudget}/mo
-                          </Typography>
-                        )}
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        Loading profile...
-                      </Typography>
-                    )}
-                  </Box>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Box sx={{ bgcolor: '#fce4ec', p: 2, borderRadius: 2, height: '100%' }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, color: '#c2185b' }}>
-                      🐾 Pet's Needs
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Typography variant="body2">
-                        <strong>Space:</strong> {selectedPet.compatibilityProfile?.spaceNeeded || 'Moderate'}
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Energy:</strong> {selectedPet.compatibilityProfile?.energyLevel || 'Moderate'}
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Experience:</strong> {selectedPet.compatibilityProfile?.requiresExperiencedOwner ? 'Required' : 'Beginner OK'}
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Kids:</strong> {selectedPet.compatibilityProfile?.goodWithKids ? 'Yes' : 'No'}
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Other Pets:</strong> {selectedPet.compatibilityProfile?.goodWithPets ? 'Yes' : 'No'}
-                      </Typography>
-                    </Box>
-                  </Box>
-                </Grid>
-              </Grid>
-
-              {/* Match Reasons */}
-              {selectedPet.match_details?.match_reasons && selectedPet.match_details.match_reasons.length > 0 && (
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.5 }}>
-                    ✨ Why This Match Works
+                {/* Pet Info Overlay */}
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    p: 3,
+                    color: 'white'
+                  }}
+                >
+                  <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5, textShadow: '0 2px 8px rgba(0,0,0,0.8)' }}>
+                    {pet.name}
                   </Typography>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {selectedPet.match_details.match_reasons.slice(0, 4).map((reason, idx) => (
-                      <Box 
-                        key={idx}
-                        sx={{ 
-                          bgcolor: '#f8f9fa',
-                          borderLeft: `3px solid ${getMatchColor(selectedPet.match_score)}`,
-                          p: 1.5,
-                          borderRadius: 1,
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: 1
-                        }}
-                      >
-                        <CheckCircle sx={{ color: getMatchColor(selectedPet.match_score), fontSize: 20, mt: 0.2, flexShrink: 0 }} />
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {reason.replace(/^[✓⚠️~]\s*/, '')}
+                  <Typography variant="h6" sx={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+                    {pet.breed}
+                  </Typography>
+                  <Typography variant="body2" sx={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+                    {pet.species} • {pet.gender} • {pet.age || 'Age unknown'}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <DialogContent sx={{ p: 3 }}>
+                {/* Quick Stats Grid */}
+                <Grid container spacing={2} sx={{ mb: 3 }}>
+                  {pet.color && (
+                    <Grid item xs={6} sm={3}>
+                      <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#f8f9fa' }} elevation={0}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{pet.color}</Typography>
+                        <Typography variant="caption" color="text.secondary">Color</Typography>
+                      </Paper>
+                    </Grid>
+                  )}
+                  {pet.weight && (
+                    <Grid item xs={6} sm={3}>
+                      <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#f8f9fa' }} elevation={0}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{pet.weight} kg</Typography>
+                        <Typography variant="caption" color="text.secondary">Weight</Typography>
+                      </Paper>
+                    </Grid>
+                  )}
+                  <Grid item xs={6} sm={3}>
+                    <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#f8f9fa' }} elevation={0}>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        {pet.vaccinationStatus === 'up_to_date' ? '✓ Yes' : 
+                         pet.vaccinationStatus === 'partial' ? '~ Partial' : '✗ No'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">Vaccinated</Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: '#f8f9fa' }} elevation={0}>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>${pet.adoptionFee}</Typography>
+                      <Typography variant="caption" color="text.secondary">Adoption Fee</Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+
+                {/* Success Probability */}
+                {pet.successProbability > 0 && (
+                  <Alert 
+                    severity="success" 
+                    icon={<TrendingUp />}
+                    sx={{ 
+                      mb: 3, 
+                      bgcolor: `${getMatchColor(pet.hybridScore)}15`,
+                      border: `2px solid ${getMatchColor(pet.hybridScore)}`
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      🎯 {Math.round(pet.successProbability * 100)}% Predicted Success Rate
+                    </Typography>
+                    <Typography variant="caption">
+                      Based on historical adoption data and compatibility analysis
+                    </Typography>
+                  </Alert>
+                )}
+
+                {/* Algorithm Insights */}
+                {pet.algorithmScores && Object.keys(pet.algorithmScores).length > 0 && (
+                  <Box sx={{ mb: 3 }}>
+                    <AlgorithmInsights recommendation={pet} />
+                  </Box>
+                )}
+
+                {/* Description */}
+                {pet.description && (
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+                      About {pet.name}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#666', lineHeight: 1.8 }}>
+                      {pet.description}
+                    </Typography>
+                  </Box>
+                )}
+
+                <Divider sx={{ my: 3 }} />
+
+                {/* Compatibility Overview */}
+                <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+                  Compatibility Overview
+                </Typography>
+                
+                <Grid container spacing={2} sx={{ mb: 3 }}>
+                  {/* Your Profile */}
+                  <Grid item xs={12} sm={6}>
+                    <Paper sx={{ p: 2, bgcolor: '#e3f2fd', height: '100%' }} elevation={0}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+                        <Home sx={{ fontSize: 20, color: '#1976d2', mr: 1 }} />
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1976d2' }}>
+                          Your Profile
                         </Typography>
+                      </Box>
+                      {profileStatus?.adoptionProfile ? (
+                        <Stack spacing={0.5}>
+                          <Typography variant="body2">
+                            <strong>Home:</strong> {profileStatus.adoptionProfile.homeType} ({profileStatus.adoptionProfile.homeSize})
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>Activity:</strong> {profileStatus.adoptionProfile.activityLevel}
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>Experience:</strong> {profileStatus.adoptionProfile.experienceLevel}
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>Children:</strong> {profileStatus.adoptionProfile.hasChildren ? 'Yes' : 'No'}
+                          </Typography>
+                          {profileStatus.adoptionProfile.monthlyBudget && (
+                            <Typography variant="body2">
+                              <strong>Budget:</strong> ${profileStatus.adoptionProfile.monthlyBudget}/month
+                            </Typography>
+                          )}
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          Loading profile...
+                        </Typography>
+                      )}
+                    </Paper>
+                  </Grid>
+
+                  {/* Pet's Needs */}
+                  <Grid item xs={12} sm={6}>
+                    <Paper sx={{ p: 2, bgcolor: '#fce4ec', height: '100%' }} elevation={0}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
+                        <Pets sx={{ fontSize: 20, color: '#c2185b', mr: 1 }} />
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#c2185b' }}>
+                          {pet.name}'s Needs
+                        </Typography>
+                      </Box>
+                      <Stack spacing={0.5}>
+                        <Typography variant="body2">
+                          <strong>Space:</strong> {pet.compatibilityProfile?.size || pet.compatibilityProfile?.spaceNeeded || 'Moderate'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Energy:</strong> {pet.compatibilityProfile?.energyLevel ? `Level ${pet.compatibilityProfile.energyLevel}/5` : 'Moderate'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Experience:</strong> {pet.compatibilityProfile?.requiresExperiencedOwner ? 'Required' : 'Beginner OK'}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: pet.compatibilityProfile?.childFriendlyScore < 4 ? '#d32f2f' : 'inherit' }}>
+                          <strong>Good with Kids:</strong> {(pet.compatibilityProfile?.childFriendlyScore ?? 5) >= 6 ? 'Yes' : (pet.compatibilityProfile?.childFriendlyScore ?? 5) >= 4 ? 'Maybe' : 'No'}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: pet.compatibilityProfile?.petFriendlyScore < 4 ? '#d32f2f' : 'inherit' }}>
+                          <strong>Good with Pets:</strong> {(pet.compatibilityProfile?.petFriendlyScore ?? 5) >= 6 ? 'Yes' : (pet.compatibilityProfile?.petFriendlyScore ?? 5) >= 4 ? 'Maybe' : 'No'}
+                        </Typography>
+                      </Stack>
+                    </Paper>
+                  </Grid>
+                </Grid>
+
+                {/* Match Reasons */}
+                {pet.matchDetails?.match_reasons && pet.matchDetails.match_reasons.length > 0 && (
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
+                      ✨ Why This Match Works
+                    </Typography>
+                    <Stack spacing={1}>
+                      {pet.matchDetails.match_reasons.map((reason, idx) => (
+                        <Box 
+                          key={idx}
+                          sx={{ 
+                            bgcolor: '#f8f9fa',
+                            borderLeft: `4px solid ${getMatchColor(pet.hybridScore)}`,
+                            p: 1.5,
+                            borderRadius: 1
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                            <CheckCircle sx={{ color: getMatchColor(pet.hybridScore), fontSize: 20, mt: 0.2 }} />
+                            <Typography variant="body2">
+                              {reason.replace(/^[✓⚠️~]\s*/, '')}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+
+                {/* Score Breakdown */}
+                {pet.matchDetails?.score_breakdown && (
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
+                      📊 Detailed Score Breakdown
+                    </Typography>
+                    {Object.entries(pet.matchDetails.score_breakdown).map(([key, value]) => (
+                      <Box key={key} sx={{ mb: 1.5 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>
+                            {key.replace(/_/g, ' ')}
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: getMatchColor(value) }}>
+                            {Math.round(value)}%
+                          </Typography>
+                        </Box>
+                        <LinearProgress
+                          variant="determinate"
+                          value={value}
+                          sx={{
+                            height: 8,
+                            borderRadius: 4,
+                            backgroundColor: '#e0e0e0',
+                            '& .MuiLinearProgress-bar': {
+                              backgroundColor: getMatchColor(value),
+                              borderRadius: 4
+                            }
+                          }}
+                        />
                       </Box>
                     ))}
                   </Box>
-                </Box>
-              )}
+                )}
 
-              {/* Score Breakdown */}
-              {selectedPet.match_details?.score_breakdown && (
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.5 }}>
-                    📊 Compatibility Breakdown
-                  </Typography>
-                  {Object.entries(selectedPet.match_details.score_breakdown).map(([key, value]) => (
-                    <Box key={key} sx={{ mb: 1.5 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>
-                          {key.replace(/_/g, ' ')}
-                        </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: getMatchColor(value) }}>
-                          {Math.round(value)}%
-                        </Typography>
-                      </Box>
-                      <Box sx={{ bgcolor: '#e0e0e0', borderRadius: 1, height: 6, overflow: 'hidden' }}>
-                        <Box 
-                          sx={{ 
-                            bgcolor: getMatchColor(value),
-                            height: '100%',
-                            width: `${value}%`,
-                            borderRadius: 1
-                          }} 
-                        />
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              )}
+                {/* Warnings */}
+                {pet.matchDetails?.warnings && pet.matchDetails.warnings.length > 0 && (
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5, color: '#f57c00' }}>
+                      ⚠️ Important Considerations
+                    </Typography>
+                    <Stack spacing={1}>
+                      {pet.matchDetails.warnings.map((warning, idx) => (
+                        <Alert key={idx} severity="warning">
+                          <Typography variant="body2">{warning}</Typography>
+                        </Alert>
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
 
-              {/* Warnings */}
-              {selectedPet.match_details?.warnings && selectedPet.match_details.warnings.length > 0 && (
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.5, color: '#f57c00' }}>
-                    ⚠️ Important Notes
-                  </Typography>
-                  {selectedPet.match_details.warnings.map((warning, idx) => (
-                    <Alert 
-                      key={idx} 
-                      severity="warning"
-                      sx={{ mb: 1, py: 0.5 }}
+                {/* Additional Images */}
+                {pet.images.length > 1 && (
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
+                      More Photos
+                    </Typography>
+                    <Grid container spacing={1}>
+                      {pet.images.slice(1, 5).map((img, idx) => (
+                        <Grid item xs={6} sm={3} key={idx}>
+                          <CardMedia
+                            component="img"
+                            image={resolveMediaUrl(img.url)}
+                            alt={`${pet.name} ${idx + 2}`}
+                            sx={{ 
+                              borderRadius: 2, 
+                              aspectRatio: '1',
+                              objectFit: 'cover'
+                            }}
+                            onError={(e) => {
+                              e.target.src = '/placeholder-pet.svg';
+                            }}
+                          />
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Box>
+                )}
+              </DialogContent>
+
+              {/* Action Footer */}
+              <Box sx={{ p: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={8}>
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      size="large"
+                      onClick={() => {
+                        setDetailsOpen(false);
+                        navigate(`/user/adoption/wizard/${pet.id}`);
+                      }}
+                      startIcon={<Favorite />}
+                      sx={{
+                        bgcolor: getMatchColor(pet.hybridScore),
+                        color: 'white',
+                        py: 1.5,
+                        fontWeight: 700,
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontSize: '1rem',
+                        '&:hover': {
+                          bgcolor: getMatchColor(pet.hybridScore),
+                          filter: 'brightness(0.9)'
+                        }
+                      }}
                     >
-                      <Typography variant="body2">
-                        {warning}
-                      </Typography>
-                    </Alert>
-                  ))}
-                </Box>
-              )}
-            </DialogContent>
-
-            {/* Action Buttons */}
-            <Box sx={{ p: 3, bgcolor: '#f8f9fa', borderTop: '1px solid #e0e0e0' }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={7}>
-                  <Button
-                    variant="contained"
-                    fullWidth
-                    size="large"
-                    onClick={() => {
-                      setDetailsOpen(false);
-                      navigate(`/user/adoption/wizard/${selectedPet._id || selectedPet.id}`);
-                    }}
-                    startIcon={<Favorite />}
-                    sx={{
-                      bgcolor: getMatchColor(selectedPet.match_score),
-                      color: 'white',
-                      py: 1.5,
-                      fontWeight: 700,
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      '&:hover': {
-                        bgcolor: getMatchColor(selectedPet.match_score),
-                        transform: 'translateY(-1px)'
-                      }
-                    }}
-                  >
-                    Apply to Adopt
-                  </Button>
+                      Apply to Adopt {pet.name}
+                    </Button>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Button
+                      variant="outlined"
+                      fullWidth
+                      size="large"
+                      onClick={() => setDetailsOpen(false)}
+                      sx={{
+                        py: 1.5,
+                        fontWeight: 600,
+                        borderRadius: 2,
+                        textTransform: 'none'
+                      }}
+                    >
+                      Close
+                    </Button>
+                  </Grid>
                 </Grid>
-                <Grid item xs={12} sm={5}>
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    size="large"
-                    onClick={() => setDetailsOpen(false)}
-                    sx={{
-                      py: 1.5,
-                      fontWeight: 600,
-                      borderRadius: 2,
-                      textTransform: 'none'
-                    }}
-                  >
-                    Close
-                  </Button>
-                </Grid>
-              </Grid>
-            </Box>
-          </>
-        )}
+              </Box>
+            </>
+          );
+        })()}
       </Dialog>
     </Container>
   );

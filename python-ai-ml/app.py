@@ -406,10 +406,21 @@ if __name__ == '__main__':
         logger.info("Initializing AI models...")
         petshop_identifier.initialize()
         adoption_identifier.initialize()
-        logger.info("✅ All models initialized successfully")
+        logger.info("✅ All AI models initialized successfully")
     except Exception as e:
         logger.error(f"❌ Failed to initialize models: {str(e)}")
         logger.error("Service will start but models will load on first request")
+    
+    # Bootstrap train adoption ML models (SVD, XGBoost, K-Means)
+    try:
+        logger.info("🧠 Auto-training Adoption ML models...")
+        from modules.adoption.bootstrap_training import bootstrap_train_all_models
+        train_results = bootstrap_train_all_models()
+        trained = sum(1 for r in train_results.values() if r.get('trained', False))
+        logger.info(f"✅ Adoption ML: {trained}/3 algorithms active")
+    except Exception as e:
+        logger.error(f"❌ Adoption ML bootstrap training failed: {str(e)}")
+        logger.error("Hybrid recommender will use content-based fallback")
     
     logger.info("=" * 60)
     logger.info(f"🚀 Server starting on http://{app.config['FLASK_HOST']}:{app.config['FLASK_PORT']}")

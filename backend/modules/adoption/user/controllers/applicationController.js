@@ -4,6 +4,7 @@ const User = require('../../../../core/models/User');
 const paymentService = require('../../../../core/services/paymentService');
 const { sendMail } = require('../../../../core/utils/email');
 const { sendSMS } = require('../../../../core/utils/sms');
+const RecommendationLog = require('../../models/RecommendationLog');
 const path = require('path');
 const fs = require('fs');
 const cloudinary = require('cloudinary').v2;
@@ -442,6 +443,18 @@ const submitApplication = async (req, res) => {
       documents: application.documents
     });
 
+    // Track ML recommendation conversion (fire and forget)
+    // If this pet was in user's SmartMatches recommendations, mark it as "applied"
+    try {
+      const recResult = await RecommendationLog.markApplied(req.user.id, pet._id);
+      if (recResult) {
+        console.log(`📊 ML Conversion: User applied for recommended pet (rank in recommendations tracked)`);
+      }
+    } catch (recErr) {
+      // Non-critical - don't fail the application
+      console.warn('RecommendationLog tracking failed:', recErr?.message);
+    }
+
     // Blockchain: Log application submission event
     try {
       const BlockchainService = require('../../../../core/services/blockchainService');
@@ -668,6 +681,51 @@ const cancelApplication = async (req, res) => {
     }
 
     await application.updateStatus('cancelled', req.user.id, 'Application cancelled by user');
+
+    // ===== ML NEGATIVE FEEDBACK: Capture cancelled adoption as weak negative signal =====
+    try {
+      const MLTrainingData = require('../../models/MLTrainingData');
+      const User = require('../../../../core/models/User');
+      const cancelUser = await User.findById(req.user.id).select('adoptionProfile').lean();
+      const cancelPet = await AdoptionPet.findById(application.petId).lean();
+      if (cancelUser?.adoptionProfile && cancelPet?.compatibilityProfile) {
+        await MLTrainingData.findOneAndUpdate(
+          { userId: req.user.id, petId: application.petId },
+          {
+            userId: req.user.id,
+            petId: application.petId,
+            applicationId: application._id,
+            userProfileSnapshot: cancelUser.adoptionProfile,
+            petProfileSnapshot: {
+              species: cancelPet.species,
+              breed: cancelPet.breed,
+              name: cancelPet.name,
+              ...cancelPet.compatibilityProfile
+            },
+            outcome: 'returned',  // treated as negative signal
+            successfulAdoption: false,
+            dataType: 'real',
+            adoptionDate: new Date(),
+            implicitRating: 2,  // Slightly higher than rejection (user chose to cancel)
+            metadata: { type: 'user_cancelled' }
+          },
+          { upsert: true, new: true }
+        );
+        console.log(`📊 ML Negative feedback captured: cancelled app for user=${req.user.id}, pet=${application.petId}`);
+        
+        // Smart retrain check after cancellation
+        const realCount = await MLTrainingData.countDocuments({ dataType: 'real' });
+        const mlRetrainService = require('../../services/mlRetrainService');
+        const retrainCheck = await mlRetrainService.checkIfRetrainNeeded(realCount, 'cancellation');
+        if (retrainCheck.shouldRetrain) {
+          mlRetrainService.triggerRetrain(realCount, retrainCheck.reasons.join('; ')).catch(err => {
+            console.warn('ML retrain trigger failed:', err?.message);
+          });
+        }
+      }
+    } catch (mlErr) {
+      console.warn('ML negative feedback capture failed (non-blocking):', mlErr?.message);
+    }
 
     // Make pet available again if it was reserved or approved
     const pet = await AdoptionPet.findById(application.petId);

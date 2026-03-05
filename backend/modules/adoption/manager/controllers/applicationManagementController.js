@@ -4,6 +4,7 @@ const User = require('../../../../core/models/User');
 const paymentService = require('../../../../core/services/paymentService');
 const { sendMail } = require('../../../../core/utils/email');
 const { sendSMS } = require('../../../../core/utils/sms');
+const RecommendationLog = require('../../models/RecommendationLog');
 
 const getManagerApplications = async (req, res) => {
   try {
@@ -182,6 +183,51 @@ const rejectApplication = async (req, res) => {
     }
 
     await application.reject(req.user.id, reason, notes);
+
+    // ===== ML NEGATIVE FEEDBACK: Capture rejected adoption as failed match =====
+    try {
+      const MLTrainingData = require('../../models/MLTrainingData');
+      const rejectedUser = await User.findById(application.userId).select('adoptionProfile').lean();
+      const rejectedPet = await AdoptionPet.findById(application.petId).lean();
+      if (rejectedUser?.adoptionProfile && rejectedPet?.compatibilityProfile) {
+        await MLTrainingData.findOneAndUpdate(
+          { userId: application.userId, petId: application.petId },
+          {
+            userId: application.userId,
+            petId: application.petId,
+            applicationId: application._id,
+            userProfileSnapshot: rejectedUser.adoptionProfile,
+            petProfileSnapshot: {
+              species: rejectedPet.species,
+              breed: rejectedPet.breed,
+              name: rejectedPet.name,
+              ...rejectedPet.compatibilityProfile
+            },
+            outcome: 'returned',  // treated as negative signal
+            successfulAdoption: false,
+            dataType: 'real',
+            adoptionDate: new Date(),
+            implicitRating: 1,  // Low rating for rejection
+            metadata: { rejectionReason: reason || 'Not specified', type: 'manager_rejected' }
+          },
+          { upsert: true, new: true }
+        );
+        console.log(`📊 ML Negative feedback captured: rejected app for user=${application.userId}, pet=${application.petId}`);
+        
+        // Smart retrain check after negative feedback
+        const realCount = await MLTrainingData.countDocuments({ dataType: 'real' });
+        const mlRetrainService = require('../../services/mlRetrainService');
+        const retrainCheck = await mlRetrainService.checkIfRetrainNeeded(realCount, 'rejection');
+        if (retrainCheck.shouldRetrain) {
+          mlRetrainService.triggerRetrain(realCount, retrainCheck.reasons.join('; ')).catch(err => {
+            console.warn('ML retrain trigger failed:', err?.message);
+          });
+        }
+      }
+    } catch (mlErr) {
+      console.warn('ML negative feedback capture failed (non-blocking):', mlErr?.message);
+    }
+
     // Blockchain: Log application rejection event
     try {
       const BlockchainService = require('../../../../core/services/blockchainService');
@@ -503,6 +549,99 @@ const completeHandover = async (req, res) => {
           });
         } catch (blockchainErr) {
           console.error('Blockchain logging failed for HANDOVER_COMPLETED:', blockchainErr);
+        }
+        
+        // ===== ML TRAINING DATA: Auto-capture real adoption outcome =====
+        try {
+          const MLTrainingData = require('../../models/MLTrainingData');
+          const adopter = await User.findById(app.userId).select('adoptionProfile').lean();
+          const userProfile = adopter?.adoptionProfile || {};
+          const petProfile = pet.compatibilityProfile || {};
+          
+          await MLTrainingData.findOneAndUpdate(
+            { userId: app.userId, petId: pet._id },
+            {
+              userId: app.userId,
+              petId: pet._id,
+              applicationId: app._id,
+              userProfileSnapshot: {
+                homeType: userProfile.homeType,
+                homeSize: userProfile.homeSize,
+                hasYard: userProfile.hasYard,
+                yardSize: userProfile.yardSize,
+                activityLevel: userProfile.activityLevel,
+                workSchedule: userProfile.workSchedule,
+                hoursAlonePerDay: userProfile.hoursAlonePerDay,
+                experienceLevel: userProfile.experienceLevel,
+                previousPets: userProfile.previousPets || [],
+                hasChildren: userProfile.hasChildren,
+                childrenAges: userProfile.childrenAges || [],
+                hasOtherPets: userProfile.hasOtherPets,
+                otherPetDetails: userProfile.otherPetDetails || [],
+                monthlyBudget: userProfile.monthlyBudget,
+                maxAdoptionFee: userProfile.maxAdoptionFee,
+                preferredSize: userProfile.preferredSize || [],
+                preferredSpecies: userProfile.preferredSpecies,
+                preferredBreed: userProfile.preferredBreed,
+                preferredAge: userProfile.preferredAge,
+                lifestyleNotes: userProfile.lifestyleNotes
+              },
+              petProfileSnapshot: {
+                species: pet.species,
+                breed: pet.breed,
+                name: pet.name,
+                energyLevel: petProfile.energyLevel,
+                size: petProfile.size,
+                trainedLevel: petProfile.trainedLevel,
+                childFriendlyScore: petProfile.childFriendlyScore,
+                petFriendlyScore: petProfile.petFriendlyScore,
+                noiseLevel: petProfile.noiseLevel,
+                exerciseNeeds: petProfile.exerciseNeeds,
+                groomingNeeds: petProfile.groomingNeeds,
+                canLiveInApartment: petProfile.canLiveInApartment,
+                needsYard: petProfile.needsYard,
+                canBeLeftAlone: petProfile.canBeLeftAlone,
+                maxHoursAlone: petProfile.maxHoursAlone,
+                estimatedMonthlyCost: petProfile.estimatedMonthlyCost,
+                strangerFriendlyScore: petProfile.strangerFriendlyScore,
+                temperamentTags: petProfile.temperamentTags || []
+              },
+              matchScore: null,
+              algorithmUsed: 'none',
+              outcome: 'adopted',
+              successfulAdoption: true,
+              dataType: 'real',
+              adoptionDate: new Date(),
+              implicitRating: 5
+            },
+            { upsert: true, new: true }
+          );
+          
+          console.log(`✅ ML Training Data captured for adoption: user=${app.userId}, pet=${pet._id}`);
+          
+          // Smart retrain check - evaluates all triggers (milestone, time, negative feedback, drift)
+          const realCount = await MLTrainingData.countDocuments({ dataType: 'real' });
+          const mlRetrainService = require('../../services/mlRetrainService');
+          const retrainCheck = await mlRetrainService.checkIfRetrainNeeded(realCount, 'adoption');
+          if (retrainCheck.shouldRetrain) {
+            // Trigger async retrain (don't await - fire and forget)
+            mlRetrainService.triggerRetrain(realCount, retrainCheck.reasons.join('; ')).catch(err => {
+              console.warn('ML retrain trigger failed (non-blocking):', err?.message);
+            });
+            console.log(`🧠 ML Retrain triggered! Reasons: ${retrainCheck.reasons.join(', ')}`);
+          }
+        } catch (mlErr) {
+          console.warn('ML training data capture failed (non-blocking):', mlErr?.message || mlErr);
+        }
+        
+        // Track recommendation → adoption conversion (production metrics)
+        try {
+          const recResult = await RecommendationLog.markAdopted(app.userId, pet._id);
+          if (recResult) {
+            console.log(`📊 ML Conversion: Recommended pet was successfully adopted!`);
+          }
+        } catch (convErr) {
+          console.warn('Recommendation conversion tracking failed:', convErr?.message);
         }
         
         // Create core Pet for the adopter preserving petCode

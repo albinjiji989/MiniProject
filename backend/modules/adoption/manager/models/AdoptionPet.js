@@ -179,6 +179,72 @@ const adoptionPetSchema = new mongoose.Schema({
       type: Date,
     },
   },
+  
+  // Adoption History Tracking (for ML)
+  adoptionHistory: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    adoptionDate: {
+      type: Date,
+      required: true,
+      default: Date.now
+    },
+    matchScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: null  // Score from our matching algorithm
+    },
+    algorithmVersion: {
+      type: String,
+      default: 'content-v1'  // Which algorithm was used
+    },
+    algorithmBreakdown: {
+      contentScore: Number,
+      collaborativeScore: Number,
+      xgboostScore: Number,
+      clusterScore: Number,
+      hybridScore: Number
+    },
+    returnedDate: {
+      type: Date,
+      default: null  // If pet was returned
+    },
+    returnReason: {
+      type: String,
+      default: ''
+    },
+    successfulAdoption: {
+      type: Boolean,
+      default: null  // null=pending, true=success, false=returned
+    },
+    daysUntilReturn: {
+      type: Number,
+      default: null
+    },
+    userFeedbackScore: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: null  // 1-5 star rating from user
+    },
+    userFeedbackText: {
+      type: String,
+      default: ''
+    },
+    feedbackDate: {
+      type: Date,
+      default: null
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    }
+  }],
+  
   // Soft Delete
   isDeleted: { type: Boolean, default: false, index: true },
   deletedAt: { type: Date },
@@ -206,9 +272,33 @@ adoptionPetSchema.virtual('documents', {
   justOne: false
 });
 
-// Calculate age from dateOfBirth before saving
+// Auto-fill missing compatibility profile fields from breed-specific defaults
 adoptionPetSchema.pre('save', function (next) {
-  // No need to calculate age anymore - it's derived from DOB dynamically
+  try {
+    const { applyBreedDefaults } = require('../../services/breedDefaults');
+    
+    // Only run if the pet has a breed and compatibility profile exists (even partial)
+    if (this.breed) {
+      const currentProfile = this.compatibilityProfile
+        ? this.compatibilityProfile.toObject ? this.compatibilityProfile.toObject() : { ...this.compatibilityProfile }
+        : {};
+      
+      const filled = applyBreedDefaults(currentProfile, this.breed, this.species);
+      
+      // Apply the filled defaults back to the document
+      if (!this.compatibilityProfile) {
+        this.compatibilityProfile = {};
+      }
+      for (const [key, val] of Object.entries(filled)) {
+        if (this.compatibilityProfile[key] === undefined || this.compatibilityProfile[key] === null || this.compatibilityProfile[key] === '') {
+          this.compatibilityProfile[key] = val;
+        }
+      }
+    }
+  } catch (err) {
+    // Non-fatal: don't block save if breed defaults fail
+    console.warn('[BreedDefaults] Failed to auto-fill compatibility profile:', err.message);
+  }
   next();
 });
 
@@ -289,6 +379,93 @@ adoptionPetSchema.methods.completeAdoption = function () {
     return true;
   }
   return false;
+};
+
+// Method to record adoption for ML tracking
+adoptionPetSchema.methods.recordAdoption = function(userId, matchScore, algorithmVersion = 'content-v1', algorithmBreakdown = {}) {
+  this.adoptionHistory.push({
+    userId,
+    adoptionDate: new Date(),
+    matchScore,
+    algorithmVersion,
+    algorithmBreakdown,
+    successfulAdoption: null  // Pending - will be updated later
+  });
+  return this.save();
+};
+
+// Method to mark adoption as successful (for ML training)
+adoptionPetSchema.methods.markAdoptionSuccessful = function(userId, feedbackScore = null, feedbackText = '') {
+  const adoption = this.adoptionHistory.find(
+    a => a.userId.toString() === userId.toString() && a.successfulAdoption === null
+  );
+  
+  if (adoption) {
+    adoption.successfulAdoption = true;
+    adoption.userFeedbackScore = feedbackScore;
+    adoption.userFeedbackText = feedbackText;
+    adoption.feedbackDate = new Date();
+    return this.save();
+  }
+  
+  return Promise.reject(new Error('No pending adoption found for this user'));
+};
+
+// Method to mark adoption as failed/returned (for ML training)
+adoptionPetSchema.methods.markAdoptionFailed = function(userId, returnReason = '') {
+  const adoption = this.adoptionHistory.find(
+    a => a.userId.toString() === userId.toString() && a.successfulAdoption === null
+  );
+  
+  if (adoption) {
+    adoption.successfulAdoption = false;
+    adoption.returnedDate = new Date();
+    adoption.returnReason = returnReason;
+    
+    // Calculate days until return
+    const adoptionDate = new Date(adoption.adoptionDate);
+    const returnDate = new Date(adoption.returnedDate);
+    adoption.daysUntilReturn = Math.floor((returnDate - adoptionDate) / (1000 * 60 * 60 * 24));
+    
+    // Reset pet status to available
+    this.status = 'available';
+    this.adopterUserId = null;
+    
+    return this.save();
+  }
+  
+  return Promise.reject(new Error('No pending adoption found for this user'));
+};
+
+// Static method to get successful adoptions for ML training
+adoptionPetSchema.statics.getAdoptionsForTraining = async function() {
+  const pets = await this.find({
+    'adoptionHistory.successfulAdoption': { $ne: null }
+  }).populate('adoptionHistory.userId', 'adoptionProfile').lean();
+  
+  const trainingData = [];
+  pets.forEach(pet => {
+    pet.adoptionHistory.forEach(adoption => {
+      if (adoption.successfulAdoption !== null) {
+        trainingData.push({
+          petId: pet._id,
+          userId: adoption.userId._id,
+          userProfile: adoption.userId.adoptionProfile,
+          petProfile: pet.compatibilityProfile,
+          matchScore: adoption.matchScore,
+          algorithmVersion: adoption.algorithmVersion,
+          algorithmBreakdown: adoption.algorithmBreakdown,
+          successfulAdoption: adoption.successfulAdoption,
+          daysUntilReturn: adoption.daysUntilReturn,
+          feedbackScore: adoption.userFeedbackScore,
+          adoptionDate: adoption.adoptionDate,
+          returnedDate: adoption.returnedDate
+        });
+      }
+    });
+  });
+  
+  return trainingData;
 };
 
 // Static: generate unique pet code using centralized generator
