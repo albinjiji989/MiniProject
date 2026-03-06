@@ -253,8 +253,7 @@ class SuccessPredictor:
                 colsample_bytree=0.8,
                 objective='binary:logistic',
                 eval_metric='logloss',
-                random_state=42,
-                use_label_encoder=False
+                random_state=42
             )
             
             # Train model

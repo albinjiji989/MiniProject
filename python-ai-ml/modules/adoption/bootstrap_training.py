@@ -351,10 +351,32 @@ def bootstrap_train_all_models():
             real_xgb = format_for_xgboost(real_data)
             logger.info(f"📦 Real data available: {len(real_kmeans)} pets, {len(real_svd)} interactions, {len(real_xgb)} outcomes")
         else:
-            logger.info("📦 No real data available. Using 100% synthetic data.")
+            logger.info("📦 No real data available. Using CSV + synthetic data.")
     except Exception as e:
-        logger.warning(f"⚠️  Could not fetch real data: {e}. Using 100% synthetic.")
-    
+        logger.warning(f"⚠️  Could not fetch real data: {e}. Using CSV + synthetic.")
+
+    # ---- Step 0b: Load Custom CSV data (India-focused, 875 records) ----
+    csv_xgb = []
+    csv_kmeans = []
+    try:
+        from .custom_data_loader import CustomDataLoader
+        import os
+        csv_path = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), '../../data/custom_adoption_dataset.csv')
+        )
+        if os.path.exists(csv_path):
+            _csv_loader = CustomDataLoader(csv_path)
+            csv_xgb = _csv_loader.get_xgboost_records()
+            csv_kmeans = _csv_loader.get_kmeans_pets()
+            logger.info(
+                f"📊 Custom CSV loaded: {len(csv_xgb)} XGBoost records, "
+                f"{len(csv_kmeans)} KMeans pets (India-focused dataset)"
+            )
+        else:
+            logger.warning(f"⚠️  Custom CSV not found at {csv_path}. Falling back to random synthetic data.")
+    except Exception as e:
+        logger.warning(f"⚠️  Could not load custom CSV: {e}. Falling back to random synthetic data.")
+
     # ---- 1. Train SVD Collaborative Filter ----
     try:
         logger.info("\n📊 [1/3] Training SVD Collaborative Filter...")
@@ -398,18 +420,23 @@ def bootstrap_train_all_models():
         xgb_model = get_success_predictor()
         
         if not xgb_model.trained:
-            # FIFO: real outcomes first, fill remaining with synthetic
-            SYNTHETIC_XGB_TARGET = 150
-            synthetic_needed = max(0, SYNTHETIC_XGB_TARGET - len(real_xgb))
-            
-            if synthetic_needed > 0 or not real_xgb:
-                synthetic_xgb = generate_xgboost_training_data(n_records=max(synthetic_needed, 30))
-                training_xgb = real_xgb + synthetic_xgb
+            # Priority: real MongoDB data → custom CSV → random synthetic
+            if csv_xgb:
+                # CSV provides 2,625 India-focused records (875 pets × 3 user archetypes)
+                training_xgb = real_xgb + csv_xgb
+                logger.info(f"📊 XGBoost: {len(real_xgb)} real + {len(csv_xgb)} CSV = {len(training_xgb)} total records")
             else:
-                training_xgb = real_xgb
-            
+                # Fallback to random synthetic if CSV unavailable
+                SYNTHETIC_XGB_TARGET = 150
+                synthetic_needed = max(0, SYNTHETIC_XGB_TARGET - len(real_xgb))
+                if synthetic_needed > 0 or not real_xgb:
+                    synthetic_xgb = generate_xgboost_training_data(n_records=max(synthetic_needed, 30))
+                    training_xgb = real_xgb + synthetic_xgb
+                else:
+                    training_xgb = real_xgb
+
             real_pct = round(len(real_xgb) / max(1, len(training_xgb)) * 100, 1)
-            
+
             metrics = xgb_model.train(training_xgb)
             results['xgboost'] = {
                 'trained': True,
@@ -433,18 +460,23 @@ def bootstrap_train_all_models():
         kmeans_model = get_pet_clusterer()
         
         if not kmeans_model.trained:
-            # FIFO: real pets first, fill remaining with synthetic
-            SYNTHETIC_KMEANS_TARGET = 50
-            synthetic_needed = max(0, SYNTHETIC_KMEANS_TARGET - len(real_kmeans))
-            
-            if synthetic_needed > 0 or not real_kmeans:
-                synthetic_kmeans = generate_kmeans_pet_data(n_pets=max(synthetic_needed, 10))
-                training_kmeans = real_kmeans + synthetic_kmeans
+            # Priority: real MongoDB data → custom CSV → random synthetic
+            if csv_kmeans:
+                # CSV provides 875 India-focused pet profiles
+                training_kmeans = real_kmeans + csv_kmeans
+                logger.info(f"📊 KMeans: {len(real_kmeans)} real + {len(csv_kmeans)} CSV = {len(training_kmeans)} total pets")
             else:
-                training_kmeans = real_kmeans
-            
+                # Fallback to random synthetic if CSV unavailable
+                SYNTHETIC_KMEANS_TARGET = 50
+                synthetic_needed = max(0, SYNTHETIC_KMEANS_TARGET - len(real_kmeans))
+                if synthetic_needed > 0 or not real_kmeans:
+                    synthetic_kmeans = generate_kmeans_pet_data(n_pets=max(synthetic_needed, 10))
+                    training_kmeans = real_kmeans + synthetic_kmeans
+                else:
+                    training_kmeans = real_kmeans
+
             real_pct = round(len(real_kmeans) / max(1, len(training_kmeans)) * 100, 1)
-            
+
             metrics = kmeans_model.train(training_kmeans)
             results['kmeans'] = {
                 'trained': True,
@@ -519,7 +551,23 @@ def retrain_with_real_data(real_data):
     real_svd = real_data.get('svdInteractions', [])
     real_xgb = real_data.get('xgboostRecords', [])
     real_kmeans = real_data.get('kmeansProfiles', [])
-    
+
+    # Load custom CSV as high-quality foundation (India-focused dataset)
+    csv_xgb = []
+    csv_kmeans = []
+    try:
+        from .custom_data_loader import CustomDataLoader
+        import os
+        csv_path = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), '../../data/custom_adoption_dataset.csv')
+        )
+        if os.path.exists(csv_path):
+            _csv_loader = CustomDataLoader(csv_path)
+            csv_xgb = _csv_loader.get_xgboost_records()
+            csv_kmeans = _csv_loader.get_kmeans_pets()
+    except Exception:
+        pass  # CSV unavailable — will fall back to random synthetic
+
     logger.info("=" * 60)
     logger.info(f"🔄 INCREMENTAL RETRAIN: {real_count} real adoption records")
     logger.info("=" * 60)
@@ -581,16 +629,19 @@ def retrain_with_real_data(real_data):
     try:
         logger.info(f"\n🎯 [2/3] Retraining XGBoost with real+synthetic mix...")
         from .success_predictor import get_success_predictor
-        
-        SYNTHETIC_XGB_TARGET = 150
-        synthetic_needed = max(0, SYNTHETIC_XGB_TARGET - len(real_xgb))
-        
-        if synthetic_needed > 0:
-            synthetic_xgb = generate_xgboost_training_data(n_records=synthetic_needed)
-            mixed_xgb = real_xgb + synthetic_xgb
+
+        if csv_xgb:
+            # Priority: real data first, then CSV foundation
+            mixed_xgb = real_xgb + csv_xgb
         else:
-            mixed_xgb = real_xgb
-        
+            SYNTHETIC_XGB_TARGET = 150
+            synthetic_needed = max(0, SYNTHETIC_XGB_TARGET - len(real_xgb))
+            if synthetic_needed > 0:
+                synthetic_xgb = generate_xgboost_training_data(n_records=synthetic_needed)
+                mixed_xgb = real_xgb + synthetic_xgb
+            else:
+                mixed_xgb = real_xgb
+
         xgb_model = get_success_predictor()
         xgb_model.trained = False
         metrics = xgb_model.train(mixed_xgb)
@@ -617,16 +668,19 @@ def retrain_with_real_data(real_data):
     try:
         logger.info(f"\n🏷️ [3/3] Retraining K-Means with real+synthetic mix...")
         from .pet_clustering import get_pet_clusterer
-        
-        SYNTHETIC_KMEANS_TARGET = 50
-        synthetic_needed = max(0, SYNTHETIC_KMEANS_TARGET - len(real_kmeans))
-        
-        if synthetic_needed > 0:
-            synthetic_kmeans = generate_kmeans_pet_data(n_pets=synthetic_needed)
-            mixed_kmeans = real_kmeans + synthetic_kmeans
+
+        if csv_kmeans:
+            # Priority: real data first, then CSV foundation
+            mixed_kmeans = real_kmeans + csv_kmeans
         else:
-            mixed_kmeans = real_kmeans
-        
+            SYNTHETIC_KMEANS_TARGET = 50
+            synthetic_needed = max(0, SYNTHETIC_KMEANS_TARGET - len(real_kmeans))
+            if synthetic_needed > 0:
+                synthetic_kmeans = generate_kmeans_pet_data(n_pets=synthetic_needed)
+                mixed_kmeans = real_kmeans + synthetic_kmeans
+            else:
+                mixed_kmeans = real_kmeans
+
         kmeans_model = get_pet_clusterer()
         kmeans_model.trained = False
         metrics = kmeans_model.train(mixed_kmeans)

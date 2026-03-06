@@ -194,57 +194,79 @@ class PetClusterer:
     
     def assign_cluster_names(self, X, labels):
         """
-        Assign meaningful names to clusters based on characteristics
-        
-        Args:
-            X: Feature matrix
-            labels: Cluster labels
-            
-        Returns:
-            dict: Cluster names and characteristics
+        Assign unique meaningful names to each cluster.
+        Uses greedy auction: each cluster picks its best available label in
+        priority order (by best-matching score), so no two clusters share a name.
         """
-        cluster_names = {}
         cluster_characteristics = {}
-        
+
         for cluster_id in range(self.optimal_k):
-            # Get all pets in this cluster
             cluster_mask = labels == cluster_id
             cluster_data = X[cluster_mask]
-            
             if len(cluster_data) == 0:
                 continue
-            
-            # Calculate average characteristics
-            avg_features = cluster_data.mean(axis=0)
-            
-            characteristics = {
-                'energyLevel': float(avg_features[0]),
-                'size': float(avg_features[1]),
-                'trainedLevel': float(avg_features[2]),
-                'childFriendly': float(avg_features[3]),
-                'petFriendly': float(avg_features[4]),
-                'noiseLevel': float(avg_features[5]),
-                'exerciseNeeds': float(avg_features[6]),
-                'groomingNeeds': float(avg_features[7]),
-                'count': int(cluster_mask.sum())
+            avg = cluster_data.mean(axis=0)
+            cluster_characteristics[cluster_id] = {
+                'energyLevel':    float(avg[0]),
+                'size':           float(avg[1]),
+                'trainedLevel':   float(avg[2]),
+                'childFriendly':  float(avg[3]),
+                'petFriendly':    float(avg[4]),
+                'noiseLevel':     float(avg[5]),
+                'exerciseNeeds':  float(avg[6]),
+                'groomingNeeds':  float(avg[7]),
+                'count':          int(cluster_mask.sum()),
             }
-            
-            # Assign name based on characteristics
-            name = self._generate_cluster_name(characteristics)
-            
-            cluster_names[cluster_id] = name
-            cluster_characteristics[cluster_id] = characteristics
-        
+
+        # Greedy unique assignment — each cluster gets a different label
+        ALL_LABELS = [
+            "Energetic Athletes", "Calm Companions", "Family Friends",
+            "Independent Spirits", "Gentle Giants", "Playful Companions",
+            "Low-Maintenance Pets", "Trainable Companions",
+        ]
+        available = list(ALL_LABELS)
+        cluster_names = {}
+
+        for cluster_id in sorted(cluster_characteristics.keys()):
+            ranked = self._score_names(cluster_characteristics[cluster_id])
+            assigned = next((n for n in ranked if n in available), available[0])
+            available.remove(assigned)
+            cluster_names[cluster_id] = assigned
+
         return cluster_names, cluster_characteristics
     
     def _generate_cluster_name(self, chars):
-        """Generate cluster name based on characteristics"""
+        """
+        This is called per-cluster but we need cross-cluster uniqueness.
+        Actual naming done in assign_cluster_names() via _assign_unique_names().
+        Kept for single-cluster use (returns best matching label).
+        """
+        return self._score_names(chars)[0]
+
+    def _score_names(self, chars):
+        """Score all cluster labels for a given characteristics dict. Returns sorted list."""
+        energy = chars['energyLevel']
+        size   = chars['size']
+        scores = {
+            "Energetic Athletes":   energy * 2 + chars['exerciseNeeds'],
+            "Calm Companions":      (5 - energy) * 2 + (3 - chars['noiseLevel']),
+            "Family Friends":       chars['childFriendly'] + chars['petFriendly'],
+            "Independent Spirits":  (3 - chars['groomingNeeds']) + (5 - chars['childFriendly']) * 0.5,
+            "Gentle Giants":        size * 2 + (3 - energy),
+            "Playful Companions":   (3 - size) * 1.5 + energy,
+            "Low-Maintenance Pets": (3 - chars['groomingNeeds']) * 2 + (3 - chars['exerciseNeeds']),
+            "Trainable Companions": chars['trainedLevel'] * 2 + chars['exerciseNeeds'],
+        }
+        return sorted(scores, key=scores.get, reverse=True)
+
+    def _generate_cluster_name_legacy(self, chars):
+        """Legacy rule-based name generator (kept for reference)"""
         energy = chars['energyLevel']
         size = chars['size']
         child_friendly = chars['childFriendly']
         noise = chars['noiseLevel']
         trained = chars['trainedLevel']
-        
+
         # High energy + needs exercise
         if energy >= 4 and chars['exerciseNeeds'] >= 3:
             return "Energetic Athletes"
