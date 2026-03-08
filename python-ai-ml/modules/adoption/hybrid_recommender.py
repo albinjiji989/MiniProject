@@ -7,11 +7,18 @@ Combines 4 algorithms for research-grade recommendations:
 4. K-Means Clustering (personality matching)
 """
 
+import json
+import os
 import numpy as np
 import pandas as pd
 from datetime import datetime
 import logging
+import json
+import os
 from typing import List, Dict, Optional
+
+# Path for persisting adapted weights so they survive Flask restarts
+_WEIGHTS_STATE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'models', 'adoption_weights_state.json')
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +50,9 @@ class HybridRecommender:
             'clustering': 0.15     # 15% - Personality match
         }
         
+        # Load persisted weights if available (survives Flask restarts)
+        self._load_weights_from_disk()
+        
         # Cold start weights (when user has no history)
         # SVD still contributes via global mean predictions (just lower weight)
         self.cold_start_weights = {
@@ -66,7 +76,7 @@ class HybridRecommender:
         self.algorithm_availability['collaborative'] = self.cf_model.trained if self.cf_model else False
         self.algorithm_availability['success'] = self.xgb_model.trained if self.xgb_model else False
         self.algorithm_availability['clustering'] = self.kmeans_model.trained if self.kmeans_model else False
-    
+
     def calculate_content_score(self, user_profile, pet_profile):
         """
         Calculate content-based score (baseline algorithm)
@@ -183,7 +193,21 @@ class HybridRecommender:
         score += space_scores.get(user_space, {}).get(exercise_needs, 5)
         
         # Time commitment (0-10 points)
-        user_time = str(user_profile.get('availableTime', 'moderate')).lower()
+        # Map workSchedule (actual MongoDB field) to a time-availability bucket.
+        # Falls back to the legacy 'availableTime' field if explicitly set; otherwise
+        # 'available_time' was never stored — this caused grooming scoring to always
+        # default to 'moderate' regardless of the user's actual work schedule.
+        _schedule_time_map = {
+            'full_time':   'limited',  'part_time': 'moderate',
+            'flexible':    'flexible', 'remote':    'moderate',
+            'student':     'moderate', 'retired':   'flexible',
+            'unemployed':  'flexible', 'freelance': 'moderate',
+        }
+        _work_schedule = str(user_profile.get('workSchedule', '')).lower()
+        user_time = (
+            _schedule_time_map.get(_work_schedule)
+            or str(user_profile.get('availableTime', 'moderate')).lower()
+        )
         grooming = str(pet_profile.get('groomingNeeds', 'moderate')).lower()
         
         time_scores = {
@@ -193,6 +217,22 @@ class HybridRecommender:
         }
         
         score += time_scores.get(user_time, {}).get(grooming, 5)
+        
+        # ===== BUDGET SCORING (0-10 points) =====
+        # Compare pet adoptionFee against user's stated monthly budget.
+        # adoptionFee is a one-time cost; budget is monthly — use 2x monthly as proxy ceiling.
+        adoption_fee = _num(pet_profile.get('adoptionFee'), 0)
+        user_budget = _num(user_profile.get('monthlyBudget') or user_profile.get('budget'), 0)
+        if user_budget > 0 and adoption_fee > 0:
+            budget_ceiling = user_budget * 2   # user can typically afford 2 months' worth as one-time
+            if adoption_fee <= user_budget:
+                score += 10   # Well within budget
+            elif adoption_fee <= budget_ceiling:
+                score += 5    # Affordable stretch
+            elif adoption_fee <= budget_ceiling * 1.5:
+                score -= 5    # Over budget
+            else:
+                score -= 15   # Significantly over budget
         
         logger.debug(f"Content score breakdown: activity={activity_score:.0f}, child={child_score}, pet_friendly={pet_friendly}, has_children={has_children}, final={min(100, max(0, score)):.1f}")
         
@@ -233,7 +273,19 @@ class HybridRecommender:
                 logger.info("Cold start detected, using adjusted weights")
                 active_weights = self.cold_start_weights.copy()
             else:
-                active_weights = self.weights.copy()
+                # FIX #9: Warming-up state — if user IS in SVD but has few interactions,
+                # their mean will be close to global_mean (warmth ≈ 0), so we blend
+                # cold_start and normal weights proportionally.  This prevents jumping
+                # to full collaborative weight before SVD has meaningful signal on this user.
+                warmth = self._get_user_warmth(user_id)
+                if warmth < 1.0:
+                    active_weights = {
+                        k: round(self.cold_start_weights[k] * (1 - warmth) + self.weights[k] * warmth, 4)
+                        for k in self.weights
+                    }
+                    logger.info(f"Warming-up user (warmth={warmth:.2f}), blended weights: {active_weights}")
+                else:
+                    active_weights = self.weights.copy()
             
             recommendations = []
             
@@ -241,8 +293,57 @@ class HybridRecommender:
                 try:
                     pet_id = str(pet.get('_id', pet.get('petId', '')))
                     compat_profile = pet.get('compatibilityProfile', {})
+
+                    # ── compatibilityProfile quality gate ──────────────────────────────
+                    # Count how many numeric fields have usable values.
+                    # Profiles with <4 valid numeric fields degrade ML accuracy significantly.
+                    _REQUIRED_NUMERIC_FIELDS = [
+                        'energyLevel', 'childFriendlyScore', 'petFriendlyScore',
+                        'strangerFriendlyScore', 'maxHoursAlone', 'estimatedMonthlyCost',
+                        'trainedLevel',
+                    ]
+                    def _is_numeric_valid(v):
+                        if v is None or v == '': return False
+                        if isinstance(v, bool): return True
+                        try:
+                            return float(v) >= 0
+                        except (TypeError, ValueError):
+                            return False
+                    _valid_count = sum(
+                        1 for f in _REQUIRED_NUMERIC_FIELDS
+                        if _is_numeric_valid(compat_profile.get(f))
+                    ) if compat_profile else 0
+                    _incomplete_profile = _valid_count < 4
+                    # ──────────────────────────────────────────────────────────────────
                     
                     if not compat_profile:
+                        # FIX #6: Don't silently skip pets with no compatibility profile.
+                        # Include them with a capped score + warning so users still see them.
+                        recommendations.append({
+                            'petId': pet_id,
+                            'petName': pet.get('name', 'Unknown'),
+                            'species': pet.get('species', ''),
+                            'breed': pet.get('breed', ''),
+                            'age': pet.get('age', 0),
+                            'gender': pet.get('gender', ''),
+                            'color': pet.get('color', ''),
+                            'weight': pet.get('weight', ''),
+                            'description': pet.get('description', ''),
+                            'adoptionFee': pet.get('adoptionFee', 0),
+                            'vaccinationStatus': pet.get('vaccinationStatus', ''),
+                            'images': pet.get('images', []),
+                            'compatibilityProfile': {},
+                            'temperamentTags': pet.get('temperamentTags', []),
+                            'status': pet.get('status', ''),
+                            'hybridScore': 40.0,
+                            'confidence': 30.0,
+                            'algorithmScores': {'content': 0, 'collaborative': 0, 'success': 0, 'clustering': 0},
+                            'weights': {},
+                            'explanations': ['\u26a0\ufe0f Compatibility profile not set - limited matching available'],
+                            'algorithmUsed': algorithm,
+                            'isColdStart': True,
+                            'noProfileWarning': True
+                        })
                         continue
                     
                     # Initialize scores
@@ -255,9 +356,30 @@ class HybridRecommender:
                     
                     explanations = []
                     
+                    # FIX #4: Merge root-level temperamentTags with compat_profile tags
+                    # so aggressive pets are penalised whether tags live in the root
+                    # document OR inside compatibilityProfile.
+                    root_tags = pet.get('temperamentTags', [])
+                    compat_tags = compat_profile.get('temperamentTags', [])
+                    all_tags = list({str(t).lower() for t in (root_tags if isinstance(root_tags, list) else []) + (compat_tags if isinstance(compat_tags, list) else [])})
+                    merged_compat = {**compat_profile}
+                    if all_tags:
+                        merged_compat['temperamentTags'] = all_tags
+                    # Budget: include adoptionFee so calculate_content_score can score it
+                    merged_compat['adoptionFee'] = pet.get('adoptionFee', 0)
+
+                    # Flag incomplete profiles in explanations
+                    if _incomplete_profile:
+                        explanations.append(
+                            f'\u26a0\ufe0f Partial profile ({_valid_count}/7 fields) \u2014 scores may be less accurate'
+                        )
+
                     # 1. Content-Based Score (always available)
                     if algorithm in ['hybrid', 'content']:
-                        content_score = self.calculate_content_score(user_profile, compat_profile)
+                        content_score = self.calculate_content_score(user_profile, merged_compat)
+                        # Cap incomplete-profile pets at 35 to avoid false high scores
+                        if _incomplete_profile:
+                            content_score = min(content_score, 35.0)
                         scores['content'] = content_score
                         
                         if content_score >= 80:
@@ -269,26 +391,40 @@ class HybridRecommender:
                     cf_result_raw = None  # Track for per-pet weight adjustment
                     if algorithm in ['hybrid', 'collaborative'] and self.algorithm_availability['collaborative']:
                         try:
-                            cf_result_raw = self.cf_model.predict_rating(user_id, pet_id)
+                            # Pass breed+species so SVD can use breed-level fallback
+                            # for real MongoDB pets not in the training data
+                            _pet_meta = {'breed': pet.get('breed', ''), 'species': pet.get('species', '')}
+                            cf_result_raw = self.cf_model.predict_rating(user_id, pet_id, pet_metadata=_pet_meta)
                             # predict_rating returns dict: {predicted_rating, score, confidence, was_impossible}
                             cf_rating = cf_result_raw.get('predicted_rating', 2.5) if isinstance(cf_result_raw, dict) else float(cf_result_raw)
                             cf_score = cf_result_raw.get('score', 50.0) if isinstance(cf_result_raw, dict) else (float(cf_result_raw) / 5.0) * 100
+                            cf_impossible = cf_result_raw.get('was_impossible', False) if isinstance(cf_result_raw, dict) else False
+                            cf_confidence = cf_result_raw.get('confidence', 25.0) if isinstance(cf_result_raw, dict) else 25.0
                             scores['collaborative'] = cf_score
+                            logger.info(
+                                f"CF [{pet.get('breed','?')}] score={cf_score:.1f} "
+                                f"rating={cf_rating:.2f} impossible={cf_impossible} "
+                                f"conf={cf_confidence:.0f}% "
+                                f"breed_idx_size={len(getattr(self.cf_model, 'pet_breed_index', {}))}"
+                            )
                             
                             if cf_rating >= 4.0:
                                 explanations.append(f"Highly rated by similar users ({cf_rating:.1f}/5)")
                             elif cf_rating >= 3.0:
                                 explanations.append(f"Liked by users with similar preferences ({cf_rating:.1f}/5)")
                         except Exception as e:
-                            logger.debug(f"CF prediction failed: {str(e)}")
+                            logger.warning(f"CF prediction failed for pet {pet_id}: {str(e)}")
                     
                     # 3. Success Prediction Score
                     if algorithm in ['hybrid', 'success'] and self.algorithm_availability['success']:
                         try:
+                            # FIX #3: Pass neutral 50.0 instead of content_score to prevent
+                            # double-counting (content score already has its own 30% weight).
+                            # XGBoost should predict success from raw user+pet features alone.
                             xgb_result = self.xgb_model.predict_success_probability(
                                 user_profile,
                                 compat_profile,
-                                scores.get('content', 50)  # Pass content score as match context
+                                50.0  # Neutral — decouple XGBoost from content score bias
                             )
                             # predict_success_probability returns dict: {successProbability, confidence, trained}
                             if isinstance(xgb_result, dict):
@@ -308,7 +444,7 @@ class HybridRecommender:
                     # 4. Clustering Score
                     if algorithm in ['hybrid', 'clustering'] and self.algorithm_availability['clustering']:
                         try:
-                            cluster_info = self.kmeans_model.assign_pet_to_cluster(compat_profile)
+                            cluster_info = self.kmeans_model.assign_pet_to_cluster(merged_compat)
                             cluster_id = cluster_info.get('clusterId', 0)
                             cluster_affinity = self.kmeans_model.calculate_cluster_affinity(
                                 user_profile,
@@ -330,6 +466,8 @@ class HybridRecommender:
                     if algorithm == 'hybrid':
                         # Dynamically adjust weights per-pet based on SVD confidence
                         pet_weights = self._adjust_weights_for_pet(active_weights, cf_result_raw)
+                        # FIX #7: Also apply species-specific weight tuning
+                        pet_weights = self._adjust_weights_for_species(pet_weights, pet.get('species', ''))
                         hybrid_score = sum(
                             scores[algo] * pet_weights[algo]
                             for algo in scores.keys()
@@ -339,13 +477,17 @@ class HybridRecommender:
                         pet_weights = {algorithm: 1.0}
                         hybrid_score = scores.get(algorithm, scores['content'])
                     
-                    # Calculate confidence based on algorithm agreement
+                    # FIX #2: Use Coefficient of Variation (CV) for confidence.
+                    # CV = std / mean measures relative disagreement between algorithms.
+                    # CV=0 (all agree) → 100% confidence. CV=1 (huge spread) → 0% confidence.
+                    # Old formula (100 - std) was wrong: same std means diff things at different scales.
                     available_scores = [s for s in scores.values() if s > 0]
                     if len(available_scores) > 1:
-                        score_std = np.std(available_scores)
-                        confidence = max(0, 100 - score_std)
+                        mean_score = np.mean(available_scores)
+                        cv = np.std(available_scores) / (mean_score + 1e-10)  # avoid div-by-zero
+                        confidence = round(max(0.0, min(100.0, (1.0 - cv) * 100)), 1)
                     else:
-                        confidence = 60.0  # Lower confidence with single algorithm
+                        confidence = 60.0  # Single algorithm — moderate confidence
                     
                     # Build recommendation object
                     recommendation = {
@@ -374,15 +516,38 @@ class HybridRecommender:
                         'algorithmUsed': algorithm,
                         'isColdStart': is_cold_start
                     }
-                    
+
+                    # FIX #3: Populate match_details.score_breakdown in ML mode.
+                    # Previously this was only filled by the Node.js content-based fallback,
+                    # so the Details dialog score breakdown section was always blank in ML mode.
+                    def _compat_label(score):
+                        if score >= 85: return 'Excellent Match'
+                        if score >= 70: return 'Great Match'
+                        if score >= 55: return 'Good Match'
+                        return 'Fair Match'
+
+                    recommendation['match_details'] = {
+                        'overall_score': round(hybrid_score, 1),
+                        'compatibility_level': _compat_label(hybrid_score),
+                        'match_reasons': explanations,
+                        'warnings': [],
+                        'score_breakdown': {
+                            'Content Matching':        round(scores['content'], 1),
+                            'Collaborative Filtering': round(scores['collaborative'], 1),
+                            'Success Prediction':      round(scores['success'], 1),
+                            'Personality Clustering':  round(scores['clustering'], 1),
+                        },
+                        'success_probability': round(scores['success'] / 100, 3) if scores['success'] else 0
+                    }
+
                     # Add success probability if available
                     if scores['success'] > 0:
                         recommendation['successProbability'] = round(scores['success'] / 100, 3)
-                    
+
                     # Add cluster info if available
                     if scores['clustering'] > 0:
                         try:
-                            cluster_info = self.kmeans_model.assign_pet_to_cluster(compat_profile)
+                            cluster_info = self.kmeans_model.assign_pet_to_cluster(merged_compat)
                             recommendation['clusterName'] = cluster_info.get('clusterName', 'Unknown')
                         except:
                             pass
@@ -396,10 +561,11 @@ class HybridRecommender:
             # Sort by hybrid score
             recommendations.sort(key=lambda x: x['hybridScore'], reverse=True)
             
-            # Return top N
-            top_recommendations = recommendations[:top_n]
+            # FIX #5: Apply breed diversity — respects user's preferredBreed preference
+            diverse_recommendations = self._apply_diversity(recommendations, user_profile=user_profile, max_per_breed=3)
+            top_recommendations = diverse_recommendations[:top_n]
             
-            logger.info(f"Generated {len(top_recommendations)} recommendations using {algorithm}")
+            logger.info(f"Generated {len(top_recommendations)} recommendations using {algorithm} (diversity applied)")
             
             return top_recommendations
             
@@ -407,6 +573,103 @@ class HybridRecommender:
             logger.error(f"Error generating hybrid recommendations: {str(e)}")
             raise
     
+    def update_weights_from_feedback(self, feedback_data: List[Dict]) -> bool:
+        """
+        FIX #7: Simple online weight adaptation using adoption application feedback.
+        Called periodically from Flask with compiled feedback records.
+
+        Algorithm:
+          - For each algorithm, compute mean score on applied vs not-applied pets.
+          - If algorithm scored applied pets higher on average, nudge its weight up.
+          - Weights are always re-normalised to sum to 1.0.
+          - Changes are capped at \u00b10.05 per call to prevent over-fitting.
+
+        Args:
+            feedback_data: list of {algorithmScores: {content,collaborative,success,clustering},
+                                    wasApplied: bool}
+        Returns:
+            bool: True if weights were updated, False if not enough data.
+        """
+        if not feedback_data or len(feedback_data) < 5:
+            logger.info('Weight update skipped — not enough feedback data (need >=5 records)')
+            return False
+
+        LEARNING_RATE = 0.01
+        MAX_CHANGE    = 0.05
+
+        # FIX #3: Use adoption outcomes as a 3× stronger signal than mere applications.
+        # adopted=5.0 rating is ground truth; applied (not yet adopted) = 1.5×; not applied = 1×.
+        # This prevents the weight adapter being tuned only on noisy application signals while
+        # ignoring the hardest, most committed positive signal: a completed adoption.
+        def _weighted_avg(records, algo):
+            ws, ws_sum = 0.0, 0.0
+            for f in records:
+                s = f.get('algorithmScores', {}).get(algo, 50)
+                w = 3.0 if f.get('wasAdopted') else (1.5 if f.get('wasApplied') else 1.0)
+                ws_sum += s * w
+                ws += w
+            return ws_sum / ws if ws > 0 else 50.0
+
+        positive  = [f for f in feedback_data if f.get('wasApplied') or f.get('wasAdopted')]
+        negative  = [f for f in feedback_data if not f.get('wasApplied') and not f.get('wasAdopted')]
+        n_adopted = sum(1 for f in positive if f.get('wasAdopted'))
+
+        if not positive:
+            logger.info('Weight update skipped — no applied/adopted pets in feedback')
+            return False
+
+        old_weights = dict(self.weights)
+
+        for algo in list(self.weights.keys()):
+            avg_positive = _weighted_avg(positive, algo)
+            avg_negative = _weighted_avg(negative, algo) if negative else 50.0
+
+            # Positive delta → algorithm scores positive-outcome pets higher → boost weight
+            delta = (avg_positive - avg_negative) / 100.0 * LEARNING_RATE
+            delta = max(-MAX_CHANGE, min(MAX_CHANGE, delta))
+            self.weights[algo] = max(0.05, min(0.60, self.weights[algo] + delta))
+
+        # Re-normalise: weights must always sum to 1.0
+        total = sum(self.weights.values())
+        self.weights = {k: round(v / total, 4) for k, v in self.weights.items()}
+
+        logger.info(f'Weights updated from {len(feedback_data)} feedback records '
+                    f'({len(positive)} positive [{n_adopted} adopted], {len(negative)} negative)')
+        logger.info(f'Old: {old_weights} → New: {self.weights}')
+        self._save_weights()  # Persist so weights survive Flask restarts
+        return True
+
+    def _save_weights(self):
+        """Persist current adapted weights to JSON so they survive Flask restarts."""
+        try:
+            state = {}
+            if os.path.exists(_WEIGHTS_STATE_PATH):
+                with open(_WEIGHTS_STATE_PATH, 'r') as f:
+                    state = json.load(f)
+            state['weights'] = self.weights
+            state['updatedAt'] = datetime.now().isoformat()
+            with open(_WEIGHTS_STATE_PATH, 'w') as f:
+                json.dump(state, f, indent=2)
+            logger.info(f'Weights persisted to disk: {self.weights}')
+        except Exception as e:
+            logger.warning(f'Could not save weights to disk: {e}')
+
+    def _load_weights_from_disk(self):
+        """Load adapted weights from disk if they exist (called in __init__)."""
+        try:
+            if os.path.exists(_WEIGHTS_STATE_PATH):
+                with open(_WEIGHTS_STATE_PATH, 'r') as f:
+                    state = json.load(f)
+                saved = state.get('weights', {})
+                required = {'content', 'collaborative', 'success', 'clustering'}
+                if required.issubset(saved.keys()):
+                    total = sum(saved.values())
+                    if 0.95 <= total <= 1.05:
+                        self.weights = {k: float(v) for k, v in saved.items() if k in required}
+                        logger.info(f'Weights restored from disk: {self.weights}')
+        except Exception as e:
+            logger.warning(f'Could not load weights from disk (using defaults): {e}')
+
     def _is_cold_start(self, user_id: str) -> bool:
         """
         Check if user is in cold start state.
@@ -426,6 +689,24 @@ class HybridRecommender:
                 return False  # Known user — use normal weights
         
         return True  # Unknown user — use cold start weights
+
+    def _get_user_warmth(self, user_id: str) -> float:
+        """
+        FIX #9: Returns 0.0 (cold) → 1.0 (fully warm) based on how much the
+        user's SVD mean rating deviates from the global average.
+        - Small deviation → user has few / weak interactions → stay closer to cold_start weights
+        - Deviation ≥ 0.5 on 0-5 scale → user has a clear taste signal → use normal weights
+        This prevents users with a handful of interactions immediately jumping to
+        full collaborative-filter weighting before SVD has enough signal on them.
+        """
+        if not self.cf_model or not self.cf_model.trained:
+            return 0.0
+        user_mean = self.cf_model.user_means.get(str(user_id))
+        if user_mean is None:
+            return 0.0
+        deviation = abs(user_mean - self.cf_model.global_mean)
+        # 0.5+ deviation on 0-5 scale = user has a distinctive taste = fully warm
+        return min(1.0, deviation / 0.5)
 
     def _adjust_weights_for_pet(self, base_weights: Dict, cf_result: Dict) -> Dict:
         """
@@ -462,10 +743,14 @@ class HybridRecommender:
         redistributed = original_cf_weight - reduced_cf_weight
         
         adjusted['collaborative'] = reduced_cf_weight
-        
-        # Redistribute lost weight to content + clustering (strongest for new pets)
-        adjusted['content'] = adjusted.get('content', 0.0) + redistributed * 0.65
-        adjusted['clustering'] = adjusted.get('clustering', 0.0) + redistributed * 0.35
+
+        # FIX #6: Redistribute lost SVD weight to content (50%), XGBoost success (30%),
+        # and clustering (20%).  Previously success got nothing even though XGBoost
+        # is purely feature-based and works perfectly for brand-new users/pets outside
+        # the SVD training set — it's the most reliable algorithm when SVD has no data.
+        adjusted['content']   = adjusted.get('content',   0.0) + redistributed * 0.50
+        adjusted['success']   = adjusted.get('success',   0.0) + redistributed * 0.30
+        adjusted['clustering'] = adjusted.get('clustering', 0.0) + redistributed * 0.20
         
         logger.debug(
             f"SVD was_impossible (conf={cf_confidence:.0f}%), weights adjusted: "
@@ -474,7 +759,73 @@ class HybridRecommender:
         )
         
         return adjusted
-    
+
+    def _adjust_weights_for_species(self, weights: Dict, species: str) -> Dict:
+        """
+        FIX #7: Adjust algorithm weights based on species.
+        - Dogs: activity match is critical → boost content weight slightly
+        - Cats: personality/independence matters more → boost clustering weight
+        Weights are re-normalized to always sum to 1.0.
+        """
+        adjusted = weights.copy()
+        species_lower = str(species).lower()
+
+        if species_lower == 'dog':
+            # Dogs need strong activity match — content scoring captures this best
+            delta = 0.05
+            adjusted['content'] = adjusted.get('content', 0.30) + delta
+            adjusted['clustering'] = max(0.05, adjusted.get('clustering', 0.15) - delta)
+        elif species_lower == 'cat':
+            # Cats are independent — personality cluster match matters more than raw activity
+            delta = 0.05
+            adjusted['clustering'] = adjusted.get('clustering', 0.15) + delta
+            adjusted['content'] = max(0.15, adjusted.get('content', 0.30) - delta)
+
+        # Re-normalize so weights always sum to 1.0
+        total = sum(adjusted.values())
+        if total > 0:
+            adjusted = {k: v / total for k, v in adjusted.items()}
+
+        return adjusted
+
+    def _apply_diversity(
+        self,
+        recommendations: List[Dict],
+        user_profile: Optional[Dict] = None,
+        max_per_breed: int = 3
+    ) -> List[Dict]:
+        """
+        FIX #5: Prevent all top results being the same breed.
+        Caps any single breed to max_per_breed occurrences in the final list.
+        Exception: if the user explicitly states a preferredBreed, that breed
+        gets a higher cap (5 instead of 3) so the diversity filter doesn't work
+        against users who know exactly what breed they want.
+        Overflow pets are appended at the end (still visible, just lower priority).
+        """
+        # Honour user's stated breed preference with a relaxed cap
+        raw_pref = (user_profile or {}).get('preferredBreed', '')
+        preferred_breed_lower = str(raw_pref).strip().lower() if raw_pref else ''
+
+        breed_counts: Dict[str, int] = {}
+        primary: List[Dict] = []
+        overflow: List[Dict] = []
+
+        for rec in recommendations:
+            breed = str(rec.get('breed', 'Unknown')).strip().lower()
+            # Preferred breed gets relaxed cap (5); all others use default (3)
+            cap = 5 if (preferred_breed_lower and breed == preferred_breed_lower) else max_per_breed
+            count = breed_counts.get(breed, 0)
+            if count < cap:
+                primary.append(rec)
+                breed_counts[breed] = count + 1
+            else:
+                overflow.append(rec)
+
+        diverse = primary + overflow
+        top5_breeds = dict(list(breed_counts.items())[:5])
+        logger.info(f"Diversity re-ranking: {len(primary)} primary + {len(overflow)} overflow | top breeds: {top5_breeds}")
+        return diverse
+
     def compare_algorithms(
         self,
         user_id: str,

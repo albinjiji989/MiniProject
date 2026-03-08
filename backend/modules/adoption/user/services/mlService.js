@@ -60,6 +60,7 @@ class MLService {
           recommendations: response.data.recommendations,
           algorithm: response.data.algorithm,
           totalAvailable: response.data.totalAvailable,
+          weights: response.data.currentWeights || null,  // live adapted weights
           source: 'ml-service'
         };
       } else {
@@ -364,6 +365,39 @@ class MLService {
       error: 'Both ML service and local fallback failed',
       source: 'error'
     };
+  }
+
+  /**
+   * FIX #7: Send application feedback to Flask to nudge hybrid weights.
+   * @param {Array} feedbackData - [{algorithmScores:{...}, wasApplied:bool}]
+   */
+  async updateWeights(feedbackData) {
+    try {
+      const response = await this._makeRequest('/api/adoption/ml/update-weights', { feedbackData });
+      if (response.success) {
+        console.log('Hybrid weights updated:', response.newWeights);
+      }
+      return response;
+    } catch (error) {
+      console.warn('Weight update skipped (Flask unavailable):', error.message);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Get current hybrid algorithm weights from Flask (live, possibly adapted).
+   * @returns {Promise<{content, collaborative, success, clustering}|null>}
+   */
+  async getWeights() {
+    try {
+      const response = await this.client.get('/api/adoption/ml/weights', { timeout: 3000 });
+      if (response.data.success) {
+        return response.data.weights;
+      }
+      return null;
+    } catch (error) {
+      return null; // Non-critical — UI falls back to hardcoded defaults
+    }
   }
 }
 

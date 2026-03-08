@@ -51,6 +51,11 @@ class CollaborativeFilter:
         self.global_mean = 2.5  # Global average rating
         self.user_means = {}    # Per-user average rating
         self.predicted_ratings = None  # Full predicted matrix
+
+        # Breed/species metadata maps — built during training
+        # Allows breed-level CF fallback for pets not in training data (real MongoDB IDs)
+        self.pet_breed_index = {}   # breed (lower) -> list of pet column indices
+        self.pet_species_index = {} # species (lower) -> list of pet column indices
         
         # Try to load existing model
         self.load_model()
@@ -69,7 +74,11 @@ class CollaborativeFilter:
             df = pd.DataFrame(interactions)
             
             # Map interaction types to ratings (0-5 scale) if no explicit rating
-            if 'implicitRating' not in df.columns:
+            if 'rating' in df.columns:
+                pass  # Already numeric rating (e.g. from csv_svd or format_for_svd re-label)
+            elif 'implicitRating' in df.columns:
+                df['rating'] = df['implicitRating']
+            else:
                 rating_map = {
                     'viewed': 1.0,
                     'clicked': 1.5,
@@ -80,10 +89,12 @@ class CollaborativeFilter:
                     'viewed_matches': 0.5,
                     'shared': 2.0
                 }
-                df['rating'] = df['interactionType'].map(rating_map).fillna(1.0)
-            else:
-                df['rating'] = df['implicitRating']
-            
+                df['rating'] = df.get('interactionType', pd.Series(['viewed'] * len(df))).map(rating_map).fillna(1.0)
+
+            # Preserve breed/species metadata before aggregation (take first occurrence per petId)
+            meta_cols = [c for c in ['breed', 'species'] if c in df.columns]
+            pet_meta_df = df[['petId'] + meta_cols].drop_duplicates('petId').set_index('petId') if meta_cols else None
+
             df = df[['userId', 'petId', 'rating']].dropna()
             df['userId'] = df['userId'].astype(str)
             df['petId'] = df['petId'].astype(str)
@@ -94,7 +105,7 @@ class CollaborativeFilter:
             logger.info(f"Prepared {len(df)} interactions for training")
             logger.info(f"Unique users: {df['userId'].nunique()}, Unique pets: {df['petId'].nunique()}")
             
-            return df
+            return df, pet_meta_df
             
         except Exception as e:
             logger.error(f"Error preparing data: {str(e)}")
@@ -118,7 +129,7 @@ class CollaborativeFilter:
             logger.info("Starting SVD Collaborative Filter training...")
             
             # Prepare data
-            df = self.prepare_data(interactions)
+            df, pet_meta_df = self.prepare_data(interactions)
             
             if len(df) < 10:
                 raise ValueError(f"Need at least 10 interactions, got {len(df)}")
@@ -132,6 +143,24 @@ class CollaborativeFilter:
             
             n_users = len(unique_users)
             n_pets = len(unique_pets)
+
+            # Build breed/species -> column-index maps from metadata preserved by prepare_data()
+            self.pet_breed_index = {}
+            self.pet_species_index = {}
+            if pet_meta_df is not None:
+                for pid, p_idx in self.pet_index.items():
+                    if pid in pet_meta_df.index:
+                        row_meta = pet_meta_df.loc[pid]
+                        breed_key = str(row_meta.get('breed', '')).strip().lower() if 'breed' in row_meta else ''
+                        sp_key = str(row_meta.get('species', '')).strip().lower() if 'species' in row_meta else ''
+                        if breed_key:
+                            self.pet_breed_index.setdefault(breed_key, []).append(p_idx)
+                        if sp_key:
+                            self.pet_species_index.setdefault(sp_key, []).append(p_idx)
+            logger.info(
+                f"SVD breed index: {len(self.pet_breed_index)} breeds, "
+                f"{len(self.pet_species_index)} species indexed for breed-level fallback"
+            )
             
             # Build rating matrix
             rating_matrix = np.zeros((n_users, n_pets))
@@ -153,12 +182,17 @@ class CollaborativeFilter:
                 mask = centered_matrix[idx] > 0
                 centered_matrix[idx][mask] -= self.user_means[uid]
             
-            # Adjust n_factors if matrix is small
-            k = min(self.n_factors, min(n_users, n_pets) - 1)
+            # FIX #7: Auto-tune n_factors instead of hardcoding 20.
+            # Research heuristic: k ≈ sqrt(min(n_users, n_pets)) scales well with data size.
+            # Clamped to [10, 50]: floor prevents underfitting on tiny datasets,
+            # ceiling keeps training fast as interaction matrix grows into thousands of rows.
+            # This replaces the static self.n_factors=20 which underfits when the matrix
+            # grows beyond ~400 users/pets but wastes compute on small matrices.
+            k_auto = min(50, max(10, int(np.sqrt(min(n_users, n_pets)))))
+            k = min(k_auto, min(n_users, n_pets) - 1)
             if k < 1:
                 k = 1
-            
-            logger.info(f"Matrix shape: {n_users} x {n_pets}, using {k} latent factors")
+            logger.info(f"Auto n_factors: sqrt({min(n_users, n_pets)}) → k_auto={k_auto} → k={k} (matrix {n_users}×{n_pets})")
             
             # === CORE SVD DECOMPOSITION (same as Netflix Prize algorithm) ===
             sparse_matrix = csr_matrix(centered_matrix)
@@ -241,17 +275,28 @@ class CollaborativeFilter:
             logger.error(f"Error training SVD model: {str(e)}")
             raise
     
-    def predict_rating(self, user_id, pet_id):
+    def predict_rating(self, user_id, pet_id, pet_metadata=None):
         """
         Predict how a user would rate a specific pet.
-        
-        For known users/pets: Uses SVD decomposition.
-        For unknown (cold start): Returns global mean with low confidence.
-        
+
+        Lookup priority:
+          1. Known user + known pet  → full SVD prediction (confidence 85%)
+          2. Known user + unknown pet, breed in index
+                                     → average user's scores for same-breed pets
+                                       (confidence 65%, was_impossible=False)
+          3. Known user + unknown pet, no breed
+                                     → user's overall mean (confidence 50%)
+          4. Unknown user + known pet → pet column average (confidence 45%)
+          5. Unknown user + unknown pet, breed in index
+                                     → breed column average (confidence 35%)
+          6. Both unknown, no breed  → global mean (confidence 25%)
+
         Args:
             user_id: User ID (string)
-            pet_id: Pet ID (string)
-            
+            pet_id:  Pet ID (string) — may be a real MongoDB ObjectId
+            pet_metadata: Optional dict with 'breed' and/or 'species' keys
+                          (used to find similar pets when pet_id is unseen)
+
         Returns:
             dict: {predicted_rating, score (0-100), confidence, was_impossible}
         """
@@ -262,56 +307,97 @@ class CollaborativeFilter:
                 'confidence': 20.0,
                 'was_impossible': True
             }
-        
+
         try:
             user_id = str(user_id)
-            pet_id = str(pet_id)
-            
+            pet_id  = str(pet_id)
+
             u_idx = self.user_index.get(user_id)
             p_idx = self.pet_index.get(pet_id)
-            
+
+            # Breed/species keys for metadata fallback
+            breed_key   = str(pet_metadata.get('breed', '')  or '').strip().lower() if pet_metadata else ''
+            species_key = str(pet_metadata.get('species', '') or '').strip().lower() if pet_metadata else ''
+
+            def _breed_col_indices():
+                """Return column indices for same-breed (or same-species) pets."""
+                idxs = self.pet_breed_index.get(breed_key, [])
+                if not idxs and species_key:
+                    idxs = self.pet_species_index.get(species_key, [])
+                return idxs
+
             was_impossible = False
-            
+
             if u_idx is not None and p_idx is not None:
-                # Known user + known pet: full SVD prediction
-                predicted = float(self.predicted_ratings[u_idx, p_idx])
+                # Case 1 — fully known: exact SVD prediction
+                predicted  = float(self.predicted_ratings[u_idx, p_idx])
                 confidence = 85.0
-            elif u_idx is not None:
-                # Known user, unknown pet: use user's average
-                predicted = self.user_means.get(user_id, self.global_mean)
-                confidence = 50.0
-                was_impossible = True
-            elif p_idx is not None:
-                # Unknown user, known pet: use pet's column average
-                pet_col = self.predicted_ratings[:, p_idx]
+
+            elif u_idx is not None and p_idx is None:
+                # Case 2 — known user, unknown pet
+                breed_idxs = _breed_col_indices()
+                if breed_idxs:
+                    # Average the user's predicted ratings for all pets of this breed
+                    breed_scores = self.predicted_ratings[u_idx, breed_idxs]
+                    positive     = breed_scores[breed_scores > 0]
+                    predicted    = float(positive.mean()) if len(positive) > 0 else self.user_means.get(user_id, self.global_mean)
+                    confidence   = 65.0
+                    # was_impossible stays False: we have a real breed-level signal
+                    logger.debug(
+                        f"SVD breed fallback: user={user_id}, breed={breed_key!r}, "
+                        f"avg over {len(breed_idxs)} pets → {predicted:.2f}"
+                    )
+                else:
+                    # Case 3 — user known, pet unknown, no breed info
+                    predicted    = self.user_means.get(user_id, self.global_mean)
+                    confidence   = 50.0
+                    was_impossible = True
+
+            elif u_idx is None and p_idx is not None:
+                # Case 4 — unknown user, pet known: pet column average
+                pet_col  = self.predicted_ratings[:, p_idx]
                 non_zero = pet_col[pet_col > 0]
-                predicted = float(non_zero.mean()) if len(non_zero) > 0 else self.global_mean
-                confidence = 45.0
+                predicted    = float(non_zero.mean()) if len(non_zero) > 0 else self.global_mean
+                confidence   = 45.0
                 was_impossible = True
+
             else:
-                # Both unknown: global mean
-                predicted = self.global_mean
-                confidence = 25.0
-                was_impossible = True
-            
+                # Case 5/6 — both unknown
+                breed_idxs = _breed_col_indices()
+                if breed_idxs:
+                    # Average breed column scores across all known users
+                    breed_mat = self.predicted_ratings[:, breed_idxs]
+                    positive  = breed_mat[breed_mat > 0]
+                    predicted  = float(positive.mean()) if len(positive) > 0 else self.global_mean
+                    confidence = 35.0
+                    logger.debug(
+                        f"SVD breed-global fallback: breed={breed_key!r}, "
+                        f"{len(breed_idxs)} pets → {predicted:.2f}"
+                    )
+                else:
+                    # Case 6 — truly unknown
+                    predicted    = self.global_mean
+                    confidence   = 25.0
+                    was_impossible = True
+
             predicted = max(0.0, min(5.0, predicted))
-            score = (predicted / 5.0) * 100
-            
+            score     = (predicted / 5.0) * 100
+
             return {
                 'predicted_rating': float(round(predicted, 2)),
-                'score': float(round(score, 2)),
-                'confidence': float(confidence),
-                'was_impossible': was_impossible
+                'score':            float(round(score, 2)),
+                'confidence':       float(confidence),
+                'was_impossible':   was_impossible
             }
-            
+
         except Exception as e:
             logger.error(f"Error predicting rating: {str(e)}")
             return {
                 'predicted_rating': self.global_mean,
-                'score': 50.0,
-                'confidence': 20.0,
-                'was_impossible': True,
-                'error': str(e)
+                'score':            50.0,
+                'confidence':       20.0,
+                'was_impossible':   True,
+                'error':            str(e)
             }
     
     def recommend_for_user(self, user_id, all_pets, top_n=10, exclude_interacted=True, user_interactions=None):
@@ -333,8 +419,9 @@ class CollaborativeFilter:
                 pet_id = str(pet.get('_id') or pet.get('petId'))
                 if pet_id in exclude_ids:
                     continue
-                
-                prediction = self.predict_rating(user_id, pet_id)
+
+                pet_meta = {'breed': pet.get('breed', ''), 'species': pet.get('species', '')}
+                prediction = self.predict_rating(user_id, pet_id, pet_metadata=pet_meta)
                 
                 recommendations.append({
                     'petId': pet_id,
@@ -407,7 +494,10 @@ class CollaborativeFilter:
                 'n_factors': self.n_factors,
                 'trained': self.trained,
                 'training_date': self.training_date,
-                'metrics': self.metrics
+                'metrics': self.metrics,
+                # Breed/species index — essential for real MongoDB pet fallback
+                'pet_breed_index': self.pet_breed_index,
+                'pet_species_index': self.pet_species_index,
             }
             
             joblib.dump(model_data, self.model_path)
@@ -433,8 +523,15 @@ class CollaborativeFilter:
                 self.trained = model_data['trained']
                 self.training_date = model_data['training_date']
                 self.metrics = model_data['metrics']
+                # Restore breed index (may be absent in older PKL files — default to {})
+                self.pet_breed_index   = model_data.get('pet_breed_index', {})
+                self.pet_species_index = model_data.get('pet_species_index', {})
                 logger.info(f"SVD model loaded from {self.model_path}")
-                logger.info(f"Trained: {self.training_date}, RMSE: {self.metrics.get('rmse', 'N/A')}")
+                logger.info(
+                    f"Trained: {self.training_date}, RMSE: {self.metrics.get('rmse', 'N/A')}, "
+                    f"breed index: {len(self.pet_breed_index)} breeds / "
+                    f"{len(self.pet_species_index)} species"
+                )
                 return True
             else:
                 logger.warning("No saved SVD model found")

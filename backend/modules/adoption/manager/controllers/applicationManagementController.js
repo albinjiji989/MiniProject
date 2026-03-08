@@ -633,7 +633,34 @@ const completeHandover = async (req, res) => {
         } catch (mlErr) {
           console.warn('ML training data capture failed (non-blocking):', mlErr?.message || mlErr);
         }
-        
+
+        // ===== SVD COLLABORATIVE FILTER: Auto-record adopted interaction (rating 5.0) =====
+        // This is the strongest training signal — SVD learns "user X loves pets like this"
+        // mlSeedDataController queries UserPetInteraction for interactionType='adopted' to feed Flask
+        try {
+          const UserPetInteraction = require('../../models/UserPetInteraction');
+          await UserPetInteraction.findOneAndUpdate(
+            { userId: app.userId, petId: pet._id, interactionType: 'adopted' },
+            {
+              userId: app.userId,
+              petId: pet._id,
+              interactionType: 'adopted',
+              implicitRating: 5.0,
+              timestamp: new Date(),
+              metadata: {
+                breed: pet.breed,
+                species: pet.species,
+                handoverDate: new Date(),
+                applicationId: app._id
+              }
+            },
+            { upsert: true, new: true }
+          );
+          console.log(`[ML-SVD] ✅ Adopted interaction recorded: user=${app.userId} → pet=${pet._id} (${pet.breed || pet.species}, rating=5.0)`);
+        } catch (svdErr) {
+          console.warn('[ML-SVD] Failed to record adopted interaction (non-blocking):', svdErr?.message);
+        }
+
         // Track recommendation → adoption conversion (production metrics)
         try {
           const recResult = await RecommendationLog.markAdopted(app.userId, pet._id);

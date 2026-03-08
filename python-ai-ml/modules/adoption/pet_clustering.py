@@ -152,7 +152,11 @@ class PetClusterer:
     
     def find_optimal_k(self, X, k_range=(3, 8)):
         """
-        Find optimal number of clusters using elbow method and silhouette score
+        Find optimal number of clusters using elbow method and silhouette score.
+
+        Uses an 80/20 held-out split:  KMeans is fit on 80% of data, and the
+        silhouette score is computed on the remaining 20%.  This prevents
+        over-estimating cluster quality on training data.
         
         Args:
             X: Feature matrix
@@ -161,35 +165,51 @@ class PetClusterer:
         Returns:
             optimal_k: Best number of clusters
         """
+        # 80/20 held-out split for unbiased silhouette evaluation
+        n_samples = len(X)
+        split_idx = max(1, int(n_samples * 0.8))
+        indices = np.random.default_rng(seed=42).permutation(n_samples)
+        train_idx, test_idx = indices[:split_idx], indices[split_idx:]
+        X_train = X[train_idx]
+        X_test  = X[test_idx]
+
         inertias = []
         silhouette_scores = []
         k_values = range(k_range[0], k_range[1] + 1)
         
         for k in k_values:
             kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-            kmeans.fit(X)
-            
+            kmeans.fit(X_train)
+
             inertias.append(kmeans.inertia_)
-            
-            # Calculate silhouette score
-            if k > 1:
-                score = silhouette_score(X, kmeans.labels_)
-                silhouette_scores.append(score)
+
+            # Evaluate silhouette on held-out test set (unbiased)
+            if k > 1 and len(X_test) >= k:
+                test_labels = kmeans.predict(X_test)
+                score = silhouette_score(X_test, test_labels)
+            elif k > 1:
+                # Fallback: evaluate on training set if test split too small
+                score = silhouette_score(X_train, kmeans.labels_)
             else:
-                silhouette_scores.append(0)
+                score = 0
+            silhouette_scores.append(score)
         
-        # Find k with best silhouette score
+        # Find k with best held-out silhouette score
         best_idx = np.argmax(silhouette_scores)
         optimal_k = k_values[best_idx]
         
-        logger.info(f"Optimal K: {optimal_k} (Silhouette: {silhouette_scores[best_idx]:.3f})")
+        logger.info(
+            f"Optimal K: {optimal_k} (held-out silhouette: {silhouette_scores[best_idx]:.3f}, "
+            f"train={len(X_train)}, test={len(X_test)})"
+        )
         
         return optimal_k, {
             'k_values': list(k_values),
             'inertias': inertias,
             'silhouette_scores': silhouette_scores,
             'optimal_k': optimal_k,
-            'best_silhouette': silhouette_scores[best_idx]
+            'best_silhouette': silhouette_scores[best_idx],
+            'eval_set': f'held_out_{len(X_test)}_samples'
         }
     
     def assign_cluster_names(self, X, labels):

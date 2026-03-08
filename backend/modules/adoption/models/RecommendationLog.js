@@ -41,8 +41,14 @@ const recommendationLogSchema = new mongoose.Schema({
   // Which algorithm produced these recommendations
   algorithm: {
     type: String,
-    enum: ['hybrid', 'content_based', 'content_based_emergency'],
+    enum: ['hybrid', 'content', 'content_based', 'content_based_fallback', 'content_based_emergency', 'collaborative', 'success', 'clustering'],
     default: 'hybrid'
+  },
+
+  // A/B source label for comparing ML vs fallback sessions
+  abSource: {
+    type: String,
+    default: 'unknown'
   },
   
   // Algorithm weights at the time (for tracking drift)

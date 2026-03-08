@@ -358,6 +358,7 @@ def bootstrap_train_all_models():
     # ---- Step 0b: Load Custom CSV data (India-focused, 875 records) ----
     csv_xgb = []
     csv_kmeans = []
+    csv_svd = []
     try:
         from .custom_data_loader import CustomDataLoader
         import os
@@ -368,9 +369,10 @@ def bootstrap_train_all_models():
             _csv_loader = CustomDataLoader(csv_path)
             csv_xgb = _csv_loader.get_xgboost_records()
             csv_kmeans = _csv_loader.get_kmeans_pets()
+            csv_svd = _csv_loader.get_svd_interactions()
             logger.info(
-                f"📊 Custom CSV loaded: {len(csv_xgb)} XGBoost records, "
-                f"{len(csv_kmeans)} KMeans pets (India-focused dataset)"
+                f"📊 Custom CSV loaded: {len(csv_xgb)} XGBoost, "
+                f"{len(csv_kmeans)} KMeans, {len(csv_svd)} SVD interactions (India-focused dataset)"
             )
         else:
             logger.warning(f"⚠️  Custom CSV not found at {csv_path}. Falling back to random synthetic data.")
@@ -389,11 +391,17 @@ def bootstrap_train_all_models():
             SYNTHETIC_SVD_TARGET = 300
             synthetic_needed = max(0, SYNTHETIC_SVD_TARGET - len(real_svd))
             
-            if synthetic_needed > 0 or not real_svd:
+            # Use CSV SVD interactions (real pet characteristics, archetype users)
+            # Only fall back to random synthetic if CSV is also unavailable
+            if csv_svd:
+                training_svd = real_svd + csv_svd
+                synthetic_svd = []
+            elif synthetic_needed > 0 or not real_svd:
                 synthetic_svd = generate_svd_interactions(n_users=20, n_pets=40, n_interactions=max(synthetic_needed, 50))
                 training_svd = real_svd + synthetic_svd
             else:
                 training_svd = real_svd
+                synthetic_svd = []
             
             real_pct = round(len(real_svd) / max(1, len(training_svd)) * 100, 1)
             
@@ -555,6 +563,7 @@ def retrain_with_real_data(real_data):
     # Load custom CSV as high-quality foundation (India-focused dataset)
     csv_xgb = []
     csv_kmeans = []
+    csv_svd = []
     try:
         from .custom_data_loader import CustomDataLoader
         import os
@@ -565,6 +574,7 @@ def retrain_with_real_data(real_data):
             _csv_loader = CustomDataLoader(csv_path)
             csv_xgb = _csv_loader.get_xgboost_records()
             csv_kmeans = _csv_loader.get_kmeans_pets()
+            csv_svd = _csv_loader.get_svd_interactions()
     except Exception:
         pass  # CSV unavailable — will fall back to random synthetic
 
@@ -590,7 +600,17 @@ def retrain_with_real_data(real_data):
         SYNTHETIC_SVD_TARGET = 300
         synthetic_needed = max(0, SYNTHETIC_SVD_TARGET - len(real_svd))
         
-        if synthetic_needed > 0:
+        # Use CSV as foundation; supplement with real data; only add random synthetic if both absent
+        if csv_svd:
+            if synthetic_needed > 0 and not real_svd:
+                synthetic_svd = generate_svd_interactions(
+                    n_users=20, n_pets=40,
+                    n_interactions=synthetic_needed
+                )
+                mixed_svd = real_svd + csv_svd + synthetic_svd
+            else:
+                mixed_svd = real_svd + csv_svd
+        elif synthetic_needed > 0:
             # Generate only as many synthetic as needed to fill the gap
             synthetic_svd = generate_svd_interactions(
                 n_users=20, n_pets=40, 

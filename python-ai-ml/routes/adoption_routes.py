@@ -346,7 +346,8 @@ def get_hybrid_recommendations():
                 'recommendations': recommendations,
                 'algorithm': algorithm,
                 'totalAvailable': len(available_pets),
-                'showingTop': len(recommendations)
+                'showingTop': len(recommendations),
+                'currentWeights': hybrid_model.weights  # live weights (may differ after adaptation)
             }
         })
         
@@ -562,3 +563,60 @@ def get_training_stats():
             'success': False,
             'message': str(e)
         }), 500
+
+
+# FIX #7: Receive application feedback from Node.js and nudge hybrid weights
+@adoption_bp.route('/ml/update-weights', methods=['POST'])
+def update_weights():
+    """
+    FIX #7: Nudge algorithm weights using adoption application feedback.
+    Algorithms that correctly scored applied pets gain higher weight.
+
+    Request body:
+    {
+        "feedbackData": [
+            { "algorithmScores": {"content":80,"collaborative":70,"success":65,"clustering":60},
+              "wasApplied": true },
+            ...
+        ]
+    }
+    """
+    try:
+        from modules.adoption.hybrid_recommender import get_hybrid_recommender
+
+        data = request.get_json()
+        feedback_data = data.get('feedbackData', [])
+
+        if not feedback_data:
+            return jsonify({'success': False, 'message': 'feedbackData is required'}), 400
+
+        hybrid = get_hybrid_recommender()
+        updated = hybrid.update_weights_from_feedback(feedback_data)
+
+        return jsonify({
+            'success': True,
+            'updated': updated,
+            'newWeights': hybrid.weights,
+            'message': f'Weights {"updated" if updated else "not updated (insufficient data)"}'
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@adoption_bp.route('/ml/weights', methods=['GET'])
+def get_weights():
+    """
+    Return the current hybrid algorithm weights.
+    Used by the frontend 'How it Works' panel to display live (possibly adapted) weights.
+    """
+    try:
+        from modules.adoption.hybrid_recommender import get_hybrid_recommender
+        hybrid = get_hybrid_recommender()
+        return jsonify({
+            'success': True,
+            'weights': hybrid.weights,
+            'coldStartWeights': hybrid.cold_start_weights
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500

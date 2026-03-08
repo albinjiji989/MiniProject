@@ -348,6 +348,43 @@ class CustomDataLoader:
         logger.info(f"CustomDataLoader: generated {len(records):,} XGBoost training records")
         return records
 
+    def get_svd_interactions(self) -> list[dict]:
+        """
+        Build SVD collaborative-filter training interactions from CSV data.
+
+        Each CSV pet is cross-paired with every USER_ARCHETYPE.
+        The interaction rating (0-5 scale) is derived from compatibility score
+        so SVD learns real pet characteristics rather than synth_pet_* dummies.
+
+        Shape per interaction:
+          {
+            userId:  str,   e.g. 'archetype_active_family'
+            petId:   str,   e.g. 'csv_pet_0001'
+            rating:  float, 0-5
+            _source: 'custom_india_svd'
+          }
+        """
+        interactions = []
+        for idx, pet in enumerate(self._pets):
+            pet_id = f'csv_pet_{idx:04d}'
+            for user in USER_ARCHETYPES:
+                compat = _compute_compatibility(user, pet)
+                # Scale 0-100 → 0-5, clamp to valid range
+                rating = round(max(0.0, min(5.0, compat / 20.0)), 2)
+                interactions.append({
+                    'userId':  user['id'],
+                    'petId':   pet_id,
+                    'rating':  rating,
+                    'breed':   pet.get('breed', ''),
+                    'species': pet.get('species', ''),
+                    '_source': 'custom_india_svd',
+                })
+        logger.info(
+            f"CustomDataLoader: generated {len(interactions):,} SVD interactions "
+            f"({len(self._pets)} pets × {len(USER_ARCHETYPES)} archetypes)"
+        )
+        return interactions
+
     def get_kmeans_pets(self) -> list[dict]:
         """
         Build K-Means pet profiles — same format used by PetClusterer.
@@ -355,7 +392,6 @@ class CustomDataLoader:
         Shape per pet:
           {
             _id:  str,
-            name: str,
             species: str,
             breed: str,
             age: int,
@@ -366,7 +402,6 @@ class CustomDataLoader:
         for idx, pet in enumerate(self._pets):
             pets.append({
                 '_id':     f'custom_{idx:04d}',
-                'name':    pet.get('name', 'Unknown'),
                 'species': pet['species'],
                 'breed':   pet['breed'],
                 'age':     pet['age_months'],

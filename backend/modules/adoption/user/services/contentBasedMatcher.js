@@ -85,7 +85,12 @@ class ContentBasedMatcher {
       compatibility_level: compatibility,
       color: color,
       score_breakdown: scores,
-      match_reasons: reasons.slice(0, 5), // Top 5 reasons
+      // FIX #8: Increased cap from 5 to 8 reasons. Warnings are sorted to the front
+      // so critical safety concerns are always visible, not cut off.
+      match_reasons: [
+        ...reasons.filter(r => r.startsWith('⚠️') || r.startsWith('❌')),
+        ...reasons.filter(r => !r.startsWith('⚠️') && !r.startsWith('❌'))
+      ].slice(0, 8),
       warnings: warnings,
       success_probability: this._predictSuccessProbability(totalScore, adoptionProfile, compatProfile, pet)
     };
@@ -341,7 +346,27 @@ class ContentBasedMatcher {
     const monthlyBudget = user.monthlyBudget;
     const maxAdoptionFee = user.maxAdoptionFee;
     const adoptionFee = pet.adoptionFee || 0;
-    const estimatedMonthly = compat.estimatedMonthlyCost || 100;
+
+    // FIX #9: Use breed-specific ongoing cost estimates instead of a single generic value.
+    // High-maintenance breeds have significantly higher real monthly costs.
+    const BREED_MONTHLY_COSTS = {
+      // High-maintenance dogs
+      'golden retriever': 250, 'labrador retriever': 200, 'german shepherd': 200,
+      'husky': 220, 'siberian husky': 220, 'border collie': 180,
+      'poodle': 300, 'standard poodle': 300, 'miniature poodle': 250,
+      'shih tzu': 280, 'maltese': 260, 'bichon frise': 270,
+      'great dane': 350, 'saint bernard': 380, 'newfoundland': 360,
+      // High-maintenance cats
+      'persian': 300, 'persian cat': 300, 'persian cats': 300,
+      'maine coon': 220, 'british shorthair': 200,
+      'bengal': 250, 'ragdoll': 230, 'savannah': 400,
+      // Indian breeds (lower cost)
+      'indian pariah': 80, 'indian spitz': 90, 'kombai': 85, 'mudhol hound': 85,
+      'rajapalayam': 90, 'chippiparai': 85, 'indian street cat': 70
+    };
+
+    const breedKey = (pet.breed || '').toLowerCase().trim();
+    const breedCost = BREED_MONTHLY_COSTS[breedKey] || compat.estimatedMonthlyCost || 100;
 
     // Adoption fee check
     if (maxAdoptionFee != null) {
@@ -350,7 +375,7 @@ class ContentBasedMatcher {
         reasons.push(`✓ Adoption fee ($${adoptionFee}) within budget`);
       } else {
         score += 1;
-        reasons.push(`⚠️ Adoption fee ($${adoptionFee}) above your max`);
+        reasons.push(`⚠️ Adoption fee ($${adoptionFee}) above your max ($${maxAdoptionFee})`);
       }
     } else {
       score += 5;
@@ -358,15 +383,16 @@ class ContentBasedMatcher {
 
     // Monthly cost check
     if (monthlyBudget != null) {
-      if (estimatedMonthly <= monthlyBudget) {
+      if (breedCost <= monthlyBudget) {
         score += 5;
-        reasons.push(`✓ Monthly costs (~$${estimatedMonthly}) fit your budget`);
-      } else if (estimatedMonthly <= monthlyBudget * 1.2) {
+        reasons.push(`✓ Estimated monthly cost (~$${breedCost}) fits your budget`);
+      } else if (breedCost <= monthlyBudget * 1.2) {
         score += 3;
-        reasons.push(`~ Monthly costs slightly above budget`);
+        reasons.push(`~ Monthly costs (~$${breedCost}) slightly above your budget ($${monthlyBudget})`);
       } else {
         score += 1;
-        reasons.push(`⚠️ Monthly costs may strain your budget`);
+        // FIX #9: Explicit breed-specific cost warning instead of generic message
+        reasons.push(`⚠️ ${pet.breed || 'This pet'} estimated monthly cost ~$${breedCost} may strain your $${monthlyBudget} budget`);
       }
     } else {
       score += 5;
