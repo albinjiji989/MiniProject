@@ -382,12 +382,16 @@ const SmartMatches = () => {
   const openDetails = match => { setSelectedPet(match); setActiveImg(0); setDrawerOpen(true); };
 
   // ── Extract unique filter options from ALL matches ────────
+  // Breed options depend on selected species (cascading filter)
   const filterOptions = React.useMemo(() => {
     const species = new Set(), breed = new Set(), gender = new Set(), age = new Set(), size = new Set();
     matches.forEach(m => {
       const p = extractPet(m);
       if (p.species) species.add(p.species);
-      if (p.breed)   breed.add(p.breed);
+      // Only include breeds that belong to the selected species (or all if none selected)
+      if (p.breed && (filters.species.length === 0 || filters.species.includes(p.species))) {
+        breed.add(p.breed);
+      }
       if (p.gender)  gender.add(p.gender);
       const ageStr = String(p.age || '').toLowerCase();
       if (ageStr) {
@@ -407,7 +411,17 @@ const SmartMatches = () => {
       age:     [...age].sort(),
       size:    [...size].sort(),
     };
-  }, [matches, extractPet]);
+  }, [matches, extractPet, filters.species]);
+
+  // Auto-clear breed selections that no longer match the selected species
+  React.useEffect(() => {
+    if (filters.breed.length > 0 && filterOptions.breed.length > 0) {
+      const validBreeds = filters.breed.filter(b => filterOptions.breed.includes(b));
+      if (validBreeds.length !== filters.breed.length) {
+        setFilters(prev => ({ ...prev, breed: validBreeds }));
+      }
+    }
+  }, [filterOptions.breed, filters.breed]);
 
   // ── Apply filters + breed dismiss ─────────────────────────
   const visible = React.useMemo(() => {
@@ -602,10 +616,15 @@ const SmartMatches = () => {
               {/* Breed */}
               {filterOptions.breed.length > 0 && (
                 <Box sx={{ mb:2 }}>
-                  <Box sx={{ display:'flex', alignItems:'center', gap:0.8, mb:1 }}>
+                  <Box sx={{ display:'flex', alignItems:'center', gap:0.8, mb:0.5 }}>
                     <Pets sx={{ fontSize:16, color:'#6b7280' }} />
                     <Typography sx={{ fontSize:'0.75rem', fontWeight:800, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.8 }}>Breed</Typography>
                   </Box>
+                  {filters.species.length > 0 && (
+                    <Typography sx={{ fontSize:'0.68rem', color:'#9ca3af', mb:0.8, ml:0.3 }}>
+                      Showing breeds for: {filters.species.join(', ')}
+                    </Typography>
+                  )}
                   <Box sx={{ display:'flex', gap:0.8, flexWrap:'wrap' }}>
                     {filterOptions.breed.map(b => {
                       const active = filters.breed.includes(b);

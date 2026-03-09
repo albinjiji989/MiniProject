@@ -1,0 +1,9 @@
+{
+  "weights": {
+    "content": 0.2997,
+    "collaborative": 0.3,
+    "success": 0.2512,
+    "clustering": 0.1491
+  },
+  "updatedAt": "2026-03-09T09:56:15.805191"
+}
