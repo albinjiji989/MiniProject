@@ -489,6 +489,11 @@ class HybridRecommender:
                     else:
                         confidence = 60.0  # Single algorithm — moderate confidence
                     
+                    # ── XAI: Generate factor-level explanations ──────────────
+                    xai = self.generate_xai_explanations(
+                        user_profile, merged_compat, scores, pet
+                    )
+
                     # Build recommendation object
                     recommendation = {
                         'petId': pet_id,
@@ -513,6 +518,7 @@ class HybridRecommender:
                         },
                         'weights': pet_weights if algorithm == 'hybrid' else {algorithm: 1.0},
                         'explanations': explanations,
+                        'xaiExplanations': xai,
                         'algorithmUsed': algorithm,
                         'isColdStart': is_cold_start
                     }
@@ -947,70 +953,324 @@ class HybridRecommender:
             'algorithms_compared': len(top_5_sets)
         }
     
-    def get_algorithm_explanations(self, pet_recommendation: Dict) -> Dict:
+    # ═══════════════════════════════════════════════════════════════════════
+    #  XAI — EXPLAINABLE AI MODULE
+    #  Solves the "black-box" problem: every score is accompanied by
+    #  human-readable, factor-level reasoning so adopters understand
+    #  exactly WHY a pet was recommended.
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def generate_xai_explanations(
+        self,
+        user_profile: Dict,
+        pet_profile: Dict,
+        scores: Dict,
+        pet: Dict,
+    ) -> Dict:
         """
-        Get detailed explanations for each algorithm's contribution
-        
-        Args:
-            pet_recommendation: A single recommendation object
-            
-        Returns:
-            dict: Detailed explanations
+        Generate full Explainable AI (XAI) report for a single user-pet pair.
+
+        Returns a structured dict with:
+          - topReasons:   ordered list of the strongest factors (positive & negative)
+          - factorBreakdown: per-factor detail for every compatibility dimension
+          - algorithmInsights: per-algorithm natural-language explanation
+          - xgboostFactors: top feature importances from XGBoost (if available)
         """
-        scores = pet_recommendation.get('algorithmScores', {})
-        
-        explanations = {
-            'content': self._explain_content_score(scores.get('content', 0)),
-            'collaborative': self._explain_collaborative_score(scores.get('collaborative', 0)),
-            'success': self._explain_success_score(scores.get('success', 0)),
-            'clustering': self._explain_clustering_score(scores.get('clustering', 0))
+        factors = self._compute_factor_details(user_profile, pet_profile, pet)
+        algo_insights = self._build_algorithm_insights(scores, pet)
+        xgb_factors = self._get_xgboost_top_factors(user_profile, pet_profile)
+
+        # Rank factors by abs(impact) and split into pros / cons
+        sorted_factors = sorted(factors, key=lambda f: abs(f.get('impact', 0)), reverse=True)
+        top_reasons = []
+        for f in sorted_factors[:6]:
+            entry = {
+                'factor': f['label'],
+                'icon': f.get('icon', 'info'),
+                'sentiment': 'positive' if f['impact'] >= 0 else 'negative',
+                'text': f['reason'],
+                'impact': f['impact'],           # -10 … +20 (raw points)
+                'impactLabel': self._impact_label(f['impact']),
+            }
+            top_reasons.append(entry)
+
+        return {
+            'topReasons': top_reasons,
+            'factorBreakdown': factors,
+            'algorithmInsights': algo_insights,
+            'xgboostFactors': xgb_factors,
         }
-        
-        return explanations
-    
-    def _explain_content_score(self, score: float) -> str:
-        """Explain content-based score"""
-        if score >= 80:
-            return "Excellent match based on your lifestyle, experience, and preferences"
-        elif score >= 60:
-            return "Good compatibility with your profile and living situation"
-        elif score >= 40:
-            return "Moderate match - some aspects align with your preferences"
+
+    # ── factor-level detail ─────────────────────────────────────────────
+    def _compute_factor_details(self, user: Dict, compat: Dict, pet: Dict) -> List[Dict]:
+        """Return a list of factor dicts with label, impact, status, reason."""
+        factors = []
+        _num = lambda v, d=0: float(v) if isinstance(v, (int, float)) else d
+
+        # 1) Activity / Energy match
+        u_act = _num(user.get('activityLevel'), 3)
+        p_eng = _num(compat.get('energyLevel'), 3)
+        diff = abs(u_act - p_eng)
+        act_labels = {1:'Relaxed',2:'Light',3:'Moderate',4:'Active',5:'Very Active'}
+        eng_labels = {1:'Very Low',2:'Low',3:'Medium',4:'High',5:'Very High'}
+        if diff <= 1:
+            factors.append({'label':'Activity Level','icon':'activity','impact':+15,'status':'ok',
+                'reason':f'Your activity ({act_labels.get(int(u_act),"?")}) closely matches this pet\'s energy ({eng_labels.get(int(p_eng),"?")}) — great fit',
+                'you':act_labels.get(int(u_act),'?'),'pet':eng_labels.get(int(p_eng),'?')+' energy'})
+        elif diff <= 2:
+            factors.append({'label':'Activity Level','icon':'activity','impact':+5,'status':'warn',
+                'reason':f'Slight energy gap — you are {act_labels.get(int(u_act),"?")} but pet is {eng_labels.get(int(p_eng),"?")} energy. Extra walks can bridge this',
+                'you':act_labels.get(int(u_act),'?'),'pet':eng_labels.get(int(p_eng),'?')+' energy'})
         else:
-            return "Lower compatibility - may require adjustments to your routine"
-    
-    def _explain_collaborative_score(self, score: float) -> str:
-        """Explain collaborative filtering score"""
-        if score >= 80:
-            return "Users with similar preferences highly recommend this pet"
-        elif score >= 60:
-            return "Users like you have shown interest in similar pets"
-        elif score >= 40:
-            return "Some users with similar profiles considered this pet"
+            factors.append({'label':'Activity Level','icon':'activity','impact':-10,'status':'bad',
+                'reason':f'Significant energy mismatch — you are {act_labels.get(int(u_act),"?")} but pet needs {eng_labels.get(int(p_eng),"?")} energy. This pet may not suit your lifestyle',
+                'you':act_labels.get(int(u_act),'?'),'pet':eng_labels.get(int(p_eng),'?')+' energy'})
+
+        # 2) Living space
+        home = str(user.get('homeType', user.get('livingSpace', 'house'))).lower()
+        can_apt = compat.get('canLiveInApartment', True)
+        needs_yard = compat.get('needsYard', False)
+        has_yard = user.get('hasYard', False)
+        home_nice = {'apartment':'Apartment','house':'House','house_with_yard':'House + Yard','condo':'Condo','farm':'Farm'}.get(home, home.title())
+        if 'apartment' in home and not can_apt:
+            factors.append({'label':'Living Space','icon':'home','impact':-15,'status':'bad',
+                'reason':f'You live in an apartment but this pet does not do well in apartments — needs more space',
+                'you':home_nice,'pet':'Needs house/yard'})
+        elif needs_yard and not has_yard:
+            factors.append({'label':'Living Space','icon':'home','impact':-5,'status':'warn',
+                'reason':f'This pet prefers a yard which you don\'t have. Regular park visits can help',
+                'you':home_nice+(' + Yard' if has_yard else ''),'pet':'Yard preferred'})
         else:
-            return "Limited collaborative data for this match"
-    
-    def _explain_success_score(self, score: float) -> str:
-        """Explain XGBoost success prediction"""
-        if score >= 80:
-            return "Very high probability of successful adoption based on historical data"
-        elif score >= 60:
-            return "Good success indicators based on similar adoption outcomes"
-        elif score >= 40:
-            return "Moderate success probability - consider carefully"
+            factors.append({'label':'Living Space','icon':'home','impact':+10,'status':'ok',
+                'reason':f'Your {home_nice} is a great fit for this pet\'s space needs',
+                'you':home_nice+(' + Yard' if has_yard else ''),'pet':'Adapts well'})
+
+        # 3) Experience
+        exp_map = {'beginner':1,'first_time':1,'some_experience':2,'intermediate':2,'experienced':3,'advanced':3,'expert':4}
+        tr_map  = {'untrained':1,'basic':2,'intermediate':3,'advanced':4}
+        u_exp = exp_map.get(str(user.get('experienceLevel','beginner')).lower(), 1)
+        p_tr  = tr_map.get(str(compat.get('trainedLevel','basic')).lower(), 2)
+        exp_nice = {'beginner':'Beginner','first_time':'First-Time','some_experience':'Some Exp.','intermediate':'Intermediate','experienced':'Experienced','advanced':'Advanced'}
+        tr_nice  = {'untrained':'Needs Training','basic':'Basic','intermediate':'Trained','advanced':'Well Trained'}
+        if u_exp >= p_tr:
+            factors.append({'label':'Experience Match','icon':'experience','impact':+10,'status':'ok',
+                'reason':f'Your experience ({exp_nice.get(str(user.get("experienceLevel","beginner")).lower(),"?")}) is enough for this pet ({tr_nice.get(str(compat.get("trainedLevel","basic")).lower(),"?")})',
+                'you':exp_nice.get(str(user.get('experienceLevel','beginner')).lower(),'?'),
+                'pet':tr_nice.get(str(compat.get('trainedLevel','basic')).lower(),'?')})
         else:
-            return "Lower success probability - may face challenges"
-    
-    def _explain_clustering_score(self, score: float) -> str:
-        """Explain clustering score"""
-        if score >= 70:
-            return "Perfect personality type match for your lifestyle"
-        elif score >= 50:
-            return "Good fit within the pet's personality group"
-        elif score >= 30:
-            return "Moderate alignment with pet personality cluster"
+            factors.append({'label':'Experience Match','icon':'experience','impact':-8,'status':'warn',
+                'reason':f'This pet needs more experience than you currently have — training classes recommended',
+                'you':exp_nice.get(str(user.get('experienceLevel','beginner')).lower(),'?'),
+                'pet':tr_nice.get(str(compat.get('trainedLevel','basic')).lower(),'?')})
+
+        # 4) Child safety
+        has_kids = bool(user.get('hasChildren', False))
+        child_score = _num(compat.get('childFriendlyScore'), 5)
+        if has_kids:
+            if child_score >= 7:
+                factors.append({'label':'Child Safety','icon':'children','impact':+15,'status':'ok',
+                    'reason':f'Child-friendly score {child_score}/10 — excellent around kids',
+                    'you':'Has children','pet':f'{child_score}/10 child-friendly'})
+            elif child_score >= 4:
+                factors.append({'label':'Child Safety','icon':'children','impact':0,'status':'warn',
+                    'reason':f'Moderate child score ({child_score}/10) — supervise interactions with young children',
+                    'you':'Has children','pet':f'{child_score}/10 child-friendly'})
+            else:
+                factors.append({'label':'Child Safety','icon':'children','impact':-20,'status':'bad',
+                    'reason':f'Low child-friendly score ({child_score}/10) — NOT recommended for homes with children',
+                    'you':'Has children','pet':f'{child_score}/10 child-friendly'})
+
+        # 5) Other pets
+        has_pets = bool(user.get('hasOtherPets', False))
+        pet_score = _num(compat.get('petFriendlyScore'), 5)
+        if has_pets:
+            if pet_score >= 7:
+                factors.append({'label':'Pet Compatibility','icon':'pets','impact':+10,'status':'ok',
+                    'reason':f'Gets along well with other animals ({pet_score}/10)',
+                    'you':'Has other pets','pet':f'{pet_score}/10 pet-friendly'})
+            elif pet_score >= 4:
+                factors.append({'label':'Pet Compatibility','icon':'pets','impact':0,'status':'warn',
+                    'reason':f'May need slow introduction to your other pets ({pet_score}/10)',
+                    'you':'Has other pets','pet':f'{pet_score}/10 pet-friendly'})
+            else:
+                factors.append({'label':'Pet Compatibility','icon':'pets','impact':-12,'status':'bad',
+                    'reason':f'Does not do well with other animals ({pet_score}/10) — risky with your pets',
+                    'you':'Has other pets','pet':f'{pet_score}/10 pet-friendly'})
+
+        # 6) Time left alone
+        u_hours = _num(user.get('hoursAlonePerDay'), 8)
+        p_max   = _num(compat.get('maxHoursAlone'), 6)
+        if u_hours <= p_max:
+            factors.append({'label':'Alone Time','icon':'time','impact':+8,'status':'ok',
+                'reason':f'You\'re away {u_hours}h/day and this pet tolerates up to {p_max}h — comfortable fit',
+                'you':f'{u_hours}h away/day','pet':f'Up to {p_max}h alone'})
+        elif u_hours <= p_max + 2:
+            factors.append({'label':'Alone Time','icon':'time','impact':-3,'status':'warn',
+                'reason':f'You\'re away {u_hours}h but pet prefers max {p_max}h alone — a pet-sitter helps',
+                'you':f'{u_hours}h away/day','pet':f'Up to {p_max}h alone'})
         else:
-            return "Different personality type - may require adaptation"
+            factors.append({'label':'Alone Time','icon':'time','impact':-12,'status':'bad',
+                'reason':f'You\'re away {u_hours}h but pet can only tolerate {p_max}h — may cause separation anxiety',
+                'you':f'{u_hours}h away/day','pet':f'Up to {p_max}h alone'})
+
+        # 7) Budget
+        u_budget = _num(user.get('monthlyBudget'), 0)
+        p_cost   = _num(compat.get('estimatedMonthlyCost'), 0)
+        if u_budget > 0 and p_cost > 0:
+            if p_cost <= u_budget:
+                factors.append({'label':'Budget','icon':'budget','impact':+8,'status':'ok',
+                    'reason':f'Estimated monthly cost (${p_cost}) is within your ${u_budget}/mo budget',
+                    'you':f'${u_budget}/mo','pet':f'${p_cost}/mo est.'})
+            elif p_cost <= u_budget * 1.3:
+                factors.append({'label':'Budget','icon':'budget','impact':-3,'status':'warn',
+                    'reason':f'Slightly over budget — ${p_cost}/mo vs your ${u_budget}/mo. Tight but manageable',
+                    'you':f'${u_budget}/mo','pet':f'${p_cost}/mo est.'})
+            else:
+                factors.append({'label':'Budget','icon':'budget','impact':-10,'status':'bad',
+                    'reason':f'Over budget — pet costs ~${p_cost}/mo but your budget is ${u_budget}/mo',
+                    'you':f'${u_budget}/mo','pet':f'${p_cost}/mo est.'})
+
+        # 8) Size preference
+        raw_pref = user.get('preferredSize', 'medium')
+        user_sizes = [str(s).lower() for s in raw_pref] if isinstance(raw_pref, list) else [str(raw_pref).lower()]
+        pet_size = str(compat.get('size', 'medium')).lower()
+        if pet_size in user_sizes:
+            factors.append({'label':'Size Preference','icon':'size','impact':+8,'status':'ok',
+                'reason':f'This pet\'s size ({pet_size}) matches your preference',
+                'you':', '.join(user_sizes),'pet':pet_size})
+        else:
+            factors.append({'label':'Size Preference','icon':'size','impact':-4,'status':'warn',
+                'reason':f'You preferred {" / ".join(user_sizes)} but this pet is {pet_size}',
+                'you':', '.join(user_sizes),'pet':pet_size})
+
+        return factors
+
+    # ── algorithm-level natural language ─────────────────────────────────
+    def _build_algorithm_insights(self, scores: Dict, pet: Dict) -> List[Dict]:
+        """Return per-algorithm human-readable insight."""
+        insights = []
+        cs = scores.get('content', 0)
+        if cs > 0:
+            if cs >= 80:
+                txt = 'Your lifestyle, space, experience and preferences align strongly with this pet.'
+            elif cs >= 60:
+                txt = 'Good overall fit — most factors align, a few minor gaps.'
+            elif cs >= 40:
+                txt = 'Moderate compatibility — some factors match, others need compromise.'
+            else:
+                txt = 'Several lifestyle factors don\'t align — review the factor breakdown above.'
+            insights.append({'algorithm':'Profile Compatibility','score':round(cs,1),'color':'#3b82f6',
+                'explanation':txt,'icon':'content'})
+
+        cf = scores.get('collaborative', 0)
+        if cf > 0:
+            if cf >= 80:
+                txt = f'Users with similar lifestyles overwhelmingly adopted {pet.get("species","pets")} like this — strong social signal.'
+            elif cf >= 60:
+                txt = f'Many users with profiles like yours showed interest in similar {pet.get("breed","breeds")}.'
+            elif cf >= 40:
+                txt = 'Some users with overlapping preferences interacted with similar pets.'
+            else:
+                txt = 'Limited data from similar users — this score is mostly based on general trends.'
+            insights.append({'algorithm':'Collaborative Filter','score':round(cf,1),'color':'#a855f7',
+                'explanation':txt,'icon':'collaborative'})
+
+        sp = scores.get('success', 0)
+        if sp > 0:
+            if sp >= 80:
+                txt = 'Historical adoption data shows very high success probability for this user-pet combination.'
+            elif sp >= 60:
+                txt = 'Good success indicators — similar past matches had positive outcomes.'
+            elif sp >= 40:
+                txt = 'Mixed signals — some similar matches succeeded, others faced challenges.'
+            else:
+                txt = 'Lower predicted success — pay attention to the warnings in the factor breakdown.'
+            insights.append({'algorithm':'Success Prediction','score':round(sp,1),'color':'#22c55e',
+                'explanation':txt,'icon':'success'})
+
+        cl = scores.get('clustering', 0)
+        if cl > 0:
+            cluster_name = pet.get('clusterName', '')
+            if cl >= 70:
+                txt = f'This pet\'s personality profile{(" ("+cluster_name+")") if cluster_name else ""} is an excellent match for your lifestyle type.'
+            elif cl >= 50:
+                txt = f'Reasonable personality alignment{(" — grouped as "+cluster_name) if cluster_name else ""}.'
+            else:
+                txt = f'Different personality cluster{(" ("+cluster_name+")") if cluster_name else ""} — you may need to adapt.'
+            insights.append({'algorithm':'Personality Cluster','score':round(cl,1),'color':'#f59e0b',
+                'explanation':txt,'icon':'clustering'})
+
+        return insights
+
+    # ── XGBoost feature-importance explainer ─────────────────────────────
+    def _get_xgboost_top_factors(self, user_profile: Dict, pet_profile: Dict, top_n: int = 5) -> List[Dict]:
+        """
+        Return the top-N XGBoost feature importances with human-readable labels.
+        This directly tells the user which features the ML model considers most
+        important when predicting adoption success.
+        """
+        if not self.xgb_model or not self.xgb_model.trained:
+            return []
+
+        fi = getattr(self.xgb_model, 'feature_importance', [])
+        if not fi:
+            return []
+
+        # Human-readable names for feature keys
+        _nice = {
+            'activityMatch':        'Activity-Energy Compatibility',
+            'childSafety':          'Child Safety Score',
+            'petCompatibility':     'Other-Pet Compatibility',
+            'budgetMatch':          'Budget Fit',
+            'yardMatch':            'Yard Requirement Match',
+            'aloneTimeMatch':       'Alone-Time Tolerance',
+            'contentMatchScore':    'Overall Profile Score',
+            'activityLevel':        'Your Activity Level',
+            'energyLevel':          'Pet Energy Level',
+            'experienceLevel_encoded': 'Owner Experience',
+            'childFriendlyScore':   'Child-Friendly Rating',
+            'petFriendlyScore':     'Pet-Friendly Rating',
+            'monthlyBudget':        'Your Monthly Budget',
+            'estimatedMonthlyCost': 'Pet Monthly Cost',
+            'hoursAlonePerDay':     'Hours Left Alone',
+            'maxHoursAlone':        'Pet Max Alone Time',
+            'workSchedule_encoded': 'Work Schedule',
+            'homeType_encoded':     'Home Type',
+            'homeSize':             'Home Size',
+            'hasYard':              'Has Yard',
+            'hasChildren':          'Has Children',
+            'hasOtherPets':         'Has Other Pets',
+            'petSize_encoded':      'Pet Size',
+            'trainedLevel_encoded': 'Pet Training Level',
+            'strangerFriendlyScore':'Stranger-Friendly Score',
+            'previousPets':         'Previous Pet Experience',
+        }
+
+        result = []
+        for item in fi[:top_n]:
+            fname = item.get('feature', '')
+            imp   = item.get('importance', 0)
+            result.append({
+                'feature': _nice.get(fname, fname.replace('_', ' ').title()),
+                'rawFeature': fname,
+                'importance': round(imp * 100, 1),   # percentage
+                'rank': item.get('rank', 0),
+            })
+        return result
+
+    @staticmethod
+    def _impact_label(impact: float) -> str:
+        if impact >= 12:  return 'Strong Positive'
+        if impact >= 5:   return 'Positive'
+        if impact >= -2:  return 'Neutral'
+        if impact >= -8:  return 'Slight Concern'
+        return 'Major Concern'
+
+    def get_algorithm_explanations(self, pet_recommendation: Dict) -> Dict:
+        """Legacy helper — wraps generate_xai_explanations."""
+        scores = pet_recommendation.get('algorithmScores', {})
+        insights = self._build_algorithm_insights(scores, pet_recommendation)
+        return {i['algorithm']: i['explanation'] for i in insights}
     
     def get_system_stats(self) -> Dict:
         """Get hybrid recommender system statistics"""

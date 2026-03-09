@@ -3,13 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient, resolveMediaUrl } from '../../../services/api';
 import {
   Box, Container, Typography, Button, Grid, Chip, LinearProgress,
-  CircularProgress, IconButton, Dialog, Stack, Alert, Tooltip, Collapse
+  CircularProgress, IconButton, Dialog, Stack, Alert, Tooltip, Collapse,
+  Badge
 } from '@mui/material';
 import {
   Refresh, Settings, Close, Pets, Favorite, EmojiEvents,
   Check, Warning, AutoAwesome, Psychology, Home, FitnessCenter,
   ChildCare, AttachMoney, Straighten, Speed, ContentCut, WatchLater,
-  DirectionsRun, KeyboardArrowDown, KeyboardArrowUp
+  DirectionsRun, KeyboardArrowDown, KeyboardArrowUp,
+  Lightbulb, TrendingUp, TrendingDown, RemoveCircleOutline,
+  Info, BarChart, FilterList, Clear, Category, Female, Male,
+  Cake, Tune
 } from '@mui/icons-material';
 
 /* ─── SVG Circular Match Score Ring ─────────────────────────── */
@@ -51,24 +55,117 @@ const AlgoBar = ({ label, value, color, desc }) => (
     {desc && <Typography variant="caption" sx={{ color:'#6b7280', mt:0.3, display:'block' }}>{desc}</Typography>}
   </Box>
 );
+/* ─── XAI (Explainable AI) components ─────────────────────────── */
 
+const xaiIcons = {
+  activity: <DirectionsRun fontSize="small" />,
+  home: <Home fontSize="small" />,
+  experience: <FitnessCenter fontSize="small" />,
+  children: <ChildCare fontSize="small" />,
+  pets: <Pets fontSize="small" />,
+  time: <WatchLater fontSize="small" />,
+  budget: <AttachMoney fontSize="small" />,
+  size: <Straighten fontSize="small" />,
+  info: <Info fontSize="small" />,
+};
+
+const sentimentColor = s => s === 'positive' ? '#22c55e' : s === 'negative' ? '#ef4444' : '#f59e0b';
+const sentimentBg    = s => s === 'positive' ? '#f0fdf4' : s === 'negative' ? '#fef2f2' : '#fffbeb';
+const sentimentBdr   = s => s === 'positive' ? '#bbf7d0' : s === 'negative' ? '#fecaca' : '#fde68a';
+const SentimentIcon  = ({ s }) => s === 'positive'
+  ? <TrendingUp sx={{ fontSize:16, color:'#22c55e' }} />
+  : s === 'negative'
+    ? <TrendingDown sx={{ fontSize:16, color:'#ef4444' }} />
+    : <RemoveCircleOutline sx={{ fontSize:16, color:'#f59e0b' }} />;
+
+/** Single XAI factor row — shows icon, label, impact badge, and reason text */
+const XaiFactorRow = ({ factor }) => {
+  const clr = sentimentColor(factor.sentiment);
+  const bg  = sentimentBg(factor.sentiment);
+  const bdr = sentimentBdr(factor.sentiment);
+  return (
+    <Box sx={{ border:'1px solid', borderColor:bdr, borderRadius:2, bgcolor:bg, mb:1, overflow:'hidden' }}>
+      <Box sx={{ display:'flex', alignItems:'center', gap:1, px:1.5, py:1 }}>
+        <Box sx={{ color:clr, display:'flex', flexShrink:0 }}>
+          {xaiIcons[factor.icon] || <Info fontSize="small" />}
+        </Box>
+        <Typography sx={{ fontWeight:700, fontSize:'0.82rem', color:'#111827', flex:1 }}>
+          {factor.factor}
+        </Typography>
+        <Box sx={{ display:'flex', alignItems:'center', gap:0.5, flexShrink:0 }}>
+          <SentimentIcon s={factor.sentiment} />
+          <Typography sx={{ fontSize:'0.68rem', fontWeight:700, color:clr,
+            bgcolor: factor.sentiment==='positive'?'rgba(34,197,94,0.12)':factor.sentiment==='negative'?'rgba(239,68,68,0.12)':'rgba(245,158,11,0.12)',
+            px:0.8, py:0.2, borderRadius:1 }}>
+            {factor.impactLabel}
+          </Typography>
+        </Box>
+      </Box>
+      <Box sx={{ px:1.5, pb:1.2, pt:0 }}>
+        <Typography sx={{ fontSize:'0.77rem', color:'#4b5563', lineHeight:1.6 }}>
+          {factor.text}
+        </Typography>
+      </Box>
+    </Box>
+  );
+};
+
+/** XGBoost feature importance mini-chart */
+const XgbFeatureChart = ({ factors }) => {
+  if (!factors || factors.length === 0) return null;
+  const maxImp = Math.max(...factors.map(f => f.importance), 1);
+  return (
+    <Box sx={{ mt:0.5 }}>
+      {factors.map((f, i) => (
+        <Box key={i} sx={{ display:'flex', alignItems:'center', gap:1, mb:1 }}>
+          <Typography sx={{ fontSize:'0.72rem', fontWeight:600, color:'#6b7280', width:130, flexShrink:0, textAlign:'right' }}>
+            {f.feature}
+          </Typography>
+          <Box sx={{ flex:1, height:7, bgcolor:'#f3f4f6', borderRadius:4, overflow:'hidden' }}>
+            <Box sx={{ width:`${(f.importance/maxImp)*100}%`, height:'100%', borderRadius:4,
+              bgcolor: i===0?'#22c55e':i===1?'#3b82f6':i===2?'#a855f7':'#f59e0b' }} />
+          </Box>
+          <Typography sx={{ fontSize:'0.72rem', fontWeight:700, color:'#374151', width:36, flexShrink:0 }}>
+            {f.importance}%
+          </Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+};
 /* ─── User vs Pet comparison row ────────────────────────────── */
-const CompareRow = ({ icon, label, userVal, petVal, status }) => {
+const CompareRow = ({ icon, label, userVal, petVal, status, note }) => {
   const col = { ok:'#22c55e', warn:'#f59e0b', bad:'#ef4444' }[status]||'#6b7280';
+  const bg  = { ok:'#f0fdf4', warn:'#fffbeb', bad:'#fef2f2' }[status]||'#f9fafb';
+  const bdr = { ok:'#bbf7d0', warn:'#fde68a', bad:'#fecaca' }[status]||'#e5e7eb';
   const Ico = { ok: Check, warn: Warning, bad: Warning }[status]||Check;
   return (
-    <Box sx={{ display:'flex', alignItems:'center', gap:1.5, py:1.2,
-      borderBottom:'1px solid #f3f4f6', '&:last-child':{ borderBottom:'none' } }}>
-      <Box sx={{ color:'#9ca3af', display:'flex' }}>{icon}</Box>
-      <Typography variant="body2" sx={{ fontWeight:600, color:'#374151', minWidth:110, flexShrink:0 }}>{label}</Typography>
-      <Box sx={{ flex:1, display:'flex', alignItems:'center', gap:0.6, flexWrap:'wrap' }}>
-        <Chip label={userVal} size="small"
-          sx={{ bgcolor:'#eff6ff', color:'#1d4ed8', fontWeight:600, fontSize:'0.72rem', height:22 }} />
-        <Typography sx={{ color:'#9ca3af', fontSize:'0.7rem' }}>→</Typography>
-        <Chip label={petVal} size="small"
-          sx={{ bgcolor:'#f9fafb', color:'#374151', fontWeight:600, fontSize:'0.72rem', height:22 }} />
+    <Box sx={{ borderRadius:2, border:'1px solid', mb:1.2, borderColor:bdr, bgcolor:bg, overflow:'hidden' }}>
+      {/* header row */}
+      <Box sx={{ display:'flex', alignItems:'center', gap:1.2, px:1.5, py:0.9 }}>
+        <Box sx={{ color:col, display:'flex', flexShrink:0 }}>{icon}</Box>
+        <Typography variant="body2" sx={{ fontWeight:700, color:'#111827', flex:1 }}>{label}</Typography>
+        <Ico sx={{ fontSize:17, color:col, flexShrink:0 }} />
       </Box>
-      <Ico sx={{ fontSize:18, color:col, flexShrink:0 }} />
+      {/* two-column value row */}
+      <Box sx={{ display:'flex', borderTop:'1px solid', borderColor:bdr }}>
+        <Box sx={{ flex:1, px:1.5, py:0.8, borderRight:'1px solid', borderColor:bdr }}>
+          <Typography sx={{ fontSize:'0.62rem', color:'#6b7280', fontWeight:700,
+            textTransform:'uppercase', letterSpacing:0.6, mb:0.3 }}>You</Typography>
+          <Typography sx={{ fontSize:'0.84rem', fontWeight:700, color:'#1d4ed8' }}>{userVal}</Typography>
+        </Box>
+        <Box sx={{ flex:1, px:1.5, py:0.8 }}>
+          <Typography sx={{ fontSize:'0.62rem', color:'#6b7280', fontWeight:700,
+            textTransform:'uppercase', letterSpacing:0.6, mb:0.3 }}>This Pet</Typography>
+          <Typography sx={{ fontSize:'0.84rem', fontWeight:700, color:'#374151' }}>{petVal}</Typography>
+        </Box>
+      </Box>
+      {/* context note */}
+      {note && (
+        <Box sx={{ px:1.5, py:0.6, borderTop:'1px solid', borderColor:bdr, bgcolor:'rgba(255,255,255,0.6)' }}>
+          <Typography sx={{ fontSize:'0.73rem', color:col, fontWeight:600 }}>{note}</Typography>
+        </Box>
+      )}
     </Box>
   );
 };
@@ -90,6 +187,30 @@ const SmartMatches = () => {
   const [cacheAgeMs, setCacheAgeMs]   = useState(null);
   const [dismissed, setDismissed]     = useState(new Set());
   const [activeImg, setActiveImg]     = useState(0);
+
+  // ── Multi-select filters ──────────────────────────────────
+  const [showFilters, setShowFilters]   = useState(false);
+  const [filters, setFilters] = useState({
+    species: [],   // e.g. ['Dog','Cat']
+    breed: [],     // e.g. ['Labrador','Siamese']
+    gender: [],    // e.g. ['Male','Female']
+    age: [],       // e.g. ['Puppy','Adult','Senior']
+    size: [],      // e.g. ['Small','Medium','Large']
+  });
+
+  const toggleFilter = (key, value) => {
+    setFilters(prev => {
+      const arr = prev[key] || [];
+      return {
+        ...prev,
+        [key]: arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value]
+      };
+    });
+  };
+
+  const clearAllFilters = () => setFilters({ species:[], breed:[], gender:[], age:[], size:[] });
+
+  const activeFilterCount = Object.values(filters).reduce((s, a) => s + a.length, 0);
 
   useEffect(() => { loadAll(); }, []);
 
@@ -146,6 +267,7 @@ const SmartMatches = () => {
       hybridScore: m.hybridScore || m.match_score || m.matchScore || p.hybridScore || 70,
       algorithmScores: m.algorithmScores || {},
       explanations: m.explanations || m.match_details?.match_reasons || [],
+      xai: m.xaiExplanations || {},
       matchDetails: m.match_details || m.matchDetails || {},
       confidence: m.confidence || 0,
       successProbability: m.successProbability || 0,
@@ -158,48 +280,164 @@ const SmartMatches = () => {
     if (!user) return [];
     const c = pet.compat || {};
     const rows = [];
-    // Activity
+
+    // ── Helpers ──────────────────────────────────────
+    const actLabel = n => ['','Relaxed','Light','Moderate','Active','Very Active'][Math.min(5,Math.max(1,Math.round(n)))]||'Moderate';
+    const engLabel = n => ['','Very Low','Low','Medium','High','Very High'][Math.min(5,Math.max(1,Math.round(n)))]||'Medium';
+    const homeLabel = h => ({ apartment:'Apartment', house:'House', house_with_yard:'House + Yard',
+      condo:'Condo', farm:'Farm / Rural' })[String(h).toLowerCase()] || String(h).replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) || 'Home';
+    const expLabel = e => ({ beginner:'Beginner', first_time:'First-Time Owner', some_experience:'Some Experience',
+      intermediate:'Intermediate', experienced:'Experienced', advanced:'Advanced Owner' })[String(e).toLowerCase()] || String(e);
+    const trainLabel = t => ({ untrained:'Needs Training', basic:'Basic Training',
+      intermediate:'Intermediate', advanced:'Well Trained' })[String(t).toLowerCase()] || String(t);
+    const friendLabel = s => s>=8?'Excellent':s>=6?'Good':s>=4?'Fair':'Not Recommended';
+    const fmt$ = n => '$'+Number(n).toLocaleString();
+
+    // ── Activity Level ────────────────────────────────
     const uAct = Number(user.activityLevel||3), pEng = Number(c.energyLevel||3), adiff = Math.abs(uAct-pEng);
+    const actSt = adiff<=1?'ok':adiff<=2?'warn':'bad';
     rows.push({ icon:<DirectionsRun fontSize="small"/>, label:'Activity Level',
-      userVal:`Level ${uAct}/5`, petVal:`Energy ${pEng}/5`,
-      status: adiff<=1?'ok': adiff<=2?'warn':'bad' });
-    // Space
-    const ht = String(user.homeType||'').toLowerCase(), canApt = c.canLiveInApartment!==false, needYard = c.needsYard===true, hasYard = user.hasYard===true;
-    let spSt='ok'; if(ht.includes('apartment')&&!canApt) spSt='bad'; else if(needYard&&!hasYard) spSt='warn';
+      userVal: actLabel(uAct), petVal: engLabel(pEng)+' energy',
+      status: actSt,
+      note: actSt==='ok'?'Great energy match — your lifestyle suits this pet'
+          : actSt==='warn'?'Slight mismatch — manageable with exercise'
+          : 'Energy mismatch — this pet needs a more active owner' });
+
+    // ── Living Space ──────────────────────────────────
+    const ht = String(user.homeType||'').toLowerCase();
+    const canApt = c.canLiveInApartment!==false, needYard = c.needsYard===true, hasYard = user.hasYard===true;
+    let spSt='ok';
+    if (ht.includes('apartment')&&!canApt) spSt='bad';
+    else if (needYard&&!hasYard) spSt='warn';
+    const petSpaceLabel = needYard?'Yard required':(canApt?'Indoor / Apartment OK':'Prefers a house');
     rows.push({ icon:<Home fontSize="small"/>, label:'Living Space',
-      userVal: ht||'home', petVal: needYard?'Yard needed': canApt?'Apartment OK':'House needed', status:spSt });
-    // Experience
+      userVal: homeLabel(user.homeType)+(user.hasYard?' ✓ Has yard':''),
+      petVal: petSpaceLabel, status: spSt,
+      note: spSt==='ok'?'Your home suits this pet perfectly'
+          : spSt==='warn'?'Pet prefers a yard — outdoor walks can compensate'
+          : 'This pet does not do well in apartments' });
+
+    // ── Owner Experience ──────────────────────────────
     const expM={beginner:1,first_time:1,some_experience:2,intermediate:2,experienced:3,advanced:3};
     const trM={untrained:1,basic:2,intermediate:3,advanced:4};
     const uExp=expM[String(user.experienceLevel||'beginner').toLowerCase()]||1;
     const pTr=trM[String(c.trainedLevel||'basic').toLowerCase()]||2;
-    rows.push({ icon:<FitnessCenter fontSize="small"/>, label:'Experience',
-      userVal: user.experienceLevel||'Beginner', petVal: c.trainedLevel||'Basic',
-      status: uExp>=pTr?'ok': uExp>=pTr-1?'warn':'bad' });
-    // Children
+    const expSt = uExp>=pTr?'ok':uExp>=pTr-1?'warn':'bad';
+    rows.push({ icon:<FitnessCenter fontSize="small"/>, label:'Owner Experience',
+      userVal: expLabel(user.experienceLevel), petVal: trainLabel(c.trainedLevel),
+      status: expSt,
+      note: expSt==='ok'?'Your experience level is a good fit'
+          : expSt==='warn'?'Manageable — some patience and training needed'
+          : 'This pet needs an experienced owner to thrive' });
+
+    // ── Children (only if user has kids) ─────────────
     if (user.hasChildren) {
-      const cs=Number(c.childFriendlyScore||5);
-      rows.push({ icon:<ChildCare fontSize="small"/>, label:'Good with Kids',
-        userVal:'Has children', petVal:`Score ${cs}/10`, status:cs>=7?'ok':cs>=4?'warn':'bad' });
+      const cs = Number(c.childFriendlyScore||0);
+      const kSt = cs>=7?'ok':cs>=4?'warn':'bad';
+      rows.push({ icon:<ChildCare fontSize="small"/>, label:'Kids Compatibility',
+        userVal:'You have children', petVal: friendLabel(cs)+' with kids',
+        status: kSt,
+        note: kSt==='ok'?'This pet does great around children'
+            : kSt==='warn'?'Supervision recommended around young children'
+            : 'Not recommended for households with young children' });
     }
-    // Other pets
+
+    // ── Other Pets (only if user has pets) ───────────
     if (user.hasOtherPets) {
-      const ps=Number(c.petFriendlyScore||5);
-      rows.push({ icon:<Pets fontSize="small"/>, label:'Other Pets',
-        userVal:'Has other pets', petVal:`Score ${ps}/10`, status:ps>=7?'ok':ps>=4?'warn':'bad' });
+      const ps = Number(c.petFriendlyScore||0);
+      const pSt = ps>=7?'ok':ps>=4?'warn':'bad';
+      rows.push({ icon:<Pets fontSize="small"/>, label:'Pet Compatibility',
+        userVal:'You have other pets', petVal: friendLabel(ps)+' with pets',
+        status: pSt,
+        note: pSt==='ok'?'Gets along well with other animals'
+            : pSt==='warn'?'Slow introduction recommended'
+            : 'May not get along with other pets' });
     }
-    // Time alone
+
+    // ── Time Alone ────────────────────────────────────
     const uH=Number(user.hoursAlonePerDay||8), pM=Number(c.maxHoursAlone||6);
-    rows.push({ icon:<WatchLater fontSize="small"/>, label:'Time Alone',
-      userVal:`${uH}h/day`, petVal:`Max ${pM}h`, status:uH<=pM?'ok':uH<=pM+2?'warn':'bad' });
-    // Budget
+    const tSt = uH<=pM?'ok':uH<=pM+2?'warn':'bad';
+    rows.push({ icon:<WatchLater fontSize="small"/>, label:'Time Left Alone',
+      userVal:`You\'re away ${uH}h/day`, petVal:`Tolerates up to ${pM}h`,
+      status: tSt,
+      note: tSt==='ok'?'This pet is comfortable with your schedule'
+          : tSt==='warn'?`Only ${uH-pM}h over limit — a pet-sitter helps`
+          : `${uH-pM}h over this pet\'s limit — may cause separation anxiety` });
+
+    // ── Monthly Cost ──────────────────────────────────
     const uB=Number(user.monthlyBudget||0), pC=Number(c.estimatedMonthlyCost||0);
-    if(uB>0&&pC>0) rows.push({ icon:<AttachMoney fontSize="small"/>, label:'Monthly Cost',
-      userVal:`$${uB}/mo budget`, petVal:`~$${pC}/mo`, status:pC<=uB?'ok':pC<=uB*1.3?'warn':'bad' });
+    if (uB>0&&pC>0) {
+      const bSt = pC<=uB?'ok':pC<=uB*1.3?'warn':'bad';
+      rows.push({ icon:<AttachMoney fontSize="small"/>, label:'Monthly Cost',
+        userVal:`Your budget: ${fmt$(uB)}/mo`, petVal:`Est. cost: ${fmt$(pC)}/mo`,
+        status: bSt,
+        note: bSt==='ok'?'Comfortably within your budget'
+            : bSt==='warn'?`${fmt$(pC-uB)}/mo over budget — tight but possible`
+            : `${fmt$(pC-uB)}/mo over budget — may be financially straining` });
+    }
+
     return rows;
   };
 
   const openDetails = match => { setSelectedPet(match); setActiveImg(0); setDrawerOpen(true); };
+
+  // ── Extract unique filter options from ALL matches ────────
+  const filterOptions = React.useMemo(() => {
+    const species = new Set(), breed = new Set(), gender = new Set(), age = new Set(), size = new Set();
+    matches.forEach(m => {
+      const p = extractPet(m);
+      if (p.species) species.add(p.species);
+      if (p.breed)   breed.add(p.breed);
+      if (p.gender)  gender.add(p.gender);
+      const ageStr = String(p.age || '').toLowerCase();
+      if (ageStr) {
+        if (ageStr.includes('puppy') || ageStr.includes('kitten') || ageStr.includes('baby')) age.add('Baby/Puppy');
+        else if (ageStr.includes('young') || ageStr.includes('junior')) age.add('Young');
+        else if (ageStr.includes('adult')) age.add('Adult');
+        else if (ageStr.includes('senior') || ageStr.includes('old')) age.add('Senior');
+        else age.add(p.age);
+      }
+      const sz = (p.compat?.size || '').toString();
+      if (sz) size.add(sz.charAt(0).toUpperCase() + sz.slice(1).toLowerCase());
+    });
+    return {
+      species: [...species].sort(),
+      breed:   [...breed].sort(),
+      gender:  [...gender].sort(),
+      age:     [...age].sort(),
+      size:    [...size].sort(),
+    };
+  }, [matches, extractPet]);
+
+  // ── Apply filters + breed dismiss ─────────────────────────
+  const visible = React.useMemo(() => {
+    return matches.filter(m => {
+      const p = extractPet(m);
+      if (dismissed.has((p.breed || '').toLowerCase())) return false;
+
+      if (filters.species.length > 0 && !filters.species.includes(p.species)) return false;
+      if (filters.breed.length   > 0 && !filters.breed.includes(p.breed))     return false;
+      if (filters.gender.length  > 0 && !filters.gender.includes(p.gender))   return false;
+
+      if (filters.size.length > 0) {
+        const petSize = (p.compat?.size || '').toString();
+        const petSizeNorm = petSize.charAt(0).toUpperCase() + petSize.slice(1).toLowerCase();
+        if (!filters.size.includes(petSizeNorm)) return false;
+      }
+
+      if (filters.age.length > 0) {
+        const ageStr = String(p.age || '').toLowerCase();
+        let bucket = p.age;
+        if (ageStr.includes('puppy') || ageStr.includes('kitten') || ageStr.includes('baby')) bucket = 'Baby/Puppy';
+        else if (ageStr.includes('young') || ageStr.includes('junior')) bucket = 'Young';
+        else if (ageStr.includes('adult')) bucket = 'Adult';
+        else if (ageStr.includes('senior') || ageStr.includes('old')) bucket = 'Senior';
+        if (!filters.age.includes(bucket)) return false;
+      }
+
+      return true;
+    });
+  }, [matches, filters, dismissed, extractPet]);
 
   /* ── LOADING ── */
   if (loading) return (
@@ -214,8 +452,6 @@ const SmartMatches = () => {
       <Typography variant="body2" sx={{ color:'#9ca3af' }}>AI is analysing compatibility</Typography>
     </Box>
   );
-
-  const visible = matches.filter(m => !dismissed.has((extractPet(m).breed||'').toLowerCase()));
 
   /* ════════════════════════ RENDER ═══════════════════════════ */
   return (
@@ -240,7 +476,8 @@ const SmartMatches = () => {
               </Typography>
               {visible.length>0 && (
                 <Typography sx={{ color:'rgba(255,255,255,0.55)', fontSize:'0.8rem', mt:0.5 }}>
-                  {visible.length} compatible pets ranked for you
+                  {visible.length}{activeFilterCount > 0 ? ` of ${matches.length}` : ''} compatible pets ranked for you
+                  {activeFilterCount > 0 && ' (filtered)'}
                 </Typography>
               )}
             </Box>
@@ -287,6 +524,191 @@ const SmartMatches = () => {
       </Box>
 
       <Container maxWidth="xl" sx={{ py:4 }}>
+
+        {/* ── FILTER BAR ── */}
+        <Box sx={{ mb:3 }}>
+          {/* Filter toggle button */}
+          <Box sx={{ display:'flex', alignItems:'center', gap:1.5, mb: showFilters ? 2 : 0 }}>
+            <Button
+              startIcon={
+                <Badge badgeContent={activeFilterCount} color="error"
+                  sx={{ '& .MuiBadge-badge':{ fontSize:'0.65rem', minWidth:16, height:16 } }}>
+                  <FilterList />
+                </Badge>
+              }
+              onClick={() => setShowFilters(v => !v)}
+              variant={activeFilterCount > 0 ? 'contained' : 'outlined'}
+              size="small"
+              sx={{
+                textTransform:'none', fontWeight:700, borderRadius:2,
+                ...(activeFilterCount > 0
+                  ? { bgcolor:'#065f46', '&:hover':{ bgcolor:'#047857' } }
+                  : { borderColor:'#d1d5db', color:'#374151', '&:hover':{ borderColor:'#9ca3af' } })
+              }}>
+              Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
+              {showFilters ? <KeyboardArrowUp sx={{ ml:0.5, fontSize:18 }} /> : <KeyboardArrowDown sx={{ ml:0.5, fontSize:18 }} />}
+            </Button>
+
+            {activeFilterCount > 0 && (
+              <Button size="small" startIcon={<Clear sx={{ fontSize:14 }} />}
+                onClick={clearAllFilters}
+                sx={{ textTransform:'none', color:'#6b7280', fontSize:'0.78rem', '&:hover':{ color:'#ef4444' } }}>
+                Clear all
+              </Button>
+            )}
+
+            {/* Active filter chips summary (always visible) */}
+            {activeFilterCount > 0 && !showFilters && (
+              <Box sx={{ display:'flex', gap:0.6, flexWrap:'wrap', flex:1 }}>
+                {Object.entries(filters).flatMap(([key, vals]) =>
+                  vals.map(v => (
+                    <Chip key={`${key}-${v}`} label={v} size="small"
+                      onDelete={() => toggleFilter(key, v)}
+                      sx={{ bgcolor:'#eff6ff', color:'#1d4ed8', fontWeight:600, fontSize:'0.7rem', height:24,
+                        '& .MuiChip-deleteIcon':{ fontSize:14, color:'#3b82f6', '&:hover':{ color:'#ef4444' } } }} />
+                  ))
+                )}
+              </Box>
+            )}
+          </Box>
+
+          {/* Expanded filter panel */}
+          <Collapse in={showFilters}>
+            <Box sx={{ bgcolor:'#fff', border:'1px solid #e5e7eb', borderRadius:3, p:2.5,
+              boxShadow:'0 2px 12px rgba(0,0,0,0.04)' }}>
+
+              {/* Species */}
+              {filterOptions.species.length > 0 && (
+                <Box sx={{ mb:2 }}>
+                  <Box sx={{ display:'flex', alignItems:'center', gap:0.8, mb:1 }}>
+                    <Category sx={{ fontSize:16, color:'#6b7280' }} />
+                    <Typography sx={{ fontSize:'0.75rem', fontWeight:800, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.8 }}>Species</Typography>
+                  </Box>
+                  <Box sx={{ display:'flex', gap:0.8, flexWrap:'wrap' }}>
+                    {filterOptions.species.map(s => {
+                      const active = filters.species.includes(s);
+                      return (
+                        <Chip key={s} label={s} size="small" clickable onClick={() => toggleFilter('species', s)}
+                          sx={{ fontWeight:600, fontSize:'0.76rem', height:28, borderRadius:2,
+                            bgcolor: active?'#065f46':'#f9fafb', color: active?'#fff':'#374151',
+                            border:'1px solid '+(active?'#065f46':'#d1d5db'),
+                            '&:hover':{ bgcolor:active?'#047857':'#f3f4f6' } }} />
+                      );
+                    })}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Breed */}
+              {filterOptions.breed.length > 0 && (
+                <Box sx={{ mb:2 }}>
+                  <Box sx={{ display:'flex', alignItems:'center', gap:0.8, mb:1 }}>
+                    <Pets sx={{ fontSize:16, color:'#6b7280' }} />
+                    <Typography sx={{ fontSize:'0.75rem', fontWeight:800, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.8 }}>Breed</Typography>
+                  </Box>
+                  <Box sx={{ display:'flex', gap:0.8, flexWrap:'wrap' }}>
+                    {filterOptions.breed.map(b => {
+                      const active = filters.breed.includes(b);
+                      return (
+                        <Chip key={b} label={b} size="small" clickable onClick={() => toggleFilter('breed', b)}
+                          sx={{ fontWeight:600, fontSize:'0.76rem', height:28, borderRadius:2,
+                            bgcolor: active?'#1d4ed8':'#f9fafb', color: active?'#fff':'#374151',
+                            border:'1px solid '+(active?'#1d4ed8':'#d1d5db'),
+                            '&:hover':{ bgcolor:active?'#1e40af':'#f3f4f6' } }} />
+                      );
+                    })}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Gender + Age + Size in a row */}
+              <Box sx={{ display:'flex', gap:3, flexWrap:'wrap' }}>
+                {/* Gender */}
+                {filterOptions.gender.length > 0 && (
+                  <Box sx={{ minWidth:120 }}>
+                    <Box sx={{ display:'flex', alignItems:'center', gap:0.8, mb:1 }}>
+                      <Box sx={{ display:'flex', color:'#6b7280' }}>
+                        {filterOptions.gender.some(g => g.toLowerCase()==='male') ? <Male sx={{ fontSize:16 }} /> : <Female sx={{ fontSize:16 }} />}
+                      </Box>
+                      <Typography sx={{ fontSize:'0.75rem', fontWeight:800, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.8 }}>Gender</Typography>
+                    </Box>
+                    <Box sx={{ display:'flex', gap:0.8, flexWrap:'wrap' }}>
+                      {filterOptions.gender.map(g => {
+                        const active = filters.gender.includes(g);
+                        return (
+                          <Chip key={g} label={g} size="small" clickable onClick={() => toggleFilter('gender', g)}
+                            sx={{ fontWeight:600, fontSize:'0.76rem', height:28, borderRadius:2,
+                              bgcolor: active?'#7e22ce':'#f9fafb', color: active?'#fff':'#374151',
+                              border:'1px solid '+(active?'#7e22ce':'#d1d5db'),
+                              '&:hover':{ bgcolor:active?'#6b21a8':'#f3f4f6' } }} />
+                        );
+                      })}
+                    </Box>
+                  </Box>
+                )}
+
+                {/* Age */}
+                {filterOptions.age.length > 0 && (
+                  <Box sx={{ minWidth:120 }}>
+                    <Box sx={{ display:'flex', alignItems:'center', gap:0.8, mb:1 }}>
+                      <Cake sx={{ fontSize:16, color:'#6b7280' }} />
+                      <Typography sx={{ fontSize:'0.75rem', fontWeight:800, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.8 }}>Age</Typography>
+                    </Box>
+                    <Box sx={{ display:'flex', gap:0.8, flexWrap:'wrap' }}>
+                      {filterOptions.age.map(a => {
+                        const active = filters.age.includes(a);
+                        return (
+                          <Chip key={a} label={a} size="small" clickable onClick={() => toggleFilter('age', a)}
+                            sx={{ fontWeight:600, fontSize:'0.76rem', height:28, borderRadius:2,
+                              bgcolor: active?'#c2410c':'#f9fafb', color: active?'#fff':'#374151',
+                              border:'1px solid '+(active?'#c2410c':'#d1d5db'),
+                              '&:hover':{ bgcolor:active?'#9a3412':'#f3f4f6' } }} />
+                        );
+                      })}
+                    </Box>
+                  </Box>
+                )}
+
+                {/* Size */}
+                {filterOptions.size.length > 0 && (
+                  <Box sx={{ minWidth:120 }}>
+                    <Box sx={{ display:'flex', alignItems:'center', gap:0.8, mb:1 }}>
+                      <Straighten sx={{ fontSize:16, color:'#6b7280' }} />
+                      <Typography sx={{ fontSize:'0.75rem', fontWeight:800, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.8 }}>Size</Typography>
+                    </Box>
+                    <Box sx={{ display:'flex', gap:0.8, flexWrap:'wrap' }}>
+                      {filterOptions.size.map(s => {
+                        const active = filters.size.includes(s);
+                        return (
+                          <Chip key={s} label={s} size="small" clickable onClick={() => toggleFilter('size', s)}
+                            sx={{ fontWeight:600, fontSize:'0.76rem', height:28, borderRadius:2,
+                              bgcolor: active?'#0369a1':'#f9fafb', color: active?'#fff':'#374151',
+                              border:'1px solid '+(active?'#0369a1':'#d1d5db'),
+                              '&:hover':{ bgcolor:active?'#075985':'#f3f4f6' } }} />
+                        );
+                      })}
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+
+              {/* Results count */}
+              <Box sx={{ mt:2, pt:1.5, borderTop:'1px solid #f3f4f6', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <Typography sx={{ fontSize:'0.78rem', color:'#6b7280' }}>
+                  Showing <strong style={{ color:'#111827' }}>{visible.length}</strong> of {matches.length} pets
+                </Typography>
+                {activeFilterCount > 0 && (
+                  <Button size="small" startIcon={<Clear sx={{ fontSize:14 }} />}
+                    onClick={clearAllFilters}
+                    sx={{ textTransform:'none', fontSize:'0.75rem', color:'#ef4444' }}>
+                    Reset filters
+                  </Button>
+                )}
+              </Box>
+            </Box>
+          </Collapse>
+        </Box>
+
         {/* banners */}
         {!mlAvailable && <Alert severity="warning" sx={{ mb:3, borderRadius:2 }}>AI/ML service offline — showing profile-based results.</Alert>}
         {cacheAgeMs!=null && (
@@ -310,12 +732,25 @@ const SmartMatches = () => {
               alignItems:'center', justifyContent:'center', mx:'auto', mb:3 }}>
               <Pets sx={{ fontSize:48, color:'#d1fae5' }} />
             </Box>
-            <Typography variant="h6" sx={{ fontWeight:700, color:'#374151', mb:1 }}>No matches found</Typography>
-            <Typography sx={{ color:'#6b7280', mb:3 }}>No pets currently match your profile. Try updating your preferences.</Typography>
-            <Button variant="contained" onClick={()=>navigate('/user/adoption/profile-wizard')}
-              sx={{ bgcolor:'#065f46', textTransform:'none', fontWeight:700, borderRadius:2 }}>
-              Update Preferences
-            </Button>
+            <Typography variant="h6" sx={{ fontWeight:700, color:'#374151', mb:1 }}>
+              {activeFilterCount > 0 ? 'No pets match your filters' : 'No matches found'}
+            </Typography>
+            <Typography sx={{ color:'#6b7280', mb:3 }}>
+              {activeFilterCount > 0
+                ? `${matches.length} pets available — try removing some filters.`
+                : 'No pets currently match your profile. Try updating your preferences.'}
+            </Typography>
+            {activeFilterCount > 0 ? (
+              <Button variant="contained" startIcon={<Clear />} onClick={clearAllFilters}
+                sx={{ bgcolor:'#065f46', textTransform:'none', fontWeight:700, borderRadius:2 }}>
+                Clear All Filters
+              </Button>
+            ) : (
+              <Button variant="contained" onClick={()=>navigate('/user/adoption/profile-wizard')}
+                sx={{ bgcolor:'#065f46', textTransform:'none', fontWeight:700, borderRadius:2 }}>
+                Update Preferences
+              </Button>
+            )}
           </Box>
         )}
 
@@ -400,11 +835,19 @@ const SmartMatches = () => {
                         sx={{ height:5, borderRadius:3, bgcolor:'#f3f4f6', mb:1.5,
                           '& .MuiLinearProgress-bar':{ borderRadius:3, bgcolor:color } }} />
 
-                      {/* top AI reason */}
-                      {pet.explanations.length>0 && (
-                        <Box sx={{ bgcolor:'#f0fdf4', borderRadius:1.5, px:1.2, py:0.8, mb:1.5, borderLeft:'3px solid '+color }}>
-                          <Typography sx={{ fontSize:'0.74rem', color:'#166534', lineHeight:1.45 }}>
-                            {String(pet.explanations[0]).replace(/^[✓⚠️~⚠]\s*/,'')}
+                      {/* top XAI reason (factor-level) or fallback to generic explanation */}
+                      {(pet.xai?.topReasons?.length > 0 || pet.explanations.length > 0) && (
+                        <Box sx={{ bgcolor: pet.xai?.topReasons?.[0]?.sentiment==='negative' ? '#fef2f2' : '#f0fdf4',
+                          borderRadius:1.5, px:1.2, py:0.8, mb:1.5,
+                          borderLeft:'3px solid '+(pet.xai?.topReasons?.[0]?.sentiment==='negative' ? '#ef4444' : color) }}>
+                          <Box sx={{ display:'flex', alignItems:'center', gap:0.6, mb:0.2 }}>
+                            <Lightbulb sx={{ fontSize:13, color: pet.xai?.topReasons?.[0]?.sentiment==='negative' ? '#ef4444' : '#166534' }} />
+                            <Typography sx={{ fontSize:'0.65rem', fontWeight:800, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5 }}>
+                              {pet.xai?.topReasons?.[0]?.factor || 'AI Insight'}
+                            </Typography>
+                          </Box>
+                          <Typography sx={{ fontSize:'0.74rem', color: pet.xai?.topReasons?.[0]?.sentiment==='negative' ? '#991b1b' : '#166534', lineHeight:1.45 }}>
+                            {pet.xai?.topReasons?.[0]?.text || String(pet.explanations[0]).replace(/^[✓⚠️~⚠]\s*/,'')}
                           </Typography>
                         </Box>
                       )}
@@ -479,17 +922,41 @@ const SmartMatches = () => {
             { label:'Type',         val: pet.clusterName || (pet.compat?.size ? pet.compat.size+' '+pet.species : pet.species) },
           ];
 
+          // human-readable helpers
+          const engLbl = n => ['','Very Low','Low','Medium','High','Very High'][Math.min(5,Math.max(1,Math.round(Number(n))))]||'Medium';
+          const sizeLbl = s => ({ tiny:'Tiny', small:'Small', medium:'Medium', large:'Large', giant:'Giant' })[String(s).toLowerCase()] || String(s).replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+          const trainLbl = t => ({ untrained:'Needs Training', basic:'Basic-Trained', intermediate:'Well Trained', advanced:'Fully Trained' })[String(t).toLowerCase()] || String(t).replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+          const levelLbl = t => ({ low:'Low', moderate:'Moderate', medium:'Moderate', high:'High', very_high:'Very High' })[String(t).toLowerCase()] || String(t).replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+          const scoreLbl = s => { const n=Number(s); return n>=8?'Excellent':n>=6?'Good':n>=4?'Fair':'Not Ideal'; };
+          const scoreClr = s => { const n=Number(s); return n>=8?'#22c55e':n>=6?'#3b82f6':n>=4?'#f59e0b':'#ef4444'; };
+
           const compatItems = [
-            { icon:<Speed fontSize="small"/>,       label:'Energy',      val: pet.compat.energyLevel!=null?`${pet.compat.energyLevel}/5`:null },
-            { icon:<Straighten fontSize="small"/>,  label:'Size',        val: pet.compat.size||null },
-            { icon:<FitnessCenter fontSize="small"/>,label:'Training',   val: pet.compat.trainedLevel||null },
-            { icon:<DirectionsRun fontSize="small"/>,label:'Exercise',   val: pet.compat.exerciseNeeds||null },
-            { icon:<ContentCut fontSize="small"/>,  label:'Grooming',    val: pet.compat.groomingNeeds||null },
-            { icon:<Home fontSize="small"/>,        label:'Apt OK',      val: pet.compat.canLiveInApartment!=null?(pet.compat.canLiveInApartment?'Yes':'No'):null },
-            { icon:<ChildCare fontSize="small"/>,   label:'Kids',        val: pet.compat.childFriendlyScore!=null?`${pet.compat.childFriendlyScore}/10`:null },
-            { icon:<Pets fontSize="small"/>,        label:'Pets',        val: pet.compat.petFriendlyScore!=null?`${pet.compat.petFriendlyScore}/10`:null },
-            { icon:<WatchLater fontSize="small"/>,  label:'Max Alone',   val: pet.compat.maxHoursAlone!=null?`${pet.compat.maxHoursAlone}h`:null },
-            { icon:<AttachMoney fontSize="small"/>, label:'Monthly',     val: pet.compat.estimatedMonthlyCost?`~$${pet.compat.estimatedMonthlyCost}`:null },
+            { icon:<Speed fontSize="small"/>,        label:'Energy Level',
+              val: pet.compat.energyLevel!=null ? engLbl(pet.compat.energyLevel) : null,
+              sub: pet.compat.energyLevel!=null ? `${pet.compat.energyLevel} / 5` : null },
+            { icon:<Straighten fontSize="small"/>,   label:'Size',
+              val: pet.compat.size ? sizeLbl(pet.compat.size) : null },
+            { icon:<FitnessCenter fontSize="small"/>, label:'Training Level',
+              val: pet.compat.trainedLevel ? trainLbl(pet.compat.trainedLevel) : null },
+            { icon:<DirectionsRun fontSize="small"/>, label:'Exercise Needs',
+              val: pet.compat.exerciseNeeds ? levelLbl(pet.compat.exerciseNeeds) : null },
+            { icon:<ContentCut fontSize="small"/>,   label:'Grooming',
+              val: pet.compat.groomingNeeds ? levelLbl(pet.compat.groomingNeeds) : null },
+            { icon:<Home fontSize="small"/>,         label:'Apartment OK',
+              val: pet.compat.canLiveInApartment!=null ? (pet.compat.canLiveInApartment?'Yes — Adapts Well':'No — Needs Space') : null,
+              clr: pet.compat.canLiveInApartment ? '#22c55e' : '#ef4444' },
+            { icon:<ChildCare fontSize="small"/>,    label:'With Children',
+              val: pet.compat.childFriendlyScore!=null ? scoreLbl(pet.compat.childFriendlyScore) : null,
+              sub: pet.compat.childFriendlyScore!=null ? `${pet.compat.childFriendlyScore}/10` : null,
+              clr: pet.compat.childFriendlyScore!=null ? scoreClr(pet.compat.childFriendlyScore) : null },
+            { icon:<Pets fontSize="small"/>,         label:'With Other Pets',
+              val: pet.compat.petFriendlyScore!=null ? scoreLbl(pet.compat.petFriendlyScore) : null,
+              sub: pet.compat.petFriendlyScore!=null ? `${pet.compat.petFriendlyScore}/10` : null,
+              clr: pet.compat.petFriendlyScore!=null ? scoreClr(pet.compat.petFriendlyScore) : null },
+            { icon:<WatchLater fontSize="small"/>,   label:'Max Time Alone',
+              val: pet.compat.maxHoursAlone!=null ? `Up to ${pet.compat.maxHoursAlone} hours` : null },
+            { icon:<AttachMoney fontSize="small"/>,  label:'Est. Monthly Cost',
+              val: pet.compat.estimatedMonthlyCost ? `$${Number(pet.compat.estimatedMonthlyCost).toLocaleString()}/mo` : null },
           ].filter(r=>r.val!=null && r.val!=='');
 
           return (
@@ -577,20 +1044,70 @@ const SmartMatches = () => {
                   </Grid>
                 </Box>
 
-                {/* ── WHY YOU MATCH ── */}
+                {/* ── XAI: WHY THIS PET? (Explainable AI) ── */}
                 <Box sx={{ bgcolor:'#fff', my:1.5, p:2.5 }}>
-                  <Typography sx={{ fontWeight:800, fontSize:'1rem', color:'#111827', mb:0.4 }}>Why You Match</Typography>
+                  <Box sx={{ display:'flex', alignItems:'center', gap:1, mb:0.4 }}>
+                    <Lightbulb sx={{ fontSize:20, color:'#f59e0b' }} />
+                    <Typography sx={{ fontWeight:800, fontSize:'1rem', color:'#111827' }}>Why This Pet?</Typography>
+                  </Box>
                   <Typography sx={{ fontSize:'0.77rem', color:'#6b7280', mb:2 }}>
-                    Trait-by-trait: your profile vs {pet.name}'s needs
+                    Explainable AI — every factor that influenced this recommendation
                   </Typography>
 
-                  {comps.length>0
-                    ? comps.map((row,i)=><CompareRow key={i} {...row} />)
-                    : <Typography variant="body2" sx={{ color:'#9ca3af' }}>Complete your profile to see comparisons.</Typography>
-                  }
+                  {/* XAI Factor Breakdown */}
+                  {pet.xai?.topReasons?.length > 0 ? (
+                    <Box sx={{ mb:2 }}>
+                      {pet.xai.topReasons.map((f, i) => <XaiFactorRow key={i} factor={f} />)}
+                    </Box>
+                  ) : comps.length > 0 ? (
+                    comps.map((row, i) => <CompareRow key={i} {...row} />)
+                  ) : (
+                    <Typography variant="body2" sx={{ color:'#9ca3af' }}>Complete your profile to see comparisons.</Typography>
+                  )}
 
-                  {/* AI text explanations */}
-                  {pet.explanations.filter(e=>!String(e).startsWith('⚠')).length>0 && (
+                  {/* Algorithm Insights — per-algorithm natural language */}
+                  {pet.xai?.algorithmInsights?.length > 0 && (
+                    <Box sx={{ mt:2, pt:2, borderTop:'1px solid #f3f4f6' }}>
+                      <Typography sx={{ fontSize:'0.77rem', fontWeight:700, color:'#374151', mb:1.2 }}>Algorithm Insights</Typography>
+                      <Stack spacing={1}>
+                        {pet.xai.algorithmInsights.map((ins, i) => (
+                          <Box key={i} sx={{ bgcolor:'#f9fafb', border:'1px solid #e5e7eb', borderRadius:2, p:1.4 }}>
+                            <Box sx={{ display:'flex', alignItems:'center', gap:0.8, mb:0.5 }}>
+                              <Box sx={{ width:8, height:8, borderRadius:'50%', bgcolor:ins.color, flexShrink:0 }} />
+                              <Typography sx={{ fontWeight:700, fontSize:'0.78rem', color:'#111827', flex:1 }}>
+                                {ins.algorithm}
+                              </Typography>
+                              <Typography sx={{ fontWeight:800, fontSize:'0.78rem', color:ins.color }}>
+                                {Math.round(ins.score)}%
+                              </Typography>
+                            </Box>
+                            <Typography sx={{ fontSize:'0.76rem', color:'#4b5563', lineHeight:1.55 }}>
+                              {ins.explanation}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Stack>
+                    </Box>
+                  )}
+
+                  {/* XGBoost Feature Importance */}
+                  {pet.xai?.xgboostFactors?.length > 0 && (
+                    <Box sx={{ mt:2, pt:2, borderTop:'1px solid #f3f4f6' }}>
+                      <Box sx={{ display:'flex', alignItems:'center', gap:0.8, mb:1.2 }}>
+                        <BarChart sx={{ fontSize:17, color:'#22c55e' }} />
+                        <Typography sx={{ fontSize:'0.77rem', fontWeight:700, color:'#374151' }}>
+                          XGBoost — Top Decision Factors
+                        </Typography>
+                      </Box>
+                      <Typography sx={{ fontSize:'0.72rem', color:'#9ca3af', mb:1.5 }}>
+                        Features the ML model weighs most when predicting adoption success
+                      </Typography>
+                      <XgbFeatureChart factors={pet.xai.xgboostFactors} />
+                    </Box>
+                  )}
+
+                  {/* Fallback: legacy AI text explanations */}
+                  {!pet.xai?.topReasons?.length && pet.explanations.filter(e=>!String(e).startsWith('⚠')).length>0 && (
                     <Box sx={{ mt:2, pt:2, borderTop:'1px solid #f3f4f6' }}>
                       <Typography sx={{ fontSize:'0.77rem', fontWeight:700, color:'#374151', mb:1 }}>AI Insights</Typography>
                       <Stack spacing={0.8}>
@@ -608,6 +1125,16 @@ const SmartMatches = () => {
                           );
                         })}
                       </Stack>
+                    </Box>
+                  )}
+
+                  {/* Trait-by-trait fallback when XAI has full factor breakdown */}
+                  {pet.xai?.factorBreakdown?.length > 0 && comps.length > 0 && (
+                    <Box sx={{ mt:2, pt:2, borderTop:'1px solid #f3f4f6' }}>
+                      <Typography sx={{ fontSize:'0.77rem', fontWeight:700, color:'#374151', mb:1 }}>
+                        Detailed Trait Comparison
+                      </Typography>
+                      {comps.map((row, i) => <CompareRow key={i} {...row} />)}
                     </Box>
                   )}
 
@@ -709,14 +1236,20 @@ const SmartMatches = () => {
                 {/* ── PET REQUIREMENTS GRID ── */}
                 {compatItems.length>0 && (
                   <Box sx={{ bgcolor:'#fff', my:1.5, p:2.5 }}>
-                    <Typography sx={{ fontWeight:800, fontSize:'1rem', color:'#111827', mb:1.5 }}>{pet.name}'s Requirements</Typography>
-                    <Grid container spacing={1.5}>
-                      {compatItems.map(({ icon, label, val })=>(
-                        <Grid item xs={4} key={label}>
-                          <Box sx={{ bgcolor:'#f9fafb', borderRadius:2, p:1.2, display:'flex', flexDirection:'column', alignItems:'center', gap:0.5 }}>
-                            <Box sx={{ color:'#9ca3af' }}>{icon}</Box>
-                            <Typography sx={{ fontWeight:700, fontSize:'0.8rem', color:'#111827', textAlign:'center' }}>{val}</Typography>
-                            <Typography sx={{ fontSize:'0.64rem', color:'#9ca3af', textAlign:'center' }}>{label}</Typography>
+                    <Typography sx={{ fontWeight:800, fontSize:'1rem', color:'#111827', mb:0.3 }}>{pet.name}'s Profile</Typography>
+                    <Typography sx={{ fontSize:'0.75rem', color:'#6b7280', mb:2 }}>Key characteristics &amp; care requirements</Typography>
+                    <Grid container spacing={1.2}>
+                      {compatItems.map(({ icon, label, val, sub, clr })=>(
+                        <Grid item xs={6} key={label}>
+                          <Box sx={{ bgcolor:'#f9fafb', border:'1px solid #e5e7eb', borderRadius:2,
+                            p:1.4, display:'flex', alignItems:'flex-start', gap:1 }}>
+                            <Box sx={{ color: clr||'#6b7280', mt:0.1, flexShrink:0 }}>{icon}</Box>
+                            <Box>
+                              <Typography sx={{ fontSize:'0.62rem', color:'#9ca3af', fontWeight:700,
+                                textTransform:'uppercase', letterSpacing:0.5, mb:0.2 }}>{label}</Typography>
+                              <Typography sx={{ fontWeight:700, fontSize:'0.84rem', color: clr||'#111827', lineHeight:1.2 }}>{val}</Typography>
+                              {sub && <Typography sx={{ fontSize:'0.68rem', color:'#9ca3af', mt:0.2 }}>{sub}</Typography>}
+                            </Box>
                           </Box>
                         </Grid>
                       ))}
