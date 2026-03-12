@@ -198,11 +198,20 @@ const getAppointments = async (req, res) => {
         .sort({ bookingType: 1, appointmentDate: 1, timeSlot: 1 });
       console.log('Found user appointments:', userAppointments.length);
       
-      // Add source identifier to user appointments
-      userAppointments = userAppointments.map(appointment => ({
-        ...appointment.toObject(),
-        _source: 'user'
-      }));
+      // Add source identifier to user appointments and use petInfo for display
+      userAppointments = userAppointments.map(appointment => {
+        const appointmentObj = appointment.toObject();
+        return {
+          ...appointmentObj,
+          _source: 'user',
+          // Add pet field from petInfo for display (petId stays as ObjectId)
+          pet: appointmentObj.petInfo || appointmentObj.petId || {
+            name: 'Unknown Pet',
+            species: 'Unknown',
+            breed: 'Unknown'
+          }
+        };
+      });
     }
     
     // Combine appointments
@@ -234,7 +243,13 @@ const getAppointmentById = async (req, res) => {
     const { id } = req.params;
     
     // Find the veterinary store for this manager
-    const veterinaryStore = await Veterinary.findOne({ storeId: req.user.storeId });
+    const veterinaryStore = await Veterinary.findOne({ 
+      $or: [
+        { storeId: req.user.storeId },
+        { createdBy: req.user._id }
+      ]
+    });
+    
     if (!veterinaryStore) {
       return res.status(404).json({ success: false, message: 'Veterinary store not found' });
     }
@@ -242,7 +257,6 @@ const getAppointmentById = async (req, res) => {
     // Try to find in ManagerVeterinaryAppointment first
     let appointment = await ManagerVeterinaryAppointment.findById(id)
       .populate([
-        { path: 'petId', select: 'name species breed' },
         { path: 'ownerId', select: 'name email phone' },
         { path: 'staffId', select: 'name role' },
         { path: 'serviceId', select: 'name price duration' }
@@ -252,7 +266,6 @@ const getAppointmentById = async (req, res) => {
     if (!appointment) {
       appointment = await VeterinaryAppointment.findById(id)
         .populate([
-          { path: 'petId', select: 'name species breed' },
           { path: 'ownerId', select: 'name email phone' },
           { path: 'serviceId', select: 'name price duration' },
           { path: 'storeId', select: 'storeName' }
@@ -260,9 +273,16 @@ const getAppointmentById = async (req, res) => {
       
       // Add source identifier if found in user collection
       if (appointment) {
+        const appointmentObj = appointment.toObject();
         appointment = {
-          ...appointment.toObject(),
-          _source: 'user'
+          ...appointmentObj,
+          _source: 'user',
+          // Keep original petId, add pet property with petInfo for display
+          pet: appointmentObj.petInfo || { 
+            name: 'Unknown Pet',
+            species: 'Unknown',
+            breed: 'Unknown'
+          }
         };
       }
     }
@@ -272,19 +292,38 @@ const getAppointmentById = async (req, res) => {
     }
 
     // Check if user has access to this appointment
-    // For manager appointments, check against veterinaryStore.storeId (string)
-    // For user appointments, check against veterinaryStore._id (ObjectId)
+    // Allow access if:
+    // 1. Appointment's storeId (ObjectId) matches veterinaryStore._id (ObjectId)
+    // 2. Manager created the veterinary store
+    // 3. For manager appointments: appointment.storeId (string) matches veterinaryStore.storeId (string)
     let hasAccess = false;
     
     if (appointment._source === 'user') {
-      // User appointment - check ObjectId storeId
-      hasAccess = appointment.storeId.toString() === veterinaryStore._id.toString();
+      // User appointment - storeId is ObjectId, compare with veterinaryStore._id
+      hasAccess = 
+        appointment.storeId?.toString() === veterinaryStore._id?.toString() ||
+        veterinaryStore.createdBy?.toString() === req.user._id.toString();
     } else {
-      // Manager appointment - check string storeId
-      hasAccess = appointment.storeId === veterinaryStore.storeId;
+      // Manager appointment - storeId might be string, compare with veterinaryStore.storeId
+      // Also check ObjectId match as fallback
+      hasAccess = 
+        appointment.storeId === veterinaryStore.storeId ||
+        appointment.storeId?.toString() === veterinaryStore._id?.toString() ||
+        veterinaryStore.createdBy?.toString() === req.user._id.toString();
     }
     
     if (!hasAccess) {
+      console.log('Access denied - Debug info:', {
+        appointmentSource: appointment._source || 'manager',
+        appointmentStoreId: appointment.storeId?.toString(),
+        appointmentStoreIdType: typeof appointment.storeId,
+        veterinaryStoreObjectId: veterinaryStore._id?.toString(),
+        veterinaryStoreStoreId: veterinaryStore.storeId,
+        managerId: req.user._id.toString(),
+        storeCreatedBy: veterinaryStore.createdBy?.toString(),
+        managerMatch: veterinaryStore.createdBy?.toString() === req.user._id.toString(),
+        objectIdMatch: appointment.storeId?.toString() === veterinaryStore._id?.toString()
+      });
       return res.status(403).json({ success: false, message: 'Access denied - Appointment does not belong to your veterinary clinic' });
     }
 

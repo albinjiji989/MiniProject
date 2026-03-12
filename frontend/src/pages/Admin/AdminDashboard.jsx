@@ -21,6 +21,8 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   IconButton,
+  Tooltip,
+  Stack,
 } from '@mui/material'
 import {
   People as UsersIcon,
@@ -32,88 +34,26 @@ import {
   TrendingDown as TrendingDownIcon,
   Assignment as AssignmentIcon,
   PersonAdd as PersonAddIcon,
-  FileUpload as UploadIcon,
-  FileDownload as DownloadIcon,
+  Category as CategoryIcon,
+  Biotech as SpeciesIcon,
+  Pets as BreedIcon,
+  Analytics as AnalyticsIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import { userAPI as usersAPI, modulesAPI, managersAPI, apiClient, blockchainAPI } from '../../services/api'
-import BlockchainStats from '../../components/blockchain/BlockchainStats'
-import { TextField, InputAdornment } from '@mui/material'
-import SearchIcon from '@mui/icons-material/Search'
-// ...existing code...
-
-// ...existing code...
+import { userAPI as usersAPI, modulesAPI, managersAPI, apiClient, dashboardAPI } from '../../services/api'
 import {
   speciesAPI,
   breedsAPI,
   petsAPI as adminPetsAPI,
   customBreedRequestsAPI,
+  petCategoriesAPI,
 } from '../../services/petSystemAPI'
-
+import AdminStatCard from '../../components/Admin/AdminStatCard'
 
 const AdminDashboard = () => {
   const navigate = useNavigate()
 
-  // Blockchain audit state
-  const [blockchainEvents, setBlockchainEvents] = useState([])
-  const [blockchainSearch, setBlockchainSearch] = useState('')
-  const [blockchainLoading, setBlockchainLoading] = useState(false)
-  const [blockchainError, setBlockchainError] = useState('')
-
-  // Blockchain event search handler
-  const handleBlockchainSearch = async () => {
-    setBlockchainLoading(true)
-    setBlockchainError('')
-    try {
-      // Search by petCode or eventType
-      const query = blockchainSearch.trim()
-      let events = []
-      if (!query) {
-        setBlockchainEvents([])
-        setBlockchainLoading(false)
-        return
-      }
-      // Try as petCode first
-      try {
-        const res = await blockchainAPI.getPetHistory(query)
-        events = res.data?.data?.events || []
-      } catch {
-        // If not a petCode, try as eventType (fetch all, filter client-side)
-        const statsRes = await blockchainAPI.getStats()
-        const allEvents = statsRes.data?.data?.allEvents || []
-        events = allEvents.filter(ev => (ev.eventType || '').toLowerCase().includes(query.toLowerCase()))
-      }
-      setBlockchainEvents(events)
-    } catch (e) {
-      setBlockchainError(e?.response?.data?.message || 'Failed to search blockchain events')
-    } finally {
-      setBlockchainLoading(false)
-    }
-  }
-
-  // Download blockchain events as CSV
-  const downloadBlockchainCSV = () => {
-    if (!blockchainEvents.length) return
-    const header = ['EventType','Timestamp','PetCode','Details']
-    const rows = blockchainEvents.map(ev => [
-      ev.eventType,
-      new Date(ev.timestamp || ev.createdAt).toLocaleString(),
-      ev.petCode || '',
-      typeof ev.details === 'string' ? ev.details : JSON.stringify(ev.details)
-    ])
-    const csv = [header, ...rows].map(r => r.map(x => '"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `blockchain_audit_${Date.now()}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
-  // ...existing dashboard state and logic...
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -127,6 +67,12 @@ const AdminDashboard = () => {
     breeds: { total: 0, active: 0, growth: 0 },
     modules: { total: 0, active: 0, growth: 0 },
     breedRequests: { total: 0, pending: 0, approved: 0, growth: 0 },
+    categories: { total: 0, active: 0, growth: 0 },
+  })
+
+  // Analytics data
+  const [analytics, setAnalytics] = useState({
+    recentActivities: [],
   })
 
   // Recent activities
@@ -135,238 +81,96 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     loadDashboardData()
-  }, [])
+  }, []) // Empty dependency array to run only once
 
   const loadDashboardData = async () => {
     setLoading(true)
     try {
-      // Fetch real statistics from backend APIs with error handling
-      const results = await Promise.allSettled([
-        usersAPI.getStats(),
-        modulesAPI.listAdmin(),
-        managersAPI.list(),
-        adminPetsAPI.getStats(),
-        speciesAPI.getStats(),
-        breedsAPI.getStats(),
-        customBreedRequestsAPI.getStats()
+      // Use the new comprehensive dashboard API with fallback
+      const [statsResponse, activitiesResponse, alertsResponse] = await Promise.allSettled([
+        dashboardAPI.getStats().catch(err => {
+          console.warn('Dashboard stats API not available, using fallback:', err.message)
+          return { data: null }
+        }),
+        dashboardAPI.getRecentActivities(10).catch(err => {
+          console.warn('Dashboard activities API not available:', err.message)
+          return { data: [] }
+        }),
+        dashboardAPI.getSystemAlerts().catch(err => {
+          console.warn('Dashboard alerts API not available:', err.message)
+          return { data: [] }
+        })
       ])
 
-      // Extract data with proper error handling
-      const usersResponse = results[0].status === 'fulfilled' ? results[0].value : null
-      const modulesResponse = results[1].status === 'fulfilled' ? results[1].value : null
-      const managersResponse = results[2].status === 'fulfilled' ? results[2].value : null
-      const petsResponse = results[3].status === 'fulfilled' ? results[3].value : null
-      const speciesResponse = results[4].status === 'fulfilled' ? results[4].value : null
-      const breedsResponse = results[5].status === 'fulfilled' ? results[5].value : null
-      const breedRequestsResponse = results[6].status === 'fulfilled' ? results[6].value : null
-
-      // Process users data
-      const usersData = usersResponse?.data || {}
-      const usersStats = {
-        total: usersData.totalUsers || usersData.total || 0,
-        active: usersData.activeUsers || usersData.active || 0,
-        new: usersData.newUsers || usersData.recent || 0,
-        growth: usersData.growthRate || 0
-      }
-
-      // Process managers data
-      let managersStats = { total: 0, active: 0, pending: 0, growth: 0 }
-      if (managersResponse?.data) {
-        const managersArray = Array.isArray(managersResponse.data) 
-          ? managersResponse.data 
-          : (managersResponse.data.managers || [])
-        managersStats = {
-          total: managersArray.length,
-          active: managersArray.filter(m => m.isActive !== false).length,
-          pending: 0,
-          growth: 0
+      // Process stats data
+      if (statsResponse.status === 'fulfilled' && statsResponse.value?.data) {
+        const apiResponse = statsResponse.value.data
+        const data = apiResponse.data // The actual data is nested under .data
+        
+        // Ensure all required properties exist with defaults
+        const processedStats = {
+          users: data.users || { total: 0, active: 0, new: 0, growth: 0 },
+          managers: data.managers || { total: 0, active: 0, pending: 0, growth: 0 },
+          pets: data.pets || { total: 0, available: 0, adopted: 0, growth: 0, bySpecies: [], byHealthStatus: [] },
+          species: data.species || { total: 0, active: 0, growth: 0 },
+          breeds: data.breeds || { total: 0, active: 0, growth: 0 },
+          modules: data.modules || { total: 0, active: 0, growth: 0 },
+          breedRequests: data.breedRequests || { total: 0, pending: 0, approved: 0, growth: 0 },
+          categories: data.categories || { total: 0, active: 0, growth: 0 },
         }
-      }
-
-      // Process pets data
-      const petsData = petsResponse?.data || {}
-      const petsStats = {
-        total: petsData.totalPets || petsData.total || 0,
-        available: petsData.availablePets || petsData.available || 0,
-        adopted: petsData.adoptedPets || petsData.adopted || 0,
-        growth: petsData.growthRate || 0
-      }
-
-      // Process species data
-      const speciesData = speciesResponse?.data || {}
-      const speciesStats = {
-        total: speciesData.total || 0,
-        active: speciesData.active || 0,
-        growth: 0
-      }
-
-      // Process breeds data
-      const breedsData = breedsResponse?.data || {}
-      const breedsStats = {
-        total: breedsData.total || 0,
-        active: breedsData.active || 0,
-        growth: 0
-      }
-
-      // Process modules data
-      const modulesData = Array.isArray(modulesResponse?.data) ? modulesResponse.data : []
-      const modulesStats = {
-        total: modulesData.length,
-        active: modulesData.filter(m => m.status === 'active').length,
-        growth: 0
-      }
-
-      // Process breed requests data
-      const breedRequestsData = breedRequestsResponse?.data || {}
-      const breedRequestsStats = {
-        total: breedRequestsData.total || 0,
-        pending: breedRequestsData.pending || 0,
-        approved: breedRequestsData.approved || 0,
-        growth: 0
-      }
-
-      setStats({
-        users: usersStats,
-        managers: managersStats,
-        pets: petsStats,
-        species: speciesStats,
-        breeds: breedsStats,
-        modules: modulesStats,
-        breedRequests: breedRequestsStats,
-      })
-
-      // Generate recent activities
-      const activities = []
-      
-      // Add recent users
-      if (usersData.recentUsers && Array.isArray(usersData.recentUsers)) {
-        usersData.recentUsers.slice(0, 2).forEach((user, index) => {
-          activities.push({
-            id: `user-${user._id || index}`,
-            type: 'user_registered',
-            message: `New user registered: ${user.name || user.email || 'Unknown user'}`,
-            time: user.createdAt ? new Date(user.createdAt).toLocaleString() : 'Just now',
-            icon: <PersonAddIcon />
-          })
+        
+        setStats(processedStats)
+        
+        // Set analytics data from the comprehensive stats
+        setAnalytics({
+          recentActivities: processedStats.pets.recent || [],
+        })
+      } else {
+        // Fallback: show dashboard with zero values but no error
+        setStats({
+          users: { total: 0, active: 0, new: 0, growth: 0 },
+          managers: { total: 0, active: 0, pending: 0, growth: 0 },
+          pets: { total: 0, available: 0, adopted: 0, growth: 0 },
+          species: { total: 0, active: 0, growth: 0 },
+          breeds: { total: 0, active: 0, growth: 0 },
+          modules: { total: 0, active: 0, growth: 0 },
+          breedRequests: { total: 0, pending: 0, approved: 0, growth: 0 },
+          categories: { total: 0, active: 0, growth: 0 },
+        })
+        setAnalytics({
+          recentActivities: [],
         })
       }
 
-      // Add recent pets
-      if (petsData.recentPets && Array.isArray(petsData.recentPets)) {
-        petsData.recentPets.slice(0, 2).forEach((pet, index) => {
-          activities.push({
-            id: `pet-${pet._id || index}`,
-            type: 'pet_added',
-            message: `Pet "${pet.name || 'Unknown'}" added to system`,
-            time: pet.createdAt ? new Date(pet.createdAt).toLocaleString() : 'Just now',
-            icon: <PetsIcon />
-          })
-        })
+      // Process activities data
+      if (activitiesResponse.status === 'fulfilled' && activitiesResponse.value?.data) {
+        setRecentActivities(Array.isArray(activitiesResponse.value.data) ? activitiesResponse.value.data : [])
       }
 
-      setRecentActivities(activities.slice(0, 5))
-
-      // Generate system alerts
-      const alerts = []
-      
-      // Check for pending breed requests
-      if (breedRequestsStats.pending > 0) {
-        alerts.push({
-          id: 'pending-requests',
-          type: 'warning',
-          message: `${breedRequestsStats.pending} breed request${breedRequestsStats.pending > 1 ? 's' : ''} need${breedRequestsStats.pending === 1 ? 's' : ''} review`,
-          action: 'Review Requests'
-        })
+      // Process alerts data
+      if (alertsResponse.status === 'fulfilled' && alertsResponse.value?.data) {
+        setSystemAlerts(Array.isArray(alertsResponse.value.data) ? alertsResponse.value.data : [])
       }
 
-      // Check for API connection issues
-      const failedApis = results.filter(r => r.status === 'rejected').length
-      if (failedApis > 0) {
-        alerts.push({
-          id: 'api-errors',
-          type: 'error',
-          message: `Failed to load data from ${failedApis} API endpoint${failedApis > 1 ? 's' : ''}. Some statistics may be incomplete.`,
-          action: null
-        })
-      }
-
-      setSystemAlerts(alerts)
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
-      setError('Failed to load dashboard data. Please check your network connection and try again later.')
+      setError('Dashboard is loading with limited functionality. Some features may not be available.')
+      
+      // Set fallback data even on error
+      setStats({
+        users: { total: 0, active: 0, new: 0, growth: 0 },
+        managers: { total: 0, active: 0, pending: 0, growth: 0 },
+        pets: { total: 0, available: 0, adopted: 0, growth: 0 },
+        species: { total: 0, active: 0, growth: 0 },
+        breeds: { total: 0, active: 0, growth: 0 },
+        modules: { total: 0, active: 0, growth: 0 },
+        breedRequests: { total: 0, pending: 0, approved: 0, growth: 0 },
+        categories: { total: 0, active: 0, growth: 0 },
+      })
     } finally {
       setLoading(false)
     }
   }
-
-  const StatCard = ({ title, value, subtitle, icon, color, growth, onClick }) => (
-    <Card
-      sx={{
-        cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.3s ease',
-        '&:hover': onClick ? { transform: 'translateY(-4px)', boxShadow: 4 } : {}
-      }}
-      onClick={onClick}
-    >
-      <CardContent>
-        <Box display="flex" alignItems="center" justifyContent="space-between">
-          <Box>
-            <Typography color="textSecondary" gutterBottom variant="h6">
-              {title}
-            </Typography>
-            <Typography variant="h4" component="h2" sx={{ fontWeight: 'bold' }}>
-              {value}
-            </Typography>
-            <Typography color="textSecondary" variant="body2">
-              {subtitle}
-            </Typography>
-            {growth !== undefined && growth !== null && (
-              <Box display="flex" alignItems="center" mt={1}>
-                {growth >= 0 ? (
-                  <TrendingUpIcon color="success" fontSize="small" />
-                ) : (
-                  <TrendingDownIcon color="error" fontSize="small" />
-                )}
-                <Typography
-                  variant="body2"
-                  color={growth >= 0 ? 'success.main' : 'error.main'}
-                  sx={{ ml: 0.5 }}
-                >
-                  {Math.abs(growth)}%
-                </Typography>
-              </Box>
-            )}
-          </Box>
-          <Avatar sx={{ bgcolor: `${color}.main`, width: 56, height: 56 }}>
-            {icon}
-          </Avatar>
-        </Box>
-      </CardContent>
-    </Card>
-  )
-
-  const QuickActionCard = ({ title, description, icon, color, onClick }) => (
-    <Card
-      sx={{
-        cursor: 'pointer',
-        transition: 'all 0.3s ease',
-        '&:hover': { transform: 'translateY(-2px)', boxShadow: 3 }
-      }}
-      onClick={onClick}
-    >
-      <CardContent sx={{ textAlign: 'center', py: 3 }}>
-        <Avatar sx={{ bgcolor: `${color}.main`, width: 48, height: 48, mx: 'auto', mb: 2 }}>
-          {icon}
-        </Avatar>
-        <Typography variant="h6" component="h3" gutterBottom>
-          {title}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {description}
-        </Typography>
-      </CardContent>
-    </Card>
-  )
 
   if (loading) {
     return (
@@ -380,58 +184,6 @@ const AdminDashboard = () => {
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-            {/* Blockchain Audit Section */}
-            <Box mb={4}>
-              <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>Blockchain Audit & Verification</Typography>
-              <BlockchainStats />
-              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                <TextField
-                  label="Search by PetCode or Event Type"
-                  value={blockchainSearch}
-                  onChange={e => setBlockchainSearch(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleBlockchainSearch() }}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon />
-                      </InputAdornment>
-                    )
-                  }}
-                  sx={{ minWidth: 320 }}
-                />
-                <Button variant="contained" onClick={handleBlockchainSearch} disabled={blockchainLoading}>Search</Button>
-                <Button variant="outlined" onClick={downloadBlockchainCSV} disabled={!blockchainEvents.length}>Download CSV</Button>
-              </Box>
-              {blockchainLoading && <CircularProgress size={20} sx={{ ml: 2 }} />}
-              {blockchainError && <Alert severity="error" sx={{ my: 1 }}>{blockchainError}</Alert>}
-              {blockchainEvents.length > 0 && (
-                <Card sx={{ mt: 2 }}>
-                  <CardContent>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Blockchain Event Log</Typography>
-                    <Box sx={{ maxHeight: 320, overflow: 'auto' }}>
-                      <List>
-                        {blockchainEvents.map((ev, idx) => (
-                          <React.Fragment key={ev._id || idx}>
-                            <ListItem alignItems="flex-start">
-                              <ListItemText
-                                primary={<>
-                                  <b>{ev.eventType}</b> {ev.petCode && <Chip label={ev.petCode} size="small" sx={{ ml: 1 }} />}
-                                </>}
-                                secondary={<>
-                                  <Typography variant="caption" color="text.secondary">{new Date(ev.timestamp || ev.createdAt).toLocaleString()}</Typography>
-                                  {ev.details && <><br /><span style={{ fontSize: '0.95em' }}>{typeof ev.details === 'string' ? ev.details : JSON.stringify(ev.details)}</span></>}
-                                </>}
-                              />
-                            </ListItem>
-                            {idx < blockchainEvents.length - 1 && <Divider />}
-                          </React.Fragment>
-                        ))}
-                      </List>
-                    </Box>
-                  </CardContent>
-                </Card>
-              )}
-            </Box>
       <Box mb={4}>
         <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
           Admin Dashboard
@@ -449,10 +201,19 @@ const AdminDashboard = () => {
               key={alert.id}
               severity={alert.type}
               action={alert.action && (
-                <Button color="inherit" size="small" onClick={() => {
-                  if (alert.action === 'View Invites') navigate('/admin/managers')
-                  if (alert.action === 'Review Requests') navigate('/admin/custom-breed-requests')
-                }}>
+                <Button 
+                  color="inherit" 
+                  size="small" 
+                  onClick={() => {
+                    if (alert.actionUrl) {
+                      navigate(alert.actionUrl)
+                    } else if (alert.action === 'View Invites') {
+                      navigate('/admin/managers')
+                    } else if (alert.action === 'Review Requests') {
+                      navigate('/admin/custom-breed-requests')
+                    }
+                  }}
+                >
                   {alert.action}
                 </Button>
               )}
@@ -464,193 +225,240 @@ const AdminDashboard = () => {
         </Box>
       )}
 
-      {/* Main Statistics */}
+      {/* Main Statistics Grid */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
+        <Grid item xs={12} sm={6} md={4} lg={3}>
+          <AdminStatCard
             title="Public Users"
-            value={stats.users.total}
-            subtitle={`${stats.users.active} active, ${stats.users.new} new this week`}
-            icon={<UsersIcon />}
-            color="primary"
-            growth={stats.users.growth}
+            value={stats.users?.total || 0}
+            subtitle={`${stats.users?.active || 0} active, ${stats.users?.new || 0} new`}
+            icon={UsersIcon}
+            color="primary.main"
+            growth={stats.users?.growth || 0}
             onClick={() => navigate('/admin/users')}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
+        <Grid item xs={12} sm={6} md={4} lg={3}>
+          <AdminStatCard
             title="Managers"
-            value={stats.managers.total}
-            subtitle={`${stats.managers.active} active, ${stats.managers.pending} pending`}
-            icon={<BusinessIcon />}
-            color="warning"
-            growth={stats.managers.growth}
+            value={stats.managers?.total || 0}
+            subtitle={`${stats.managers?.active || 0} active managers`}
+            icon={BusinessIcon}
+            color="warning.main"
+            growth={stats.managers?.growth || 0}
             onClick={() => navigate('/admin/managers')}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
+        <Grid item xs={12} sm={6} md={4} lg={3}>
+          <AdminStatCard
             title="Total Pets"
-            value={stats.pets.total}
-            subtitle={`${stats.pets.available} available, ${stats.pets.adopted} adopted`}
-            icon={<PetsIcon />}
-            color="success"
-            growth={stats.pets.growth}
+            value={stats.pets?.total || 0}
+            subtitle={`${stats.pets?.available || 0} available, ${stats.pets?.adopted || 0} adopted`}
+            icon={PetsIcon}
+            color="success.main"
+            growth={stats.pets?.growth || 0}
             onClick={() => navigate('/admin/pets')}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
+        <Grid item xs={12} sm={6} md={4} lg={3}>
+          <AdminStatCard
             title="Breed Requests"
-            value={stats.breedRequests.total}
-            subtitle={`${stats.breedRequests.pending} pending, ${stats.breedRequests.approved} approved`}
-            icon={<AssignmentIcon />}
-            color="info"
-            growth={stats.breedRequests.growth}
+            value={stats.breedRequests?.total || 0}
+            subtitle={`${stats.breedRequests?.pending || 0} pending review`}
+            icon={AssignmentIcon}
+            color="info.main"
+            growth={stats.breedRequests?.growth || 0}
             onClick={() => navigate('/admin/custom-breed-requests')}
           />
         </Grid>
-      </Grid>
-
-      {/* Secondary Statistics */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
+        <Grid item xs={12} sm={6} md={4} lg={3}>
+          <AdminStatCard
             title="Species"
-            value={stats.species.total}
-            subtitle={`${stats.species.active} active`}
-            icon={<PetsIcon />}
-            color="secondary"
-            growth={stats.species.growth}
+            value={stats.species?.total || 0}
+            subtitle={`${stats.species?.active || 0} active species`}
+            icon={SpeciesIcon}
+            color="secondary.main"
+            growth={stats.species?.growth || 0}
             onClick={() => navigate('/admin/species')}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
+        <Grid item xs={12} sm={6} md={4} lg={3}>
+          <AdminStatCard
             title="Breeds"
-            value={stats.breeds.total}
-            subtitle={`${stats.breeds.active} active`}
-            icon={<PetsIcon />}
-            color="secondary"
-            growth={stats.breeds.growth}
+            value={stats.breeds?.total || 0}
+            subtitle={`${stats.breeds?.active || 0} active breeds`}
+            icon={BreedIcon}
+            color="info.main"
+            growth={stats.breeds?.growth || 0}
             onClick={() => navigate('/admin/breeds')}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
+        <Grid item xs={12} sm={6} md={4} lg={3}>
+          <AdminStatCard
+            title="Pet Categories"
+            value={stats.categories?.total || 0}
+            subtitle={`${stats.categories?.active || 0} active categories`}
+            icon={CategoryIcon}
+            color="success.main"
+            growth={stats.categories?.growth || 0}
+            onClick={() => navigate('/admin/pet-categories')}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={4} lg={3}>
+          <AdminStatCard
             title="Modules"
-            value={stats.modules.total}
-            subtitle={`${stats.modules.active} active`}
-            icon={<ModuleIcon />}
-            color="primary"
-            growth={stats.modules.growth}
+            value={stats.modules?.total || 0}
+            subtitle={`${stats.modules?.active || 0} active modules`}
+            icon={ModuleIcon}
+            color="warning.main"
+            growth={stats.modules?.growth || 0}
             onClick={() => navigate('/admin/modules')}
           />
         </Grid>
       </Grid>
 
-      {/* Quick Actions */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12}>
-          <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
-            Quick Actions
-          </Typography>
-        </Grid>
 
-        {/* Pet Management */}
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Add Pet"
-            description="Add a new pet to the system"
-            icon={<AddIcon />}
-            color="success"
-            onClick={() => navigate('/admin/pets/add')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Import Pets"
-            description="Import pets from CSV file"
-            icon={<UploadIcon />}
-            color="info"
-            onClick={() => navigate('/admin/pets/import')}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Export Data"
-            description="Export system data to CSV"
-            icon={<DownloadIcon />}
-            color="primary"
-            onClick={() => {/* Export functionality */ }}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <QuickActionCard
-            title="Invite Manager"
-            description="Send invitation to new manager"
-            icon={<PersonAddIcon />}
-            color="warning"
-            onClick={() => navigate('/admin/managers')}
-          />
-        </Grid>
-      </Grid>
+
+      {/* Quick Actions - Simplified */}
+      <Card sx={{ mb: 4 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h6">Quick Actions</Typography>
+            <Tooltip title="Refresh Dashboard">
+              <IconButton onClick={loadDashboardData} size="small">
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={3}>
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<PersonAddIcon />}
+                onClick={() => navigate('/admin/manager-invite')}
+                sx={{ py: 2 }}
+              >
+                Invite Manager
+              </Button>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<CategoryIcon />}
+                onClick={() => navigate('/admin/pet-categories')}
+                sx={{ py: 2 }}
+              >
+                Add Pet Category
+              </Button>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<SpeciesIcon />}
+                onClick={() => navigate('/admin/species')}
+                sx={{ py: 2 }}
+              >
+                Manage Species
+              </Button>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<BreedIcon />}
+                onClick={() => navigate('/admin/breeds')}
+                sx={{ py: 2 }}
+              >
+                Manage Breeds
+              </Button>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
 
       {/* Recent Activities */}
       <Grid container spacing={3}>
-        <Grid item xs={12}>
+        <Grid item xs={12} md={8}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
-                Recent Activities
-              </Typography>
-              <List>
-                {recentActivities.map((activity, index) => (
-                  <React.Fragment key={activity.id}>
-                    <ListItem>
-                      <ListItemIcon>
-                        {activity.icon}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={activity.message}
-                        secondary={activity.time}
-                      />
-                    </ListItem>
-                    {index < recentActivities.length - 1 && <Divider />}
-                  </React.Fragment>
-                ))}
-              </List>
+              <Typography variant="h6" sx={{ mb: 2 }}>Recent Activities</Typography>
+              {recentActivities.length > 0 ? (
+                <List>
+                  {recentActivities.map((activity) => {
+                    const IconComponent = activity.icon === 'PersonAdd' ? PersonAddIcon : 
+                                        activity.icon === 'Pets' ? PetsIcon : 
+                                        activity.icon === 'Assignment' ? AssignmentIcon : PersonAddIcon
+                    return (
+                      <ListItem key={activity.id} divider>
+                        <ListItemIcon>
+                          <IconComponent />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={activity.message}
+                          secondary={new Date(activity.time).toLocaleString()}
+                        />
+                      </ListItem>
+                    )
+                  })}
+                </List>
+              ) : (
+                <Typography color="text.secondary">No recent activities</Typography>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2 }}>System Overview</Typography>
+              <Stack spacing={2}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2">Total Users</Typography>
+                  <Chip label={stats.users?.total || 0} size="small" color="primary" />
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2">Active Managers</Typography>
+                  <Chip label={stats.managers?.active || 0} size="small" color="warning" />
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2">Available Pets</Typography>
+                  <Chip label={stats.pets?.available || 0} size="small" color="success" />
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2">Pending Requests</Typography>
+                  <Chip label={stats.breedRequests?.pending || 0} size="small" color="error" />
+                </Box>
+              </Stack>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Error/Success Messages */}
-      {error && (
-        <Snackbar
-          open={!!error}
-          autoHideDuration={6000}
-          onClose={() => setError('')}
-          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        >
-          <Alert onClose={() => setError('')} severity="error" sx={{ width: '100%' }}>
-            {error}
-          </Alert>
-        </Snackbar>
-      )}
+      {/* Error Snackbar */}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={6000}
+        onClose={() => setError('')}
+      >
+        <Alert onClose={() => setError('')} severity="error" sx={{ width: '100%' }}>
+          {error}
+        </Alert>
+      </Snackbar>
 
-      {success && (
-        <Snackbar
-          open={!!success}
-          autoHideDuration={6000}
-          onClose={() => setSuccess('')}
-          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        >
-          <Alert onClose={() => setSuccess('')} severity="success" sx={{ width: '100%' }}>
-            {success}
-          </Alert>
-        </Snackbar>
-      )}
+      {/* Success Snackbar */}
+      <Snackbar
+        open={!!success}
+        autoHideDuration={4000}
+        onClose={() => setSuccess('')}
+      >
+        <Alert onClose={() => setSuccess('')} severity="success" sx={{ width: '100%' }}>
+          {success}
+        </Alert>
+      </Snackbar>
     </Container>
   )
 }

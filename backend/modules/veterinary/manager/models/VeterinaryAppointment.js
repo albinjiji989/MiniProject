@@ -42,8 +42,8 @@ const veterinaryAppointmentSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'completed', 'cancelled', 'no-show'],
-    default: 'pending'
+    enum: ['pending_approval', 'confirmed', 'in_consultation', 'completed', 'cancelled'],
+    default: 'confirmed'
   },
   veterinarianId: {
     type: mongoose.Schema.Types.ObjectId,

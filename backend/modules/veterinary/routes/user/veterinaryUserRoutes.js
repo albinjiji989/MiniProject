@@ -9,6 +9,7 @@ const router = express.Router();
 
 // User appointments
 router.get('/appointments', auth, veterinaryUserController.getUserAppointments);
+router.get('/appointments/slots/available', auth, veterinaryUserController.getAvailableTimeSlots);
 router.get('/appointments/:id', auth, veterinaryUserController.getUserAppointmentById);
 router.post('/appointments/book', auth, [
   body('petId').notEmpty().withMessage('Pet ID is required'),
@@ -17,6 +18,9 @@ router.post('/appointments/book', auth, [
   body('visitType').optional().isIn(['routine_checkup', 'vaccination', 'follow_up', 'consultation', 'other']).withMessage('Invalid visit type')
 ], veterinaryUserController.bookAppointment); // Removed duplicate auth middleware
 router.post('/appointments/:id/cancel', auth, veterinaryUserController.cancelAppointment);
+
+// Get available services for booking
+router.get('/services/available', auth, veterinaryUserController.getAvailableServices);
 
 // User can view medical records for their pets; creation is manager-side
 router.get('/pets/:petId/medical-records', auth, medicalController.listRecordsForPet);

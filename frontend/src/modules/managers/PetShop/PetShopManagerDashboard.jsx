@@ -516,6 +516,20 @@ const PetShopManagerDashboard = () => {
             </CardContent>
           </Card>
         </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' } }} onClick={() => navigate('/manager/petshop/breed-requests')}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Breed Requests</Typography>
+                  <Typography variant="body2" color="textSecondary">Request new breeds/species</Typography>
+                </Box>
+                <AssignmentIcon color="primary" />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
 
       {/* Stock Management Section */}

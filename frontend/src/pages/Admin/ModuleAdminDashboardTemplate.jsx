@@ -48,7 +48,8 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material'
 import { useAuth } from '../../contexts/AuthContext'
-import { api } from '../../services/api'
+import { api, authAPI } from '../../services/api'
+import firebaseAuth from '../../services/firebaseAuth'
 
 const ModuleAdminDashboardTemplate = ({ moduleName, moduleIcon, moduleColor }) => {
   const { user, logout } = useAuth()
@@ -123,8 +124,55 @@ const ModuleAdminDashboardTemplate = ({ moduleName, moduleIcon, moduleColor }) =
     }
   }
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async (event) => {
+    console.log('Module Admin logout clicked')
+    event?.preventDefault()
+    event?.stopPropagation()
+    
+    try {
+      console.log('Starting logout process...')
+      
+      // Set logout guard to prevent Firebase re-auth
+      sessionStorage.setItem('auth_logout', '1')
+      
+      // Call backend logout
+      const token = localStorage.getItem('token')
+      if (token) {
+        try {
+          await authAPI.logout()
+        } catch (error) {
+          console.error('Backend logout error:', error)
+        }
+      }
+      
+      // Clear all auth data
+      const TOKEN_KEYS = ['token', 'authToken', 'accessToken', 'jwt', 'jwtToken', 'access_token']
+      for (const k of TOKEN_KEYS) {
+        localStorage.removeItem(k)
+        sessionStorage.removeItem(k)
+      }
+      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
+      
+      // Sign out from Firebase
+      try {
+        await firebaseAuth.signOut()
+      } catch (error) {
+        console.error('Firebase logout error:', error)
+      }
+      
+      console.log('Logout completed, redirecting...')
+      
+      // Simple redirect to home
+      window.location.href = '/'
+      
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Fallback: Clear storage and force navigation
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.href = '/'
+    }
   }
 
   const StatCard = ({ title, value, icon, color, subtitle }) => (

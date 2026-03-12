@@ -4,9 +4,16 @@ const veterinaryAppointmentSchema = new mongoose.Schema({
   // Basic appointment information
   petId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Pet', 
     required: true,
     index: true
+    // Note: No ref specified - pet can be from multiple models
+  },
+  // Store pet info directly to avoid populate issues
+  petInfo: {
+    name: String,
+    species: String,
+    breed: String,
+    petCode: String
   },
   // Support for multiple pets in one appointment
   pets: [{
@@ -78,7 +85,7 @@ const veterinaryAppointmentSchema = new mongoose.Schema({
   },
   visitType: {
     type: String,
-    enum: ['routine_checkup', 'vaccination', 'follow_up', 'consultation', 'other']
+    enum: ['routine_checkup', 'vaccination', 'follow_up', 'consultation', 'examination', 'checkup', 'surgery', 'grooming', 'dentistry', 'dental', 'emergency', 'diagnostic', 'other']
   },
   symptoms: { 
     type: String 
@@ -95,8 +102,8 @@ const veterinaryAppointmentSchema = new mongoose.Schema({
   },
   status: { 
     type: String, 
-    enum: ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show', 'pending_approval'],
-    default: 'scheduled',
+    enum: ['pending_approval', 'confirmed', 'in_consultation', 'completed', 'cancelled'],
+    default: 'confirmed',
     index: true
   },
   

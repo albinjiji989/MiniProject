@@ -13,35 +13,156 @@ const getVeterinaryModels = () => {
 };
 
 // Helper function to find pet across different models
+// Helper function to find pet across different models
 const findPetById = async (petId) => {
   try {
-    // Try core Pet model first
-    let pet = await Pet.findById(petId);
+    // Check if petId is a valid ObjectId
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(petId) && /^[0-9a-fA-F]{24}$/.test(petId);
+    
+    // If it's a valid ObjectId, try finding by _id first
+    if (isValidObjectId) {
+      let pet = await Pet.findById(petId);
+      if (pet) {
+        return { pet, modelUsed: 'Pet', ownerId: pet.owner || pet.currentOwnerId || pet.createdBy };
+      }
+
+      // Try AdoptionPet model by _id
+      const AdoptionPet = mongoose.models.AdoptionPet;
+      if (AdoptionPet) {
+        pet = await AdoptionPet.findById(petId);
+        if (pet) {
+          return { pet, modelUsed: 'AdoptionPet', ownerId: pet.adopterUserId || pet.owner || pet.createdBy };
+        }
+      }
+
+      // Try PetNew model by _id
+      const PetNew = mongoose.models.PetNew;
+      if (PetNew) {
+        pet = await PetNew.findById(petId);
+        if (pet) {
+          return { pet, modelUsed: 'PetNew', ownerId: pet.ownerId || pet.owner || pet.createdBy };
+        }
+      }
+
+      // Try PetInventoryItem model by _id
+      const PetInventoryItem = mongoose.models.PetInventoryItem;
+      if (PetInventoryItem) {
+        pet = await PetInventoryItem.findById(petId);
+        if (pet) {
+          // For PetInventoryItem, check if there's a completed reservation
+          const PetReservation = mongoose.models.PetReservation;
+          if (PetReservation) {
+            const reservation = await PetReservation.findOne({
+              itemId: pet._id,
+              status: { $in: ['completed', 'at_owner', 'paid', 'delivered'] }
+            });
+            if (reservation) {
+              return { pet, modelUsed: 'PetInventoryItem', ownerId: reservation.userId };
+            }
+          }
+          // If no reservation found, use default owner
+          return { pet, modelUsed: 'PetInventoryItem', ownerId: pet.currentOwnerId || pet.owner || pet.createdBy };
+        }
+      }
+    }
+
+    // If not a valid ObjectId or not found by _id, search by petCode
+    console.log('Searching for pet by petCode:', petId);
+    
+    // Try Pet model by petCode
+    let pet = await Pet.findOne({ petCode: petId });
     if (pet) {
+      console.log('Found pet in Pet model by petCode');
       return { pet, modelUsed: 'Pet', ownerId: pet.owner || pet.currentOwnerId || pet.createdBy };
     }
 
-    // Try AdoptionPet model
+    // Try AdoptionPet model by petCode
     const AdoptionPet = mongoose.models.AdoptionPet;
     if (AdoptionPet) {
-      pet = await AdoptionPet.findById(petId);
+      pet = await AdoptionPet.findOne({ petCode: petId });
       if (pet) {
+        console.log('Found pet in AdoptionPet model by petCode');
         return { pet, modelUsed: 'AdoptionPet', ownerId: pet.adopterUserId || pet.owner || pet.createdBy };
       }
     }
 
-    // Try PetNew model if it exists
+    // Try PetNew model by petCode
     const PetNew = mongoose.models.PetNew;
     if (PetNew) {
-      pet = await PetNew.findById(petId);
+      pet = await PetNew.findOne({ petCode: petId });
       if (pet) {
+        console.log('Found pet in PetNew model by petCode');
         return { pet, modelUsed: 'PetNew', ownerId: pet.ownerId || pet.owner || pet.createdBy };
       }
     }
 
+    // Try PetInventoryItem model by petCode
+    const PetInventoryItem = mongoose.models.PetInventoryItem;
+    if (PetInventoryItem) {
+      pet = await PetInventoryItem.findOne({ petCode: petId });
+      if (pet) {
+        console.log('Found pet in PetInventoryItem model by petCode');
+        // For PetInventoryItem, check if there's a completed reservation
+        const PetReservation = mongoose.models.PetReservation;
+        if (PetReservation) {
+          const reservation = await PetReservation.findOne({
+            itemId: pet._id,
+            status: { $in: ['completed', 'at_owner', 'paid', 'delivered'] }
+          });
+          if (reservation) {
+            console.log('Found reservation for pet, owner is:', reservation.userId);
+            return { pet, modelUsed: 'PetInventoryItem', ownerId: reservation.userId };
+          }
+        }
+        // If no reservation found, use default owner
+        console.log('No reservation found, using default owner');
+        return { pet, modelUsed: 'PetInventoryItem', ownerId: pet.currentOwnerId || pet.owner || pet.createdBy };
+      }
+    }
+
+    // Try PetRegistry model by petCode as last resort
+    const PetRegistry = mongoose.models.PetRegistry;
+    if (PetRegistry) {
+      const registryEntry = await PetRegistry.findOne({ petCode: petId });
+      if (registryEntry && registryEntry.petId) {
+        console.log('Found pet in PetRegistry, fetching actual pet from source model');
+        // Try to get the actual pet from the source model
+        const sourceModel = mongoose.models[registryEntry.sourceModel];
+        if (sourceModel) {
+          pet = await sourceModel.findById(registryEntry.petId);
+          if (pet) {
+            console.log('Found pet via PetRegistry from', registryEntry.sourceModel);
+            // Check ownership based on source model
+            let ownerId;
+            if (registryEntry.sourceModel === 'PetInventoryItem') {
+              // Check for reservation
+              const PetReservation = mongoose.models.PetReservation;
+              if (PetReservation) {
+                const reservation = await PetReservation.findOne({
+                  itemId: pet._id,
+                  status: { $in: ['completed', 'at_owner', 'paid', 'delivered'] }
+                });
+                if (reservation) {
+                  ownerId = reservation.userId;
+                } else {
+                  ownerId = pet.currentOwnerId || pet.owner || pet.createdBy;
+                }
+              } else {
+                ownerId = pet.currentOwnerId || pet.owner || pet.createdBy;
+              }
+            } else {
+              ownerId = pet.currentOwnerId || pet.owner || pet.ownerId || pet.adopterUserId || pet.createdBy;
+            }
+            return { pet, modelUsed: registryEntry.sourceModel, ownerId };
+          }
+        }
+      }
+    }
+
+    console.log('Pet not found with ID or petCode:', petId);
     return null;
   } catch (error) {
-    console.error('Error finding pet:', error);
+    console.error('Error finding pet:', error.message);
     return null;
   }
 };
@@ -92,20 +213,47 @@ const bookAppointment = async (req, res) => {
 
       const { pet, modelUsed, ownerId } = petResult;
       
+      console.log('Pet found:', {
+        petId: pid,
+        petName: pet.name,
+        modelUsed,
+        ownerId: ownerId?.toString(),
+        userId: req.user._id.toString(),
+        petStatus: pet.status,
+        petObject: {
+          owner: pet.owner?.toString(),
+          currentOwnerId: pet.currentOwnerId?.toString(),
+          ownerId: pet.ownerId?.toString(),
+          adopterUserId: pet.adopterUserId?.toString(),
+          buyerId: pet.buyerId?.toString(),
+          createdBy: pet.createdBy?.toString()
+        }
+      });
+      
       // Verify ownership
       if (ownerId) {
         const ownerIdStr = ownerId.toString();
         const userIdStr = req.user._id.toString();
         
         if (ownerIdStr !== userIdStr) {
+          console.log('Ownership mismatch:', { ownerIdStr, userIdStr, modelUsed, petStatus: pet.status });
+          
+          // Provide specific error message based on pet type
+          let errorMessage = `Access denied - Pet ${pet.name || pid} does not belong to you.`;
+          if (modelUsed === 'PetInventoryItem' && pet.status !== 'sold') {
+            errorMessage = `This pet is still in the petshop and hasn't been purchased yet. Please purchase the pet first before booking a veterinary appointment.`;
+          } else if (modelUsed === 'AdoptionPet' && !pet.adopterUserId) {
+            errorMessage = `This pet hasn't been adopted yet. Please complete the adoption process first before booking a veterinary appointment.`;
+          }
+          
           return res.status(403).json({ 
             success: false, 
-            message: `Access denied - Pet ${pet.name || pid} does not belong to you` 
+            message: errorMessage
           });
         }
       }
       
-      verifiedPets.push({ petId: pid, pet, modelUsed });
+      verifiedPets.push({ petId: pet._id, pet, modelUsed }); // Use pet._id instead of pid
     }
 
     // Validate booking type
@@ -162,7 +310,6 @@ const bookAppointment = async (req, res) => {
         }
       }
     }
-
     // Set default status based on booking type
     let status = 'scheduled';
     if (bookingType === 'emergency') {
@@ -234,6 +381,12 @@ const bookAppointment = async (req, res) => {
     // Create appointment
     const appointment = new VeterinaryAppointment({
       petId: verifiedPets[0].petId, // Primary pet (for backward compatibility)
+      petInfo: {
+        name: verifiedPets[0].pet.name,
+        species: verifiedPets[0].pet.species,
+        breed: verifiedPets[0].pet.breed,
+        petCode: verifiedPets[0].pet.petCode
+      },
       pets: isMultiplePets ? petsArray : [],
       isMultiplePets,
       ownerId: req.user._id,
@@ -255,20 +408,11 @@ const bookAppointment = async (req, res) => {
 
     await appointment.save();
     
-    // Populate references
+    // Populate references (petId won't populate but we have petInfo)
     await appointment.populate([
-      { 
-        path: 'petId', 
-        select: 'name species breed imageIds',
-        populate: { path: 'images', select: 'url caption isPrimary' }
-      },
-      { 
-        path: 'pets.petId', 
-        select: 'name species breed imageIds',
-        populate: { path: 'images', select: 'url caption isPrimary' }
-      },
       { path: 'serviceId', select: 'name price duration' },
-      { path: 'storeId', select: 'name storeName' }
+      { path: 'storeId', select: 'name storeName' },
+      { path: 'ownerId', select: 'name email phone' }
     ]);
 
     const message = isMultiplePets 
@@ -435,9 +579,202 @@ const cancelAppointment = async (req, res) => {
   }
 };
 
+// Get available time slots for a given date (for user booking)
+const getAvailableTimeSlots = async (req, res) => {
+  try {
+    const { date } = req.query;
+    
+    if (!date) {
+      return res.status(400).json({ success: false, message: 'Date is required' });
+    }
+
+    const { Veterinary } = getVeterinaryModels();
+    
+    // Get default veterinary store
+    const defaultStore = await Veterinary.findOne({ isActive: true }).sort({ createdAt: 1 });
+    
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+    const nextDate = new Date(selectedDate);
+    nextDate.setDate(nextDate.getDate() + 1);
+
+    // Get all booked time slots for the selected date
+    const bookedAppointments = await VeterinaryAppointment.find({
+      appointmentDate: { $gte: selectedDate, $lt: nextDate },
+      status: { $in: ['scheduled', 'confirmed', 'pending_approval'] }
+    }).select('timeSlot');
+
+    const bookedSlots = bookedAppointments.map(app => app.timeSlot);
+
+    // Generate all possible time slots (9 AM to 5 PM in 30-minute intervals)
+    const allSlots = [];
+    for (let hour = 9; hour <= 17; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        if (hour === 17 && minute > 0) continue; // Don't include 5:30 PM
+        const h = hour > 12 ? hour - 12 : hour;
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const timeString = `${h.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} ${ampm}`;
+        allSlots.push(timeString);
+      }
+    }
+
+    // Filter out booked slots
+    const availableSlots = allSlots.filter(slot => !bookedSlots.includes(slot));
+
+    res.json({
+      success: true,
+      data: { 
+        availableSlots,
+        totalSlots: allSlots.length,
+        bookedCount: bookedSlots.length
+      }
+    });
+  } catch (error) {
+    console.error('Get available time slots error:', error);
+    res.status(500).json({ success: false, message: 'Server error while fetching available time slots', error: error.message });
+  }
+};
+
+// Get available services for booking
+const getAvailableServices = async (req, res) => {
+  try {
+    const { Veterinary, VeterinaryService } = getVeterinaryModels();
+    
+    // Get active veterinary stores with their operating hours
+    let stores = await Veterinary.find({ isActive: true })
+      .select('name storeName storeId address contact operatingHours location');
+    
+    console.log('Found veterinary stores:', stores.length);
+    
+    // If no stores found, try to get all services anyway (for debugging)
+    if (stores.length === 0) {
+      console.log('No active veterinary clinics found, checking for services...');
+      const allServices = await VeterinaryService.find({ isActive: true, status: 'active' });
+      console.log('Found services without clinic:', allServices.length);
+      
+      if (allServices.length > 0) {
+        // Get unique storeIds from services
+        const uniqueStoreIds = [...new Set(allServices.map(s => s.storeId))];
+        console.log('Unique storeIds from services:', uniqueStoreIds);
+        
+        // Try to find stores by storeId
+        stores = await Veterinary.find({ storeId: { $in: uniqueStoreIds } });
+        console.log('Found stores by storeId:', stores.length);
+        
+        // If still no stores, create a default one for each storeId
+        if (stores.length === 0 && uniqueStoreIds.length > 0) {
+          console.log('Creating default clinic for storeId:', uniqueStoreIds[0]);
+          const defaultStore = new Veterinary({
+            name: 'Veterinary Clinic',
+            storeName: 'Veterinary Clinic',
+            storeId: uniqueStoreIds[0],
+            address: {
+              street: 'Clinic Address',
+              city: 'City',
+              state: 'State',
+              zipCode: '000000',
+              country: 'India'
+            },
+            location: {
+              type: 'Point',
+              coordinates: [0, 0]
+            },
+            contact: {
+              phone: '',
+              email: ''
+            },
+            operatingHours: {
+              monday: { open: '09:00', close: '18:00', closed: false },
+              tuesday: { open: '09:00', close: '18:00', closed: false },
+              wednesday: { open: '09:00', close: '18:00', closed: false },
+              thursday: { open: '09:00', close: '18:00', closed: false },
+              friday: { open: '09:00', close: '18:00', closed: false },
+              saturday: { open: '09:00', close: '14:00', closed: false },
+              sunday: { open: '09:00', close: '13:00', closed: true }
+            },
+            isActive: true,
+            createdBy: allServices[0].createdBy
+          });
+          await defaultStore.save();
+          stores = [defaultStore];
+          console.log('Default clinic created');
+        }
+      }
+    }
+    
+    if (stores.length === 0) {
+      return res.json({
+        success: true,
+        data: { services: [], clinics: [] },
+        message: 'No active veterinary clinics available'
+      });
+    }
+    
+    // Get all active services from all stores
+    const storeIds = stores.map(store => store.storeId);
+    console.log('Looking for services with storeIds:', storeIds);
+    
+    const services = await VeterinaryService.find({
+      storeId: { $in: storeIds },
+      isActive: true,
+      status: 'active'
+    }).select('name description price duration category storeId storeName')
+      .sort({ category: 1, name: 1 });
+    
+    console.log('Found services:', services.length);
+    
+    // Format clinic data with working hours
+    const clinics = stores.map(store => {
+      // Convert operating hours to working days array (0=Sun, 1=Mon, etc.)
+      const workingDays = [];
+      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      days.forEach((day, index) => {
+        if (store.operatingHours[day] && !store.operatingHours[day].closed) {
+          workingDays.push(index);
+        }
+      });
+      
+      // Get general working hours (use Monday as default)
+      const workingHours = {
+        start: store.operatingHours.monday?.open || '09:00',
+        end: store.operatingHours.monday?.close || '18:00'
+      };
+      
+      return {
+        id: store._id,
+        storeId: store.storeId,
+        name: store.name || store.storeName,
+        address: store.address,
+        contact: store.contact,
+        operatingHours: store.operatingHours,
+        workingDays,
+        workingHours,
+        location: store.location
+      };
+    });
+    
+    res.json({
+      success: true,
+      data: { 
+        services,
+        clinics
+      }
+    });
+  } catch (error) {
+    console.error('Get available services error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server error while fetching services', 
+      error: error.message 
+    });
+  }
+};
+
 module.exports = {
   bookAppointment,
   getUserAppointments,
   getUserAppointmentById,
-  cancelAppointment
+  cancelAppointment,
+  getAvailableTimeSlots,
+  getAvailableServices
 };

@@ -53,6 +53,7 @@ const petDetailsAPI = {
 
 // Custom Breed Requests API
 const customBreedRequestsAPI = {
+  // Admin endpoints
   list: (params = {}) => api.get('/admin/custom-breed-requests', { params }),
   getAll: (params = {}) => api.get('/admin/custom-breed-requests', { params }), // Alias for list
   getById: (id) => api.get(`/admin/custom-breed-requests/${id}`),
@@ -61,7 +62,12 @@ const customBreedRequestsAPI = {
   reject: (id, data) => api.patch(`/admin/custom-breed-requests/${id}/reject`, data),
   markUnderReview: (id) => api.patch(`/admin/custom-breed-requests/${id}/review`),
   setPriority: (id, data) => api.patch(`/admin/custom-breed-requests/${id}/priority`, data),
-  getStats: () => api.get('/admin/custom-breed-requests/stats/overview')
+  getStats: () => api.get('/admin/custom-breed-requests/stats/overview'),
+  
+  // Manager endpoints
+  getMyRequests: () => api.get('/manager/custom-breed-requests'),
+  create: (data) => api.post('/manager/custom-breed-requests', data),
+  getMyRequestById: (id) => api.get(`/manager/custom-breed-requests/${id}`)
 };
 
 // Admin Pets API
@@ -84,7 +90,15 @@ const petsAPI = {
   downloadTemplate: () => api.get('/admin/pets/template-csv', {
     responseType: 'blob'
   }),
-  getStats: () => api.get('/admin/pets/stats/overview')
+  getStats: () => api.get('/admin/pets-overview/stats'),
+  getAnalytics: () => api.get('/admin/pets-overview/analytics'),
+  getAdoptionOverview: () => api.get('/admin/pets-overview/adoption'),
+  getPetshopOverview: () => api.get('/admin/pets-overview/petshop'),
+  getBlockchainData: () => api.get('/admin/pets-overview/blockchain'),
+  getHistory: (params = {}) => api.get('/admin/pets-overview/history', { params }),
+  downloadReport: (type) => api.get(`/admin/pets-overview/download-report/${type}`, {
+    responseType: 'blob'
+  })
 };
 
 // User Pets API

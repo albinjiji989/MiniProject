@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../../../../services/api'
-import RequestModal from '../../../../components/Common/RequestModal'
+import BreedSpeciesRequestModal from '../../../../components/Common/BreedSpeciesRequestModal'
 
 const KEY = 'adopt_wizard'
 
@@ -136,9 +136,9 @@ export default function StepBasicInfo() {
           <h3 className="text-lg font-semibold">Basic Information</h3>
           <button
             onClick={() => setShowRequestModal(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
           >
-            Request New Data
+            Request New Breed/Species
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -333,7 +333,7 @@ export default function StepBasicInfo() {
         </button>
       </div>
 
-      <RequestModal
+      <BreedSpeciesRequestModal
         isOpen={showRequestModal}
         onClose={() => setShowRequestModal(false)}
         onSuccess={handleRequestSuccess}

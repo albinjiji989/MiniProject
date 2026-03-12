@@ -22,6 +22,8 @@ import {
 } from '@mui/icons-material'
 import { useAuth } from '../contexts/AuthContext'
 import { Navigate } from 'react-router-dom'
+import { authAPI } from '../services/api'
+import firebaseAuth from '../services/firebaseAuth'
 import RoleBasedSidebar from '../components/Layout/RoleBasedSidebar'
 
 const drawerWidth = 280
@@ -30,6 +32,7 @@ const AdminLayout = () => {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [desktopOpen, setDesktopOpen] = useState(true)
   const [anchorEl, setAnchorEl] = useState(null)
   const navigate = useNavigate()
   const location = useLocation()
@@ -44,7 +47,11 @@ const AdminLayout = () => {
   }
 
   const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen)
+    if (isMobile) {
+      setMobileOpen(!mobileOpen)
+    } else {
+      setDesktopOpen(!desktopOpen)
+    }
   }
 
   const handleProfileMenuOpen = (event) => {
@@ -55,16 +62,63 @@ const AdminLayout = () => {
     setAnchorEl(null)
   }
 
-  const handleLogout = () => {
-    logout()
-    setTimeout(() => {
-      navigate('/')
-    }, 100)
+  const handleLogout = async (event) => {
+    console.log('Admin navbar logout clicked')
+    event?.preventDefault()
+    event?.stopPropagation()
+    
+    // Close the menu first
+    handleProfileMenuClose()
+    
+    try {
+      console.log('Starting logout process...')
+      
+      // Set logout guard to prevent Firebase re-auth
+      sessionStorage.setItem('auth_logout', '1')
+      
+      // Call backend logout
+      const token = localStorage.getItem('token')
+      if (token) {
+        try {
+          await authAPI.logout()
+        } catch (error) {
+          console.error('Backend logout error:', error)
+        }
+      }
+      
+      // Clear all auth data
+      const TOKEN_KEYS = ['token', 'authToken', 'accessToken', 'jwt', 'jwtToken', 'access_token']
+      for (const k of TOKEN_KEYS) {
+        localStorage.removeItem(k)
+        sessionStorage.removeItem(k)
+      }
+      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
+      
+      // Sign out from Firebase
+      try {
+        await firebaseAuth.signOut()
+      } catch (error) {
+        console.error('Firebase logout error:', error)
+      }
+      
+      console.log('Logout completed, redirecting...')
+      
+      // Simple redirect to home
+      window.location.href = '/'
+      
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Fallback: Clear storage and force navigation
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.href = '/'
+    }
   }
 
 
   const drawer = (
-    <RoleBasedSidebar />
+    <RoleBasedSidebar onClose={handleDrawerToggle} />
   )
 
   return (
@@ -72,20 +126,24 @@ const AdminLayout = () => {
       <AppBar
         position="fixed"
         sx={{
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
+          width: { md: desktopOpen ? `calc(100% - ${drawerWidth}px)` : '100%' },
+          ml: { md: desktopOpen ? `${drawerWidth}px` : 0 },
           backgroundColor: 'white',
           color: 'text.primary',
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          transition: theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.leavingScreen,
+          }),
         }}
       >
         <Toolbar>
           <IconButton
             color="inherit"
-            aria-label="open drawer"
+            aria-label="toggle drawer"
             edge="start"
             onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { md: 'none' } }}
+            sx={{ mr: 2 }}
           >
             <MenuIcon />
           </IconButton>
@@ -115,7 +173,7 @@ const AdminLayout = () => {
 
       <Box
         component="nav"
-        sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
+        sx={{ width: { md: desktopOpen ? drawerWidth : 0 }, flexShrink: { md: 0 } }}
       >
         <Drawer
           variant="temporary"
@@ -138,7 +196,7 @@ const AdminLayout = () => {
           {drawer}
         </Drawer>
         <Drawer
-          variant="permanent"
+          variant="persistent"
           sx={{
             display: { xs: 'none', md: 'block' },
             '& .MuiDrawer-paper': { 
@@ -146,10 +204,14 @@ const AdminLayout = () => {
               width: drawerWidth,
               backgroundColor: 'background.paper',
               borderRight: '1px solid',
-              borderColor: 'divider'
+              borderColor: 'divider',
+              transition: theme.transitions.create('width', {
+                easing: theme.transitions.easing.sharp,
+                duration: theme.transitions.duration.enteringScreen,
+              }),
             },
           }}
-          open
+          open={desktopOpen}
         >
           {drawer}
         </Drawer>
@@ -159,11 +221,15 @@ const AdminLayout = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          width: { md: `calc(100% - ${drawerWidth}px)` },
+          width: { md: desktopOpen ? `calc(100% - ${drawerWidth}px)` : '100%' },
           minHeight: '100vh',
           backgroundColor: 'grey.50',
           display: 'flex',
           flexDirection: 'column',
+          transition: theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.leavingScreen,
+          }),
         }}
       >
         <Toolbar />
@@ -182,7 +248,6 @@ const AdminLayout = () => {
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
         onClose={handleProfileMenuClose}
-        onClick={handleProfileMenuClose}
         PaperProps={{
           elevation: 0,
           sx: {
@@ -200,11 +265,18 @@ const AdminLayout = () => {
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
-        <MenuItem onClick={handleLogout}>
+        <MenuItem 
+          onClick={handleLogout}
+          sx={{
+            '&:hover': {
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+            },
+          }}
+        >
           <ListItemIcon>
-            <LogoutIcon fontSize="small" />
+            <LogoutIcon fontSize="small" sx={{ color: 'error.main' }} />
           </ListItemIcon>
-          Logout
+          <Typography sx={{ color: 'error.main' }}>Logout</Typography>
         </MenuItem>
       </Menu>
     </Box>

@@ -624,6 +624,8 @@ export const veterinaryAPI = {
   getAppointmentById: (id) => api.get(`/veterinary/user/appointments/${id}`),
   bookAppointment: (payload) => api.post('/veterinary/user/appointments/book', payload),
   cancelAppointment: (id) => api.post(`/veterinary/user/appointments/${id}/cancel`),
+  getAvailableTimeSlots: (date) => api.get('/veterinary/user/appointments/slots/available', { params: { date } }),
+  getAvailableServices: () => api.get('/veterinary/user/services/available'),
   
   // Manager store setup
   managerGetMyStore: () => api.get('/veterinary/manager/me/store'),
@@ -726,6 +728,19 @@ export const veterinaryAPI = {
   userGetPetMedicalHistory: (petId) => api.get(`/veterinary/user/medical-history/pet/${petId}`),
   userGetMedicalRecordDetail: (recordId) => api.get(`/veterinary/user/medical-history/record/${recordId}`),
   userDownloadMedicalRecord: (recordId) => api.get(`/veterinary/user/medical-history/record/${recordId}/download`),
+
+  // ============ DOCTOR CONSULTATION FLOW ============
+  // Pending appointments requiring approval (emergency cases)
+  managerGetPendingApplications: (params) => api.get('/veterinary/manager/applications/pending', { params }),
+  managerAcceptApplication: (id, payload) => api.post(`/veterinary/manager/applications/${id}/accept`, payload),
+  managerRejectApplication: (id, payload) => api.post(`/veterinary/manager/applications/${id}/reject`, payload),
+  
+  // Consultation management
+  managerStartConsultation: (id) => api.post(`/veterinary/manager/consultations/${id}/start`),
+  managerGetConsultationDetails: (id) => api.get(`/veterinary/manager/consultations/${id}`),
+  managerCompleteConsultation: (id, payload) => api.post(`/veterinary/manager/consultations/${id}/complete`, payload),
+  managerCompletePetConsultation: (id, petId, payload) => api.post(`/veterinary/manager/consultations/${id}/pets/${petId}/complete`, payload),
+  managerUpdateMedicalRecordInConsultation: (id, payload) => api.put(`/veterinary/manager/medical-records/${id}/update`, payload),
 }
 
 // Pet System APIs
@@ -808,7 +823,7 @@ export const breedsAPI = {
 // Custom Breed Requests API
 export const customBreedRequestsAPI = {
   list: () => api.get('/admin/custom-breed-requests'),
-  create: (requestData) => api.post('/admin/custom-breed-requests', requestData),
+  create: (requestData) => api.post('/manager/custom-breed-requests', requestData), // Manager endpoint
   update: (id, requestData) => api.put(`/admin/custom-breed-requests/${id}`, requestData),
   delete: (id) => api.delete(`/admin/custom-breed-requests/${id}`),
   approve: (id) => api.put(`/admin/custom-breed-requests/${id}/approve`),
@@ -851,11 +866,13 @@ export const userPetsAPI = {
   getOwnershipHistory: (id) => api.get(`/user/pets/${id}/history`),
   submitCustomRequest: (data) => api.post('/user/pets/custom-request', data),
   getMyCustomRequests: () => api.get('/user/pets/custom-requests/my')
-};
+}
 
 // Dashboard API
 export const dashboardAPI = {
-  getStats: () => apiClient.get('/user-dashboard/stats'),
+  getStats: () => api.get('/admin/dashboard/stats'),
+  getRecentActivities: (limit = 10) => api.get(`/admin/dashboard/recent-activities?limit=${limit}`),
+  getSystemAlerts: () => api.get('/admin/dashboard/system-alerts'),
   getActivities: () => apiClient.get('/user-dashboard/activities'),
   getNotifications: () => apiClient.get('/user-dashboard/notifications'),
   getModuleStats: () => apiClient.get('/user-dashboard/module-stats')

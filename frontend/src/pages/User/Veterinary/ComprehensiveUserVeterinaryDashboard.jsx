@@ -121,11 +121,27 @@ export default function ComprehensiveUserVeterinaryDashboard() {
   };
 
   const getPetImage = (pet) => {
+    if (!pet) return '/placeholder-pet.svg';
+    
+    // Handle images array (common format)
     if (pet.images && pet.images.length > 0) {
       const primaryImage = pet.images.find(img => img.isPrimary);
-      if (primaryImage) return primaryImage.url;
-      return pet.images[0].url;
+      if (primaryImage?.url) return primaryImage.url;
+      if (pet.images[0]?.url) return pet.images[0].url;
     }
+    
+    // Handle imageIds populated array
+    if (pet.imageIds && pet.imageIds.length > 0) {
+      const firstImage = pet.imageIds[0];
+      if (firstImage?.url) return firstImage.url;
+    }
+    
+    // Handle imageUrl string
+    if (pet.imageUrl) return pet.imageUrl;
+    
+    // Handle profileImage
+    if (pet.profileImage) return pet.profileImage;
+    
     return '/placeholder-pet.svg';
   };
 

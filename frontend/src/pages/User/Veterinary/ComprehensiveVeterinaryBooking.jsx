@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { petsAPI, userPetsAPI, adoptionAPI, petShopAPI, veterinaryAPI } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
-import UserLayout from '../../../components/Layout/UserLayout';
 
 export default function ComprehensiveVeterinaryBooking() {
   const navigate = useNavigate();
@@ -27,11 +26,52 @@ export default function ComprehensiveVeterinaryBooking() {
     existingConditionDetails: ''
   });
   const [errors, setErrors] = useState({});
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  // Helper to normalize pet data from different sources (defined early so useEffect can use it)
+  const normalizePet = (pet, source) => {
+    // Normalize species - could be string or object with name or empty object
+    let speciesName = 'Unknown';
+    if (typeof pet.species === 'string' && pet.species) {
+      speciesName = pet.species;
+    } else if (pet.species && typeof pet.species === 'object') {
+      speciesName = pet.species.displayName || pet.species.name || 'Unknown';
+    }
+    
+    // Normalize breed - could be string or object with name or empty object
+    let breedName = 'Unknown';
+    if (typeof pet.breed === 'string' && pet.breed) {
+      breedName = pet.breed;
+    } else if (pet.breed && typeof pet.breed === 'object') {
+      breedName = pet.breed.name || 'Unknown';
+    }
+    
+    const sourceConfig = {
+      owned: { label: 'My Pet', badge: 'bg-purple-100 text-purple-800' },
+      adopted: { label: 'Adopted Pet', badge: 'bg-green-100 text-green-800' },
+      purchased: { label: 'Purchased Pet', badge: 'bg-blue-100 text-blue-800' }
+    };
+    
+    const safeSource = sourceConfig[source] ? source : 'owned';
+    
+    return {
+      ...pet,
+      species: speciesName,
+      breed: breedName,
+      source: safeSource,
+      sourceLabel: sourceConfig[safeSource].label,
+      sourceBadge: sourceConfig[safeSource].badge
+    };
+  };
 
   useEffect(() => {
     // Check if pet was passed from navigation state
     if (location.state?.selectedPet) {
-      setSelectedPet(location.state.selectedPet);
+      // Normalize the pet data first to ensure consistency
+      const pet = location.state.selectedPet;
+      const source = pet.source || (pet.sourceLabel?.includes('Adopt') ? 'adopted' : pet.sourceLabel?.includes('Purchase') ? 'purchased' : 'owned');
+      setSelectedPet(normalizePet(pet, source));
       setStep(2);
     } else {
       loadAllPets();
@@ -55,45 +95,32 @@ export default function ComprehensiveVeterinaryBooking() {
           ? ownedRes.value.data.data 
           : (ownedRes.value.data?.data?.pets || []);
         userPets.forEach(pet => {
-          allPets.push({
-            ...pet,
-            source: 'owned',
-            sourceLabel: 'My Pet',
-            sourceBadge: 'bg-purple-100 text-purple-800'
-          });
+          allPets.push(normalizePet(pet, 'owned'));
         });
       }
 
-      // Process adopted pets
+      // Process adopted pets - response is { data: pets } where pets is array
       if (adoptedRes.status === 'fulfilled') {
         const adoptedPets = Array.isArray(adoptedRes.value.data?.data) 
           ? adoptedRes.value.data.data 
           : (adoptedRes.value.data?.data?.pets || []);
         adoptedPets.forEach(pet => {
-          allPets.push({
-            ...pet,
-            source: 'adopted',
-            sourceLabel: 'Adopted Pet',
-            sourceBadge: 'bg-green-100 text-green-800'
-          });
+          allPets.push(normalizePet(pet, 'adopted'));
         });
       }
 
-      // Process purchased pets
+      // Process purchased pets - response is { data: { pets: [...] } }
       if (purchasedRes.status === 'fulfilled') {
-        const purchasedPets = Array.isArray(purchasedRes.value.data?.data) 
-          ? purchasedRes.value.data.data 
-          : (purchasedRes.value.data?.data?.pets || []);
+        const responseData = purchasedRes.value.data?.data;
+        const purchasedPets = Array.isArray(responseData) 
+          ? responseData 
+          : (responseData?.pets || []);
         purchasedPets.forEach(pet => {
-          allPets.push({
-            ...pet,
-            source: 'purchased',
-            sourceLabel: 'Purchased Pet',
-            sourceBadge: 'bg-blue-100 text-blue-800'
-          });
+          allPets.push(normalizePet(pet, 'purchased'));
         });
       }
 
+      console.log('Loaded all pets:', allPets.length, 'pets from all sources');
       setPets(allPets);
     } catch (error) {
       console.error('Failed to load pets:', error);
@@ -107,12 +134,46 @@ export default function ComprehensiveVeterinaryBooking() {
     setStep(2);
   };
 
+  // Fetch available time slots when date changes
+  const fetchAvailableSlots = async (date) => {
+    if (!date) {
+      setAvailableSlots([]);
+      return;
+    }
+    
+    setLoadingSlots(true);
+    try {
+      const response = await veterinaryAPI.getAvailableTimeSlots(date);
+      if (response.data?.success) {
+        setAvailableSlots(response.data.data.availableSlots || []);
+      } else {
+        setAvailableSlots([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch available slots:', error);
+      // Fallback to default slots if API fails
+      setAvailableSlots([
+        '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
+        '12:00 PM', '12:30 PM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM',
+        '04:00 PM', '04:30 PM', '05:00 PM'
+      ]);
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+    
+    // When date changes, fetch available slots and reset selected time slot
+    if (name === 'appointmentDate' && value) {
+      setFormData(prev => ({ ...prev, timeSlot: '' }));
+      fetchAvailableSlots(value);
+    }
     
     // Clear error
     if (errors[name]) {
@@ -184,23 +245,30 @@ export default function ComprehensiveVeterinaryBooking() {
   });
 
   const getPetImage = (pet) => {
+    // Handle images array (common format from both adoption and petshop)
     if (pet.images && pet.images.length > 0) {
       const primaryImage = pet.images.find(img => img.isPrimary);
-      if (primaryImage) return primaryImage.url;
-      return pet.images[0].url;
+      if (primaryImage?.url) return primaryImage.url;
+      if (pet.images[0]?.url) return pet.images[0].url;
     }
+    
+    // Handle imageUrl string (some responses)
+    if (pet.imageUrl) return pet.imageUrl;
+    
+    // Handle imageIds array with populated data
+    if (pet.imageIds && pet.imageIds.length > 0) {
+      const firstImage = pet.imageIds[0];
+      if (firstImage?.url) return firstImage.url;
+    }
+    
+    // Handle profileImage
+    if (pet.profileImage) return pet.profileImage;
+    
     return '/placeholder-pet.svg';
   };
 
-  const timeSlots = [
-    '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-    '12:00 PM', '12:30 PM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM',
-    '04:00 PM', '04:30 PM', '05:00 PM'
-  ];
-
   return (
-    <UserLayout>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
           <button
@@ -315,17 +383,22 @@ export default function ComprehensiveVeterinaryBooking() {
                     />
                     <div className="p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900">{pet.name}</h3>
-                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${pet.sourceBadge}`}>
-                          {pet.sourceLabel}
+                        <h3 className="text-lg font-semibold text-gray-900">{pet.name || 'Unknown'}</h3>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${typeof pet.sourceBadge === 'string' ? pet.sourceBadge : 'bg-gray-100 text-gray-800'}`}>
+                          {typeof pet.sourceLabel === 'string' ? pet.sourceLabel : 'Pet'}
                         </span>
                       </div>
                       <p className="text-sm text-gray-600">
-                        {pet.species} • {pet.breed}
+                        {typeof pet.species === 'string' ? pet.species : 'Unknown'} • {typeof pet.breed === 'string' ? pet.breed : 'Unknown'}
                       </p>
-                      {pet.age && (
+                      {pet.age && typeof pet.age !== 'object' && (
                         <p className="text-sm text-gray-500 mt-1">
                           Age: {pet.age} {pet.ageUnit || 'years'}
+                        </p>
+                      )}
+                      {pet.age && typeof pet.age === 'object' && (
+                        <p className="text-sm text-gray-500 mt-1">
+                          Age: {pet.age.years || pet.age.value || 0} {pet.ageUnit || 'years'}
                         </p>
                       )}
                     </div>
@@ -349,12 +422,12 @@ export default function ComprehensiveVeterinaryBooking() {
                   onError={(e) => { e.target.src = '/placeholder-pet.svg'; }}
                 />
                 <div className="ml-4 flex-1">
-                  <h3 className="text-xl font-semibold text-gray-900">{selectedPet.name}</h3>
+                  <h3 className="text-xl font-semibold text-gray-900">{selectedPet.name || 'Unknown'}</h3>
                   <p className="text-sm text-gray-600">
-                    {selectedPet.species} • {selectedPet.breed}
+                    {typeof selectedPet.species === 'string' ? selectedPet.species : 'Unknown'} • {typeof selectedPet.breed === 'string' ? selectedPet.breed : 'Unknown'}
                   </p>
-                  <span className={`inline-block mt-1 px-2 py-1 text-xs font-semibold rounded-full ${selectedPet.sourceBadge}`}>
-                    {selectedPet.sourceLabel}
+                  <span className={`inline-block mt-1 px-2 py-1 text-xs font-semibold rounded-full ${typeof selectedPet.sourceBadge === 'string' ? selectedPet.sourceBadge : 'bg-gray-100 text-gray-800'}`}>
+                    {typeof selectedPet.sourceLabel === 'string' ? selectedPet.sourceLabel : 'Pet'}
                   </span>
                 </div>
                 <button
@@ -426,15 +499,29 @@ export default function ComprehensiveVeterinaryBooking() {
                       name="timeSlot"
                       value={formData.timeSlot}
                       onChange={handleInputChange}
+                      disabled={!formData.appointmentDate || loadingSlots}
                       className={`w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
                         errors.timeSlot ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      } ${(!formData.appointmentDate || loadingSlots) ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                     >
-                      <option value="">Select a time slot</option>
-                      {timeSlots.map(slot => (
+                      <option value="">
+                        {loadingSlots 
+                          ? 'Loading available slots...' 
+                          : !formData.appointmentDate 
+                            ? 'Select a date first' 
+                            : availableSlots.length === 0 
+                              ? 'No slots available for this date' 
+                              : 'Select a time slot'}
+                      </option>
+                      {availableSlots.map(slot => (
                         <option key={slot} value={slot}>{slot}</option>
                       ))}
                     </select>
+                    {availableSlots.length > 0 && (
+                      <p className="mt-1 text-xs text-green-600">
+                        {availableSlots.length} time {availableSlots.length === 1 ? 'slot' : 'slots'} available
+                      </p>
+                    )}
                     {errors.timeSlot && (
                       <p className="mt-1 text-sm text-red-500">{errors.timeSlot}</p>
                     )}
@@ -549,7 +636,6 @@ export default function ComprehensiveVeterinaryBooking() {
             </form>
           </div>
         )}
-      </div>
-    </UserLayout>
+    </div>
   );
 }

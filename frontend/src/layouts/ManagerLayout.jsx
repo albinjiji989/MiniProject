@@ -4,6 +4,8 @@ import { Menu as MenuIcon, Logout as LogoutIcon, Notifications as NotificationIc
 import ManagerSidebar from '../components/Navigation/ManagerSidebar'
 import { useAuth } from '../contexts/AuthContext'
 import { Navigate, useNavigate } from 'react-router-dom'
+import { authAPI } from '../services/api'
+import firebaseAuth from '../services/firebaseAuth'
 const drawerWidth = 280
 
 const ManagerLayout = ({ children }) => {
@@ -44,7 +46,59 @@ const ManagerLayout = ({ children }) => {
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen)
   const handleProfileMenuOpen = (e) => setAnchorEl(e.currentTarget)
   const handleProfileMenuClose = () => setAnchorEl(null)
-  const handleLogout = () => { logout() }
+  const handleLogout = async (event) => {
+    console.log('Manager navbar logout clicked')
+    event?.preventDefault()
+    event?.stopPropagation()
+    
+    // Close the menu first
+    handleProfileMenuClose()
+    
+    try {
+      console.log('Starting logout process...')
+      
+      // Set logout guard to prevent Firebase re-auth
+      sessionStorage.setItem('auth_logout', '1')
+      
+      // Call backend logout
+      const token = localStorage.getItem('token')
+      if (token) {
+        try {
+          await authAPI.logout()
+        } catch (error) {
+          console.error('Backend logout error:', error)
+        }
+      }
+      
+      // Clear all auth data
+      const TOKEN_KEYS = ['token', 'authToken', 'accessToken', 'jwt', 'jwtToken', 'access_token']
+      for (const k of TOKEN_KEYS) {
+        localStorage.removeItem(k)
+        sessionStorage.removeItem(k)
+      }
+      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
+      
+      // Sign out from Firebase
+      try {
+        await firebaseAuth.signOut()
+      } catch (error) {
+        console.error('Firebase logout error:', error)
+      }
+      
+      console.log('Logout completed, redirecting...')
+      
+      // Simple redirect to home
+      window.location.href = '/'
+      
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Fallback: Clear storage and force navigation
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.href = '/'
+    }
+  }
 
   const moduleType = (user?.role || '').replace('_manager','').replace('_', '-') || 'petshop'
   const drawer = (
@@ -118,11 +172,18 @@ const ManagerLayout = ({ children }) => {
         <MenuItem onClick={() => navigate('/manager/store-name-change')}>
           Request Store Name Change
         </MenuItem>
-        <MenuItem onClick={handleLogout}>
+        <MenuItem 
+          onClick={handleLogout}
+          sx={{
+            '&:hover': {
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+            },
+          }}
+        >
           <ListItemIcon>
-            <LogoutIcon fontSize="small" />
+            <LogoutIcon fontSize="small" sx={{ color: 'error.main' }} />
           </ListItemIcon>
-          Logout
+          <Typography sx={{ color: 'error.main' }}>Logout</Typography>
         </MenuItem>
       </Menu>
     </Box>

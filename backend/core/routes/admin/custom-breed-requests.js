@@ -46,10 +46,11 @@ router.get('/', auth, authorize('admin'), async (req, res) => {
     }
 
     const requests = await CustomBreedRequest.find(query)
-      .populate('requester', 'name email phone')
+      .populate('requestedBy', 'name email phone role')
       .populate('reviewer', 'name email')
       .populate('createdSpecies', 'name displayName')
       .populate('createdBreed', 'name')
+      .populate('speciesId', 'name displayName')
       .sort({ priority: -1, submittedAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);

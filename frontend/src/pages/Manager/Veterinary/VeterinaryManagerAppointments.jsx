@@ -15,6 +15,11 @@ export default function VeterinaryManagerAppointments() {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [showDeclineModal, setShowDeclineModal] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+  const [acceptNotes, setAcceptNotes] = useState('');
 
   useEffect(() => {
     loadAppointments();
@@ -25,7 +30,7 @@ export default function VeterinaryManagerAppointments() {
     try {
       const params = {
         page: currentPage,
-        limit: 10,
+        limit: 20,
         ...filter
       };
       
@@ -47,330 +52,461 @@ export default function VeterinaryManagerAppointments() {
     setCurrentPage(1);
   };
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    setCurrentPage(1);
-    loadAppointments();
-  };
-
   const getBookingTypeBadge = (bookingType) => {
-    switch (bookingType?.toLowerCase()) {
-      case 'emergency':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Emergency</span>;
-      case 'walkin':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Walk-in</span>;
-      default:
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Scheduled</span>;
-    }
-  };
-
-  const getStatusBadge = (status) => {
-    switch (status?.toLowerCase()) {
-      case 'scheduled':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Scheduled</span>;
-      case 'confirmed':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Confirmed</span>;
-      case 'completed':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">Completed</span>;
-      case 'cancelled':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Cancelled</span>;
-      case 'pending_approval':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Pending Approval</span>;
-      case 'declined':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Declined</span>;
-      default:
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{status}</span>;
-    }
-  };
-
-  const getSourceBadge = (appointment) => {
-    // Check if appointment has _source property (from user collection) or if it's from manager collection
-    const isUserAppointment = appointment._source === 'user';
+    const badges = {
+      emergency: { bg: 'bg-red-100', text: 'text-red-800', label: 'Emergency', icon: '🚨' },
+      walkin: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Walk-in', icon: '🚶' },
+      routine: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Routine', icon: '📅' }
+    };
+    const badge = badges[bookingType?.toLowerCase()] || badges.routine;
     return (
-      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-        isUserAppointment 
-          ? 'bg-green-100 text-green-800' 
-          : 'bg-blue-100 text-blue-800'
-      }`}>
-        {isUserAppointment ? 'User Booking' : 'Manager Booking'}
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+        <span className="mr-1">{badge.icon}</span>
+        {badge.label}
       </span>
     );
   };
 
-  const updateAppointmentStatus = async (appointmentId, newStatus) => {
+  const getStatusBadge = (status) => {
+    const badges = {
+      pending_approval: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Pending', icon: '⏳' },
+      confirmed: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Confirmed', icon: '✓' },
+      in_consultation: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'In Consultation', icon: '👨‍⚕️' },
+      completed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed', icon: '✓' },
+      cancelled: { bg: 'bg-red-100', text: 'text-red-800', label: 'Cancelled', icon: '✗' }
+    };
+    const badge = badges[status?.toLowerCase()] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status, icon: '•' };
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+        <span className="mr-1">{badge.icon}</span>
+        {badge.label}
+      </span>
+    );
+  };
+
+  const getPaymentBadge = (paymentStatus) => {
+    const badges = {
+      pending: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Pending', icon: '💳' },
+      paid: { bg: 'bg-green-100', text: 'text-green-800', label: 'Paid', icon: '✓' },
+      failed: { bg: 'bg-red-100', text: 'text-red-800', label: 'Failed', icon: '✗' },
+      refunded: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Refunded', icon: '↩' }
+    };
+    const badge = badges[paymentStatus?.toLowerCase()] || badges.pending;
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+        <span className="mr-1">{badge.icon}</span>
+        {badge.label}
+      </span>
+    );
+  };
+
+  const handleAcceptAppointment = async () => {
     try {
-      await veterinaryAPI.managerUpdateAppointment(appointmentId, { status: newStatus });
-      loadAppointments(); // Refresh the list
+      await veterinaryAPI.managerUpdateAppointment(selectedAppointment._id, {
+        status: 'confirmed',
+        notes: acceptNotes
+      });
+      setShowAcceptModal(false);
+      setAcceptNotes('');
+      setSelectedAppointment(null);
+      loadAppointments();
+      alert('Appointment confirmed successfully!');
     } catch (error) {
-      console.error('Failed to update appointment status:', error);
+      console.error('Failed to accept appointment:', error);
+      alert('Failed to confirm appointment');
     }
   };
 
-  const approveEmergencyAppointment = async (appointmentId) => {
+  const handleDeclineAppointment = async () => {
+    if (!declineReason.trim()) {
+      alert('Please provide a reason for declining');
+      return;
+    }
     try {
-      await veterinaryAPI.managerUpdateAppointment(appointmentId, { 
-        emergencyApproved: true,
-        status: 'scheduled'
+      await veterinaryAPI.managerUpdateAppointment(selectedAppointment._id, {
+        status: 'declined',
+        declineReason: declineReason
       });
-      loadAppointments(); // Refresh the list
+      setShowDeclineModal(false);
+      setDeclineReason('');
+      setSelectedAppointment(null);
+      loadAppointments();
+      alert('Appointment declined');
     } catch (error) {
-      console.error('Failed to approve emergency appointment:', error);
+      console.error('Failed to decline appointment:', error);
+      alert('Failed to decline appointment');
     }
   };
 
-  const declineEmergencyAppointment = async (appointmentId, reason) => {
-    try {
-      await veterinaryAPI.managerUpdateAppointment(appointmentId, { 
-        emergencyDeclined: true,
-        emergencyDeclineReason: reason,
-        status: 'declined'
-      });
-      loadAppointments(); // Refresh the list
-    } catch (error) {
-      console.error('Failed to decline emergency appointment:', error);
-    }
+  const handleStartConsultation = (appointment) => {
+    navigate(`/manager/veterinary/consultation/${appointment._id}`);
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const formatTime = (timeString) => {
+    return timeString || 'Not specified';
   };
 
   return (
     <ManagerModuleLayout
       title="Veterinary Appointments"
-      subtitle="Manage all veterinary appointments"
-      actions={[
-        {
-          label: 'New Appointment',
-          onClick: () => navigate('/manager/veterinary/appointments/new'),
-          primary: true
-        }
-      ]}
+      subtitle="Manage and track all veterinary appointments"
     >
       {/* Filters */}
-      <div className="mb-6 bg-white shadow sm:rounded-lg p-4">
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label htmlFor="status" className="block text-sm font-medium text-gray-700">
-              Status
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
-              id="status"
               value={filter.status}
               onChange={(e) => handleFilterChange('status', e.target.value)}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Statuses</option>
-              <option value="scheduled">Scheduled</option>
+              <option value="pending_approval">Pending</option>
               <option value="confirmed">Confirmed</option>
+              <option value="in_consultation">In Consultation</option>
               <option value="completed">Completed</option>
               <option value="cancelled">Cancelled</option>
-              <option value="pending_approval">Pending Approval</option>
-              <option value="declined">Declined</option>
             </select>
           </div>
           
           <div>
-            <label htmlFor="bookingType" className="block text-sm font-medium text-gray-700">
-              Booking Type
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Booking Type</label>
             <select
-              id="bookingType"
               value={filter.bookingType}
               onChange={(e) => handleFilterChange('bookingType', e.target.value)}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">All Types</option>
-              <option value="routine">Scheduled</option>
+              <option value="routine">Routine</option>
               <option value="emergency">Emergency</option>
               <option value="walkin">Walk-in</option>
             </select>
           </div>
           
           <div>
-            <label htmlFor="date" className="block text-sm font-medium text-gray-700">
-              Date
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <input
               type="date"
-              id="date"
               value={filter.date}
               onChange={(e) => handleFilterChange('date', e.target.value)}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           
           <div>
-            <label htmlFor="search" className="block text-sm font-medium text-gray-700">
-              Search
-            </label>
-            <div className="mt-1 flex">
-              <input
-                type="text"
-                id="search"
-                placeholder="Pet or owner name"
-                value={filter.search}
-                onChange={(e) => handleFilterChange('search', e.target.value)}
-                className="block w-full border border-gray-300 rounded-l-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              />
-              <button
-                onClick={handleSearch}
-                className="inline-flex items-center px-3 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 text-gray-500 sm:text-sm"
-              >
-                🔍
-              </button>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <input
+              type="text"
+              placeholder="Pet name, owner..."
+              value={filter.search}
+              onChange={(e) => handleFilterChange('search', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
           </div>
         </div>
       </div>
 
-      {/* Appointments Table */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-        <div className="border-t border-gray-200">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Patient
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date & Time
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Booking Type
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Source
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {loading ? (
+      {/* Appointments List */}
+      {loading ? (
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      ) : appointments.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-12 text-center">
+          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No appointments</h3>
+          <p className="mt-1 text-sm text-gray-500">No appointments match your filters</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan="7" className="px-6 py-4 text-center">
-                    <div className="flex justify-center">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
-                    </div>
-                  </td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Appointment
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Pet & Owner
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Service
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date & Time
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type & Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
-              ) : appointments.length > 0 ? (
-                appointments.map((appointment) => (
-                  <tr key={appointment._id}>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {appointments.map((appointment) => (
+                  <tr key={appointment._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{appointment.pet?.name || 'Unknown Pet'}</div>
-                      <div className="text-sm text-gray-500">{appointment.owner?.name || appointment.ownerId?.name || 'Unknown Owner'}</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        #{appointment.appointmentNumber || appointment._id.slice(-6)}
+                      </div>
+                      {appointment.symptoms && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Symptoms: {appointment.symptoms.substring(0, 30)}...
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">
+                        {appointment.pet?.name || appointment.petId?.name || 'Unknown Pet'}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {appointment.ownerId?.name || 'Unknown Owner'}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {appointment.pet?.species || appointment.petId?.species || 'Unknown'} • {appointment.pet?.breed || appointment.petId?.breed || 'Unknown'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">
+                        {appointment.serviceId?.name || appointment.reason || 'General Checkup'}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        ₹{appointment.serviceId?.price || appointment.amount || 0}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{appointment.appointmentDate ? new Date(appointment.appointmentDate).toLocaleDateString() : 'Anytime'}</div>
-                      <div className="text-sm text-gray-500">{appointment.timeSlot || 'N/A'}</div>
+                      <div className="text-sm text-gray-900">
+                        {formatDate(appointment.appointmentDate)}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {formatTime(appointment.timeSlot)}
+                      </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {appointment.visitType || 'Consultation'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {getBookingTypeBadge(appointment.bookingType)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {getStatusBadge(appointment.status)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {getSourceBadge(appointment)}
+                    <td className="px-6 py-4">
+                      <div className="space-y-1">
+                        {getBookingTypeBadge(appointment.bookingType)}
+                        {getStatusBadge(appointment.status)}
+                        {getPaymentBadge(appointment.paymentStatus)}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => navigate(`/manager/veterinary/appointments/${appointment._id}`)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                        >
-                          View
-                        </button>
-                        {appointment.status === 'pending_approval' && appointment.bookingType === 'emergency' && (
+                      <div className="flex flex-col space-y-2">
+                        {appointment.status === 'pending_approval' && (
                           <>
                             <button
-                              onClick={() => approveEmergencyAppointment(appointment._id)}
-                              className="text-green-600 hover:text-green-900"
+                              onClick={() => {
+                                setSelectedAppointment(appointment);
+                                setShowAcceptModal(true);
+                              }}
+                              className="text-green-600 hover:text-green-900 text-left"
                             >
-                              Approve
+                              ✓ Accept
                             </button>
                             <button
                               onClick={() => {
-                                const reason = prompt('Enter reason for declining this emergency appointment:');
-                                if (reason) {
-                                  declineEmergencyAppointment(appointment._id, reason);
-                                }
+                                setSelectedAppointment(appointment);
+                                setShowDeclineModal(true);
                               }}
-                              className="text-red-600 hover:text-red-900"
+                              className="text-red-600 hover:text-red-900 text-left"
                             >
-                              Decline
+                              ✗ Decline
                             </button>
                           </>
                         )}
-                        {appointment.status === 'scheduled' && (
+                        {(appointment.status === 'confirmed' || appointment.status === 'scheduled') && (
                           <button
-                            onClick={() => updateAppointmentStatus(appointment._id, 'confirmed')}
-                            className="text-green-600 hover:text-green-900"
+                            onClick={() => handleStartConsultation(appointment)}
+                            className="text-blue-600 hover:text-blue-900 text-left"
                           >
-                            Confirm
+                            👨‍⚕️ Start Consultation
                           </button>
                         )}
-                        {appointment.status === 'confirmed' && (
+                        {appointment.status === 'in_consultation' && (
                           <button
-                            onClick={() => updateAppointmentStatus(appointment._id, 'completed')}
-                            className="text-purple-600 hover:text-purple-900"
+                            onClick={() => handleStartConsultation(appointment)}
+                            className="text-purple-600 hover:text-purple-900 text-left"
                           >
-                            Complete
+                            📋 Continue
                           </button>
                         )}
+                        {appointment.status === 'completed' && (
+                          <button
+                            onClick={() => navigate(`/manager/veterinary/appointments/${appointment._id}`)}
+                            className="text-gray-600 hover:text-gray-900 text-left"
+                          >
+                            👁️ View Details
+                          </button>
+                        )}
+                        <button
+                          onClick={() => navigate(`/manager/veterinary/appointments/${appointment._id}`)}
+                          className="text-blue-600 hover:text-blue-900 text-left"
+                        >
+                          📄 Details
+                        </button>
                       </div>
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">
-                    No appointments found
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-6 flex items-center justify-between">
-          <div className="text-sm text-gray-700">
-            Page {currentPage} of {totalPages}
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
-                currentPage === 1 
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
-                currentPage === totalPages 
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Next
-            </button>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">
+                    Page <span className="font-medium">{currentPage}</span> of <span className="font-medium">{totalPages}</span>
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Accept Modal */}
+      {showAcceptModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
+                Confirm Appointment
+              </h3>
+              <div className="mb-4">
+                <p className="text-sm text-gray-500 mb-2">
+                  Pet: <span className="font-medium text-gray-900">{selectedAppointment?.petId?.name}</span>
+                </p>
+                <p className="text-sm text-gray-500 mb-2">
+                  Owner: <span className="font-medium text-gray-900">{selectedAppointment?.ownerId?.name}</span>
+                </p>
+                <p className="text-sm text-gray-500 mb-4">
+                  Date: <span className="font-medium text-gray-900">{formatDate(selectedAppointment?.appointmentDate)} at {selectedAppointment?.timeSlot}</span>
+                </p>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes (Optional)
+                </label>
+                <textarea
+                  value={acceptNotes}
+                  onChange={(e) => setAcceptNotes(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Any special instructions or notes..."
+                />
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowAcceptModal(false);
+                    setAcceptNotes('');
+                    setSelectedAppointment(null);
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAcceptAppointment}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
+                  Confirm Appointment
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Decline Modal */}
+      {showDeclineModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
+                Decline Appointment
+              </h3>
+              <div className="mb-4">
+                <p className="text-sm text-gray-500 mb-4">
+                  Please provide a reason for declining this appointment.
+                </p>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Reason <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Explain why this appointment cannot be accepted..."
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowDeclineModal(false);
+                    setDeclineReason('');
+                    setSelectedAppointment(null);
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeclineAppointment}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                >
+                  Decline Appointment
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

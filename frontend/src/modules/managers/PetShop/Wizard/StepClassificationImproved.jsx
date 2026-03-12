@@ -14,7 +14,9 @@ import {
   FormHelperText,
   Paper
 } from '@mui/material'
+import { Add as AddIcon } from '@mui/icons-material'
 import { apiClient } from '../../../../services/api'
+import BreedSpeciesRequestModal from '../../../../components/Common/BreedSpeciesRequestModal'
 
 const KEY = 'petshop_wizard'
 
@@ -22,6 +24,8 @@ export default function StepClassificationImproved() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [showRequestModal, setShowRequestModal] = useState(false)
   const [categories, setCategories] = useState([])
   const [allSpecies, setAllSpecies] = useState([])
   const [filteredSpecies, setFilteredSpecies] = useState([])
@@ -193,6 +197,22 @@ export default function StepClassificationImproved() {
 
   const back = () => navigate('/manager/petshop/wizard/basic')
 
+  const handleRequestSuccess = () => {
+    setSuccess('Request submitted successfully! Admin will review it.')
+    setTimeout(() => setSuccess(''), 5000)
+    // Optionally reload data
+    const loadData = async () => {
+      try {
+        const specRes = await apiClient.get('/admin/species')
+        const specs = Array.isArray(specRes.data?.data) ? specRes.data.data : (Array.isArray(specRes.data) ? specRes.data : [])
+        setAllSpecies(specs)
+      } catch (err) {
+        console.error('Failed to reload species:', err)
+      }
+    }
+    loadData()
+  }
+
   if (loading && (categories.length === 0 || allSpecies.length === 0)) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
@@ -203,13 +223,29 @@ export default function StepClassificationImproved() {
 
   return (
     <Box className="space-y-6">
-      <Typography variant="h6" sx={{ mb: 2 }}>Pet Classification</Typography>
-      <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-        Select the category, species, and breed for your pet stock.
-      </Typography>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Box>
+          <Typography variant="h6">Pet Classification</Typography>
+          <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+            Select the category, species, and breed for your pet stock.
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={<AddIcon />}
+          onClick={() => setShowRequestModal(true)}
+          color="primary"
+        >
+          Request New Breed/Species
+        </Button>
+      </Box>
       
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>
+      )}
+      
+      {success && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>{success}</Alert>
       )}
       
       <Paper sx={{ p: 3 }}>
@@ -297,6 +333,13 @@ export default function StepClassificationImproved() {
           Next: Pricing
         </Button>
       </Box>
+
+      {/* Request Modal */}
+      <BreedSpeciesRequestModal
+        isOpen={showRequestModal}
+        onClose={() => setShowRequestModal(false)}
+        onSuccess={handleRequestSuccess}
+      />
     </Box>
   )
 }

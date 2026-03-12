@@ -12,6 +12,9 @@ import {
   Avatar,
   Collapse,
   Chip,
+  IconButton,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material'
 import {
   Dashboard as DashboardIcon,
@@ -45,6 +48,7 @@ import {
   Visibility as ViewIcon,
   Info as InfoIcon,
   History as HistoryIcon,
+  Close as CloseIcon,
   // Additional icons for comprehensive admin functions
   Assessment as AssessmentIcon,
   FileUpload as FileUploadIcon,
@@ -62,6 +66,8 @@ import {
   TrendingUp as TrendingUpIcon,
 } from '@mui/icons-material'
 import { useAuth } from '../../contexts/AuthContext'
+import { authAPI } from '../../services/api'
+import firebaseAuth from '../../services/firebaseAuth'
 const getMenuItems = (userRole, userDetails) => {
   // Role-aware default dashboard path
   const dashboardPath = (
@@ -103,6 +109,7 @@ const getMenuItems = (userRole, userDetails) => {
           { text: 'Species', icon: <PetsIcon />, path: '/admin/species', roles: ['admin'] },
           { text: 'Breed', icon: <PetsIcon />, path: '/admin/breeds', roles: ['admin'] },
           { text: 'Breed Request', icon: <AssignmentIcon />, path: '/admin/custom-breed-requests', roles: ['admin'] },
+          { text: 'Name Change Requests', icon: <EditIcon />, path: '/admin/name-change-requests', roles: ['admin'] },
         ]
       },
     ]
@@ -196,10 +203,15 @@ const RoleBasedSidebar = ({ onClose }) => {
   const location = useLocation()
   const { user, logout } = useAuth()
   const [expandedItems, setExpandedItems] = React.useState({})
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
 
   const handleNavigation = (path) => {
     navigate(path)
-    onClose?.()
+    // Only close sidebar on mobile devices
+    if (isMobile) {
+      onClose?.()
+    }
   }
 
   const handleExpandClick = (itemText) => {
@@ -209,11 +221,55 @@ const RoleBasedSidebar = ({ onClose }) => {
     }))
   }
 
-  const handleLogout = () => {
-    logout()
-    setTimeout(() => {
-      navigate('/')
-    }, 100)
+  const handleLogout = async (event) => {
+    console.log('Sidebar logout clicked')
+    event?.preventDefault()
+    event?.stopPropagation()
+    
+    try {
+      console.log('Starting logout process...')
+      
+      // Set logout guard to prevent Firebase re-auth
+      sessionStorage.setItem('auth_logout', '1')
+      
+      // Call backend logout
+      const token = localStorage.getItem('token')
+      if (token) {
+        try {
+          await authAPI.logout()
+        } catch (error) {
+          console.error('Backend logout error:', error)
+        }
+      }
+      
+      // Clear all auth data
+      const TOKEN_KEYS = ['token', 'authToken', 'accessToken', 'jwt', 'jwtToken', 'access_token']
+      for (const k of TOKEN_KEYS) {
+        localStorage.removeItem(k)
+        sessionStorage.removeItem(k)
+      }
+      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
+      
+      // Sign out from Firebase
+      try {
+        await firebaseAuth.signOut()
+      } catch (error) {
+        console.error('Firebase logout error:', error)
+      }
+      
+      console.log('Logout completed, redirecting...')
+      
+      // Simple redirect to home
+      window.location.href = '/'
+      
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Fallback: Clear storage and force navigation
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.href = '/'
+    }
   }
 
   // Get portal title based on role
@@ -320,6 +376,43 @@ const RoleBasedSidebar = ({ onClose }) => {
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Header with Portal Title and Close Button */}
+      <Box sx={{ 
+        p: 2, 
+        borderBottom: '1px solid', 
+        borderColor: 'divider',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: 'background.paper'
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Avatar sx={{ bgcolor: 'primary.main', width: 36, height: 36 }}>
+            {user?.name?.charAt(0)?.toUpperCase() || 'A'}
+          </Avatar>
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+              {getPortalTitle()}
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1 }}>
+              {user?.name || user?.email}
+            </Typography>
+          </Box>
+        </Box>
+        {onClose && (
+          <IconButton 
+            onClick={onClose}
+            size="small"
+            sx={{ 
+              display: { md: 'none' },
+              '&:hover': { backgroundColor: 'grey.100' }
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        )}
+      </Box>
+
       {/* Navigation */}
       <Box sx={{ flex: 1, overflow: 'auto' }}>
         <List sx={{ px: 2, py: 1.5 }}>

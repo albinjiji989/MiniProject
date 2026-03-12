@@ -22,6 +22,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 const allowedOrigins = [
   'http://localhost:5173',           // Web dev
   'http://localhost:3000',           // Alternative web dev
+  'https://mini-project-njfc.vercel.app', // New frontend production
   'https://mini-project-ebon-omega.vercel.app', // Web production
   process.env.CLIENT_URL,            // Custom client URL
   process.env.FRONTEND_URL           // Alternative frontend URL
@@ -88,6 +89,7 @@ app.use('/api/modules', require('./core/routes/pet/modulesRoutes'));
 app.use('/api/ai', require('./core/routes/aiRoutes'));
 
 // Admin Routes
+app.use('/api/admin/dashboard', require('./core/routes/admin/dashboard'));
 app.use('/api/admin/species', require('./core/routes/admin/species'));
 app.use('/api/admin/breeds', require('./core/routes/admin/breeds'));
 app.use('/api/admin/pet-categories', require('./core/routes/admin/pet-categories'));
@@ -95,6 +97,7 @@ app.use('/api/admin/pet-details', require('./core/routes/admin/pet-details'));
 app.use('/api/admin/custom-breed-requests', require('./core/routes/admin/custom-breed-requests'));
 app.use('/api/admin/pet-system-requests', require('./core/routes/admin/petSystemRequests'));
 app.use('/api/admin/pets', require('./core/routes/admin/pets'));
+app.use('/api/admin/pets-overview', require('./core/routes/admin/pets-overview'));
 app.use('/api/admin/pet-registry', require('./core/routes/admin/pet-registry'));
 app.use('/api/admin', require('./modules/admin/routes/admin'));
 app.use('/api/user/pets', require('./core/routes/user/user/pets'));
@@ -108,6 +111,7 @@ app.use('/api/user-dashboard', require('./core/routes/user/userDashboard'));
 app.use('/api/user/ownership-history', require('./core/routes/user/user/ownership-history'));
 app.use('/api/pets', require('./core/routes/pet'));  // Use index.js to include centralized routes
 app.use('/api/pet-age', require('./core/routes/petAgeRoutes'));
+app.use('/api/pet-name-change', require('./core/routes/nameChangeRequestRoutes'));
 
 // Blockchain routes
 app.use('/api/blockchain', require('./core/routes/blockchainRoutes'));
@@ -128,6 +132,7 @@ app.use('/api/admin', require('./modules/admin/routes'));
 
 // Manager Profile Routes
 app.use('/api/manager', require('./modules/manager/routes'));
+app.use('/api/manager/custom-breed-requests', require('./core/routes/manager/custom-breed-requests'));
 
 // E-Commerce Routes
 app.use('/api/ecommerce/admin', require('./modules/ecommerce/admin/routes'));

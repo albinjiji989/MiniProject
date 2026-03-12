@@ -27,7 +27,11 @@ import {
   Alert,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  TextField,
+  Tooltip,
+  Divider,
+  LinearProgress
 } from '@mui/material';
 import { 
   Cake as CakeIcon,
@@ -42,7 +46,24 @@ import {
   History as HistoryIcon,
   ExpandMore as ExpandMoreIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon
+  Delete as DeleteIcon,
+  Badge as BadgeIcon,
+  Lock as LockIcon,
+  CheckCircle as CheckCircleIcon,
+  Info as InfoIcon,
+  FitnessCenter as FitnessCenterIcon,
+  Vaccines as VaccinesIcon,
+  Description as DescriptionIcon,
+  ChildCare as ChildCareIcon,
+  Home as HomeIcon,
+  AttachMoney as MoneyIcon,
+  EmojiNature as NatureIcon,
+  VolumeUp as VolumeUpIcon,
+  School as SchoolIcon,
+  ContentCut as GroomingIcon,
+  LocationOn as LocationIcon,
+  SwapHoriz as TransferIcon,
+  Star as StarIcon
 } from '@mui/icons-material';
 import { apiClient, petsAPI, userPetsAPI, petShopAPI, resolveMediaUrl } from '../../../services/api';
 
@@ -69,6 +90,13 @@ const UserPetDetails = () => {
   const [birthdayLoading, setBirthdayLoading] = useState(false);
   const [birthdayError, setBirthdayError] = useState('');
   const [birthdaySuccess, setBirthdaySuccess] = useState('');
+  
+  // Pet naming state
+  const [showNameDialog, setShowNameDialog] = useState(false);
+  const [petNameInput, setPetNameInput] = useState('');
+  const [nameLoading, setNameLoading] = useState(false);
+  const [nameError, setNameError] = useState('');
+  const [nameSuccess, setNameSuccess] = useState('');
   
   const loadPetDetails = async () => {
     try {
@@ -318,6 +346,56 @@ const UserPetDetails = () => {
   useEffect(() => {
     loadPetDetails()
   }, [id])
+
+  // Helper: get a value from pet or pet.sourceData (source data has richer fields)
+  const sd = pet?.sourceData || {};
+  const getField = (field, fallback = '-') => {
+    const val = pet?.[field] ?? sd?.[field];
+    if (val === null || val === undefined || val === '') return fallback;
+    return val;
+  };
+
+  // Handle setting pet name
+  const handleSetPetName = async () => {
+    if (!petNameInput.trim()) {
+      setNameError('Please enter a name');
+      return;
+    }
+    if (petNameInput.trim().length < 2) {
+      setNameError('Name must be at least 2 characters');
+      return;
+    }
+    if (petNameInput.trim().length > 50) {
+      setNameError('Name must be less than 50 characters');
+      return;
+    }
+
+    setNameLoading(true);
+    setNameError('');
+    setNameSuccess('');
+
+    try {
+      const response = await apiClient.put(`/pets/centralized/${pet.petCode}/set-name`, {
+        name: petNameInput.trim()
+      });
+
+      if (response.data.success) {
+        setNameSuccess('Pet name set successfully! 🎉');
+        // Reload pet details to reflect the change
+        loadPetDetails();
+        setTimeout(() => {
+          setShowNameDialog(false);
+          setNameSuccess('');
+        }, 1500);
+      } else {
+        setNameError(response.data.message || 'Failed to set name');
+      }
+    } catch (err) {
+      setNameError(err.response?.data?.message || 'Failed to set pet name');
+    } finally {
+      setNameLoading(false);
+    }
+  };
 
   const handleMenuOpen = (event) => {
     setMenuAnchor(event.currentTarget)
@@ -608,16 +686,22 @@ const UserPetDetails = () => {
                   <PetsIcon sx={{ fontSize: 80, color: 'primary.main' }} />
                 </Avatar>
                 
-                {pet.currentStatus && (
+                {(pet.currentStatus || getField('status')) && (
                   <Chip 
-                    label={pet.currentStatus} 
-                    color={pet.currentStatus === 'Available' ? 'success' : 'default'}
+                    label={pet.currentStatus || getField('status')} 
+                    color={['Available', 'available', 'adopted'].includes(pet.currentStatus || getField('status')) ? 'success' : 'default'}
                     size="medium"
-                    sx={{ 
-                      fontWeight: 700,
-                      fontSize: '1rem',
-                      height: 32
-                    }}
+                    sx={{ fontWeight: 700, fontSize: '1rem', height: 32, mb: 1 }}
+                  />
+                )}
+
+                {pet.source && (
+                  <Chip 
+                    label={pet.sourceLabel || pet.source} 
+                    variant="outlined"
+                    size="small"
+                    icon={<LocationIcon sx={{ fontSize: 14 }} />}
+                    sx={{ fontWeight: 600, fontSize: '0.75rem', mt: 0.5 }}
                   />
                 )}
               </Box>
@@ -625,25 +709,88 @@ const UserPetDetails = () => {
             
             {/* Pet Details */}
             <Grid item xs={12} md={8}>
+              {/* Pet Name + Set Name Feature */}
               <Box sx={{ mb: 3 }}>
-                <Typography variant="h3" sx={{ fontWeight: 700, mb: 1 }}>
-                  {pet.name}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                  <Typography variant="h3" sx={{ fontWeight: 700 }}>
+                    {pet.name || 'Unnamed Pet'}
+                  </Typography>
+                  
+                  {/* Name badge - show set name button or locked indicator */}
+                  {pet.petCode && !pet.nameSetByUser && (
+                    <Tooltip title="Set a name for your pet (one time only)">
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<BadgeIcon />}
+                        onClick={() => {
+                          setPetNameInput('');
+                          setNameError('');
+                          setNameSuccess('');
+                          setShowNameDialog(true);
+                        }}
+                        sx={{ 
+                          borderRadius: 2, fontWeight: 600, fontSize: '0.78rem',
+                          borderColor: '#10b981', color: '#10b981',
+                          '&:hover': { borderColor: '#059669', bgcolor: '#ecfdf5' }
+                        }}
+                      >
+                        Set a Name
+                      </Button>
+                    </Tooltip>
+                  )}
+                  {pet.nameSetByUser && (
+                    <>
+                      <Tooltip title={`Name set on ${pet.nameSetAt ? new Date(pet.nameSetAt).toLocaleDateString() : 'unknown date'}. Request admin to change.`}>
+                        <Chip
+                          icon={<LockIcon sx={{ fontSize: 14 }} />}
+                          label="Name Locked"
+                          size="small"
+                          sx={{ 
+                            bgcolor: '#f0fdf4', color: '#166534', fontWeight: 600,
+                            border: '1px solid #bbf7d0', fontSize: '0.72rem'
+                          }}
+                        />
+                      </Tooltip>
+                      <Button
+                        variant="text"
+                        size="small"
+                        onClick={() => navigate(`/user/pets/request-name-change?petCode=${pet.petCode}`)}
+                        sx={{ 
+                          fontSize: '0.72rem', fontWeight: 600, color: '#6366f1',
+                          textTransform: 'none', ml: 1
+                        }}
+                      >
+                        Request Name Change
+                      </Button>
+                    </>
+                  )}
+                </Box>
                 
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, mt: 1 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {getGenderIcon(pet.gender)}
+                    {getGenderIcon(pet.gender || sd.gender)}
                     <Typography variant="h6" color="text.secondary">
-                      {pet.gender || 'Unknown'}
+                      {pet.gender || sd.gender || 'Unknown'}
                     </Typography>
                   </Box>
                   
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CalendarIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
                     <Typography variant="h6" color="text.secondary">
-                      {pet.age || '-'} {pet.ageUnit || 'months'}
+                      {pet.age || sd.age || '-'} {pet.ageUnit || sd.ageUnit || 'months'}
                     </Typography>
                   </Box>
+
+                  {pet.dateOfBirth && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <CakeIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+                      <Typography variant="body1" color="text.secondary">
+                        Born: {new Date(pet.dateOfBirth).toLocaleDateString()}
+                        {pet.dobAccuracy === 'estimated' && ' (est.)'}
+                      </Typography>
+                    </Box>
+                  )}
                 </Box>
                 
                 {pet.petCode && (
@@ -661,13 +808,14 @@ const UserPetDetails = () => {
                 )}
               </Box>
               
+              {/* Core Details Grid */}
               <Grid container spacing={3}>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Species</Typography>
                   <Typography variant="h6">
                     {pet.species && typeof pet.species === 'object' 
                       ? (pet.species.displayName || pet.species.name || '-') 
-                      : (pet.species || '-')}
+                      : (pet.species || sd.species || '-')}
                   </Typography>
                 </Grid>
                 
@@ -676,33 +824,90 @@ const UserPetDetails = () => {
                   <Typography variant="h6">
                     {pet.breed && typeof pet.breed === 'object' 
                       ? (pet.breed.name || '-') 
-                      : (pet.breed || '-')}
+                      : (pet.breed || sd.breed || '-')}
                   </Typography>
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Color</Typography>
-                  <Typography variant="h6">{pet.color || '-'}</Typography>
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Health Status</Typography>
-                  <Typography variant="h6">{pet.healthStatus || '-'}</Typography>
+                  <Typography variant="h6">{getField('color')}</Typography>
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Size</Typography>
-                  <Typography variant="h6">{pet.size || '-'}</Typography>
+                  <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>{getField('size', sd?.compatibilityProfile?.size || '-')}</Typography>
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Weight</Typography>
                   <Typography variant="h6">
-                    {pet.weight?.value ? `${pet.weight.value} ${pet.weight.unit || 'kg'}` : '-'}
+                    {pet.weight?.value 
+                      ? `${pet.weight.value} ${pet.weight.unit || 'kg'}` 
+                      : (typeof sd.weight === 'number' && sd.weight > 0)
+                        ? `${sd.weight} kg`
+                        : (sd.weight?.value ? `${sd.weight.value} ${sd.weight.unit || 'kg'}` : '-')}
                   </Typography>
                 </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Vaccination Status</Typography>
+                  <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>
+                    {(getField('vaccinationStatus', sd.vaccinationStatus || '-')).replace(/_/g, ' ')}
+                  </Typography>
+                </Grid>
+
+                {getField('healthStatus', sd.healthStatus) !== '-' && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Health Status</Typography>
+                    <Typography variant="h6">{getField('healthStatus')}</Typography>
+                  </Grid>
+                )}
+
+                {pet.currentLocation && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Current Location</Typography>
+                    <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>
+                      {pet.currentLocation.replace(/_/g, ' ')}
+                    </Typography>
+                  </Grid>
+                )}
               </Grid>
-              
+
+              {/* Description */}
+              {(getField('description', sd.description || sd.healthHistory) !== '-') && (
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="h6" sx={{ mb: 1, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <DescriptionIcon sx={{ fontSize: 20 }} /> About This Pet
+                  </Typography>
+                  <Typography variant="body1" sx={{ color: 'text.secondary', lineHeight: 1.7 }}>
+                    {getField('description', sd.description || sd.healthHistory || '')}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Special Needs */}
+              {(() => {
+                const needs = pet.specialNeeds || sd.specialNeeds || [];
+                return needs.length > 0 ? (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, fontWeight: 600 }}>Special Needs</Typography>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      {needs.map((need, i) => (
+                        <Chip key={i} label={need} size="small" color="warning" variant="outlined" sx={{ fontWeight: 600 }} />
+                      ))}
+                    </Box>
+                  </Box>
+                ) : null;
+              })()}
+
+              {/* Behavior Notes (Petshop) */}
+              {sd.behaviorNotes && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, fontWeight: 600 }}>Behavior Notes</Typography>
+                  <Typography variant="body1">{sd.behaviorNotes}</Typography>
+                </Box>
+              )}
+
               {/* Additional Images (if any) */}
               {pet.images && Array.isArray(pet.images) && pet.images.length > 1 && (
                 <Box sx={{ mt: 3 }}>
@@ -726,9 +931,6 @@ const UserPetDetails = () => {
                               border: '1px solid',
                               borderColor: 'divider',
                               cursor: 'pointer'
-                            }}
-                            onClick={() => {
-                              // Could implement a lightbox here
                             }}
                             onError={(e) => { e.currentTarget.src = '/placeholder-pet.svg' }}
                           />
@@ -777,52 +979,58 @@ const UserPetDetails = () => {
               )}
                               
               {/* Source-specific Additional Information */}
-              {pet.source === 'adoption' && (
+              {(pet.source === 'adoption' || sd.adoptionDate || sd.adoptionFee != null) && (
                 <Box sx={{ mt: 3 }}>
                   <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>Adoption Information</Typography>
                   <Grid container spacing={2}>
-                    {pet.adoptionDate && (
+                    {(pet.adoptionDate || sd.adoptionDate) && (
                       <Grid item xs={12} sm={6}>
                         <Typography variant="body2" color="text.secondary">Adoption Date</Typography>
-                        <Typography variant="h6">{new Date(pet.adoptionDate).toLocaleDateString()}</Typography>
+                        <Typography variant="h6">{new Date(pet.adoptionDate || sd.adoptionDate).toLocaleDateString()}</Typography>
                       </Grid>
                     )}
-                    {pet.adoptionFee && (
+                    {(pet.adoptionFee || sd.adoptionFee) != null && (pet.adoptionFee || sd.adoptionFee) > 0 && (
                       <Grid item xs={12} sm={6}>
                         <Typography variant="body2" color="text.secondary">Adoption Fee</Typography>
-                        <Typography variant="h6">${pet.adoptionFee}</Typography>
+                        <Typography variant="h6">₹{pet.adoptionFee || sd.adoptionFee}</Typography>
                       </Grid>
                     )}
-                    {pet.adoptionStatus && (
+                    {(pet.adoptionStatus || sd.status) && (
                       <Grid item xs={12} sm={6}>
                         <Typography variant="body2" color="text.secondary">Adoption Status</Typography>
-                        <Typography variant="h6">{pet.adoptionStatus}</Typography>
+                        <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>{pet.adoptionStatus || sd.status}</Typography>
+                      </Grid>
+                    )}
+                    {sd.dateAdded && (
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" color="text.secondary">Date Added to Shelter</Typography>
+                        <Typography variant="h6">{new Date(sd.dateAdded).toLocaleDateString()}</Typography>
                       </Grid>
                     )}
                   </Grid>
                 </Box>
               )}
                               
-              {pet.source === 'petshop' && (
+              {(pet.source === 'petshop' || sd.price != null || sd.storeName) && (
                 <Box sx={{ mt: 3 }}>
                   <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>Pet Shop Information</Typography>
                   <Grid container spacing={2}>
-                    {pet.purchaseDate && (
+                    {(pet.purchaseDate || sd.soldAt) && (
                       <Grid item xs={12} sm={6}>
                         <Typography variant="body2" color="text.secondary">Purchase Date</Typography>
-                        <Typography variant="h6">{new Date(pet.purchaseDate).toLocaleDateString()}</Typography>
+                        <Typography variant="h6">{new Date(pet.purchaseDate || sd.soldAt).toLocaleDateString()}</Typography>
                       </Grid>
                     )}
-                    {pet.purchasePrice && (
+                    {(pet.purchasePrice || sd.price) != null && (pet.purchasePrice || sd.price) > 0 && (
                       <Grid item xs={12} sm={6}>
                         <Typography variant="body2" color="text.secondary">Purchase Price</Typography>
-                        <Typography variant="h6">${pet.purchasePrice}</Typography>
+                        <Typography variant="h6">₹{pet.purchasePrice || sd.price}</Typography>
                       </Grid>
                     )}
-                    {pet.petShopName && (
+                    {(pet.petShopName || sd.storeName) && (
                       <Grid item xs={12} sm={6}>
                         <Typography variant="body2" color="text.secondary">Pet Shop</Typography>
-                        <Typography variant="h6">{pet.petShopName}</Typography>
+                        <Typography variant="h6">{pet.petShopName || sd.storeName}</Typography>
                       </Grid>
                     )}
                   </Grid>
@@ -834,11 +1042,153 @@ const UserPetDetails = () => {
       </Card>
       
       {/* Source-specific Additional Details */}
-      {pet.source === 'adoption' && pet.description && (
+      {(pet.source === 'adoption' || sd.description) && (getField('description', sd.description || sd.healthHistory) !== '-') && (
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>About This Pet</Typography>
-            <Typography variant="body1">{pet.description}</Typography>
+            <Typography variant="body1">{getField('description', sd.description || sd.healthHistory || '')}</Typography>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Compatibility Profile (from adoption sourceData) */}
+      {(() => {
+        const cp = sd?.compatibilityProfile;
+        if (!cp) return null;
+        const scoreBar = (label, value, max = 10, icon) => (
+          <Box sx={{ mb: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.3 }}>
+              {icon}
+              <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.82rem' }}>{label}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ ml: 'auto', fontWeight: 700 }}>
+                {value}/{max}
+              </Typography>
+            </Box>
+            <LinearProgress
+              variant="determinate"
+              value={(value / max) * 100}
+              sx={{ height: 8, borderRadius: 4, bgcolor: '#f3f4f6',
+                '& .MuiLinearProgress-bar': {
+                  borderRadius: 4,
+                  bgcolor: value >= 7 ? '#10b981' : value >= 4 ? '#f59e0b' : '#ef4444'
+                }
+              }}
+            />
+          </Box>
+        );
+
+        return (
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <StarIcon sx={{ color: '#f59e0b' }} /> Compatibility Profile
+              </Typography>
+              <Grid container spacing={3}>
+                {/* Scores */}
+                <Grid item xs={12} sm={6}>
+                  {cp.childFriendlyScore != null && scoreBar('Child Friendly', cp.childFriendlyScore, 10, <ChildCareIcon sx={{ fontSize: 16, color: '#6b7280' }} />)}
+                  {cp.petFriendlyScore != null && scoreBar('Pet Friendly', cp.petFriendlyScore, 10, <PetsIcon sx={{ fontSize: 16, color: '#6b7280' }} />)}
+                  {cp.strangerFriendlyScore != null && scoreBar('Stranger Friendly', cp.strangerFriendlyScore, 10, <NatureIcon sx={{ fontSize: 16, color: '#6b7280' }} />)}
+                  {cp.energyLevel != null && scoreBar('Energy Level', cp.energyLevel, 5, <FitnessCenterIcon sx={{ fontSize: 16, color: '#6b7280' }} />)}
+                </Grid>
+                {/* Details */}
+                <Grid item xs={12} sm={6}>
+                  <Grid container spacing={1.5}>
+                    {cp.exerciseNeeds && (
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Exercise</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>{cp.exerciseNeeds.replace(/_/g, ' ')}</Typography>
+                      </Grid>
+                    )}
+                    {cp.trainingNeeds && (
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Training Needs</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>{cp.trainingNeeds}</Typography>
+                      </Grid>
+                    )}
+                    {cp.trainedLevel && (
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Trained Level</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>{cp.trainedLevel}</Typography>
+                      </Grid>
+                    )}
+                    {cp.groomingNeeds && (
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Grooming</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>{cp.groomingNeeds}</Typography>
+                      </Grid>
+                    )}
+                    {cp.noiseLevel && (
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Noise Level</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>{cp.noiseLevel}</Typography>
+                      </Grid>
+                    )}
+                    {cp.maxHoursAlone != null && (
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Max Hours Alone</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{cp.maxHoursAlone}h</Typography>
+                      </Grid>
+                    )}
+                    {cp.estimatedMonthlyCost != null && cp.estimatedMonthlyCost > 0 && (
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Est. Monthly Cost</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>₹{cp.estimatedMonthlyCost}</Typography>
+                      </Grid>
+                    )}
+                    {cp.canLiveInApartment != null && (
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Apartment OK?</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{cp.canLiveInApartment ? 'Yes' : 'No'}</Typography>
+                      </Grid>
+                    )}
+                    {cp.requiresExperiencedOwner && (
+                      <Grid item xs={12}>
+                        <Chip label="Requires Experienced Owner" color="warning" size="small" sx={{ fontWeight: 600 }} />
+                      </Grid>
+                    )}
+                  </Grid>
+                </Grid>
+                {/* Temperament Tags */}
+                {cp.temperamentTags && cp.temperamentTags.length > 0 && (
+                  <Grid item xs={12}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, fontWeight: 600 }}>Temperament</Typography>
+                    <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
+                      {cp.temperamentTags.map((tag, i) => (
+                        <Chip key={i} label={tag} size="small" variant="outlined" color="primary" sx={{ fontWeight: 600, textTransform: 'capitalize' }} />
+                      ))}
+                    </Box>
+                  </Grid>
+                )}
+              </Grid>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {/* Ownership History */}
+      {pet.ownershipHistory && pet.ownershipHistory.length > 0 && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TransferIcon /> Ownership History
+            </Typography>
+            {pet.ownershipHistory.map((record, i) => (
+              <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1.5, p: 1.5, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Typography sx={{ fontWeight: 800, fontSize: '0.75rem', color: '#4338ca' }}>{i + 1}</Typography>
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>
+                    {(record.transferType || 'Transfer').replace(/_/g, ' ')}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {record.transferDate ? new Date(record.transferDate).toLocaleDateString() : ''}
+                    {record.transferReason ? ` — ${record.transferReason}` : ''}
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
           </CardContent>
         </Card>
       )}
@@ -1085,6 +1435,57 @@ const UserPetDetails = () => {
           Delete Pet
         </MenuItem>
       </Menu>
+
+      {/* Set Pet Name Dialog */}
+      <Dialog open={showNameDialog} onClose={() => !nameLoading && setShowNameDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <BadgeIcon color="primary" /> Name Your Pet
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 1 }}>
+            {nameError && <Alert severity="error" sx={{ mb: 2 }}>{nameError}</Alert>}
+            {nameSuccess && <Alert severity="success" sx={{ mb: 2 }}>{nameSuccess}</Alert>}
+            
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <strong>Important:</strong> You can only set the name <strong>once</strong>. 
+              After setting, you'll need to contact an admin to change it.
+            </Alert>
+
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              Give your pet <strong>{pet?.petCode}</strong> a name that you'll use to identify them.
+              {pet?.name && pet.name !== '' && (
+                <> Current name: <strong>{pet.name}</strong></>
+              )}
+            </Typography>
+            
+            <TextField
+              fullWidth
+              label="Pet Name"
+              value={petNameInput}
+              onChange={(e) => setPetNameInput(e.target.value)}
+              disabled={nameLoading || !!nameSuccess}
+              placeholder="e.g., Buddy, Luna, Max..."
+              inputProps={{ maxLength: 50 }}
+              helperText={`${petNameInput.length}/50 characters`}
+              autoFocus
+              sx={{ mb: 1 }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowNameDialog(false)} disabled={nameLoading || !!nameSuccess}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSetPetName}
+            variant="contained"
+            disabled={nameLoading || !petNameInput.trim() || !!nameSuccess}
+            startIcon={nameLoading ? <CircularProgress size={20} /> : <CheckCircleIcon />}
+          >
+            {nameLoading ? 'Setting...' : nameSuccess ? 'Done!' : 'Confirm Name'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog

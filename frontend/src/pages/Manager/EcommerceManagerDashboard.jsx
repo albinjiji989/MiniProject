@@ -50,6 +50,8 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { authAPI } from '../../services/api';
+import firebaseAuth from '../../services/firebaseAuth';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -96,10 +98,56 @@ const EcommerceManagerDashboard = () => {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+  const handleLogout = async (event) => {
+    console.log('Ecommerce Manager logout clicked')
+    event?.preventDefault()
+    event?.stopPropagation()
+    
+    try {
+      console.log('Starting logout process...')
+      
+      // Set logout guard to prevent Firebase re-auth
+      sessionStorage.setItem('auth_logout', '1')
+      
+      // Call backend logout
+      const token = localStorage.getItem('token')
+      if (token) {
+        try {
+          await authAPI.logout()
+        } catch (error) {
+          console.error('Backend logout error:', error)
+        }
+      }
+      
+      // Clear all auth data
+      const TOKEN_KEYS = ['token', 'authToken', 'accessToken', 'jwt', 'jwtToken', 'access_token']
+      for (const k of TOKEN_KEYS) {
+        localStorage.removeItem(k)
+        sessionStorage.removeItem(k)
+      }
+      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
+      
+      // Sign out from Firebase
+      try {
+        await firebaseAuth.signOut()
+      } catch (error) {
+        console.error('Firebase logout error:', error)
+      }
+      
+      console.log('Logout completed, redirecting...')
+      
+      // Simple redirect to home
+      window.location.href = '/'
+      
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Fallback: Clear storage and force navigation
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.href = '/'
+    }
+  }
 
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/manager/ecommerce/dashboard' },

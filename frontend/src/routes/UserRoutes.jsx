@@ -85,10 +85,13 @@ import VeterinaryUserPrescriptions from '../pages/User/Veterinary/Veterinary'
 import VeterinaryUserPetSelection from '../pages/User/Veterinary/SimpleVeterinaryPetSelection'
 // NEW Comprehensive Veterinary Components
 import ComprehensiveVeterinaryBooking from '../pages/User/Veterinary/ComprehensiveVeterinaryBooking'
+import ProfessionalVeterinaryBooking from '../pages/User/Veterinary/ProfessionalVeterinaryBooking'
 import ComprehensiveUserVeterinaryDashboard from '../pages/User/Veterinary/ComprehensiveUserVeterinaryDashboard'
+import PetSpecificVeterinaryDashboard from '../pages/User/Veterinary/PetSpecificVeterinaryDashboard'
 import UserPetsMedicalHistory from '../pages/User/Veterinary/UserPetsMedicalHistory'
 import UserPetMedicalHistoryDetail from '../pages/User/Veterinary/UserPetMedicalHistoryDetail'
 import PublicUserDashboard from '../pages/User/PublicUserDashboard'
+import RequestNameChange from '../pages/User/Pets/RequestNameChange'
 
 import { useAuth } from '../contexts/AuthContext'
 
@@ -109,6 +112,7 @@ const UserRoutes = () => {
         <Route path="/pets" element={<UserPets />} />
         <Route path="/pets/:id" element={<UserPetDetails />} />
         <Route path="/pets/centralized/:id" element={<UserPetDetails />} />
+        <Route path="/pets/request-name-change" element={<RequestNameChange />} />
         
         {/* User: Adoptions */}
         <Route path="/adoption/*" element={
@@ -145,11 +149,13 @@ const UserRoutes = () => {
           <Routes>
             <Route path="/dashboard" element={<VeterinaryUserDashboard />} />
             <Route path="/comprehensive-dashboard" element={<ComprehensiveUserVeterinaryDashboard />} />
+            <Route path="/pet-dashboard" element={<PetSpecificVeterinaryDashboard />} />
             <Route path="/select-pet" element={<VeterinaryUserPetSelection />} />
             <Route path="/appointments" element={<VeterinaryUserAppointments />} />
             <Route path="/appointments/schedule" element={<VeterinaryUserSchedule />} />
             <Route path="/appointments/book" element={<VeterinaryUserBooking />} />
-            <Route path="/book" element={<ComprehensiveVeterinaryBooking />} />
+            <Route path="/book" element={<ProfessionalVeterinaryBooking />} />
+            <Route path="/book-old" element={<ComprehensiveVeterinaryBooking />} />
             <Route path="/appointments/book/:clinicId" element={<VeterinaryUserBookingForm />} />
             <Route path="/appointments/:id" element={<VeterinaryUserBookingDetails />} />
             <Route path="/services" element={<VeterinaryUserServices />} />

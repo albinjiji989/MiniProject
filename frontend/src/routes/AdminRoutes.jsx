@@ -16,6 +16,14 @@ import CentralizedPetDashboard from '../pages/Admin/Dashboard/CentralizedPetDash
 import CentralizedPetDetails from '../components/Pet/CentralizedPetDetails'
 import PetManagementOverview from '../pages/Admin/PetManagement/PetManagementOverview'
 import PetManagement from '../pages/Admin/PetManagement/PetManagement'
+import PetsOverview from '../pages/Admin/PetsOverview'
+import PetsDashboard from '../pages/Admin/Pets/PetsDashboard'
+import AdoptionOverview from '../pages/Admin/Pets/AdoptionOverview'
+import PetShopOverview from '../pages/Admin/Pets/PetShopOverview'
+import BlockchainExplorer from '../pages/Admin/Pets/BlockchainExplorer'
+import RevenueOverview from '../pages/Admin/Pets/RevenueOverview'
+import TransactionsOverview from '../pages/Admin/Pets/TransactionsOverview'
+import AllPetsOverview from '../pages/Admin/Pets/AllPetsOverview'
 import PetForm from '../pages/Admin/PetManagement/PetForm'
 import PetDetailsAdmin from '../pages/Admin/PetManagement/PetDetails'
 import PetImport from '../pages/Admin/PetManagement/PetImport'
@@ -27,6 +35,7 @@ import TestDebug from '../pages/Admin/TestDebug'
 import DebugPage from '../pages/Admin/DebugPage'
 import TemporaryCareAdminDashboard from '../pages/Admin/TemporaryCareAdminDashboard'
 import ModelPerformance from '../pages/Admin/Adoption/ModelPerformance'
+import NameChangeRequests from '../pages/Admin/NameChangeRequests'
 
 // New Admin Components
 import ModuleManagementNew from '../modules/admin/components/ModuleManagement'
@@ -43,13 +52,18 @@ const AdminRoutes = () => {
         <Route path="users" element={<UserManagement />} />
         <Route path="roles" element={<RoleManagement />} />
         <Route path="modules" element={<ModuleManagement />} />
-        
         {/* New Module Management */}
         <Route path="module-management" element={<ModuleManagementNew />} />
         <Route path="manager-invite" element={<ManagerInviteNew />} />
-        
         {/* Pet Management Routes */}
-        <Route path="pets" element={<PetManagementDashboard />} />
+        <Route path="pets" element={<PetsDashboard />} />
+        <Route path="pets/overview" element={<AllPetsOverview />} />
+        <Route path="pets/manage" element={<PetManagementDashboard />} />
+        <Route path="pets/adoption/overview" element={<AdoptionOverview />} />
+        <Route path="pets/petshop/overview" element={<PetShopOverview />} />
+        <Route path="pets/blockchain/explorer" element={<BlockchainExplorer />} />
+        <Route path="pets/revenue" element={<RevenueOverview />} />
+        <Route path="pets/transactions" element={<TransactionsOverview />} />
         <Route path="pet-categories" element={<PetCategories />} />
         <Route path="species" element={<SpeciesManagement />} />
         <Route path="breeds" element={<BreedManagement />} />
@@ -62,6 +76,7 @@ const AdminRoutes = () => {
         <Route path="pet-management/:id" element={<PetDetailsAdmin />} />
         <Route path="pet-registry" element={<PetRegistry />} />
         <Route path="pet-registry/:petCode" element={<PetRegistryDetails />} />
+        <Route path="name-change-requests" element={<NameChangeRequests />} />
         {/* Test route */}
         <Route path="test" element={<TestPage />} />
         <Route path="test-debug" element={<TestDebug />} />

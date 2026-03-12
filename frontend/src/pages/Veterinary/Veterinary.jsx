@@ -35,7 +35,8 @@ import {
   Pets as PetsIcon,
 } from '@mui/icons-material'
 import { useAuth } from '../../contexts/AuthContext'
-import { petsAPI, veterinaryAPI } from '../../services/api'
+import { petsAPI, veterinaryAPI, authAPI } from '../../services/api'
+import firebaseAuth from '../../services/firebaseAuth'
 
 const Veterinary = () => {
   const { user, logout } = useAuth()
@@ -73,9 +74,55 @@ const Veterinary = () => {
     // proceed to booking flow with selectedPetId (extend as needed)
   }
 
-  const handleLogout = () => {
-    logout()
-    navigate('/')
+  const handleLogout = async (event) => {
+    console.log('Veterinary logout clicked')
+    event?.preventDefault()
+    event?.stopPropagation()
+    
+    try {
+      console.log('Starting logout process...')
+      
+      // Set logout guard to prevent Firebase re-auth
+      sessionStorage.setItem('auth_logout', '1')
+      
+      // Call backend logout
+      const token = localStorage.getItem('token')
+      if (token) {
+        try {
+          await authAPI.logout()
+        } catch (error) {
+          console.error('Backend logout error:', error)
+        }
+      }
+      
+      // Clear all auth data
+      const TOKEN_KEYS = ['token', 'authToken', 'accessToken', 'jwt', 'jwtToken', 'access_token']
+      for (const k of TOKEN_KEYS) {
+        localStorage.removeItem(k)
+        sessionStorage.removeItem(k)
+      }
+      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
+      
+      // Sign out from Firebase
+      try {
+        await firebaseAuth.signOut()
+      } catch (error) {
+        console.error('Firebase logout error:', error)
+      }
+      
+      console.log('Logout completed, redirecting...')
+      
+      // Simple redirect to home
+      window.location.href = '/'
+      
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Fallback: Clear storage and force navigation
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.href = '/'
+    }
   }
 
   const handleBackToDashboard = () => {

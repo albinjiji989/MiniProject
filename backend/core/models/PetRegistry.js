@@ -14,6 +14,15 @@ const petRegistrySchema = new mongoose.Schema({
     }
   },
   name: { type: String, trim: true },
+  nameSetByUser: { type: Boolean, default: false },
+  nameSetAt: { type: Date },
+  nameSetByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  previousNames: [{
+    name: { type: String },
+    changedAt: { type: Date, default: Date.now },
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    changedByRole: { type: String, enum: ['user', 'admin'], default: 'user' }
+  }],
   species: { 
     type: mongoose.Schema.Types.Mixed, // Can be ObjectId reference or string
   },

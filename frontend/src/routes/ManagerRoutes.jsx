@@ -34,6 +34,7 @@ import PostImportProcessing from '../modules/managers/Adoption/PostImportProcess
 import Reports from '../modules/managers/Adoption/Reports'
 import PetProfile from '../modules/managers/Adoption/PetProfile'
 import PaymentHistory from '../modules/managers/Adoption/PaymentHistory'
+import AdoptionBreedRequests from '../modules/managers/Adoption/MyBreedRequests'
 import AdoptionWizardLayout from '../modules/managers/Adoption/Wizard/WizardLayout'
 import AdoptionStepBasic from '../modules/managers/Adoption/Wizard/StepBasicInfo'
 import AdoptionStepHealth from '../modules/managers/Adoption/Wizard/StepHealthMedia'
@@ -66,6 +67,7 @@ import StepPricingImproved from '../modules/managers/PetShop/Wizard/StepPricingI
 import StepGenderClassification from '../modules/managers/PetShop/Wizard/StepGenderClassification'
 import StepReviewImproved from '../modules/managers/PetShop/Wizard/StepReviewImproved'
 import StockManagement from '../modules/managers/PetShop/StockManagement'
+import PetShopBreedRequests from '../modules/managers/PetShop/MyBreedRequests'
 import PharmacyManagerDashboard from '../modules/managers/Pharmacy/PharmacyManagerDashboard'
 import RescueManagerDashboard from '../modules/managers/Rescue/RescueManagerDashboard'
 import TemporaryCareManagerDashboard from '../modules/managers/TemporaryCare/TemporaryCareManagerDashboard'
@@ -99,9 +101,11 @@ import VeterinaryManagerServiceForm from '../pages/Manager/Veterinary/Veterinary
 import VeterinaryManagerAppointmentDetails from '../pages/Manager/Veterinary/VeterinaryManagerAppointmentDetails'
 import VeterinaryManagerAppointments from '../pages/Manager/Veterinary/VeterinaryManagerAppointments'
 import VeterinaryManagerNewAppointment from '../pages/Manager/Veterinary/VeterinaryManagerNewAppointment'
+import VeterinaryConsultation from '../pages/Manager/Veterinary/VeterinaryConsultation'
 import VeterinaryManagerMedicalRecordForm from '../pages/Manager/Veterinary/VeterinaryManagerMedicalRecordForm'
 import VeterinaryManagerMedicalRecordDetail from '../pages/Manager/Veterinary/VeterinaryManagerMedicalRecordDetail'
 import VeterinaryManagerMedicalRecords from '../pages/Manager/Veterinary/VeterinaryManagerMedicalRecords'
+import DoctorConsultation from '../pages/Manager/Veterinary/DoctorConsultation'
 import VetWizardLayout from '../modules/managers/Veterinary/Wizard/WizardLayout'
 import VetStepBasics from '../modules/managers/Veterinary/Wizard/StepBasics'
 import VetStepTests from '../modules/managers/Veterinary/Wizard/StepTestsInjections'
@@ -162,6 +166,7 @@ const ManagerRoutes = () => {
             <Route path="/post-import-processing" element={<PostImportProcessing />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/manage" element={<AdoptionManage />} />
+            <Route path="/breed-requests" element={<AdoptionBreedRequests />} />
             <Route path="/" element={<Navigate to="/manager/adoption/dashboard" replace />} />
           </Routes>
         } />
@@ -237,6 +242,7 @@ const ManagerRoutes = () => {
             {/* Stock Management Routes */}
             <Route path="/stocks" element={<StockManagement />} />
             <Route path="/stocks/add" element={<StockManagement />} />
+            <Route path="/breed-requests" element={<PetShopBreedRequests />} />
             <Route path="/" element={<Navigate to="/manager/petshop/dashboard" replace />} />
           </Routes>
         } />
@@ -266,6 +272,7 @@ const ManagerRoutes = () => {
             <Route path="/appointments" element={<VeterinaryManagerAppointments />} />
             <Route path="/appointments/new" element={<VeterinaryManagerNewAppointment />} />
             <Route path="/appointments/:id" element={<VeterinaryManagerAppointmentDetails />} />
+            <Route path="/consultation/:appointmentId" element={<VeterinaryConsultation />} />
             <Route path="/services" element={<VeterinaryManagerServices />} />
             <Route path="/records" element={<VeterinaryManagerMedicalRecords />} />
             {/* NEW Comprehensive Medical Records */}

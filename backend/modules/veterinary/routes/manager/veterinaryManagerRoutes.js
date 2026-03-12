@@ -47,7 +47,7 @@ const requireManagerOrWorker = [auth, authorizeModule('veterinary'), (req, res, 
 router.get('/dashboard/stats', requireManager, dashboardController.getDashboardStats);
 // Removed conflicting route: router.get('/appointments', requireManager, dashboardController.getAppointments);
 router.get('/records', requireManager, dashboardController.getMedicalRecords);
-router.get('/services', requireManager, dashboardController.getServices);
+// Removed duplicate services route - using serviceController.getServices instead
 
 // Appointments Management
 router.post('/appointments', requireManager, [

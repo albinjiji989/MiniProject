@@ -9,6 +9,10 @@ export default function VeterinaryManagerAppointmentDetails() {
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [newStatus, setNewStatus] = useState('');
+  const [error, setError] = useState(null);
+  const [editingFee, setEditingFee] = useState(false);
+  const [consultationFee, setConsultationFee] = useState(0);
+  const [updatingPayment, setUpdatingPayment] = useState(false);
 
   useEffect(() => {
     loadAppointment();
@@ -16,12 +20,18 @@ export default function VeterinaryManagerAppointmentDetails() {
 
   const loadAppointment = async () => {
     setLoading(true);
+    setError(null);
     try {
+      console.log('Loading appointment:', id);
       const response = await veterinaryAPI.managerGetAppointmentById(id);
+      console.log('Appointment response:', response.data);
       setAppointment(response.data.data.appointment);
       setNewStatus(response.data.data.appointment.status);
+      setConsultationFee(response.data.data.appointment.amount || 0);
     } catch (error) {
       console.error('Failed to load appointment:', error);
+      console.error('Error response:', error.response?.data);
+      setError(error.response?.data?.message || 'Failed to load appointment');
     } finally {
       setLoading(false);
     }
@@ -43,20 +53,75 @@ export default function VeterinaryManagerAppointmentDetails() {
     }
   };
 
+  const handleUpdateFee = async () => {
+    if (consultationFee < 0) {
+      alert('Consultation fee cannot be negative');
+      return;
+    }
+    
+    setUpdating(true);
+    try {
+      const response = await veterinaryAPI.managerUpdateAppointment(id, { amount: consultationFee });
+      setAppointment(response.data.data.appointment);
+      setEditingFee(false);
+      alert('Consultation fee updated successfully');
+    } catch (error) {
+      console.error('Failed to update fee:', error);
+      alert('Failed to update consultation fee');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleUpdatePaymentStatus = async (paymentStatus) => {
+    setUpdatingPayment(true);
+    try {
+      const response = await veterinaryAPI.managerUpdateAppointment(id, { paymentStatus });
+      setAppointment(response.data.data.appointment);
+      alert(`Payment status updated to ${paymentStatus}`);
+    } catch (error) {
+      console.error('Failed to update payment status:', error);
+      alert('Failed to update payment status');
+    } finally {
+      setUpdatingPayment(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const statusClasses = {
-      scheduled: 'bg-blue-100 text-blue-800',
-      confirmed: 'bg-green-100 text-green-800',
-      in_progress: 'bg-yellow-100 text-yellow-800',
-      completed: 'bg-purple-100 text-purple-800',
-      cancelled: 'bg-red-100 text-red-800',
-      no_show: 'bg-yellow-100 text-yellow-800',
-      pending_approval: 'bg-orange-100 text-orange-800'
+      pending_approval: 'bg-orange-100 text-orange-800',
+      confirmed: 'bg-blue-100 text-blue-800',
+      in_consultation: 'bg-yellow-100 text-yellow-800',
+      completed: 'bg-green-100 text-green-800',
+      cancelled: 'bg-red-100 text-red-800'
+    };
+    
+    const statusLabels = {
+      pending_approval: 'Pending',
+      confirmed: 'Confirmed',
+      in_consultation: 'In Consultation',
+      completed: 'Completed',
+      cancelled: 'Cancelled'
     };
     
     return (
       <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusClasses[status] || 'bg-gray-100 text-gray-800'}`}>
-        {status?.charAt(0).toUpperCase() + status?.slice(1).replace('_', ' ') || 'Unknown'}
+        {statusLabels[status] || status?.charAt(0).toUpperCase() + status?.slice(1).replace('_', ' ') || 'Unknown'}
+      </span>
+    );
+  };
+
+  const getPaymentBadge = (paymentStatus) => {
+    const statusClasses = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      paid: 'bg-green-100 text-green-800',
+      failed: 'bg-red-100 text-red-800',
+      refunded: 'bg-gray-100 text-gray-800'
+    };
+    
+    return (
+      <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusClasses[paymentStatus] || 'bg-gray-100 text-gray-800'}`}>
+        {paymentStatus?.charAt(0).toUpperCase() + paymentStatus?.slice(1) || 'Unknown'}
       </span>
     );
   };
@@ -108,7 +173,10 @@ export default function VeterinaryManagerAppointmentDetails() {
           </svg>
           <h3 className="mt-2 text-sm font-medium text-gray-900">Appointment not found</h3>
           <p className="mt-1 text-sm text-gray-500">
-            The appointment you're looking for doesn't exist or has been removed.
+            {error || "The appointment you're looking for doesn't exist or has been removed."}
+          </p>
+          <p className="mt-1 text-xs text-gray-400">
+            Appointment ID: {id}
           </p>
           <div className="mt-6">
             <button
@@ -141,6 +209,14 @@ export default function VeterinaryManagerAppointmentDetails() {
         <div className="mt-2 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">Appointment Details</h1>
           <div className="flex space-x-3">
+            {(appointment.status === 'confirmed' || appointment.status === 'scheduled' || appointment.status === 'in_consultation') && (
+              <button
+                onClick={() => navigate(`/manager/veterinary/consultation/${id}`)}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                {appointment.status === 'in_consultation' ? '📋 Continue Consultation' : '👨‍⚕️ Start Consultation'}
+              </button>
+            )}
             <button
               onClick={() => navigate(`/manager/veterinary/appointments/${id}/edit`)}
               className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -160,7 +236,7 @@ export default function VeterinaryManagerAppointmentDetails() {
             <div className="flex items-center space-x-2">
               {getBookingTypeBadge(appointment.bookingType)}
               {getStatusBadge(appointment.status)}
-              {getSourceBadge()}
+              {getPaymentBadge(appointment.paymentStatus)}
             </div>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">
@@ -236,10 +312,78 @@ export default function VeterinaryManagerAppointmentDetails() {
                 {appointment.serviceId?.name || 'General Checkup'}
               </dd>
             </div>
+            
+            {/* Consultation Fee */}
             <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">Amount</dt>
+              <dt className="text-sm font-medium text-gray-500">Consultation Fee</dt>
               <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                ${appointment.amount || 0}
+                {editingFee ? (
+                  <div className="flex items-center space-x-3">
+                    <span className="text-gray-700">$</span>
+                    <input
+                      type="number"
+                      value={consultationFee}
+                      onChange={(e) => setConsultationFee(parseFloat(e.target.value) || 0)}
+                      min="0"
+                      step="0.01"
+                      className="block w-32 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    />
+                    <button
+                      onClick={handleUpdateFee}
+                      disabled={updating}
+                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+                    >
+                      {updating ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingFee(false);
+                        setConsultationFee(appointment.amount || 0);
+                      }}
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-3">
+                    <span className="text-lg font-semibold text-gray-900">${appointment.amount || 0}</span>
+                    <button
+                      onClick={() => setEditingFee(true)}
+                      className="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      Edit Fee
+                    </button>
+                  </div>
+                )}
+              </dd>
+            </div>
+            
+            {/* Payment Status */}
+            <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+              <dt className="text-sm font-medium text-gray-500">Payment Status</dt>
+              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                <div className="flex items-center space-x-3">
+                  {getPaymentBadge(appointment.paymentStatus)}
+                  {appointment.paymentStatus === 'pending' && (
+                    <button
+                      onClick={() => handleUpdatePaymentStatus('paid')}
+                      disabled={updatingPayment}
+                      className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+                    >
+                      {updatingPayment ? 'Updating...' : 'Mark as Paid'}
+                    </button>
+                  )}
+                  {appointment.paymentStatus === 'paid' && (
+                    <button
+                      onClick={() => handleUpdatePaymentStatus('refunded')}
+                      disabled={updatingPayment}
+                      className="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                    >
+                      {updatingPayment ? 'Updating...' : 'Refund'}
+                    </button>
+                  )}
+                </div>
               </dd>
             </div>
             
@@ -251,9 +395,9 @@ export default function VeterinaryManagerAppointmentDetails() {
               </dd>
             </div>
             
-            {/* Status Update */}
+            {/* Status Update - Simplified */}
             <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">Update Status</dt>
+              <dt className="text-sm font-medium text-gray-500">Appointment Status</dt>
               <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
                 <div className="flex items-center space-x-3">
                   <select
@@ -261,13 +405,11 @@ export default function VeterinaryManagerAppointmentDetails() {
                     onChange={(e) => setNewStatus(e.target.value)}
                     className="block w-48 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   >
-                    <option value="scheduled">Scheduled</option>
+                    <option value="pending_approval">Pending</option>
                     <option value="confirmed">Confirmed</option>
-                    <option value="in_progress">In Progress</option>
+                    <option value="in_consultation">In Consultation</option>
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
-                    <option value="no_show">No Show</option>
-                    <option value="pending_approval">Pending Approval</option>
                   </select>
                   <button
                     onClick={handleUpdateStatus}

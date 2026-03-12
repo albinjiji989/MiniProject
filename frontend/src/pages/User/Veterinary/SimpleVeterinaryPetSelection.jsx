@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { petsAPI, userPetsAPI, adoptionAPI, petShopAPI } from '../../../services/api';
+import { userPetsAPI } from '../../../services/api';
 import { useAuth } from '../../../contexts/AuthContext';
 
 export default function SimpleVeterinaryPetSelection() {
@@ -17,89 +17,27 @@ export default function SimpleVeterinaryPetSelection() {
   const loadUserPets = async () => {
     setLoading(true);
     try {
-      // Load all types of pets like the main dashboard does
-      const [ownedRes, adoptedRes, purchasedRes] = await Promise.allSettled([
-        userPetsAPI.list({}),
-        adoptionAPI.getMyAdoptedPets(),
-        petShopAPI.getMyPurchasedPets()
-      ]);
-
-      let allPets = [];
+      // Use the SAME unified API endpoint as /User/pets page
+      const response = await userPetsAPI.getAllPets();
+      const allPets = response.data?.data?.pets || [];
       
-      // Process user-created pets
-      if (ownedRes.status === 'fulfilled') {
-        const userPets = Array.isArray(ownedRes.value.data?.data) ? ownedRes.value.data.data : (ownedRes.value.data?.data?.pets || []);
-        console.log('Owned pets:', userPets);
-        userPets.forEach(pet => {
-          allPets.push({
-            ...pet,
-            source: 'user',
-            sourceLabel: 'My Pet',
-            isUserCreated: true,
-            userPetId: pet._id
-          });
-        });
-      }
-
-      // Process adopted pets
-      if (adoptedRes.status === 'fulfilled') {
-        const adoptedPets = Array.isArray(adoptedRes.value.data?.data) ? adoptedRes.value.data.data : (adoptedRes.value.data?.data?.pets || []);
-        console.log('Adopted pets:', adoptedPets);
-        adoptedPets.forEach(pet => {
-          allPets.push({
-            ...pet,
-            source: 'adoption',
-            sourceLabel: 'Adopted Pet',
-            tags: ['adoption']
-          });
-        });
-      }
-
-      // Process purchased pets - handle multiple possible response structures
-      if (purchasedRes.status === 'fulfilled') {
-        console.log('Purchased pets raw response:', purchasedRes.value.data);
-        
-        let purchasedPets = [];
-        
-        // Try different response structures
-        if (Array.isArray(purchasedRes.value.data?.data?.pets)) {
-          purchasedPets = purchasedRes.value.data.data.pets;
-        } else if (Array.isArray(purchasedRes.value.data?.data)) {
-          purchasedPets = purchasedRes.value.data.data;
-        } else if (Array.isArray(purchasedRes.value.data?.pets)) {
-          purchasedPets = purchasedRes.value.data.pets;
-        } else if (Array.isArray(purchasedRes.value.data)) {
-          purchasedPets = purchasedRes.value.data;
-        }
-        
-        console.log('Purchased pets processed:', purchasedPets);
-        
-        purchasedPets.forEach(pet => {
-          // Handle case where pet might be nested in petId
-          const petData = pet.petId || pet;
-          allPets.push({
-            ...petData,
-            source: 'purchased',
-            sourceLabel: 'Purchased Pet',
-            tags: ['purchased']
-          });
-        });
-      } else {
-        console.error('Failed to fetch purchased pets:', purchasedRes.reason);
-      }
-
-      console.log('All pets combined:', allPets);
-
-      // Remove duplicates based on petCode or _id
-      const uniquePets = allPets.filter((pet, index, self) => 
-        index === self.findIndex(p => (p.petCode || p._id) === (pet.petCode || pet._id))
-      );
-
-      console.log('Unique pets:', uniquePets);
-      setPets(uniquePets);
+      console.log('🐾 Loaded pets from unified API:', allPets.length);
+      console.log('🐾 Sample pet:', allPets[0]);
+      
+      // Add source labels for display - ensure sourceLabel is always a string
+      const petsWithLabels = allPets.map(pet => ({
+        ...pet,
+        sourceLabel: (typeof pet.sourceLabel === 'string' && pet.sourceLabel) ? pet.sourceLabel : (
+          pet.source === 'adoption' ? 'Adopted Pet' :
+          pet.source === 'petshop' ? 'Purchased Pet' :
+          'My Pet'
+        )
+      }));
+      
+      setPets(petsWithLabels);
     } catch (error) {
       console.error('Failed to load pets:', error);
-      setPets([]); // Set empty array on error
+      setPets([]);
     } finally {
       setLoading(false);
     }
@@ -111,37 +49,47 @@ export default function SimpleVeterinaryPetSelection() {
       console.error('Invalid pet object:', pet);
       return;
     }
-    // Navigate to pet-specific dashboard with selected pet
-    navigate('/user/veterinary/pet-dashboard', { state: { selectedPet: pet } });
+    // Navigate directly to booking page with selected pet
+    navigate('/user/veterinary/book', { state: { selectedPet: pet } });
   };
 
-  const filteredPets = pets.filter(pet => 
-    pet && 
-    typeof pet === 'object' &&
-    pet.name && 
-    typeof pet.name === 'string' &&
-    (pet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (pet.breed && typeof pet.breed === 'string' && pet.breed.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (pet.species && typeof pet.species === 'string' && pet.species.toLowerCase().includes(searchTerm.toLowerCase())))
-  );
+  const filteredPets = pets.filter(pet => {
+    if (!pet || typeof pet !== 'object' || !pet.name) return false;
+    
+    const searchLower = searchTerm.toLowerCase();
+    const petName = (pet.name || '').toLowerCase();
+    const petBreed = (typeof pet.breed === 'object' ? (pet.breed?.name || '') : (pet.breed || '')).toLowerCase();
+    const petSpecies = (typeof pet.species === 'object' 
+      ? (pet.species?.displayName || pet.species?.name || '') 
+      : (pet.species || '')).toLowerCase();
+    
+    return petName.includes(searchLower) ||
+           petBreed.includes(searchLower) ||
+           petSpecies.includes(searchLower);
+  });
 
   // Function to get pet image URL
   const getPetImageUrl = (pet) => {
-    if (!pet || !pet.images || pet.images.length === 0) {
-      return '/placeholder-pet.svg';
+    if (!pet) return '/placeholder-pet.svg';
+    
+    // Handle images array
+    if (pet.images && pet.images.length > 0) {
+      const primaryImage = pet.images.find(img => img.isPrimary);
+      if (primaryImage?.url) return primaryImage.url;
+      if (pet.images[0]?.url) return pet.images[0].url;
     }
     
-    // Find primary image first
-    const primaryImage = pet.images.find(img => img.isPrimary);
-    if (primaryImage && primaryImage.url) {
-      return primaryImage.url;
+    // Handle imageIds populated array
+    if (pet.imageIds && pet.imageIds.length > 0) {
+      const firstImage = pet.imageIds[0];
+      if (firstImage?.url) return firstImage.url;
     }
     
-    // Fallback to first image
-    const firstImage = pet.images[0];
-    if (firstImage && firstImage.url) {
-      return firstImage.url;
-    }
+    // Handle imageUrl string
+    if (pet.imageUrl) return pet.imageUrl;
+    
+    // Handle profileImage
+    if (pet.profileImage) return pet.profileImage;
     
     return '/placeholder-pet.svg';
   };
@@ -216,7 +164,7 @@ export default function SimpleVeterinaryPetSelection() {
                   <div className="p-6 flex flex-col">
                     <div className="flex-1 flex flex-col">
                       <div className="flex-shrink-0 mx-auto bg-gray-200 rounded-full w-24 h-24 flex items-center justify-center">
-                        {pet.images && Array.isArray(pet.images) && pet.images.length > 0 ? (
+                        {(pet.images?.length > 0 || pet.imageIds?.length > 0 || pet.imageUrl || pet.profileImage) ? (
                           <img 
                             className="rounded-full w-24 h-24 object-cover"
                             src={getPetImageUrl(pet)}
@@ -232,7 +180,16 @@ export default function SimpleVeterinaryPetSelection() {
                       </div>
                       <div className="mt-4 text-center">
                         <h3 className="text-lg font-medium text-gray-900">{typeof pet.name === 'string' ? pet.name : 'Unknown Pet'}</h3>
-                        <p className="text-sm text-gray-500">
+                        {pet.sourceLabel && typeof pet.sourceLabel === 'string' && (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
+                            pet.source === 'adoption' ? 'bg-green-100 text-green-800' :
+                            pet.source === 'petshop' ? 'bg-blue-100 text-blue-800' :
+                            'bg-purple-100 text-purple-800'
+                          }`}>
+                            {pet.sourceLabel}
+                          </span>
+                        )}
+                        <p className="text-sm text-gray-500 mt-1">
                           {/* Handle different data structures for breed and species */}
                           {typeof pet.breed === 'string' ? pet.breed : 
                            (pet.breed && typeof pet.breed === 'object' && pet.breed.name) ? pet.breed.name : 

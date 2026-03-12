@@ -595,8 +595,8 @@ export default function UserPetMedicalHistoryDetail() {
                               <div className="flex items-center text-gray-600 mt-1">
                                 <MapPin className="w-3 h-3 mr-1" />
                                 <span className="text-xs">{apt.clinic}</span>
-                                {apt.location && (
-                                  <span className="text-xs ml-1">• {apt.location}</span>
+                                {apt.clinicLocation && (
+                                  <span className="text-xs ml-1">• {apt.clinicLocation}</span>
                                 )}
                               </div>
                             )}
@@ -652,7 +652,11 @@ export default function UserPetMedicalHistoryDetail() {
                   </div>
                   <div>
                     <dt className="text-sm text-gray-600">Location</dt>
-                    <dd className="text-sm font-medium">{selectedRecord.veterinary?.location || 'N/A'}</dd>
+                    <dd className="text-sm font-medium">
+                      {selectedRecord.veterinary?.address 
+                        ? `${selectedRecord.veterinary.address.street || ''}, ${selectedRecord.veterinary.address.city || ''}, ${selectedRecord.veterinary.address.state || ''}`.replace(/^,\s*|,\s*$/g, '').replace(/,\s*,/g, ',') || 'N/A'
+                        : selectedRecord.veterinary?.storeName || 'N/A'}
+                    </dd>
                   </div>
                 </dl>
               </div>

@@ -68,33 +68,37 @@ export default function VeterinaryVaccinations() {
 
   // Function to get the primary image URL or first image URL
   const getPetImageUrl = (pet) => {
-    if (!pet || !pet.images || pet.images.length === 0) {
-      return '/placeholder-pet.svg';
+    if (!pet) return '/placeholder-pet.svg';
+    
+    const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    
+    // Handle images array
+    if (pet.images && pet.images.length > 0) {
+      const primaryImage = pet.images.find(img => img.isPrimary);
+      if (primaryImage?.url) {
+        return primaryImage.url.startsWith('http') || primaryImage.url.startsWith('/') 
+          ? primaryImage.url 
+          : `${apiOrigin}/${primaryImage.url}`;
+      }
+      const firstImage = pet.images[0];
+      if (firstImage?.url) {
+        return firstImage.url.startsWith('http') || firstImage.url.startsWith('/') 
+          ? firstImage.url 
+          : `${apiOrigin}/${firstImage.url}`;
+      }
     }
     
-    // Find primary image first
-    const primaryImage = pet.images.find(img => img.isPrimary);
-    if (primaryImage && primaryImage.url) {
-      // Handle relative URLs
-      if (primaryImage.url.startsWith('http') || primaryImage.url.startsWith('/')) {
-        return primaryImage.url;
-      }
-      // For relative paths, prepend the API origin
-      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      return `${apiOrigin}${primaryImage.url.startsWith('/') ? '' : '/'}${primaryImage.url}`;
+    // Handle imageIds populated array
+    if (pet.imageIds && pet.imageIds.length > 0) {
+      const firstImage = pet.imageIds[0];
+      if (firstImage?.url) return firstImage.url;
     }
     
-    // Fallback to first image
-    const firstImage = pet.images[0];
-    if (firstImage && firstImage.url) {
-      // Handle relative URLs
-      if (firstImage.url.startsWith('http') || firstImage.url.startsWith('/')) {
-        return firstImage.url;
-      }
-      // For relative paths, prepend the API origin
-      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      return `${apiOrigin}${firstImage.url.startsWith('/') ? '' : '/'}${firstImage.url}`;
-    }
+    // Handle imageUrl string
+    if (pet.imageUrl) return pet.imageUrl;
+    
+    // Handle profileImage
+    if (pet.profileImage) return pet.profileImage;
     
     return '/placeholder-pet.svg';
   };

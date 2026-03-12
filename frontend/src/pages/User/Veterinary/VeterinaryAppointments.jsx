@@ -40,35 +40,47 @@ export default function VeterinaryAppointments() {
     navigate(`/user/veterinary/appointments/${appointmentId}`);
   };
 
+  // Function to get the pet data from appointment (matches different field names)
+  const getPetFromAppointment = (appointment) => {
+    return appointment.pet || appointment.petId || {};
+  };
+
   // Function to get the primary image URL or first image URL
   const getPetImageUrl = (pet) => {
-    if (!pet || !pet.images || pet.images.length === 0) {
-      return '/placeholder-pet.svg';
+    if (!pet) return '/placeholder-pet.svg';
+    
+    // Handle images array (populated virtual)
+    if (pet.images && pet.images.length > 0) {
+      const primaryImage = pet.images.find(img => img.isPrimary);
+      if (primaryImage?.url) {
+        if (primaryImage.url.startsWith('http') || primaryImage.url.startsWith('/')) {
+          return primaryImage.url;
+        }
+        const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        return `${apiOrigin}${primaryImage.url.startsWith('/') ? '' : '/'}${primaryImage.url}`;
+      }
+      
+      const firstImage = pet.images[0];
+      if (firstImage?.url) {
+        if (firstImage.url.startsWith('http') || firstImage.url.startsWith('/')) {
+          return firstImage.url;
+        }
+        const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        return `${apiOrigin}${firstImage.url.startsWith('/') ? '' : '/'}${firstImage.url}`;
+      }
     }
     
-    // Find primary image first
-    const primaryImage = pet.images.find(img => img.isPrimary);
-    if (primaryImage && primaryImage.url) {
-      // Handle relative URLs
-      if (primaryImage.url.startsWith('http') || primaryImage.url.startsWith('/')) {
-        return primaryImage.url;
-      }
-      // For relative paths, prepend the API origin
-      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      return `${apiOrigin}${primaryImage.url.startsWith('/') ? '' : '/'}${primaryImage.url}`;
+    // Handle imageIds populated array
+    if (pet.imageIds && pet.imageIds.length > 0) {
+      const firstImage = pet.imageIds[0];
+      if (firstImage?.url) return firstImage.url;
     }
     
-    // Fallback to first image
-    const firstImage = pet.images[0];
-    if (firstImage && firstImage.url) {
-      // Handle relative URLs
-      if (firstImage.url.startsWith('http') || firstImage.url.startsWith('/')) {
-        return firstImage.url;
-      }
-      // For relative paths, prepend the API origin
-      const apiOrigin = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      return `${apiOrigin}${firstImage.url.startsWith('/') ? '' : '/'}${firstImage.url}`;
-    }
+    // Handle imageUrl string
+    if (pet.imageUrl) return pet.imageUrl;
+    
+    // Handle profileImage
+    if (pet.profileImage) return pet.profileImage;
     
     return '/placeholder-pet.svg';
   };
@@ -210,17 +222,19 @@ export default function VeterinaryAppointments() {
           </div>
         ) : (
           <ul className="divide-y divide-gray-200">
-            {appointments.map((appointment) => (
+            {appointments.map((appointment) => {
+              const pet = getPetFromAppointment(appointment);
+              return (
               <li key={appointment._id}>
                 <div className="px-4 py-4 sm:px-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
                         {/* Display pet image or default icon */}
-                        {appointment.pet?.images && appointment.pet.images.length > 0 ? (
+                        {(pet?.images?.length > 0 || pet?.imageIds?.length > 0 || pet?.imageUrl || pet?.profileImage) ? (
                           <img 
-                            src={getPetImageUrl(appointment.pet)} 
-                            alt={appointment.pet.name}
+                            src={getPetImageUrl(pet)} 
+                            alt={pet?.name || 'Pet'}
                             className="h-12 w-12 rounded-full object-cover"
                             onError={(e) => {
                               e.target.onerror = null;
@@ -233,7 +247,7 @@ export default function VeterinaryAppointments() {
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">
-                          {appointment.pet?.name || 'Unknown Pet'}
+                          {pet?.name || 'Unknown Pet'}
                         </div>
                         <div className="text-sm text-gray-500">
                           {appointment.storeName || 'Unknown Clinic'}
@@ -281,7 +295,8 @@ export default function VeterinaryAppointments() {
                   </div>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

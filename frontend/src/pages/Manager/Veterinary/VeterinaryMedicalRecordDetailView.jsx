@@ -194,11 +194,82 @@ export default function VeterinaryMedicalRecordDetailView() {
           {/* Overview Tab */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
+              {/* Vital Signs */}
+              {record.vitalSigns && Object.keys(record.vitalSigns).some(key => record.vitalSigns[key]) && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Vital Signs</h3>
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      {record.vitalSigns.temperature && (
+                        <div>
+                          <p className="text-sm text-gray-600">Temperature</p>
+                          <p className="text-lg font-semibold text-gray-900">{record.vitalSigns.temperature}°F</p>
+                        </div>
+                      )}
+                      {record.vitalSigns.weight && (
+                        <div>
+                          <p className="text-sm text-gray-600">Weight</p>
+                          <p className="text-lg font-semibold text-gray-900">{record.vitalSigns.weight} kg</p>
+                        </div>
+                      )}
+                      {record.vitalSigns.heartRate && (
+                        <div>
+                          <p className="text-sm text-gray-600">Heart Rate</p>
+                          <p className="text-lg font-semibold text-gray-900">{record.vitalSigns.heartRate} bpm</p>
+                        </div>
+                      )}
+                      {record.vitalSigns.respiratoryRate && (
+                        <div>
+                          <p className="text-sm text-gray-600">Respiratory Rate</p>
+                          <p className="text-lg font-semibold text-gray-900">{record.vitalSigns.respiratoryRate} /min</p>
+                        </div>
+                      )}
+                      {record.vitalSigns.bloodPressure && (
+                        <div>
+                          <p className="text-sm text-gray-600">Blood Pressure</p>
+                          <p className="text-lg font-semibold text-gray-900">{record.vitalSigns.bloodPressure}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Chief Complaint */}
+              {record.chiefComplaint && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Chief Complaint</h3>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-gray-700">{record.chiefComplaint}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Symptoms */}
+              {record.symptoms && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Symptoms</h3>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-gray-700">{record.symptoms}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Physical Examination */}
+              {record.physicalExamination && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Physical Examination</h3>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-gray-700">{record.physicalExamination}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Diagnosis */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Diagnosis</h3>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-gray-700">{record.diagnosis || 'Not specified'}</p>
+                <div className="bg-green-50 rounded-lg p-4 border-l-4 border-green-500">
+                  <p className="text-gray-700 font-medium">{record.diagnosis || 'Not specified'}</p>
                 </div>
               </div>
 
@@ -208,6 +279,16 @@ export default function VeterinaryMedicalRecordDetailView() {
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">Treatment Plan</h3>
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-gray-700">{record.treatment}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Recommendations */}
+              {record.recommendations && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Recommendations</h3>
+                  <div className="bg-purple-50 rounded-lg p-4 border-l-4 border-purple-500">
+                    <p className="text-gray-700">{record.recommendations}</p>
                   </div>
                 </div>
               )}

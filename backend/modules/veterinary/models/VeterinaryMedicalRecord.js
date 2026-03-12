@@ -32,6 +32,43 @@ const veterinaryMedicalRecordSchema = new mongoose.Schema({
     required: [true, 'Visit date is required'],
     index: true
   },
+  visitType: {
+    type: String,
+    enum: ['routine_checkup', 'vaccination', 'follow_up', 'consultation', 'examination', 'checkup', 'surgery', 'grooming', 'dentistry', 'dental', 'emergency', 'diagnostic', 'other'],
+    default: 'consultation'
+  },
+  
+  // Vital Signs
+  vitalSigns: {
+    temperature: Number,
+    weight: Number,
+    heartRate: Number,
+    respiratoryRate: Number,
+    bloodPressure: String
+  },
+  
+  // Examination details
+  chiefComplaint: {
+    type: String,
+    trim: true,
+    maxlength: [1000, 'Chief complaint cannot exceed 1000 characters']
+  },
+  symptoms: {
+    type: String,
+    trim: true,
+    maxlength: [2000, 'Symptoms cannot exceed 2000 characters']
+  },
+  physicalExamination: {
+    type: String,
+    trim: true,
+    maxlength: [2000, 'Physical examination cannot exceed 2000 characters']
+  },
+  recommendations: {
+    type: String,
+    trim: true,
+    maxlength: [2000, 'Recommendations cannot exceed 2000 characters']
+  },
+  
   diagnosis: { 
     type: String, 
     required: [true, 'Diagnosis is required'],

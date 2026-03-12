@@ -20,34 +20,80 @@ const getDashboardStats = async (req, res) => {
       });
     }
 
+    // Find the veterinary store to get its ObjectId
+    const veterinaryStore = await Veterinary.findOne({ storeId: storeId });
+    if (!veterinaryStore) {
+      return res.status(404).json({
+        success: false,
+        message: 'Veterinary store not found'
+      });
+    }
+
     // Get today's date range
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Get stats directly using storeId
-    const [todayAppointments, pendingAppointments, totalPatients, staffCount] = await Promise.all([
+    // Query both appointment collections
+    // VeterinaryAppointment uses ObjectId for storeId
+    // ManagerVeterinaryAppointment uses string for storeId
+    const [
+      todayUserAppointments,
+      todayManagerAppointments,
+      pendingUserAppointments,
+      pendingManagerAppointments,
+      totalUserPatients,
+      totalManagerPatients,
+      staffCount
+    ] = await Promise.all([
       VeterinaryAppointment.countDocuments({
-        storeId: storeId,
+        storeId: veterinaryStore._id, // Use ObjectId
+        appointmentDate: { $gte: today, $lt: tomorrow },
+        status: { $ne: 'cancelled' }
+      }),
+      ManagerVeterinaryAppointment.countDocuments({
+        storeId: storeId, // Use string
         appointmentDate: { $gte: today, $lt: tomorrow },
         status: { $ne: 'cancelled' }
       }),
       VeterinaryAppointment.countDocuments({
-        storeId: storeId,
-        status: { $in: ['pending_approval', 'scheduled'] }
+        storeId: veterinaryStore._id, // Use ObjectId
+        status: { $in: ['pending_approval', 'confirmed'] }
       }),
-      VeterinaryAppointment.distinct('petId', { storeId: storeId }).then(ids => ids.length),
+      ManagerVeterinaryAppointment.countDocuments({
+        storeId: storeId, // Use string
+        status: { $in: ['pending_approval', 'confirmed'] }
+      }),
+      VeterinaryAppointment.distinct('petId', { storeId: veterinaryStore._id }).then(ids => ids.length),
+      ManagerVeterinaryAppointment.distinct('petId', { storeId: storeId }).then(ids => ids.length),
       VeterinaryStaff.countDocuments({ storeId, isActive: true })
     ]);
 
-    // Get recent appointments
-    const recentAppointments = await VeterinaryAppointment.find({ storeId: storeId })
-      .populate('petId', 'name species breed')
-      .populate('ownerId', 'name email phone')
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .lean();
+    // Combine stats from both collections
+    const todayAppointments = todayUserAppointments + todayManagerAppointments;
+    const pendingAppointments = pendingUserAppointments + pendingManagerAppointments;
+    const totalPatients = totalUserPatients + totalManagerPatients;
+
+    // Get recent appointments from both collections
+    const [recentUserAppointments, recentManagerAppointments] = await Promise.all([
+      VeterinaryAppointment.find({ storeId: veterinaryStore._id })
+        .populate('ownerId', 'name email phone')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
+      ManagerVeterinaryAppointment.find({ storeId: storeId })
+        .populate('petId', 'name species breed')
+        .populate('ownerId', 'name email phone')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean()
+    ]);
+
+    // Combine and sort recent appointments
+    const recentAppointments = [...recentUserAppointments, ...recentManagerAppointments]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 10);
 
     const stats = {
       todayAppointments,
