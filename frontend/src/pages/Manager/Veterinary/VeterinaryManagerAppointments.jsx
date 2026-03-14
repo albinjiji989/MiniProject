@@ -7,8 +7,8 @@ export default function VeterinaryManagerAppointments() {
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('pending_approval');
   const [filter, setFilter] = useState({
-    status: '',
     bookingType: '',
     date: '',
     search: ''
@@ -17,28 +17,47 @@ export default function VeterinaryManagerAppointments() {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [showAcceptModal, setShowAcceptModal] = useState(false);
-  const [showDeclineModal, setShowDeclineModal] = useState(false);
-  const [declineReason, setDeclineReason] = useState('');
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
   const [acceptNotes, setAcceptNotes] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [error, setError] = useState('');
+  const [stats, setStats] = useState({});
+
+  const tabs = [
+    { id: 'pending_approval', label: 'Pending Approval', icon: '⏳' },
+    { id: 'confirmed', label: 'Confirmed', icon: '✓' },
+    { id: 'in_consultation', label: 'In Consultation', icon: '👨‍⚕️' },
+    { id: 'completed', label: 'Completed', icon: '✅' },
+    { id: 'cancelled', label: 'Cancelled', icon: '❌' }
+  ];
 
   useEffect(() => {
     loadAppointments();
-  }, [filter, currentPage]);
+  }, [activeTab, filter, currentPage]);
 
   const loadAppointments = async () => {
     setLoading(true);
+    setError('');
     try {
       const params = {
         page: currentPage,
         limit: 20,
+        status: activeTab,
         ...filter
       };
       
       const response = await veterinaryAPI.managerGetAppointments(params);
       setAppointments(response.data.data.appointments || []);
       setTotalPages(response.data.data.pagination?.pages || 1);
+      
+      // Update stats if available
+      if (response.data.data.stats) {
+        setStats(response.data.data.stats);
+      }
     } catch (error) {
       console.error('Failed to load appointments:', error);
+      setError('Failed to load appointments. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -50,6 +69,16 @@ export default function VeterinaryManagerAppointments() {
       [key]: value
     }));
     setCurrentPage(1);
+  };
+
+  const showMessage = (message, isError = false) => {
+    if (isError) {
+      setError(message);
+      setTimeout(() => setError(''), 5000);
+    } else {
+      setSuccessMessage(message);
+      setTimeout(() => setSuccessMessage(''), 5000);
+    }
   };
 
   const getBookingTypeBadge = (bookingType) => {
@@ -110,31 +139,31 @@ export default function VeterinaryManagerAppointments() {
       setAcceptNotes('');
       setSelectedAppointment(null);
       loadAppointments();
-      alert('Appointment confirmed successfully!');
+      showMessage('Appointment confirmed successfully!');
     } catch (error) {
       console.error('Failed to accept appointment:', error);
-      alert('Failed to confirm appointment');
+      showMessage('Failed to confirm appointment', true);
     }
   };
 
-  const handleDeclineAppointment = async () => {
-    if (!declineReason.trim()) {
-      alert('Please provide a reason for declining');
+  const handleCancelAppointment = async () => {
+    if (!cancelReason.trim()) {
+      showMessage('Please provide a reason for cancelling', true);
       return;
     }
     try {
       await veterinaryAPI.managerUpdateAppointment(selectedAppointment._id, {
-        status: 'declined',
-        declineReason: declineReason
+        status: 'cancelled',
+        cancelReason: cancelReason
       });
-      setShowDeclineModal(false);
-      setDeclineReason('');
+      setShowCancelModal(false);
+      setCancelReason('');
       setSelectedAppointment(null);
       loadAppointments();
-      alert('Appointment declined');
+      showMessage('Appointment cancelled successfully');
     } catch (error) {
-      console.error('Failed to decline appointment:', error);
-      alert('Failed to decline appointment');
+      console.error('Failed to cancel appointment:', error);
+      showMessage('Failed to cancel appointment', true);
     }
   };
 
@@ -158,26 +187,96 @@ export default function VeterinaryManagerAppointments() {
     <ManagerModuleLayout
       title="Veterinary Appointments"
       subtitle="Manage and track all veterinary appointments"
+      action={
+        <div className="flex space-x-3">
+          <button
+            onClick={loadAppointments}
+            disabled={loading}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            <svg className={`-ml-0.5 mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+          <button
+            onClick={() => navigate('/manager/veterinary/appointments/new')}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <svg className="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+            </svg>
+            New Appointment
+          </button>
+        </div>
+      }
     >
+      {/* Success/Error Messages */}
+      {successMessage && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-md p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-green-800">{successMessage}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm font-medium text-red-800">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Tabs */}
+      <div className="mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8 overflow-x-auto">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setCurrentPage(1);
+                }}
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
+                  activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+                {stats[tab.id] > 0 && (
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    activeTab === tab.id ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {stats[tab.id]}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select
-              value={filter.status}
-              onChange={(e) => handleFilterChange('status', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">All Statuses</option>
-              <option value="pending_approval">Pending</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="in_consultation">In Consultation</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-          
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Booking Type</label>
             <select
@@ -217,16 +316,64 @@ export default function VeterinaryManagerAppointments() {
 
       {/* Appointments List */}
       {loading ? (
-        <div className="flex justify-center items-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="bg-white rounded-lg shadow">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Appointment</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pet & Owner</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type & Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {[1, 2, 3].map((i) => (
+                  <tr key={i}>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded animate-pulse"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded animate-pulse"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded animate-pulse"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded animate-pulse"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded animate-pulse"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded animate-pulse"></div></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : appointments.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-12 text-center">
-          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No appointments</h3>
-          <p className="mt-1 text-sm text-gray-500">No appointments match your filters</p>
+          <div className="text-6xl mb-4">
+            {activeTab === 'pending_approval' ? '⏳' : 
+             activeTab === 'confirmed' ? '✓' : 
+             activeTab === 'in_consultation' ? '👨‍⚕️' : 
+             activeTab === 'completed' ? '✅' : '❌'}
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            No {tabs.find(t => t.id === activeTab)?.label.toLowerCase()} appointments
+          </h3>
+          <p className="text-sm text-gray-500 mb-6">
+            {activeTab === 'pending_approval' 
+              ? "No appointments are waiting for your approval."
+              : activeTab === 'confirmed'
+              ? "No confirmed appointments at the moment."
+              : activeTab === 'in_consultation'
+              ? "No ongoing consultations."
+              : activeTab === 'completed'
+              ? "No completed appointments to show."
+              : "No cancelled appointments."}
+          </p>
+          {activeTab === 'pending_approval' && (
+            <button
+              onClick={() => navigate('/manager/veterinary/appointments/new')}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+            >
+              Create New Appointment
+            </button>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -302,7 +449,7 @@ export default function VeterinaryManagerAppointments() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex flex-col space-y-2">
+                      <div className="flex flex-wrap gap-2">
                         {appointment.status === 'pending_approval' && (
                           <>
                             <button
@@ -310,48 +457,40 @@ export default function VeterinaryManagerAppointments() {
                                 setSelectedAppointment(appointment);
                                 setShowAcceptModal(true);
                               }}
-                              className="text-green-600 hover:text-green-900 text-left"
+                              className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700"
                             >
                               ✓ Accept
                             </button>
                             <button
                               onClick={() => {
                                 setSelectedAppointment(appointment);
-                                setShowDeclineModal(true);
+                                setShowCancelModal(true);
                               }}
-                              className="text-red-600 hover:text-red-900 text-left"
+                              className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700"
                             >
-                              ✗ Decline
+                              ✗ Cancel
                             </button>
                           </>
                         )}
                         {(appointment.status === 'confirmed' || appointment.status === 'scheduled') && (
                           <button
                             onClick={() => handleStartConsultation(appointment)}
-                            className="text-blue-600 hover:text-blue-900 text-left"
+                            className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700"
                           >
-                            👨‍⚕️ Start Consultation
+                            👨‍⚕️ Start
                           </button>
                         )}
                         {appointment.status === 'in_consultation' && (
                           <button
                             onClick={() => handleStartConsultation(appointment)}
-                            className="text-purple-600 hover:text-purple-900 text-left"
+                            className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-purple-600 hover:bg-purple-700"
                           >
                             📋 Continue
                           </button>
                         )}
-                        {appointment.status === 'completed' && (
-                          <button
-                            onClick={() => navigate(`/manager/veterinary/appointments/${appointment._id}`)}
-                            className="text-gray-600 hover:text-gray-900 text-left"
-                          >
-                            👁️ View Details
-                          </button>
-                        )}
                         <button
                           onClick={() => navigate(`/manager/veterinary/appointments/${appointment._id}`)}
-                          className="text-blue-600 hover:text-blue-900 text-left"
+                          className="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50"
                         >
                           📄 Details
                         </button>
@@ -464,35 +603,35 @@ export default function VeterinaryManagerAppointments() {
         </div>
       )}
 
-      {/* Decline Modal */}
-      {showDeclineModal && (
+      {/* Cancel Modal */}
+      {showCancelModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
-                Decline Appointment
+                Cancel Appointment
               </h3>
               <div className="mb-4">
                 <p className="text-sm text-gray-500 mb-4">
-                  Please provide a reason for declining this appointment.
+                  Please provide a reason for cancelling this appointment.
                 </p>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Reason <span className="text-red-500">*</span>
                 </label>
                 <textarea
-                  value={declineReason}
-                  onChange={(e) => setDeclineReason(e.target.value)}
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
                   rows={4}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Explain why this appointment cannot be accepted..."
+                  placeholder="Explain why this appointment needs to be cancelled..."
                   required
                 />
               </div>
               <div className="flex justify-end space-x-3">
                 <button
                   onClick={() => {
-                    setShowDeclineModal(false);
-                    setDeclineReason('');
+                    setShowCancelModal(false);
+                    setCancelReason('');
                     setSelectedAppointment(null);
                   }}
                   className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
@@ -500,10 +639,10 @@ export default function VeterinaryManagerAppointments() {
                   Cancel
                 </button>
                 <button
-                  onClick={handleDeclineAppointment}
+                  onClick={handleCancelAppointment}
                   className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
                 >
-                  Decline Appointment
+                  Cancel Appointment
                 </button>
               </div>
             </div>

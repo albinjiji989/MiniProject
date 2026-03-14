@@ -77,7 +77,7 @@ export default function ProfessionalVeterinaryBooking() {
     }
   };
 
-  // Normalize pet data from different sources
+  // Normalize pet data from unified API
   const normalizePet = (pet) => {
     let speciesName = 'Unknown';
     if (typeof pet.species === 'string' && pet.species) {
@@ -93,13 +93,17 @@ export default function ProfessionalVeterinaryBooking() {
       breedName = pet.breed.name || 'Unknown';
     }
     
-    const source = pet.source || 'owned';
+    // Use the source from unified API or determine from sourceLabel
+    const source = pet.source || 
+      (pet.sourceLabel === 'Adopted Pet' ? 'adoption' : 
+       pet.sourceLabel === 'Purchased Pet' ? 'petshop' : 
+       pet.sourceLabel === 'My Pet' ? 'user' : 'owned');
+    
     const sourceLabels = {
-      owned: { label: 'My Pet', badge: 'bg-purple-100 text-purple-800' },
-      adopted: { label: 'Adopted', badge: 'bg-green-100 text-green-800' },
-      purchased: { label: 'Purchased', badge: 'bg-blue-100 text-blue-800' },
       adoption: { label: 'Adopted', badge: 'bg-green-100 text-green-800' },
-      petshop: { label: 'Purchased', badge: 'bg-blue-100 text-blue-800' }
+      petshop: { label: 'Purchased', badge: 'bg-blue-100 text-blue-800' },
+      user: { label: 'My Pet', badge: 'bg-purple-100 text-purple-800' },
+      owned: { label: 'My Pet', badge: 'bg-purple-100 text-purple-800' }
     };
     
     return {
@@ -115,39 +119,53 @@ export default function ProfessionalVeterinaryBooking() {
   const loadAllPets = async () => {
     setLoading(true);
     try {
-      const [ownedRes, adoptedRes, purchasedRes] = await Promise.allSettled([
-        userPetsAPI.list({}),
-        adoptionAPI.getMyAdoptedPets(),
-        petShopAPI.getMyPurchasedPets()
-      ]);
-
-      let allPets = [];
+      // Use the same unified API as the dashboard for consistency
+      const response = await userPetsAPI.getAllPets();
       
-      if (ownedRes.status === 'fulfilled') {
-        const userPets = Array.isArray(ownedRes.value.data?.data) 
-          ? ownedRes.value.data.data 
-          : (ownedRes.value.data?.data?.pets || []);
-        userPets.forEach(pet => allPets.push(normalizePet({ ...pet, source: 'owned' })));
-      }
+      if (response.data?.success) {
+        const allPets = response.data.data?.pets || [];
+        console.log('🐾 Veterinary booking loaded pets:', allPets.length);
+        console.log('🐾 Pet sources:', allPets.map(p => `${p.name}(${p.petCode}) - ${p.source}`));
+        
+        // Debug image data for each pet
+        allPets.forEach(pet => {
+          if (pet.source === 'petshop') {
+            console.log('🖼️ Petshop pet image debug:', {
+              name: pet.name,
+              petCode: pet.petCode,
+              source: pet.source,
+              images: pet.images?.length || 0,
+              imageIds: pet.imageIds?.length || 0,
+              firstImageUrl: pet.images?.[0]?.url || 'none',
+              imageStructure: pet.images?.[0] || 'none'
+            });
+          }
+        });
+        
+        // Normalize pets for veterinary booking
+        const normalizedPets = allPets.map(pet => normalizePet({
+          ...pet,
+          source: pet.source || pet.sourceLabel || 'owned'
+        }));
+        
+        // Validation: Ensure all pets have required fields
+        const validPets = normalizedPets.filter(pet => {
+          const isValid = pet._id && (pet.petCode || pet.name);
+          if (!isValid) {
+            console.warn('⚠️ Filtering out invalid pet:', pet);
+          }
+          return isValid;
+        });
 
-      if (adoptedRes.status === 'fulfilled') {
-        const adoptedPets = Array.isArray(adoptedRes.value.data?.data) 
-          ? adoptedRes.value.data.data 
-          : (adoptedRes.value.data?.data?.pets || []);
-        adoptedPets.forEach(pet => allPets.push(normalizePet({ ...pet, source: 'adopted' })));
+        console.log('📋 Total valid pets for veterinary booking:', validPets.length);
+        setPets(validPets);
+      } else {
+        console.error('Failed to load pets:', response.data?.message);
+        setPets([]);
       }
-
-      if (purchasedRes.status === 'fulfilled') {
-        const responseData = purchasedRes.value.data?.data;
-        const purchasedPets = Array.isArray(responseData) 
-          ? responseData 
-          : (responseData?.pets || []);
-        purchasedPets.forEach(pet => allPets.push(normalizePet({ ...pet, source: 'purchased' })));
-      }
-
-      setPets(allPets);
     } catch (error) {
       console.error('Failed to load pets:', error);
+      setPets([]); // Ensure we don't show invalid data
     } finally {
       setLoading(false);
     }
@@ -258,14 +276,69 @@ export default function ProfessionalVeterinaryBooking() {
 
   // Get pet image
   const getPetImage = (pet) => {
+    console.log('🖼️ Getting image for pet:', pet?.name, 'Source:', pet?.source);
+    console.log('🖼️ Pet image data:', {
+      images: pet?.images?.length || 0,
+      imageIds: pet?.imageIds?.length || 0,
+      imageUrl: !!pet?.imageUrl,
+      profileImage: !!pet?.profileImage
+    });
+    
+    // Check images array first (most common for all sources)
     if (pet?.images?.length > 0) {
       const primary = pet.images.find(img => img.isPrimary);
-      if (primary?.url) return primary.url;
-      if (pet.images[0]?.url) return pet.images[0].url;
+      if (primary?.url) {
+        console.log('🖼️ Using primary image:', primary.url);
+        return primary.url;
+      }
+      if (pet.images[0]?.url) {
+        console.log('🖼️ Using first image:', pet.images[0].url);
+        return pet.images[0].url;
+      }
     }
-    if (pet?.imageUrl) return pet.imageUrl;
-    if (pet?.imageIds?.[0]?.url) return pet.imageIds[0].url;
-    if (pet?.profileImage) return pet.profileImage;
+    
+    // Check imageIds array (populated images)
+    if (pet?.imageIds?.length > 0) {
+      const primary = pet.imageIds.find(img => img.isPrimary);
+      if (primary?.url) {
+        console.log('🖼️ Using primary imageId:', primary.url);
+        return primary.url;
+      }
+      if (pet.imageIds[0]?.url) {
+        console.log('🖼️ Using first imageId:', pet.imageIds[0].url);
+        return pet.imageIds[0].url;
+      }
+    }
+    
+    // Check direct image URL properties
+    if (pet?.imageUrl) {
+      console.log('🖼️ Using imageUrl:', pet.imageUrl);
+      return pet.imageUrl;
+    }
+    
+    if (pet?.profileImage) {
+      console.log('🖼️ Using profileImage:', pet.profileImage);
+      return pet.profileImage;
+    }
+    
+    // For petshop pets, try additional fallback approaches
+    if (pet?.source === 'petshop' || pet?.source === 'purchased') {
+      console.log('🖼️ Petshop pet - checking additional image sources');
+      
+      // Check if there's a batch image reference
+      if (pet?.batchImages?.length > 0) {
+        console.log('🖼️ Using batch image:', pet.batchImages[0].url);
+        return pet.batchImages[0].url;
+      }
+      
+      // Check sourceData for images
+      if (pet?.sourceData?.images?.length > 0) {
+        console.log('🖼️ Using sourceData image:', pet.sourceData.images[0].url);
+        return pet.sourceData.images[0].url;
+      }
+    }
+    
+    console.log('🖼️ No image found, using placeholder');
     return '/placeholder-pet.svg';
   };
 
@@ -328,25 +401,62 @@ export default function ProfessionalVeterinaryBooking() {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
+      // Validation: Ensure we have a valid pet
+      if (!selectedPet || !selectedPet._id) {
+        alert('Invalid pet selected. Please refresh the page and try again.');
+        return;
+      }
+
+      console.log('🐾 Selected Pet Data:', selectedPet);
+      console.log('🐾 Pet Source:', selectedPet.source);
+      console.log('🐾 Pet ID Options:', {
+        _id: selectedPet._id,
+        petCode: selectedPet.petCode,
+        id: selectedPet.id
+      });
+
+      // Enhanced pet identification strategy
+      let petIdentifier;
+      let bookingNotes = additionalNotes || '';
+
+      // Always try petCode first as it's the most reliable identifier across all systems
+      if (selectedPet.petCode) {
+        petIdentifier = selectedPet.petCode;
+        console.log('🔍 Using petCode as identifier:', petIdentifier);
+      } else if (selectedPet._id) {
+        petIdentifier = selectedPet._id;
+        console.log('🔍 Using _id as identifier:', petIdentifier);
+      } else {
+        throw new Error('No valid pet identifier found');
+      }
+
+      // Add source information to notes for tracking
+      if (selectedPet.source === 'purchased' || selectedPet.source === 'petshop') {
+        bookingNotes = `[Purchased Pet - Code: ${selectedPet.petCode}] ${bookingNotes}`.trim();
+      }
+
       const bookingData = {
-        petId: selectedPet.petCode || selectedPet._id, // Use petCode if available
+        petId: petIdentifier,
         serviceId: selectedService._id,
         appointmentDate: selectedDate,
         timeSlot: selectedTimeSlot.value,
-        reason: `${selectedService.name}${additionalNotes ? ' - ' + additionalNotes : ''}`,
+        reason: `${selectedService.name}${bookingNotes ? ' - ' + bookingNotes : ''}`,
         symptoms: symptoms || '',
         bookingType: selectedService.category === 'emergency' ? 'emergency' : 'routine',
-        visitType: 'consultation'
+        visitType: 'consultation',
+        // Add metadata about pet source for backend reference
+        petSource: selectedPet.source,
+        petCode: selectedPet.petCode // Include petCode as additional reference
       };
       
-      console.log('Booking data:', bookingData);
+      console.log('📋 Final booking data:', bookingData);
       
       await veterinaryAPI.bookAppointment(bookingData);
       
       // Success - navigate to appointments
       navigate('/user/veterinary/appointments', {
         state: { 
-          message: 'Appointment booked successfully!',
+          successMessage: 'Appointment submitted for manager approval. You will be notified once reviewed.',
           appointmentDate: selectedDate,
           timeSlot: selectedTimeSlot.display
         }
@@ -354,7 +464,124 @@ export default function ProfessionalVeterinaryBooking() {
     } catch (error) {
       console.error('Failed to book appointment:', error);
       console.error('Error response:', error.response?.data);
-      alert(error.response?.data?.message || 'Failed to book appointment. Please try again.');
+      
+      // Enhanced error handling for purchased pets
+      if (error.response?.data?.message?.includes('does not belong to you')) {
+        
+        if (selectedPet.source === 'purchased' || selectedPet.source === 'petshop') {
+          console.log('🔄 Purchased pet ownership issue detected. Attempting alternative approaches...');
+          
+          // Strategy 1: Try with _id instead of petCode
+          if (selectedPet.petCode && selectedPet._id && petIdentifier === selectedPet.petCode) {
+            console.log('🔄 Retrying with _id instead of petCode...');
+            try {
+              const retryBookingData = {
+                ...bookingData,
+                petId: selectedPet._id
+              };
+              
+              await veterinaryAPI.bookAppointment(retryBookingData);
+              
+              navigate('/user/veterinary/appointments', {
+                state: { 
+                  successMessage: 'Appointment submitted for manager approval. You will be notified once reviewed.',
+                  appointmentDate: selectedDate,
+                  timeSlot: selectedTimeSlot.display
+                }
+              });
+              return;
+            } catch (retryError) {
+              console.log('🔄 Retry with _id also failed, proceeding to registration...');
+            }
+          }
+          
+          // Strategy 2: Register pet as owned pet and retry
+          console.log('🔄 Attempting to register purchased pet as owned pet...');
+          
+          try {
+            // Try to create the pet in the user's owned pets
+            const petRegistrationData = {
+              name: selectedPet.name,
+              species: selectedPet.species,
+              breed: selectedPet.breed,
+              gender: selectedPet.gender,
+              age: selectedPet.age,
+              ageUnit: selectedPet.ageUnit || 'months',
+              color: selectedPet.color,
+              weight: selectedPet.weight,
+              petCode: selectedPet.petCode,
+              description: `Pet purchased from pet shop (Original Code: ${selectedPet.petCode})`,
+              images: selectedPet.images || []
+            };
+            
+            console.log('📝 Registering pet data:', petRegistrationData);
+            
+            const registrationResponse = await userPetsAPI.createPet(petRegistrationData);
+            const newPetId = registrationResponse.data?.data?._id || registrationResponse.data?._id;
+            
+            console.log('✅ Pet registered successfully with ID:', newPetId);
+            
+            // Now try booking again with the new pet ID
+            const retryBookingData = {
+              ...bookingData,
+              petId: newPetId,
+              reason: `${selectedService.name} - [Registered from purchased pet ${selectedPet.petCode}]${bookingNotes ? ' - ' + bookingNotes : ''}`
+            };
+            
+            console.log('🔄 Retrying booking with registered pet:', retryBookingData);
+            
+            await veterinaryAPI.bookAppointment(retryBookingData);
+            
+            // Success after registration
+            navigate('/user/veterinary/appointments', {
+              state: { 
+                successMessage: 'Pet registered and appointment submitted for manager approval.',
+                appointmentDate: selectedDate,
+                timeSlot: selectedTimeSlot.display
+              }
+            });
+            
+            return; // Exit successfully
+            
+          } catch (registrationError) {
+            console.error('Failed to register pet:', registrationError);
+            
+            alert(`Unable to book appointment for this purchased pet. The veterinary system doesn't recognize pets purchased from pet shops. Please contact customer support for assistance with pet code: ${selectedPet.petCode}`);
+            return;
+          }
+        } else {
+          // For non-purchased pets, show generic ownership error
+          alert(`Unable to book appointment for this pet. The pet ownership could not be verified. Please contact customer support.`);
+          return;
+        }
+      }
+      
+      // Special handling for pets that don't belong to user at all
+      if (error.response?.status === 403) {
+        if (error.response?.data?.message?.includes('Data inconsistency detected')) {
+          alert(`${error.response.data.message}\n\nThis appears to be a system data issue where the same pet code is used for multiple pets. Please contact customer support to resolve this.`);
+        } else {
+          alert(`Access denied: This pet does not belong to you. Please ensure you're selecting from your own pets only. If you believe this is an error, please contact customer support with pet code: ${selectedPet.petCode || 'N/A'}`);
+        }
+        return;
+      }
+      
+      // Special handling for data inconsistency (409 status)
+      if (error.response?.status === 409) {
+        alert(`${error.response.data.message}\n\nPlease refresh the page and try selecting a different pet.`);
+        // Reload pets to get fresh data
+        loadAllPets();
+        return;
+      }
+      
+      // Provide more specific error messages based on the error
+      let errorMessage = 'Failed to book appointment. Please try again.';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      alert(errorMessage);
     } finally {
       setSubmitting(false);
     }

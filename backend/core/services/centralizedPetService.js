@@ -184,7 +184,10 @@ const CentralizedPetService = {
         console.log('📦 Fetching user pet - checking original source');
         if (registryEntry.userPetId) {
           console.log('📦 Fetching from core Pet with ID:', registryEntry.userPetId);
-          sourceData = await Pet.findById(registryEntry.userPetId).populate('imageIds');
+          sourceData = await Pet.findById(registryEntry.userPetId)
+            .populate('imageIds')
+            .populate('speciesId', 'name displayName')
+            .populate('breedId', 'name displayName');
           if (sourceData?.imageIds) {
             images = sourceData.imageIds.map(img => ({
               _id: img._id,
@@ -233,13 +236,38 @@ const CentralizedPetService = {
 
     // If sourceData has populated species/breed, use those instead of registry's
     if (sourceData) {
+      // Handle different field names based on source
       if (sourceData.speciesId) {
         response.species = sourceData.speciesId;
       }
       if (sourceData.breedId) {
         response.breed = sourceData.breedId;
       }
+      
+      // Also use sourceData name if registry name is missing
+      if (sourceData.name && !response.name) {
+        response.name = sourceData.name;
+      }
     }
+
+    // Ensure species and breed are properly formatted
+    // If they're still ObjectIds (population failed), try to get names from sourceData
+    if (response.species && typeof response.species === 'object' && response.species.toString && !response.species.name) {
+      // Species is an unpopulated ObjectId, try to get from sourceData
+      if (sourceData && sourceData.speciesId && sourceData.speciesId.name) {
+        response.species = sourceData.speciesId;
+      }
+    }
+    
+    if (response.breed && typeof response.breed === 'object' && response.breed.toString && !response.breed.name) {
+      // Breed is an unpopulated ObjectId, try to get from sourceData
+      if (sourceData && sourceData.breedId && sourceData.breedId.name) {
+        response.breed = sourceData.breedId;
+      }
+    }
+
+    console.log('🔍 Final response species:', response.species);
+    console.log('🔍 Final response breed:', response.breed);
 
     return response;
   },

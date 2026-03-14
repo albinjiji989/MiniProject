@@ -33,7 +33,8 @@ import {
   Favorite as FavoriteIcon,
   Inventory as InventoryIcon,
   AttachMoney as AttachMoneyIcon,
-  TrendingUp as AnalyticsIcon
+  TrendingUp as AnalyticsIcon,
+  Assignment as AssignmentIcon
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, authAPI } from '../../../services/api'

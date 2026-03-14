@@ -66,14 +66,8 @@ export default function UserPetsMedicalHistory() {
             <Heart className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No Pets Found</h3>
             <p className="text-gray-600 mb-6">
-              You don't have any pets registered yet. Add a pet to start tracking medical history.
+              You don't have any pets registered for medical history tracking yet.
             </p>
-            <button
-              onClick={() => navigate('/user/pets/add')}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Add Your First Pet
-            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -177,9 +171,9 @@ export default function UserPetsMedicalHistory() {
         )}
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <button
-            onClick={() => navigate('/user/veterinary/booking')}
+            onClick={() => navigate('/user/veterinary/book')}
             className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-lg transition-all duration-300 text-left"
           >
             <div className="bg-blue-100 w-12 h-12 rounded-lg flex items-center justify-center mb-4">
@@ -198,17 +192,6 @@ export default function UserPetsMedicalHistory() {
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">View Appointments</h3>
             <p className="text-gray-600 text-sm">Check all your upcoming and past appointments</p>
-          </button>
-
-          <button
-            onClick={() => navigate('/user/pets/add')}
-            className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-lg transition-all duration-300 text-left"
-          >
-            <div className="bg-teal-100 w-12 h-12 rounded-lg flex items-center justify-center mb-4">
-              <Heart className="w-6 h-6 text-teal-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Add New Pet</h3>
-            <p className="text-gray-600 text-sm">Register a new pet to track their health</p>
           </button>
         </div>
 

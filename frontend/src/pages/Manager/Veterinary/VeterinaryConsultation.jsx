@@ -850,7 +850,6 @@ export default function VeterinaryConsultation() {
               <p>✓ Follow-up: {medicalRecord.followUpRequired ? 'Required' : 'Not required'}</p>
             </div>
           </div>
-
           <div className="mt-6 flex justify-between">
             <button
               onClick={() => setCurrentStep(4)}

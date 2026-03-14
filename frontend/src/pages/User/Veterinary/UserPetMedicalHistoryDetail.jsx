@@ -24,10 +24,73 @@ export default function UserPetMedicalHistoryDetail() {
   const loadPetMedicalHistory = async () => {
     setLoading(true);
     try {
-      const response = await veterinaryAPI.userGetPetMedicalHistory(petId);
-      setData(response.data.data);
+      // Use the existing working endpoint for user medical records
+      const response = await veterinaryAPI.userListMedicalRecordsForPet(petId);
+      
+      // Handle different possible response structures
+      const responseData = response.data?.data || response.data;
+      
+      console.log('🏥 Medical History API Response:', responseData);
+      
+      // If the response is just an array of records, wrap it in an object
+      if (Array.isArray(responseData)) {
+        setData({
+          pet: { name: 'Pet', petCode: petId },
+          records: responseData,
+          timeline: responseData,
+          currentMedications: [],
+          pendingFollowUps: [],
+          upcomingAppointments: [],
+          statistics: {
+            totalVisits: responseData.length || 0,
+            completedVaccinations: 0,
+            pendingVaccinations: 0,
+            lastVisit: responseData.length > 0 ? responseData[0].date : null,
+            nextAppointment: null,
+            totalExpenses: 0,
+            outstandingBalance: 0
+          }
+        });
+      } else {
+        // Ensure statistics object exists
+        const dataWithStats = {
+          ...responseData,
+          timeline: responseData.timeline || responseData.records || [],
+          currentMedications: responseData.currentMedications || [],
+          pendingFollowUps: responseData.pendingFollowUps || [],
+          upcomingAppointments: responseData.upcomingAppointments || [],
+          statistics: responseData.statistics || {
+            totalVisits: responseData.records?.length || 0,
+            completedVaccinations: 0,
+            pendingVaccinations: 0,
+            lastVisit: responseData.records?.length > 0 ? responseData.records[0].date : null,
+            nextAppointment: null,
+            totalExpenses: 0,
+            outstandingBalance: 0
+          }
+        };
+        setData(dataWithStats);
+      }
     } catch (error) {
       console.error('Failed to load pet medical history:', error);
+      // Set empty data structure to prevent crashes
+      setData({
+        pet: { name: 'Pet', petCode: petId },
+        records: [],
+        timeline: [],
+        currentMedications: [],
+        pendingFollowUps: [],
+        upcomingAppointments: [],
+        statistics: {
+          totalVisits: 0,
+          completedVaccinations: 0,
+          pendingVaccinations: 0,
+          lastVisit: null,
+          nextAppointment: null,
+          totalExpenses: 0,
+          outstandingBalance: 0
+        }
+      });
     } finally {
       setLoading(false);
     }
@@ -35,21 +98,26 @@ export default function UserPetMedicalHistoryDetail() {
 
   const viewRecordDetail = async (recordId) => {
     try {
+      // Try the existing endpoint, but handle if it doesn't exist
       const response = await veterinaryAPI.userGetMedicalRecordDetail(recordId);
       setSelectedRecord(response.data.data.record);
     } catch (error) {
       console.error('Failed to load record details:', error);
+      // Show a simple alert instead of crashing
+      alert('Unable to load detailed record information. This feature may not be available yet.');
     }
   };
 
   const downloadRecord = async (recordId) => {
     try {
+      // Try the download endpoint, but handle if it doesn't exist
       const response = await veterinaryAPI.userDownloadMedicalRecord(recordId);
-      // In production, this would trigger PDF download
       console.log('Download data:', response.data);
       alert('Download functionality will generate a PDF of the medical record');
     } catch (error) {
       console.error('Failed to download record:', error);
+      // Show a simple alert instead of crashing
+      alert('Download feature is not available yet. Please contact your veterinarian for records.');
     }
   };
 
@@ -89,18 +157,29 @@ export default function UserPetMedicalHistoryDetail() {
     );
   }
 
-  if (!data) {
+  if (!data || (!data.pet && !data.records && !data.timeline)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md mx-auto p-6">
           <Heart className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600 mb-4">No medical history found</p>
-          <button
-            onClick={() => navigate(-1)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Go Back
-          </button>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Medical History</h2>
+          <p className="text-gray-600 mb-4">
+            Medical history for pet {petId} is not available yet.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => navigate('/User/veterinary/book')}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Book Veterinary Appointment
+            </button>
+            <button
+              onClick={() => navigate(-1)}
+              className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -120,10 +199,10 @@ export default function UserPetMedicalHistoryDetail() {
           </button>
 
           <div className="flex flex-col md:flex-row md:items-start md:space-x-6">
-            {data.pet.image ? (
+            {data.pet?.image ? (
               <img
                 src={data.pet.image}
-                alt={data.pet.name}
+                alt={data.pet?.name || 'Pet'}
                 className="w-32 h-32 rounded-full object-cover border-4 border-blue-100 mb-4 md:mb-0"
               />
             ) : (
@@ -133,28 +212,36 @@ export default function UserPetMedicalHistoryDetail() {
             )}
 
             <div className="flex-1">
-              <h1 className="text-3xl font-bold text-gray-900">{data.pet.name}</h1>
+              <h1 className="text-3xl font-bold text-gray-900">{data.pet?.name || `Pet ${petId}`}</h1>
               <div className="flex flex-wrap items-center gap-3 mt-2 text-gray-600">
-                <span>{data.pet.species}</span>
+                <span>{data.pet?.species || 'Unknown Species'}</span>
                 <span>•</span>
-                <span>{data.pet.breed}</span>
-                <span>•</span>
-                <span>{data.pet.age}</span>
-                <span>•</span>
-                <span>{data.pet.gender}</span>
-                {data.pet.weight && (
+                <span>{data.pet?.breed || 'Unknown Breed'}</span>
+                {data.pet?.age && (
+                  <>
+                    <span>•</span>
+                    <span>{data.pet.age}</span>
+                  </>
+                )}
+                {data.pet?.gender && (
+                  <>
+                    <span>•</span>
+                    <span>{data.pet.gender}</span>
+                  </>
+                )}
+                {data.pet?.weight && (
                   <>
                     <span>•</span>
                     <span>{data.pet.weight} lbs</span>
                   </>
                 )}
               </div>
-              {data.pet.microchipId && (
+              {data.pet?.microchipId && (
                 <p className="text-sm text-gray-500 mt-2">
                   <span className="font-medium">Microchip ID:</span> {data.pet.microchipId}
                 </p>
               )}
-              {data.pet.color && (
+              {data.pet?.color && (
                 <p className="text-sm text-gray-500">
                   <span className="font-medium">Color:</span> {data.pet.color}
                 </p>
@@ -163,7 +250,7 @@ export default function UserPetMedicalHistoryDetail() {
 
             <div className="mt-4 md:mt-0">
               <button
-                onClick={() => navigate('/user/veterinary/booking', { state: { selectedPet: data.pet } })}
+                onClick={() => navigate('/User/veterinary/book', { state: { selectedPet: data.pet } })}
                 className="w-full md:w-auto px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
               >
                 <Calendar className="w-4 h-4 mr-2" />
@@ -180,9 +267,9 @@ export default function UserPetMedicalHistoryDetail() {
               <div>
                 <p className="text-gray-600 text-sm">Total Visits</p>
                 <p className="text-3xl font-bold text-gray-900 mt-1">
-                  {data.statistics.totalVisits}
+                  {data.statistics?.totalVisits || 0}
                 </p>
-                {data.statistics.lastVisit && (
+                {data.statistics?.lastVisit && (
                   <p className="text-xs text-gray-500 mt-1">
                     Last: {formatDate(data.statistics.lastVisit)}
                   </p>
@@ -199,9 +286,9 @@ export default function UserPetMedicalHistoryDetail() {
               <div>
                 <p className="text-gray-600 text-sm">Vaccinations</p>
                 <p className="text-3xl font-bold text-gray-900 mt-1">
-                  {data.statistics.completedVaccinations}
+                  {data.statistics?.completedVaccinations || 0}
                 </p>
-                {data.statistics.pendingVaccinations > 0 && (
+                {(data.statistics?.pendingVaccinations || 0) > 0 && (
                   <p className="text-xs text-orange-600 mt-1">
                     {data.statistics.pendingVaccinations} pending
                   </p>
@@ -217,10 +304,10 @@ export default function UserPetMedicalHistoryDetail() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-sm">Next Appointment</p>
-                {data.statistics.nextAppointment ? (
+                {data.statistics?.nextAppointment ? (
                   <>
                     <p className="text-lg font-bold text-gray-900 mt-1">
-                      {formatDate(data.statistics.nextAppointment)}
+                      {formatDate(data.statistics?.nextAppointment)}
                     </p>
                     <p className="text-xs text-green-600 mt-1">Scheduled</p>
                   </>
@@ -239,11 +326,11 @@ export default function UserPetMedicalHistoryDetail() {
               <div>
                 <p className="text-gray-600 text-sm">Total Expenses</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(data.statistics.totalExpenses)}
+                  {formatCurrency(data.statistics?.totalExpenses || 0)}
                 </p>
-                {data.statistics.outstandingBalance > 0 && (
+                {(data.statistics?.outstandingBalance || 0) > 0 && (
                   <p className="text-xs text-red-600 mt-1">
-                    {formatCurrency(data.statistics.outstandingBalance)} due
+                    {formatCurrency(data.statistics?.outstandingBalance || 0)} due
                   </p>
                 )}
               </div>
@@ -261,10 +348,10 @@ export default function UserPetMedicalHistoryDetail() {
               <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 mr-3" />
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-orange-900 mb-2">
-                  Pending Follow-ups ({data.pendingFollowUps.length})
+                  Pending Follow-ups ({(data.pendingFollowUps || []).length})
                 </h3>
                 <div className="space-y-2">
-                  {data.pendingFollowUps.map((followUp, idx) => (
+                  {(data.pendingFollowUps || []).map((followUp, idx) => (
                     <div key={idx} className="text-sm text-orange-800">
                       • {followUp.diagnosis} - Due: {formatDate(followUp.followUpDate)}
                     </div>
@@ -304,7 +391,7 @@ export default function UserPetMedicalHistoryDetail() {
             {/* Timeline Tab */}
             {activeTab === 'timeline' && (
               <div className="space-y-6">
-                {data.timeline.length === 0 ? (
+                {(data.timeline || []).length === 0 ? (
                   <div className="text-center py-12">
                     <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-500">No medical history available yet</p>
@@ -313,7 +400,7 @@ export default function UserPetMedicalHistoryDetail() {
                   <div className="relative">
                     <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gray-200"></div>
 
-                    {data.timeline.map((item, idx) => {
+                    {(data.timeline || []).map((item, idx) => {
                       const iconData = getTimelineIcon(item.type);
                       const Icon = iconData.icon;
 
@@ -485,13 +572,13 @@ export default function UserPetMedicalHistoryDetail() {
             {/* Current Medications Tab */}
             {activeTab === 'medications' && (
               <div className="space-y-4">
-                {data.currentMedications.length === 0 ? (
+                {(data.currentMedications || []).length === 0 ? (
                   <div className="text-center py-12">
                     <Pill className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-500">No current medications</p>
                   </div>
                 ) : (
-                  data.currentMedications.map((med, idx) => (
+                  (data.currentMedications || []).map((med, idx) => (
                     <div key={idx} className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start space-x-3">
@@ -522,13 +609,13 @@ export default function UserPetMedicalHistoryDetail() {
             {/* Vaccinations Tab */}
             {activeTab === 'vaccinations' && (
               <div className="space-y-4">
-                {data.timeline.filter(item => item.type === 'vaccination').length === 0 ? (
+                {(data.timeline || []).filter(item => item.type === 'vaccination').length === 0 ? (
                   <div className="text-center py-12">
                     <Syringe className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-500">No vaccination records</p>
                   </div>
                 ) : (
-                  data.timeline
+                  (data.timeline || [])
                     .filter(item => item.type === 'vaccination')
                     .map((vac, idx) => (
                       <div key={idx} className="bg-green-50 rounded-lg p-4 border border-green-200">
@@ -567,7 +654,7 @@ export default function UserPetMedicalHistoryDetail() {
             {/* Appointments Tab */}
             {activeTab === 'appointments' && (
               <div className="space-y-4">
-                {data.upcomingAppointments.length === 0 ? (
+                {(data.upcomingAppointments || []).length === 0 ? (
                   <div className="text-center py-12">
                     <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-500">No upcoming appointments</p>
@@ -579,7 +666,7 @@ export default function UserPetMedicalHistoryDetail() {
                     </button>
                   </div>
                 ) : (
-                  data.upcomingAppointments.map((apt, idx) => (
+                  (data.upcomingAppointments || []).map((apt, idx) => (
                     <div key={idx} className="bg-purple-50 rounded-lg p-4 border border-purple-200">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start space-x-3">

@@ -33,7 +33,8 @@ import {
   MoreVert as MoreVertIcon, 
   Visibility as ViewIcon, 
   Edit as EditIcon, 
-  Delete as DeleteIcon 
+  Delete as DeleteIcon,
+  FavoriteOutlined as FavoriteIcon
 } from '@mui/icons-material'
 import { apiClient, userPetsAPI, resolveMediaUrl } from '../../../services/api'
 
@@ -264,14 +265,14 @@ const MyUserPets = () => {
           <PetsIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h5" sx={{ mb: 1 }}>No pets found</Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            You don't have any pets yet.
+            You don't have any pets yet. Adopt or purchase pets to get started.
           </Typography>
           <Button
             variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => navigate('/User/pets/add')}
+            startIcon={<FavoriteIcon />}
+            onClick={() => navigate('/User/adoption')}
           >
-            Add Your First Pet
+            Find Pets for Adoption
           </Button>
         </Card>
       ) : (

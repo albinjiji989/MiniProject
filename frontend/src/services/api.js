@@ -214,6 +214,10 @@ export const petAPI = {
   getStats: () => api.get('/admin/pets/stats/overview'),
   // User pets
   getMyPets: () => api.get('/pets/my-pets'),
+  // Centralized pets
+  getCentralizedPet: (petCode) => api.get(`/pets/centralized/${petCode}`),
+  searchCentralizedPets: (searchTerm) => api.get(`/pets/centralized/search/${searchTerm}`),
+  getAllCentralizedPets: () => api.get('/pets/centralized')
 }
 
 // Adoption API

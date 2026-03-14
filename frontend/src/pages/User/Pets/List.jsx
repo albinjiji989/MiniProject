@@ -385,14 +385,6 @@ const UserPetsList = () => {
             Manage and view all your pets in one place
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => navigate('/User/pets/add')}
-          size={isMobile ? 'small' : 'medium'}
-        >
-          Add New Pet
-        </Button>
       </Box>
 
       {/* Stats Cards */}
@@ -636,14 +628,6 @@ const UserPetsList = () => {
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
               You haven't added any pets yet or no pets match your search criteria
             </Typography>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => navigate('/User/pets/add')}
-              size="large"
-            >
-              Add Your First Pet
-            </Button>
           </CardContent>
         </Card>
       ) : (

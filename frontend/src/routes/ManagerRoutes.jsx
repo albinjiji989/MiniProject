@@ -73,6 +73,11 @@ import RescueManagerDashboard from '../modules/managers/Rescue/RescueManagerDash
 import TemporaryCareManagerDashboard from '../modules/managers/TemporaryCare/TemporaryCareManagerDashboard'
 import ApplicationManagerDashboard from '../pages/Manager/TemporaryCare/ApplicationManagerDashboard'
 import ProfessionalApplicationDashboard from '../pages/Manager/TemporaryCare/ProfessionalApplicationDashboard'
+import ImprovedApplicationDashboard from '../pages/Manager/TemporaryCare/ImprovedApplicationDashboard'
+import BeautifulManagerDashboard from '../pages/Manager/TemporaryCare/BeautifulManagerDashboard'
+import SimpleCleanDashboard from '../pages/Manager/TemporaryCare/SimpleCleanDashboard'
+import IndustryLevelDashboard from '../pages/Manager/TemporaryCare/IndustryLevelDashboard'
+import TestDashboard from '../pages/Manager/TemporaryCare/TestDashboard'
 import TemporaryCareManagerRequests from '../modules/managers/TemporaryCare/Requests'
 import TemporaryCareManagerCaregivers from '../modules/managers/TemporaryCare/Caregivers'
 import TemporaryCareBookings from '../modules/managers/TemporaryCare/Bookings'
@@ -250,8 +255,8 @@ const ManagerRoutes = () => {
         {/* Temporary Care Manager */}
         <Route path="/temporary-care/*" element={
           <Routes>
-            <Route path="/dashboard" element={<ProfessionalApplicationDashboard />} />
-            <Route path="/applications" element={<ProfessionalApplicationDashboard />} />
+            <Route path="/dashboard" element={<IndustryLevelDashboard />} />
+            <Route path="/applications" element={<IndustryLevelDashboard />} />
             {/* Legacy routes (backward compatibility) */}
             <Route path="/manage" element={<TemporaryCareManage />} />
             <Route path="/requests" element={<TemporaryCareManagerRequests />} />

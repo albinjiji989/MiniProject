@@ -177,7 +177,12 @@ const getAllUserPets = async (req, res) => {
           }).populate('images');
 
           if (batch) {
-            sourcePet = { images: batch.images };
+            sourcePet = { 
+              images: batch.images,
+              // Also include batch reference for additional context
+              batchId: batch._id,
+              batchName: batch.name
+            };
           }
         }
 
@@ -201,7 +206,14 @@ const getAllUserPets = async (req, res) => {
         return {
           ...pet,
           images: sourceImages,
-          temporaryCareStatus
+          temporaryCareStatus,
+          // Add batch info for petshop pets
+          ...(sourcePet?.batchId && {
+            batchInfo: {
+              batchId: sourcePet.batchId,
+              batchName: sourcePet.batchName
+            }
+          })
         };
       })
     );

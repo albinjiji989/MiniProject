@@ -33,33 +33,212 @@ const getApplications = async (req, res) => {
       .limit(parseInt(limit));
 
     // Manually fetch pet details since petId is now petCode (string)
+    // Use centralized pet service for better data consistency
+    const CentralizedPetService = require('../../../../core/services/centralizedPetService');
+    
     for (let application of applications) {
+      console.log(`🏥 Processing application ${application._id} with ${application.pets?.length || 0} pets`);
+      
       for (let pet of application.pets) {
-        // Try to find in Pet collection first
-        let petDetails = await Pet.findOne({ petCode: pet.petId });
-
-        // If not found, try AdoptionPet collection
-        if (!petDetails) {
-          petDetails = await AdoptionPet.findOne({ petCode: pet.petId });
-
-          // Manually populate species and breed if they exist
+        console.log(`🔍 Looking for pet with code: ${pet.petId}`);
+        
+        try {
+          // Use centralized service to get complete pet data with images
+          const centralizedPet = await CentralizedPetService.getCentralizedPet(pet.petId);
+          
+          if (centralizedPet) {
+            console.log(`✅ Found centralized pet data for ${pet.petId}:`, {
+              name: centralizedPet.name,
+              species: centralizedPet.species?.name || centralizedPet.species?.displayName,
+              breed: centralizedPet.breed?.name,
+              hasImages: !!(centralizedPet.images && centralizedPet.images.length > 0),
+              imageCount: centralizedPet.images?.length || 0,
+              sourceData: !!centralizedPet.sourceData,
+              firstImageUrl: centralizedPet.images?.[0]?.url,
+              sourceDataImages: centralizedPet.sourceData?.images?.length || 0
+            });
+            
+            // Create comprehensive petDetails object with proper structure
+            pet.petDetails = {
+              _id: centralizedPet._id,
+              name: centralizedPet.name || centralizedPet.sourceData?.name || `Pet ${pet.petId}`,
+              petCode: centralizedPet.petCode || pet.petId,
+              
+              // Species handling - try multiple sources
+              species: centralizedPet.species?.name || centralizedPet.species?.displayName || centralizedPet.sourceData?.species?.name || centralizedPet.sourceData?.speciesId?.name,
+              speciesId: centralizedPet.species || centralizedPet.sourceData?.speciesId,
+              
+              // Breed handling - try multiple sources  
+              breed: centralizedPet.breed?.name || centralizedPet.sourceData?.breed?.name || centralizedPet.sourceData?.breedId?.name,
+              breedId: centralizedPet.breed || centralizedPet.sourceData?.breedId,
+              
+              // Images - comprehensive image handling
+              images: centralizedPet.images || centralizedPet.sourceData?.images || centralizedPet.sourceData?.imageIds || [],
+              profileImage: centralizedPet.images?.[0]?.url || centralizedPet.sourceData?.images?.[0]?.url || centralizedPet.sourceData?.profileImage,
+              
+              // Additional pet details
+              age: centralizedPet.sourceData?.age || centralizedPet.age,
+              gender: centralizedPet.sourceData?.gender || centralizedPet.gender,
+              description: centralizedPet.sourceData?.description || centralizedPet.description,
+              color: centralizedPet.sourceData?.color,
+              weight: centralizedPet.sourceData?.weight,
+              
+              // Status information
+              currentStatus: centralizedPet.currentStatus,
+              currentLocation: centralizedPet.currentLocation,
+              currentOwnerId: centralizedPet.currentOwnerId,
+              
+              // Source information for debugging
+              source: centralizedPet.source,
+              sourceData: centralizedPet.sourceData
+            };
+            
+            console.log(`📋 Created petDetails for ${pet.petId}:`, {
+              name: pet.petDetails.name,
+              species: pet.petDetails.species,
+              breed: pet.petDetails.breed,
+              hasImages: pet.petDetails.images?.length > 0,
+              profileImage: !!pet.petDetails.profileImage,
+              imageUrls: pet.petDetails.images?.map(img => img.url || img)
+            });
+          }
+        } catch (error) {
+          console.log(`❌ Centralized service failed for ${pet.petId}, trying direct database lookup:`, error.message);
+          
+          // Enhanced fallback with direct database queries and better image handling
+          let petDetails = null;
+          
+          // Try PetRegistry first (most likely to have user pets)
+          const PetRegistry = require('../../../../core/models/PetRegistry');
+          petDetails = await PetRegistry.findOne({ petCode: pet.petId })
+            .populate('species', 'name displayName')
+            .populate('breed', 'name');
+          console.log(`📝 PetRegistry result for ${pet.petId}:`, petDetails ? 'Found' : 'Not found');
+          
           if (petDetails) {
-            if (petDetails.speciesId) {
-              const Species = require('../../../../core/models/Species');
-              const species = await Species.findById(petDetails.speciesId);
-              petDetails = petDetails.toObject();
-              petDetails.speciesId = species;
+            console.log(`📝 PetRegistry data:`, {
+              name: petDetails.name,
+              species: petDetails.species?.name,
+              breed: petDetails.breed?.name,
+              imageIds: petDetails.imageIds?.length || 0,
+              source: petDetails.source
+            });
+            
+            // Get images from source based on registry source
+            let sourceImages = [];
+            if (petDetails.source === 'petshop' && petDetails.petShopItemId) {
+              const PetInventoryItem = require('../../../petshop/manager/models/PetInventoryItem');
+              const sourceData = await PetInventoryItem.findById(petDetails.petShopItemId).populate('imageIds');
+              if (sourceData?.imageIds) {
+                sourceImages = sourceData.imageIds;
+                console.log(`🏪 Found ${sourceImages.length} images from PetInventoryItem`);
+              }
+            } else if (petDetails.source === 'user' && petDetails.userPetId) {
+              const Pet = require('../../../../core/models/Pet');
+              const sourceData = await Pet.findById(petDetails.userPetId).populate('imageIds');
+              if (sourceData?.imageIds) {
+                sourceImages = sourceData.imageIds;
+                console.log(`👤 Found ${sourceImages.length} images from User Pet`);
+              }
+            } else if (petDetails.source === 'adoption' && petDetails.adoptionPetId) {
+              const AdoptionPet = require('../../../adoption/manager/models/AdoptionPet');
+              const sourceData = await AdoptionPet.findById(petDetails.adoptionPetId).populate('imageIds');
+              if (sourceData?.imageIds) {
+                sourceImages = sourceData.imageIds;
+                console.log(`🏠 Found ${sourceImages.length} images from AdoptionPet`);
+              }
             }
-            if (petDetails.breedId) {
-              const Breed = require('../../../../core/models/Breed');
-              const breed = await Breed.findById(petDetails.breedId);
-              petDetails.breedId = breed;
+            
+            // Create standardized petDetails structure
+            pet.petDetails = {
+              _id: petDetails._id,
+              name: petDetails.name || `Pet ${pet.petId}`,
+              petCode: petDetails.petCode || pet.petId,
+              species: petDetails.species?.name || petDetails.species?.displayName,
+              speciesId: petDetails.species,
+              breed: petDetails.breed?.name,
+              breedId: petDetails.breed,
+              images: sourceImages || [],
+              profileImage: sourceImages?.[0]?.url,
+              source: petDetails.source
+            };
+            
+            console.log(`✅ Registry fallback success for ${pet.petId}:`, {
+              name: pet.petDetails.name,
+              species: pet.petDetails.species,
+              breed: pet.petDetails.breed,
+              hasImages: pet.petDetails.images?.length > 0,
+              profileImage: !!pet.petDetails.profileImage
+            });
+          } else {
+            // Try other collections as final fallback
+            console.log(`🔍 Trying other collections for ${pet.petId}...`);
+            
+            // Try Pet collection
+            petDetails = await Pet.findOne({ petCode: pet.petId })
+              .populate('speciesId', 'name displayName')
+              .populate('breedId', 'name')
+              .populate('imageIds');
+            console.log(`📋 Pet collection result:`, petDetails ? 'Found' : 'Not found');
+
+            if (!petDetails) {
+              // Try AdoptionPet collection
+              petDetails = await AdoptionPet.findOne({ petCode: pet.petId })
+                .populate('speciesId', 'name displayName')
+                .populate('breedId', 'name')
+                .populate('imageIds');
+              console.log(`🏠 AdoptionPet collection result:`, petDetails ? 'Found' : 'Not found');
+            }
+
+            if (!petDetails) {
+              // Try PetInventoryItem (petshop pets)
+              const PetInventoryItem = require('../../../petshop/manager/models/PetInventoryItem');
+              petDetails = await PetInventoryItem.findOne({ petCode: pet.petId })
+                .populate('speciesId', 'name displayName')
+                .populate('breedId', 'name')
+                .populate('imageIds');
+              console.log(`🏪 PetInventoryItem collection result:`, petDetails ? 'Found' : 'Not found');
+            }
+
+            if (petDetails) {
+              console.log(`✅ Found pet details for ${pet.petId} via direct collection search:`, {
+                name: petDetails.name,
+                species: petDetails.species?.name || petDetails.speciesId?.name,
+                breed: petDetails.breed?.name || petDetails.breedId?.name,
+                hasImages: !!(petDetails.images && petDetails.images.length > 0) || !!(petDetails.imageIds && petDetails.imageIds.length > 0),
+                imageCount: petDetails.imageIds?.length || petDetails.images?.length || 0
+              });
+              
+              // Create standardized petDetails structure for direct collection fallback
+              pet.petDetails = {
+                _id: petDetails._id,
+                name: petDetails.name || `Pet ${pet.petId}`,
+                petCode: petDetails.petCode || pet.petId,
+                species: petDetails.species?.name || petDetails.speciesId?.name,
+                speciesId: petDetails.species || petDetails.speciesId,
+                breed: petDetails.breed?.name || petDetails.breedId?.name,
+                breedId: petDetails.breed || petDetails.breedId,
+                images: petDetails.imageIds || petDetails.images || [],
+                profileImage: petDetails.profileImage || petDetails.imageIds?.[0]?.url || petDetails.images?.[0]?.url,
+                age: petDetails.age,
+                gender: petDetails.gender,
+                description: petDetails.description,
+                color: petDetails.color,
+                weight: petDetails.weight
+              };
+            } else {
+              console.log(`❌ No pet details found anywhere for petCode: ${pet.petId}`);
+              // Create minimal petDetails to prevent errors
+              pet.petDetails = {
+                name: `Pet ${pet.petId}`,
+                petCode: pet.petId,
+                species: 'Unknown Species',
+                breed: 'Unknown Breed',
+                images: [],
+                profileImage: null
+              };
             }
           }
-        }
-
-        if (petDetails) {
-          pet.petDetails = petDetails;
         }
       }
     }
@@ -100,33 +279,91 @@ const getApplicationDetails = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Application not found' });
     }
 
-    // Manually fetch pet details for each pet
+    // Manually fetch pet details for each pet using centralized service
+    const CentralizedPetService = require('../../../../core/services/centralizedPetService');
+    
     for (let pet of application.pets) {
-      // Try to find in Pet collection first
-      let petDetails = await Pet.findOne({ petCode: pet.petId });
+      console.log(`🔍 Looking for pet details with code: ${pet.petId}`);
+      
+      try {
+        // Use centralized service to get complete pet data with images
+        const centralizedPet = await CentralizedPetService.getCentralizedPet(pet.petId);
+        
+        if (centralizedPet) {
+          console.log(`✅ Found centralized pet data for ${pet.petId}:`, {
+            name: centralizedPet.name,
+            species: centralizedPet.species?.name,
+            breed: centralizedPet.breed?.name,
+            hasImages: !!(centralizedPet.images && centralizedPet.images.length > 0),
+            imageCount: centralizedPet.images?.length || 0
+          });
+          
+          // Create petDetails object with proper structure
+          pet.petDetails = {
+            name: centralizedPet.name,
+            petCode: centralizedPet.petCode,
+            species: centralizedPet.species,
+            breed: centralizedPet.breed,
+            images: centralizedPet.images || [],
+            profileImage: centralizedPet.images?.[0]?.url, // Set first image as profile
+            age: centralizedPet.sourceData?.age,
+            gender: centralizedPet.sourceData?.gender,
+            description: centralizedPet.sourceData?.description,
+            currentStatus: centralizedPet.currentStatus,
+            currentLocation: centralizedPet.currentLocation,
+            currentOwnerId: centralizedPet.currentOwnerId
+          };
+        }
+      } catch (error) {
+        console.log(`❌ Centralized service failed for ${pet.petId}, trying fallback:`, error.message);
+        
+        // Fallback to original logic if centralized service fails
+        let petDetails = await Pet.findOne({ petCode: pet.petId });
+        console.log(`📋 Pet collection result:`, petDetails ? 'Found' : 'Not found');
 
-      // If not found, try AdoptionPet collection
-      if (!petDetails) {
-        petDetails = await AdoptionPet.findOne({ petCode: pet.petId });
+        if (!petDetails) {
+          petDetails = await AdoptionPet.findOne({ petCode: pet.petId });
+          console.log(`🏠 AdoptionPet collection result:`, petDetails ? 'Found' : 'Not found');
 
-        // Manually populate species and breed if they exist
-        if (petDetails) {
-          if (petDetails.speciesId) {
-            const Species = require('../../../../core/models/Species');
-            const species = await Species.findById(petDetails.speciesId);
-            petDetails = petDetails.toObject();
-            petDetails.speciesId = species;
-          }
-          if (petDetails.breedId) {
-            const Breed = require('../../../../core/models/Breed');
-            const breed = await Breed.findById(petDetails.breedId);
-            petDetails.breedId = breed;
+          if (petDetails) {
+            if (petDetails.speciesId) {
+              const Species = require('../../../../core/models/Species');
+              const species = await Species.findById(petDetails.speciesId);
+              petDetails = petDetails.toObject();
+              petDetails.speciesId = species;
+            }
+            if (petDetails.breedId) {
+              const Breed = require('../../../../core/models/Breed');
+              const breed = await Breed.findById(petDetails.breedId);
+              petDetails.breedId = breed;
+            }
           }
         }
-      }
 
-      if (petDetails) {
-        pet.petDetails = petDetails;
+        if (!petDetails) {
+          const PetRegistry = require('../../../../core/models/PetRegistry');
+          petDetails = await PetRegistry.findOne({ petCode: pet.petId });
+          console.log(`📝 PetRegistry collection result:`, petDetails ? 'Found' : 'Not found');
+        }
+
+        if (!petDetails) {
+          const PetInventoryItem = require('../../../petshop/manager/models/PetInventoryItem');
+          petDetails = await PetInventoryItem.findOne({ petCode: pet.petId });
+          console.log(`🏪 PetInventoryItem collection result:`, petDetails ? 'Found' : 'Not found');
+        }
+
+        if (petDetails) {
+          console.log(`✅ Found pet details for ${pet.petId} via fallback:`, {
+            name: petDetails.name,
+            species: petDetails.species || petDetails.speciesId?.name,
+            breed: petDetails.breed || petDetails.breedId?.name,
+            hasImages: !!(petDetails.images && petDetails.images.length > 0),
+            hasProfileImage: !!petDetails.profileImage
+          });
+          pet.petDetails = petDetails;
+        } else {
+          console.log(`❌ No pet details found for petCode: ${pet.petId}`);
+        }
       }
     }
 

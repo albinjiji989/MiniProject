@@ -19,6 +19,50 @@ const findPetById = async (petId) => {
     // Check if petId is a valid ObjectId
     const isValidObjectId = mongoose.Types.ObjectId.isValid(petId) && /^[0-9a-fA-F]{24}$/.test(petId);
     
+    console.log('🔍 Finding pet by ID:', petId, 'isValidObjectId:', isValidObjectId);
+    
+    // Declare PetRegistry once at the top to avoid duplicate declarations
+    const PetRegistry = mongoose.models.PetRegistry;
+    const PetReservation = mongoose.models.PetReservation;
+    
+    // PRIORITY 1: Use PetRegistry as single source of truth (same as dashboard)
+    // This is the most reliable method since it's what the dashboard uses
+    if (PetRegistry) {
+      let registryEntry = null;
+      
+      // Try to find by petCode first (most common case)
+      if (!isValidObjectId || petId.length < 24) {
+        registryEntry = await PetRegistry.findOne({ petCode: petId });
+        console.log('🔍 Registry search by petCode:', petId, 'found:', !!registryEntry);
+      }
+      
+      // If not found by petCode and it's a valid ObjectId, try by _id
+      if (!registryEntry && isValidObjectId) {
+        registryEntry = await PetRegistry.findById(petId);
+        console.log('🔍 Registry search by _id:', petId, 'found:', !!registryEntry);
+      }
+      
+      if (registryEntry) {
+        console.log('✅ Found pet in PetRegistry:', {
+          petCode: registryEntry.petCode,
+          name: registryEntry.name,
+          currentOwnerId: registryEntry.currentOwnerId,
+          source: registryEntry.source,
+          currentLocation: registryEntry.currentLocation
+        });
+        
+        // Return the registry entry as the pet with the currentOwnerId as the owner
+        return { 
+          pet: registryEntry, 
+          modelUsed: 'PetRegistry', 
+          ownerId: registryEntry.currentOwnerId 
+        };
+      }
+    }
+    
+    // PRIORITY 2: Fallback to original model-based search for backward compatibility
+    console.log('⚠️ Pet not found in PetRegistry, falling back to model search...');
+    
     // If it's a valid ObjectId, try finding by _id first
     if (isValidObjectId) {
       let pet = await Pet.findById(petId);
@@ -49,18 +93,67 @@ const findPetById = async (petId) => {
       if (PetInventoryItem) {
         pet = await PetInventoryItem.findById(petId);
         if (pet) {
+          console.log('Found PetInventoryItem by _id:', {
+            petId: pet._id,
+            petCode: pet.petCode,
+            name: pet.name,
+            currentOwnerId: pet.currentOwnerId
+          });
+          
           // For PetInventoryItem, check if there's a completed reservation
-          const PetReservation = mongoose.models.PetReservation;
           if (PetReservation) {
+            // First, let's see all reservations for this item to debug
+            const allReservations = await PetReservation.find({ itemId: pet._id });
+            console.log('All reservations for pet:', {
+              petId: pet._id,
+              petCode: pet.petCode,
+              totalReservations: allReservations.length,
+              reservations: allReservations.map(r => ({
+                _id: r._id,
+                userId: r.userId,
+                status: r.status,
+                createdAt: r.createdAt
+              }))
+            });
+            
             const reservation = await PetReservation.findOne({
               itemId: pet._id,
               status: { $in: ['completed', 'at_owner', 'paid', 'delivered'] }
             });
+            
+            console.log('Reservation search result:', {
+              itemId: pet._id,
+              reservationFound: !!reservation,
+              reservationStatus: reservation?.status,
+              reservationUserId: reservation?.userId
+            });
+            
             if (reservation) {
               return { pet, modelUsed: 'PetInventoryItem', ownerId: reservation.userId };
             }
           }
+          // If no reservation found, check PetRegistry as fallback
+          if (PetRegistry) {
+            const registryEntry = await PetRegistry.findOne({
+              petShopItemId: pet._id,
+              source: 'petshop',
+              currentLocation: 'at_owner'
+            });
+            
+            console.log('PetRegistry fallback search:', {
+              petId: pet._id,
+              registryFound: !!registryEntry,
+              registryOwnerId: registryEntry?.currentOwnerId
+            });
+            
+            if (registryEntry && registryEntry.currentOwnerId) {
+              console.log('Found ownership via PetRegistry:', registryEntry.currentOwnerId);
+              return { pet, modelUsed: 'PetInventoryItem', ownerId: registryEntry.currentOwnerId };
+            }
+          }
+          
           // If no reservation found, use default owner
+          console.log('No reservation found, using default owner:', pet.currentOwnerId || pet.owner || pet.createdBy);
           return { pet, modelUsed: 'PetInventoryItem', ownerId: pet.currentOwnerId || pet.owner || pet.createdBy };
         }
       }
@@ -101,27 +194,73 @@ const findPetById = async (petId) => {
     if (PetInventoryItem) {
       pet = await PetInventoryItem.findOne({ petCode: petId });
       if (pet) {
-        console.log('Found pet in PetInventoryItem model by petCode');
+        console.log('Found PetInventoryItem by petCode:', {
+          petId: pet._id,
+          petCode: pet.petCode,
+          name: pet.name,
+          currentOwnerId: pet.currentOwnerId
+        });
+        
         // For PetInventoryItem, check if there's a completed reservation
-        const PetReservation = mongoose.models.PetReservation;
         if (PetReservation) {
+          // First, let's see all reservations for this item to debug
+          const allReservations = await PetReservation.find({ itemId: pet._id });
+          console.log('All reservations for pet by petCode:', {
+            petId: pet._id,
+            petCode: pet.petCode,
+            totalReservations: allReservations.length,
+            reservations: allReservations.map(r => ({
+              _id: r._id,
+              userId: r.userId,
+              status: r.status,
+              createdAt: r.createdAt
+            }))
+          });
+          
           const reservation = await PetReservation.findOne({
             itemId: pet._id,
             status: { $in: ['completed', 'at_owner', 'paid', 'delivered'] }
           });
+          
+          console.log('Reservation search result for petCode:', {
+            itemId: pet._id,
+            reservationFound: !!reservation,
+            reservationStatus: reservation?.status,
+            reservationUserId: reservation?.userId
+          });
+          
           if (reservation) {
             console.log('Found reservation for pet, owner is:', reservation.userId);
             return { pet, modelUsed: 'PetInventoryItem', ownerId: reservation.userId };
           }
         }
+        // If no reservation found, check PetRegistry as fallback
+        if (PetRegistry) {
+          const registryEntry = await PetRegistry.findOne({
+            petShopItemId: pet._id,
+            source: 'petshop',
+            currentLocation: 'at_owner'
+          });
+          
+          console.log('PetRegistry fallback search for petCode:', {
+            petId: pet._id,
+            registryFound: !!registryEntry,
+            registryOwnerId: registryEntry?.currentOwnerId
+          });
+          
+          if (registryEntry && registryEntry.currentOwnerId) {
+            console.log('Found ownership via PetRegistry for petCode:', registryEntry.currentOwnerId);
+            return { pet, modelUsed: 'PetInventoryItem', ownerId: registryEntry.currentOwnerId };
+          }
+        }
+        
         // If no reservation found, use default owner
-        console.log('No reservation found, using default owner');
+        console.log('No reservation found for petCode, using default owner');
         return { pet, modelUsed: 'PetInventoryItem', ownerId: pet.currentOwnerId || pet.owner || pet.createdBy };
       }
     }
 
     // Try PetRegistry model by petCode as last resort
-    const PetRegistry = mongoose.models.PetRegistry;
     if (PetRegistry) {
       const registryEntry = await PetRegistry.findOne({ petCode: petId });
       if (registryEntry && registryEntry.petId) {
@@ -136,7 +275,6 @@ const findPetById = async (petId) => {
             let ownerId;
             if (registryEntry.sourceModel === 'PetInventoryItem') {
               // Check for reservation
-              const PetReservation = mongoose.models.PetReservation;
               if (PetReservation) {
                 const reservation = await PetReservation.findOne({
                   itemId: pet._id,
@@ -235,11 +373,53 @@ const bookAppointment = async (req, res) => {
         const ownerIdStr = ownerId.toString();
         const userIdStr = req.user._id.toString();
         
+        console.log('Ownership verification:', {
+          petId: pid,
+          petName: pet.name,
+          petCode: pet.petCode,
+          modelUsed,
+          ownerIdStr,
+          userIdStr,
+          ownershipMatch: ownerIdStr === userIdStr,
+          petStatus: pet.status
+        });
+        
         if (ownerIdStr !== userIdStr) {
           console.log('Ownership mismatch:', { ownerIdStr, userIdStr, modelUsed, petStatus: pet.status });
           
+          // Special handling for PetInventoryItem - check if this is a data inconsistency
+          if (modelUsed === 'PetInventoryItem') {
+            console.log('🔍 PetInventoryItem ownership issue detected. Checking for data inconsistency...');
+            
+            // Check if user has a registry entry for this petCode that might be legitimate
+            if (PetRegistry) {
+              const userRegistryEntry = await PetRegistry.findOne({
+                petCode: pet.petCode,
+                currentOwnerId: req.user._id,
+                currentLocation: 'at_owner'
+              });
+              
+              if (userRegistryEntry) {
+                console.log('🔄 Found user registry entry for this petCode. This suggests a data inconsistency.');
+                console.log('Registry entry:', {
+                  petCode: userRegistryEntry.petCode,
+                  name: userRegistryEntry.name,
+                  source: userRegistryEntry.source,
+                  currentOwnerId: userRegistryEntry.currentOwnerId,
+                  currentLocation: userRegistryEntry.currentLocation
+                });
+                
+                // This is a data inconsistency - same petCode used for different pets
+                return res.status(409).json({ 
+                  success: false, 
+                  message: `Data inconsistency detected: Pet code ${pet.petCode} is associated with multiple pets. Please contact customer support to resolve this issue.`
+                });
+              }
+            }
+          }
+          
           // Provide specific error message based on pet type
-          let errorMessage = `Access denied - Pet ${pet.name || pid} does not belong to you.`;
+          let errorMessage = `Access denied - Pet ${pet.name || pet.petCode || pid} does not belong to you.`;
           if (modelUsed === 'PetInventoryItem' && pet.status !== 'sold') {
             errorMessage = `This pet is still in the petshop and hasn't been purchased yet. Please purchase the pet first before booking a veterinary appointment.`;
           } else if (modelUsed === 'AdoptionPet' && !pet.adopterUserId) {
@@ -251,6 +431,18 @@ const bookAppointment = async (req, res) => {
             message: errorMessage
           });
         }
+      } else {
+        console.log('No ownerId found for pet:', {
+          petId: pid,
+          petName: pet.name,
+          petCode: pet.petCode,
+          modelUsed
+        });
+        
+        return res.status(403).json({ 
+          success: false, 
+          message: `Unable to verify ownership for pet ${pet.name || pet.petCode || pid}. Please contact customer support.`
+        });
       }
       
       verifiedPets.push({ petId: pet._id, pet, modelUsed }); // Use pet._id instead of pid
@@ -310,11 +502,8 @@ const bookAppointment = async (req, res) => {
         }
       }
     }
-    // Set default status based on booking type
-    let status = 'scheduled';
-    if (bookingType === 'emergency') {
-      status = 'pending_approval';
-    }
+    // All appointments require manager approval - no automatic confirmation
+    const status = 'pending_approval';
 
     // Get veterinary models
     const { Veterinary, VeterinaryService } = getVeterinaryModels();
@@ -416,10 +605,8 @@ const bookAppointment = async (req, res) => {
     ]);
 
     const message = isMultiplePets 
-      ? `Appointment for ${verifiedPets.length} pets ${bookingType === 'emergency' ? 'submitted for review' : 'booked successfully'}`
-      : bookingType === 'emergency' 
-        ? 'Emergency appointment submitted for review. A manager will review your request.' 
-        : 'Appointment booked successfully';
+      ? `Appointment for ${verifiedPets.length} pets submitted for manager approval. Please wait for confirmation.`
+      : 'Appointment submitted for manager approval. You will receive a notification once it is reviewed and confirmed.';
 
     res.status(201).json({
       success: true,
@@ -427,7 +614,10 @@ const bookAppointment = async (req, res) => {
       data: { 
         appointment,
         petsCount: verifiedPets.length,
-        isMultiplePets
+        isMultiplePets,
+        requiresApproval: true,
+        status: 'pending_approval',
+        note: 'All appointments require manager approval before confirmation.'
       }
     });
   } catch (error) {
@@ -555,10 +745,10 @@ const cancelAppointment = async (req, res) => {
     }
 
     // Check if appointment can be cancelled
-    if (!['scheduled', 'pending_approval', 'confirmed'].includes(appointment.status)) {
+    if (!['confirmed', 'pending_approval'].includes(appointment.status)) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Only scheduled, confirmed, or pending approval appointments can be cancelled' 
+        message: 'Only confirmed or pending approval appointments can be cancelled' 
       });
     }
 
@@ -601,7 +791,7 @@ const getAvailableTimeSlots = async (req, res) => {
     // Get all booked time slots for the selected date
     const bookedAppointments = await VeterinaryAppointment.find({
       appointmentDate: { $gte: selectedDate, $lt: nextDate },
-      status: { $in: ['scheduled', 'confirmed', 'pending_approval'] }
+      status: { $in: ['confirmed', 'pending_approval'] }
     }).select('timeSlot');
 
     const bookedSlots = bookedAppointments.map(app => app.timeSlot);

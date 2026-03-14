@@ -89,7 +89,7 @@ import ProfessionalVeterinaryBooking from '../pages/User/Veterinary/Professional
 import ComprehensiveUserVeterinaryDashboard from '../pages/User/Veterinary/ComprehensiveUserVeterinaryDashboard'
 import PetSpecificVeterinaryDashboard from '../pages/User/Veterinary/PetSpecificVeterinaryDashboard'
 import UserPetsMedicalHistory from '../pages/User/Veterinary/UserPetsMedicalHistory'
-import UserPetMedicalHistoryDetail from '../pages/User/Veterinary/UserPetMedicalHistoryDetail'
+import SimplePetMedicalHistory from '../pages/User/Veterinary/SimplePetMedicalHistory'
 import PublicUserDashboard from '../pages/User/PublicUserDashboard'
 import RequestNameChange from '../pages/User/Pets/RequestNameChange'
 
@@ -110,6 +110,8 @@ const UserRoutes = () => {
         
         {/* User: Pets */}
         <Route path="/pets" element={<UserPets />} />
+        <Route path="/pets/add" element={<Navigate to="/user/adoption" replace />} />
+        <Route path="/pets/add/*" element={<Navigate to="/user/adoption" replace />} />
         <Route path="/pets/:id" element={<UserPetDetails />} />
         <Route path="/pets/centralized/:id" element={<UserPetDetails />} />
         <Route path="/pets/request-name-change" element={<RequestNameChange />} />
@@ -163,7 +165,7 @@ const UserRoutes = () => {
             <Route path="/medical-records" element={<VeterinaryUserMedicalRecords />} />
             {/* Medical History Routes */}
             <Route path="/medical-history" element={<UserPetsMedicalHistory />} />
-            <Route path="/medical-history/:petId" element={<UserPetMedicalHistoryDetail />} />
+            <Route path="/medical-history/:petId" element={<SimplePetMedicalHistory />} />
             <Route path="/prescriptions" element={<VeterinaryUserPrescriptions />} />
             <Route path="/" element={<Navigate to="/user/veterinary/dashboard" replace />} />
           </Routes>

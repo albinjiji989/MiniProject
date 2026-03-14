@@ -133,8 +133,8 @@ export default function VeterinaryPetSelection() {
   };
 
   const handleAddPet = () => {
-    // Navigate to pet creation page
-    navigate('/User/pets/add');
+    // Navigate to adoption page instead of add pet
+    navigate('/User/adoption');
   };
 
   // Function to get the primary image URL or first image URL

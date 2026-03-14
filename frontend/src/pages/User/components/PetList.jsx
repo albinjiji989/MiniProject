@@ -8,7 +8,8 @@ const PetList = ({ pets, loading }) => {
   const navigate = useNavigate();
   
   const handleAddPet = () => {
-    navigate('/User/pets/add');
+    // Redirect to pets list instead of add pet
+    navigate('/User/pets');
   };
 
   return (

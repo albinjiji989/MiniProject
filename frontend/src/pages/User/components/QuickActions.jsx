@@ -7,7 +7,6 @@ const QuickActions = () => {
   const navigate = useNavigate();
   
   const quickActions = [
-    { title: 'Add New Pet', icon: <AddIcon />, path: '/User/pets/add', color: '#6C5CE7' },
     { title: 'Book Appointment', icon: <CalendarIcon />, path: '/User/veterinary', color: '#FF6B6B' },
     { title: 'Find Adoption', icon: <FavoriteIcon />, path: '/User/adoption', color: '#FF9F43' },
     { title: 'Shop Products', icon: <ShopIcon />, path: '/User/ecommerce', color: '#4ECDC4' }

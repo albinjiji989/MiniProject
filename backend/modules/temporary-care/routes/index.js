@@ -5,7 +5,7 @@ const express = require('express');
 const router = express.Router();
 
 // Mount manager routes similar to petshop/adoption modules
-router.use('/manager', require('./manager/temporaryCareManagerRoutes'));
+router.use('/manager', require('../manager/routes/temporaryCareManagerRoutes'));
 router.use('/admin', require('./admin/temporaryCareAdminRoutes'));
 router.use('/user', require('./user/temporaryCareUserRoutes'));
 

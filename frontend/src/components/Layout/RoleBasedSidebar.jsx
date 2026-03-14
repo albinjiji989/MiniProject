@@ -66,9 +66,9 @@ import {
   TrendingUp as TrendingUpIcon,
 } from '@mui/icons-material'
 import { useAuth } from '../../contexts/AuthContext'
-import { authAPI } from '../../services/api'
+import { authAPI, modulesAPI } from '../../services/api'
 import firebaseAuth from '../../services/firebaseAuth'
-const getMenuItems = (userRole, userDetails) => {
+const getMenuItems = (userRole, userDetails, activeModules = []) => {
   // Role-aware default dashboard path
   const dashboardPath = (
     userRole === 'admin' || userRole === 'super_admin'
@@ -182,17 +182,30 @@ const getMenuItems = (userRole, userDetails) => {
     ]
   }
 
-  // Public Users get access to public services
+  // Public Users get access to public services - filter by active modules
   if (userRole === 'public_user') {
-    return [
-      ...baseItems,
-      { text: 'Adoption', icon: <AdoptionIcon />, path: '/adoption', roles: ['public_user'] },
-      { text: 'Pet Shop', icon: <StoreIcon />, path: '/petshop', roles: ['public_user'] },
-      { text: 'Veterinary', icon: <VeterinaryIcon />, path: '/veterinary', roles: ['public_user'] },
-      { text: 'E-Commerce', icon: <EcommerceIcon />, path: '/ecommerce', roles: ['public_user'] },
-      { text: 'Pharmacy', icon: <PharmacyIcon />, path: '/pharmacy', roles: ['public_user'] },
-      { text: 'Temporary Care', icon: <TemporaryCareIcon />, path: '/temporary-care', roles: ['public_user'] },
-    ]
+    const moduleMap = {
+      'adoption': { text: 'Adoption', icon: <AdoptionIcon />, path: '/User/adoption' },
+      'petshop': { text: 'Pet Shop', icon: <StoreIcon />, path: '/User/petshop' },
+      'veterinary': { text: 'Veterinary', icon: <VeterinaryIcon />, path: '/User/veterinary' },
+      'ecommerce': { text: 'E-Commerce', icon: <EcommerceIcon />, path: '/User/ecommerce' },
+      'pharmacy': { text: 'Pharmacy', icon: <PharmacyIcon />, path: '/User/pharmacy' },
+      'temporary-care': { text: 'Temporary Care', icon: <TemporaryCareIcon />, path: '/User/temporary-care' },
+    }
+
+    const userItems = [...baseItems]
+    
+    // Add only active modules
+    activeModules.forEach(module => {
+      if (moduleMap[module.key]) {
+        userItems.push({
+          ...moduleMap[module.key],
+          roles: ['public_user']
+        })
+      }
+    })
+
+    return userItems
   }
 
   return baseItems
@@ -203,8 +216,35 @@ const RoleBasedSidebar = ({ onClose }) => {
   const location = useLocation()
   const { user, logout } = useAuth()
   const [expandedItems, setExpandedItems] = React.useState({})
+  const [activeModules, setActiveModules] = React.useState([])
+  const [modulesLoading, setModulesLoading] = React.useState(true)
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+
+  // Fetch active modules for public users
+  React.useEffect(() => {
+    const fetchModules = async () => {
+      if (user?.role === 'public_user') {
+        try {
+          setModulesLoading(true)
+          const res = await modulesAPI.list()
+          const modules = res.data?.data || []
+          // Filter only active modules
+          const activeOnly = modules.filter(module => module.status === 'active')
+          setActiveModules(activeOnly)
+        } catch (error) {
+          console.error('Failed to load modules:', error)
+          setActiveModules([])
+        } finally {
+          setModulesLoading(false)
+        }
+      } else {
+        setModulesLoading(false)
+      }
+    }
+
+    fetchModules()
+  }, [user?.role])
 
   const handleNavigation = (path) => {
     navigate(path)
@@ -283,8 +323,8 @@ const RoleBasedSidebar = ({ onClose }) => {
     }
   };
 
-  // Get menu items based on user role
-  const menuItems = getMenuItems(user?.role || 'public_user', user?.details);
+  // Get menu items based on user role and active modules
+  const menuItems = getMenuItems(user?.role || 'public_user', user?.details, activeModules);
 
   const renderMenuItem = (item, level = 0) => {
     const isExpanded = expandedItems[item.text]
@@ -416,7 +456,13 @@ const RoleBasedSidebar = ({ onClose }) => {
       {/* Navigation */}
       <Box sx={{ flex: 1, overflow: 'auto' }}>
         <List sx={{ px: 2, py: 1.5 }}>
-          {menuItems.map((item) => renderMenuItem(item))}
+          {modulesLoading && user?.role === 'public_user' ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <Typography variant="body2" color="text.secondary">Loading modules...</Typography>
+            </Box>
+          ) : (
+            menuItems.map((item) => renderMenuItem(item))
+          )}
         </List>
       </Box>
 

@@ -561,10 +561,10 @@ const PublicUserDashboard = () => {
                 <PetIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
                 <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>No pets yet</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Add your pet to get started
+                  Adopt or purchase pets to get started
                 </Typography>
-                <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/User/pets/add')}>
-                  Add Pet
+                <Button variant="contained" startIcon={<FavoriteIcon />} onClick={() => navigate('/User/adoption')}>
+                  Find Pets for Adoption
                 </Button>
               </Box>
             ) : (
@@ -750,29 +750,7 @@ const PublicUserDashboard = () => {
 
       {/* Quick Actions - Only real features */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={6}>
-          <Card sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-            color: 'white',
-            cursor: 'pointer',
-            transition: 'transform 0.2s',
-            '&:hover': { transform: 'translateY(-4px)' }
-          }} onClick={() => navigate('/User/pets/add')}>
-            <CardContent sx={{ textAlign: 'center', py: 3 }}>
-              <AddIcon sx={{ fontSize: 48, mb: 2 }} />
-              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
-                Add New Pet
-              </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                Register your pet with us
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        
-
-        
-        <Grid item xs={12} sm={6} md={6}>
+        <Grid item xs={12}>
           <Card sx={{ 
             background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', 
             color: 'white',

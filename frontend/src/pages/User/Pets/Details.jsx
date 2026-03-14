@@ -1205,37 +1205,14 @@ const UserPetDetails = () => {
           variant="contained"
           startIcon={<MedicalIcon />}
           onClick={() => {
-            // Determine which medical history route to use based on pet type
-            if (petType === 'user') {
-              // User-created pet
-              navigate(`/User/pets/${id}/medical-history?petType=user`)
-            } else {
-              // Pet from petshop or adoption - use the centralized API
-              navigate(`/User/pets/${id}/medical-history?petType=centralized`)
-            }
+            // Navigate to veterinary medical history for this specific pet
+            navigate(`/User/veterinary/medical-history/${pet.petCode || id}`)
           }}
           size="large"
           fullWidth={isMobile}
+          sx={{ mb: 2 }}
         >
-          Add Medical Record
-        </Button>
-        <Button 
-          variant="outlined"
-          startIcon={<HistoryIcon />}
-          onClick={() => {
-            // Determine which history route to use based on pet type
-            if (petType === 'user') {
-              // User-created pet
-              navigate(`/User/pets/${id}/history?petType=user`)
-            } else {
-              // Pet from petshop or adoption
-              navigate(`/User/pets/${id}/history?petType=centralized`)
-            }
-          }}
-          size="large"
-          fullWidth={isMobile}
-        >
-          View Full History
+          View Medical Records
         </Button>
         
         {/* Source-specific actions */}
@@ -1274,7 +1251,7 @@ const UserPetDetails = () => {
                   <MedicalIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
                   <Typography color="text.secondary">No medical history records found.</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Add your first medical record using the button above.
+                    Visit the veterinary section to add medical records.
                   </Typography>
                 </Box>
               ) : (

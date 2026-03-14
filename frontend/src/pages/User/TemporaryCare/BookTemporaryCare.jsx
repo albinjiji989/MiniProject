@@ -115,10 +115,10 @@ const BookTemporaryCare = () => {
           <AlertCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-500 mb-4">You don't have any pets yet</p>
           <button
-            onClick={() => navigate('/user/pets/add')}
+            onClick={() => navigate('/user/adoption')}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
           >
-            Add Your Pet
+            Find Pets for Adoption
           </button>
         </div>
       ) : (

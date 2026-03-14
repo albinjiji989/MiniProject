@@ -55,13 +55,15 @@ export default function SimpleVeterinaryAppointments() {
 
   const getStatusBadge = (status) => {
     const statusClasses = {
-      scheduled: 'bg-blue-100 text-blue-800',
       confirmed: 'bg-green-100 text-green-800',
-      in_progress: 'bg-yellow-100 text-yellow-800',
+      pending_approval: 'bg-orange-100 text-orange-800',
+      in_consultation: 'bg-blue-100 text-blue-800',
       completed: 'bg-purple-100 text-purple-800',
       cancelled: 'bg-red-100 text-red-800',
-      no_show: 'bg-yellow-100 text-yellow-800',
-      pending_approval: 'bg-orange-100 text-orange-800'
+      // Legacy support for old status values
+      scheduled: 'bg-blue-100 text-blue-800',
+      in_progress: 'bg-yellow-100 text-yellow-800',
+      no_show: 'bg-yellow-100 text-yellow-800'
     };
     
     return (
@@ -154,14 +156,24 @@ export default function SimpleVeterinaryAppointments() {
               All Appointments
             </button>
             <button
-              onClick={() => setFilter('scheduled')}
+              onClick={() => setFilter('pending_approval')}
               className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
-                filter === 'scheduled'
+                filter === 'pending_approval'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Scheduled
+              Pending Approval
+            </button>
+            <button
+              onClick={() => setFilter('confirmed')}
+              className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                filter === 'confirmed'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Confirmed
             </button>
             <button
               onClick={() => setFilter('completed')}
@@ -272,7 +284,7 @@ export default function SimpleVeterinaryAppointments() {
                         >
                           View
                         </button>
-                        {appointment.status === 'scheduled' && (
+                        {(appointment.status === 'confirmed' || appointment.status === 'pending_approval') && (
                           <button
                             onClick={() => handleCancelAppointment(appointment._id)}
                             className="text-sm font-medium text-red-600 hover:text-red-900"
