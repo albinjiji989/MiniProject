@@ -291,35 +291,29 @@ const ManagerSidebar = ({ open, onClose, user, moduleType = 'petshop' }) => {
         ]
       },
       {
-        title: 'Orders & Sales',
+        title: 'Sales & Orders',
         icon: <OrdersIcon />,
         key: 'orders',
         expandable: true,
         expanded: expandedItems.orders,
         children: [
           {
-            title: 'All Orders',
-            icon: <OrdersIcon />,
-            path: `/manager/${type}/orders`,
-            active: location.pathname.includes('/orders')
+            title: 'Customer Orders',
+            icon: <ShoppingCart />,
+            path: `/manager/${type}/purchase-applications`,
+            active: location.pathname.includes('/purchase-applications')
           },
           {
-            title: 'Reservations',
-            icon: <ReservationsIcon />,
-            path: `/manager/${type}/reservations`,
-            active: location.pathname.includes('/reservations')
-          },
-          {
-            title: 'Invoices',
+            title: 'Invoices & Billing',
             icon: <InvoiceIcon />,
             path: `/manager/${type}/invoices`,
             active: location.pathname.includes('/invoices')
           },
           {
-            title: 'Purchase Applications',
-            icon: <ShoppingCart />,
-            path: `/manager/${type}/purchase-applications`,
-            active: location.pathname.includes('/purchase-applications')
+            title: 'Supplier Orders',
+            icon: <OrdersIcon />,
+            path: `/manager/${type}/orders`,
+            active: location.pathname.includes('/orders') && !location.pathname.includes('/purchase-applications')
           }
         ]
       },

@@ -9,6 +9,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 // Import controllers
 const inventoryController = require('../controllers/inventoryController')
 const orderController = require('../controllers/orderController')
+const invoiceController = require('../controllers/invoiceController')
 const reservationController = require('../../user/controllers/reservationController') // Fixed import path
 const enhancedReservationController = require('../controllers/enhancedReservationController')
 const dashboardController = require('../controllers/dashboardController')
@@ -95,6 +96,12 @@ router.put('/orders/:id', auth, authorizeModule('petshop'), orderController.upda
 router.post('/orders/:id/submit', auth, authorizeModule('petshop'), orderController.submitPurchaseOrder);
 router.get('/orders/:id/invoice', auth, authorizeModule('petshop'), orderController.generatePurchaseOrderInvoice);
 router.post('/orders/:id/receive', auth, authorizeModule('petshop'), orderController.receivePurchaseOrder);
+
+// Invoice Management
+router.get('/invoices', auth, authorizeModule('petshop'), invoiceController.getInvoices);
+router.get('/invoices/:id', auth, authorizeModule('petshop'), invoiceController.getInvoiceById);
+router.get('/invoices/:id/pdf', auth, authorizeModule('petshop'), invoiceController.generateInvoicePDF);
+router.post('/invoices/:id/email', auth, authorizeModule('petshop'), invoiceController.sendInvoiceEmail);
 
 // Manager: request store name change (auth only; no module guard; id stays same)
 router.post('/store-name-change', auth, storeNameChangeController.createStoreNameChangeRequest);

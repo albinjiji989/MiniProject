@@ -45,6 +45,7 @@ import PetShopManagerDashboard from '../modules/managers/PetShop/PetShopManagerD
 import PetShopOrders from '../modules/managers/PetShop/Orders'
 import PetShopInventory from '../modules/managers/PetShop/Inventory'
 import PetShopInvoice from '../modules/managers/PetShop/Invoice'
+import InvoiceManagement from '../modules/managers/PetShop/InvoiceManagement'
 import PetShopAddStock from '../modules/managers/PetShop/AddStock'
 import PetShopManageInventory from '../modules/managers/PetShop/ManageInventory'
 import PetShopReports from '../modules/managers/PetShop/Reports'
@@ -233,6 +234,7 @@ const ManagerRoutes = () => {
             </Route>
             <Route path="/orders" element={<PetShopOrders />} />
             <Route path="/orders/:id/invoice" element={<PetShopInvoice />} />
+            <Route path="/invoices" element={<InvoiceManagement />} />
             <Route path="/purchase-applications" element={<PurchaseApplications />} />
             <Route path="/inventory" element={<PetShopInventory />} />
             <Route path="/manage-inventory" element={<PetShopManageInventory />} />
