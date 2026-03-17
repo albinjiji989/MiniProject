@@ -24,14 +24,19 @@ const Bookings = () => {
           ...(scheduleData.ongoing || [])
         ];
         
-        console.log('🔍 Loaded applications from schedule endpoint:', allBookings);
+        // Remove duplicates based on _id
+        const uniqueBookings = allBookings.filter((booking, index, self) => 
+          index === self.findIndex(b => b._id === booking._id)
+        );
+        
+        console.log('🔍 Loaded applications from schedule endpoint:', uniqueBookings);
         
         // If we have bookings from schedule, use them
-        if (allBookings.length > 0) {
+        if (uniqueBookings.length > 0) {
           // Filter by status if needed
-          let filteredApplications = allBookings;
+          let filteredApplications = uniqueBookings;
           if (statusFilter !== 'all') {
-            filteredApplications = allBookings.filter(app => app.status === statusFilter);
+            filteredApplications = uniqueBookings.filter(app => app.status === statusFilter);
           }
           
           setApplications(filteredApplications);
@@ -238,8 +243,8 @@ const Bookings = () => {
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 16 }}>
-          {applications.map(app => (
-            <div key={app._id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
+          {applications.map((app, index) => (
+            <div key={`${app._id}-${index}`} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div>
                   <h4 style={{ margin: 0 }}>{app.bookingNumber}</h4>

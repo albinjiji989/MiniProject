@@ -6,6 +6,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import { SnackbarProvider } from 'notistack'
+import { Analytics } from '@vercel/analytics/react'
 import { AuthProvider } from './contexts/AuthContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import App from './App.jsx'
@@ -44,6 +45,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <BrowserRouter>
               <AuthProvider>
                 <App />
+                <Analytics />
               </AuthProvider>
             </BrowserRouter>
           </SnackbarProvider>

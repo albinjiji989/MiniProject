@@ -93,6 +93,8 @@ The pet owner should receive the OTP in their email shortly.`;
   };
 
   const getStatusColor = (status) => {
+    if (!status) return 'bg-gray-100 text-gray-800';
+    
     const colors = {
       'submitted': 'bg-yellow-100 text-yellow-800',
       'price_determined': 'bg-blue-100 text-blue-800',
@@ -171,7 +173,7 @@ The pet owner should receive the OTP in their email shortly.`;
           
           <div className="flex items-center gap-2">
             <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(application.status)}`}>
-              {application.status.replace('_', ' ').toUpperCase()}
+              {application.status ? application.status.replace('_', ' ').toUpperCase() : 'UNKNOWN'}
             </span>
             <button
               onClick={fetchApplicationDetails}
