@@ -78,6 +78,9 @@ import BeautifulManagerDashboard from '../pages/Manager/TemporaryCare/BeautifulM
 import SimpleCleanDashboard from '../pages/Manager/TemporaryCare/SimpleCleanDashboard'
 import IndustryLevelDashboard from '../pages/Manager/TemporaryCare/IndustryLevelDashboard'
 import TestDashboard from '../pages/Manager/TemporaryCare/TestDashboard'
+import ApplicationDetails from '../pages/Manager/TemporaryCare/ApplicationDetails'
+import ManagerDashboard from '../pages/Manager/TemporaryCare/ManagerDashboard'
+import OTPEntryPage from '../pages/Manager/TemporaryCare/OTPEntryPage'
 import TemporaryCareManagerRequests from '../modules/managers/TemporaryCare/Requests'
 import TemporaryCareManagerCaregivers from '../modules/managers/TemporaryCare/Caregivers'
 import TemporaryCareBookings from '../modules/managers/TemporaryCare/Bookings'
@@ -255,8 +258,10 @@ const ManagerRoutes = () => {
         {/* Temporary Care Manager */}
         <Route path="/temporary-care/*" element={
           <Routes>
-            <Route path="/dashboard" element={<IndustryLevelDashboard />} />
-            <Route path="/applications" element={<IndustryLevelDashboard />} />
+            <Route path="/dashboard" element={<ManagerDashboard />} />
+            <Route path="/applications" element={<ManagerDashboard />} />
+            <Route path="/applications/:id" element={<ApplicationDetails />} />
+            <Route path="/otp-entry/:applicationId" element={<OTPEntryPage />} />
             {/* Legacy routes (backward compatibility) */}
             <Route path="/manage" element={<TemporaryCareManage />} />
             <Route path="/requests" element={<TemporaryCareManagerRequests />} />

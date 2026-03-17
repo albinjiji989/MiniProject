@@ -218,6 +218,17 @@ router.post(
   userTemporaryCareController.verifyPickupOTP
 );
 
+// OTP verification for TemporaryCareApplication system
+router.post(
+  '/otp/verify-pickup-application',
+  auth,
+  [
+    body('temporaryCareId').notEmpty(),
+    body('otp').notEmpty().isLength({ min: 6, max: 6 })
+  ],
+  userTemporaryCareController.verifyApplicationPickupOTP
+);
+
 // Care activities
 router.post(
   '/care-activities',

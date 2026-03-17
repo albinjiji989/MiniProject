@@ -63,6 +63,7 @@ router.post('/bookings-new/:id/dropoff/verify', requireManager, [
 
 // Pickup management
 router.post('/bookings-new/:id/pickup/generate-otp', requireManager, bookingController.generatePickupOTP);
+router.post('/bookings-new/:id/pickup/resend-otp', requireManager, bookingController.resendPickupOTP);
 router.post('/bookings-new/:id/pickup/verify', requireManager, [
   body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
 ], bookingController.verifyPickupOTP);
@@ -135,6 +136,9 @@ router.post('/payments/:id/refund', [ body('refundAmount').optional().isNumeric(
 /**
  * New Application Management Routes (Multi-Pet Support)
  */
+
+// Debug endpoint to get all applications (separate path to avoid conflicts)
+router.get('/debug/all-applications', requireManager, bookingController.getAllApplications);
 
 // Get all applications
 router.get('/applications', applicationManagerController.getApplications);
@@ -211,5 +215,17 @@ router.post('/applications/handover/verify-otp', [
   body('applicationId').notEmpty().withMessage('Application ID is required'),
   body('otp').notEmpty().withMessage('OTP is required').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
 ], applicationManagerController.verifyHandoverOTP);
+
+// **PICKUP OTP ROUTES FOR TEMPORARYCAREAPPLICATION SYSTEM**
+// Generate pickup OTP for TemporaryCareApplication
+router.post('/applications/:id/pickup/generate-otp', requireManager, bookingController.generateApplicationPickupOTP);
+
+// Resend pickup OTP for TemporaryCareApplication
+router.post('/applications/:id/pickup/resend-otp', requireManager, bookingController.resendApplicationPickupOTP);
+
+// Verify pickup OTP for TemporaryCareApplication
+router.post('/applications/:id/pickup/verify', requireManager, [
+  body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
+], bookingController.verifyApplicationPickupOTP);
 
 module.exports = router;

@@ -515,6 +515,29 @@ exports.verifyHandoverOTP = async (req, res) => {
           await staff.save();
         }
       }
+
+      // Update pet ownership back to user and remove temporary care status
+      const pet = await Pet.findById(booking.petId);
+      if (pet) {
+        // Remove temporary care status and restore original ownership
+        pet.temporaryCareStatus = undefined;
+        pet.temporaryCareDetails = undefined;
+        
+        // IMPORTANT: Restore pet location to at_owner
+        pet.currentLocation = 'at_owner';
+        
+        // Ensure pet ownership is back to original user
+        pet.ownerId = booking.userId;
+        
+        // Ensure original tags are preserved (they should already be there)
+        // Tags like 'adoption', 'petshop', 'purchased' should remain intact
+        // Only remove temporary care related tags if any were added
+        if (pet.tags && pet.tags.includes('temporary-care')) {
+          pet.tags = pet.tags.filter(tag => tag !== 'temporary-care');
+        }
+        
+        await pet.save();
+      }
     }
 
     await booking.save();

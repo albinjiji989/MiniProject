@@ -2,6 +2,7 @@ const CareBooking = require('../../models/CareBooking');
 const CareStaff = require('../../models/CareStaff');
 const ServiceType = require('../../models/ServiceType');
 const Pet = require('../../../../core/models/Pet');
+const TemporaryCareApplication = require('../../models/TemporaryCareApplication');
 
 /**
  * Manager Booking Management Controllers
@@ -75,7 +76,8 @@ exports.getTodaySchedule = async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    const query = {
+    // Query CareBooking system (newer)
+    const bookingQuery = {
       storeId: req.user.storeId,
       status: { $in: ['confirmed', 'in_progress'] },
       $or: [
@@ -98,29 +100,136 @@ exports.getTodaySchedule = async (req, res) => {
       ]
     };
     
-    const bookings = await CareBooking.find(query)
+    const bookings = await CareBooking.find(bookingQuery)
       .populate('userId', 'name email phone')
       .populate('petId', 'name species breed profileImage')
       .populate('serviceType', 'name')
       .populate('assignedCaregivers.caregiver', 'name')
       .sort({ startDate: 1 });
     
+    console.log('🔍 getTodaySchedule - CareBooking system results:', bookings.length);
+    
+    // ALSO query TemporaryCareApplication system (older) for relevant applications
+    // Include multiple statuses that need manager attention
+    const relevantApplications = await TemporaryCareApplication.find({
+      status: { $in: ['active_care', 'approved', 'advance_paid'] },
+      // TODO: Add center filtering when centerId is properly set
+      // centerId: req.user.centerId
+    })
+    .populate('userId', 'name email phone');
+    
+    console.log('🔍 getTodaySchedule - TemporaryCareApplication system results:', relevantApplications.length);
+    console.log('🔍 getTodaySchedule - Application statuses found:', relevantApplications.map(app => ({ id: app._id, status: app.status, finalPayment: app.paymentStatus?.final?.status })));
+    
+    // Convert applications to booking-like format for compatibility
+    const applicationBookings = [];
+    
+    for (const app of relevantApplications) {
+      // Get pet details for each pet in the application
+      for (const petEntry of app.pets || []) {
+        let petDetails = null;
+        
+        // Try to find pet by petCode in different collections
+        const Pet = require('../../../../core/models/Pet');
+        const AdoptionPet = require('../../../adoption/manager/models/AdoptionPet');
+        
+        petDetails = await Pet.findOne({ petCode: petEntry.petId });
+        if (!petDetails) {
+          petDetails = await AdoptionPet.findOne({ petCode: petEntry.petId });
+        }
+        
+        applicationBookings.push({
+          _id: app._id,
+          bookingNumber: app.applicationNumber,
+          userId: app.userId,
+          petId: petDetails || { name: 'Unknown Pet', species: 'Unknown', breed: 'Unknown' },
+          startDate: app.startDate,
+          endDate: app.endDate,
+          status: 'in_progress',
+          paymentStatus: {
+            advance: app.paymentStatus.advance,
+            final: app.paymentStatus.final
+          },
+          handover: {
+            pickup: {
+              otp: app.handover?.pickup?.otp || null,
+              otpUsed: app.handover?.pickup?.otpUsed || false
+            }
+          },
+          isFromApplication: true, // Flag to identify source
+          applicationId: app._id // Store original application ID for OTP operations
+        });
+      }
+    }
+    
+    // Combine both systems
+    const allBookings = [...bookings, ...applicationBookings];
+    
+    console.log('🔍 getTodaySchedule - Combined results:', allBookings.length);
+    console.log('🔍 getTodaySchedule - Sample combined booking:', allBookings[0]);
+    
     // Categorize bookings
-    const checkIns = bookings.filter(b => {
+    const checkIns = allBookings.filter(b => {
       const start = new Date(b.startDate);
       return start >= today && start < tomorrow;
     });
     
-    const checkOuts = bookings.filter(b => {
+    // For checkOuts, include applications that are ready for pickup (final payment completed)
+    // regardless of end date, plus normal date-based checkouts
+    const checkOuts = allBookings.filter(b => {
       const end = new Date(b.endDate);
-      return end >= today && end < tomorrow;
+      const isEndingToday = end >= today && end < tomorrow;
+      const isReadyForPickup = b.paymentStatus?.final?.status === 'completed' && 
+                               (b.status === 'active_care' || b.status === 'in_progress');
+      
+      return isEndingToday || isReadyForPickup;
     });
     
-    const ongoing = bookings.filter(b => {
+    const ongoing = allBookings.filter(b => {
       const start = new Date(b.startDate);
       const end = new Date(b.endDate);
-      return start < today && end >= tomorrow;
+      const isOngoing = start < today && end >= tomorrow;
+      const isInProgress = (b.status === 'active_care' || b.status === 'in_progress') && 
+                          b.paymentStatus?.final?.status !== 'completed';
+      
+      return isOngoing || isInProgress;
     });
+    
+    console.log('🔍 getTodaySchedule - Categorized results:', {
+      checkIns: checkIns.length,
+      checkOuts: checkOuts.length,
+      ongoing: ongoing.length
+    });
+    
+    // Debug: Log details about checkOuts
+    if (checkOuts.length > 0) {
+      console.log('🔍 CheckOuts details:');
+      checkOuts.forEach((booking, index) => {
+        console.log(`  ${index + 1}. ${booking.bookingNumber}:`, {
+          endDate: booking.endDate,
+          finalPaymentStatus: booking.paymentStatus?.final?.status,
+          status: booking.status,
+          isFromApplication: booking.isFromApplication
+        });
+      });
+    } else {
+      console.log('🔍 No checkOuts found. Checking why...');
+      allBookings.forEach((booking, index) => {
+        const end = new Date(booking.endDate);
+        const isEndingToday = end >= today && end < tomorrow;
+        const isReadyForPickup = booking.paymentStatus?.final?.status === 'completed' && 
+                                 (booking.status === 'active_care' || booking.status === 'in_progress');
+        
+        console.log(`  Booking ${index + 1} (${booking.bookingNumber}):`, {
+          endDate: booking.endDate,
+          isEndingToday,
+          finalPaymentStatus: booking.paymentStatus?.final?.status,
+          status: booking.status,
+          isReadyForPickup,
+          shouldBeInCheckOuts: isEndingToday || isReadyForPickup
+        });
+      });
+    }
     
     res.json({
       success: true,
@@ -128,7 +237,7 @@ exports.getTodaySchedule = async (req, res) => {
         checkIns,
         checkOuts,
         ongoing,
-        total: bookings.length
+        total: allBookings.length
       }
     });
   } catch (error) {
@@ -354,7 +463,7 @@ exports.verifyDropOffOTP = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid OTP' });
     }
     
-    // Verify and update
+    // Verify and update booking
     booking.handover.dropOff.otp.verified = true;
     booking.handover.dropOff.otp.verifiedAt = new Date();
     booking.handover.dropOff.actualTime = new Date();
@@ -364,9 +473,41 @@ exports.verifyDropOffOTP = async (req, res) => {
     
     await booking.save();
     
+    // IMPORTANT: Update pet status to show "in temporary care" banner
+    const Pet = require('../../../../core/models/Pet');
+    const AdoptionPet = require('../../../adoption/manager/models/AdoptionPet');
+    
+    // Try to find the pet in different collections
+    let pet = await Pet.findById(booking.petId);
+    let isAdoptionPet = false;
+    
+    if (!pet) {
+      pet = await AdoptionPet.findById(booking.petId);
+      isAdoptionPet = true;
+    }
+    
+    if (pet) {
+      // Set pet to temporary care status - THIS IS THE KEY PART
+      pet.temporaryCareStatus = {
+        inCare: true,
+        applicationId: booking._id, // Use booking ID as reference
+        centerId: req.user.storeId,
+        startDate: booking.startDate,
+        expectedEndDate: booking.endDate
+      };
+      
+      // Update pet location to temporary care center
+      if (!isAdoptionPet) {
+        pet.currentLocation = 'at_care_center';
+      }
+      
+      await pet.save();
+      console.log(`✅ Pet ${pet.name} moved to temporary care after OTP verification`);
+    }
+    
     res.json({
       success: true,
-      message: 'Pet checked in successfully',
+      message: 'Pet checked in successfully and moved to temporary care',
       data: booking
     });
   } catch (error) {
@@ -382,12 +523,22 @@ exports.generatePickupOTP = async (req, res) => {
       _id: req.params.id,
       storeId: req.user.storeId,
       status: 'in_progress'
-    });
+    })
+    .populate('userId', 'name email phone')
+    .populate('petId', 'name species breed');
     
     if (!booking) {
       return res.status(404).json({
         success: false,
         message: 'Booking not found or not in progress'
+      });
+    }
+    
+    // Check if final payment is completed
+    if (booking.paymentStatus.final.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Final payment must be completed before generating pickup OTP'
       });
     }
     
@@ -404,13 +555,51 @@ exports.generatePickupOTP = async (req, res) => {
     
     await booking.save();
     
-    res.json({
-      success: true,
-      message: 'Pickup OTP generated successfully',
-      data: {
+    // Send OTP via email
+    try {
+      const { sendMail } = require('../../../../core/utils/email');
+      const { generatePickupOTPEmail } = require('../../templates/pickup-otp-email');
+      
+      const emailData = {
+        userName: booking.userId.name,
+        petName: booking.petId.name,
         otp,
         expiresAt,
-        bookingNumber: booking.bookingNumber
+        bookingNumber: booking.bookingNumber,
+        storeName: req.user.storeName || 'Pet Care Center',
+        storeAddress: req.user.storeAddress,
+        storePhone: req.user.storePhone
+      };
+      
+      await sendMail({
+        to: booking.userId.email,
+        subject: `🐾 ${booking.petId.name} is Ready for Pickup - OTP: ${otp}`,
+        html: generatePickupOTPEmail(emailData)
+      });
+      
+      console.log(`Pickup OTP email sent to ${booking.userId.email} for booking ${booking.bookingNumber}`);
+    } catch (emailError) {
+      console.error('Failed to send pickup OTP email:', emailError);
+      // Don't fail the request if email fails
+    }
+    
+    res.json({
+      success: true,
+      message: 'Pickup OTP generated and sent to pet owner via email',
+      data: {
+        otp, // Include OTP in response for manager to see
+        expiresAt,
+        bookingNumber: booking.bookingNumber,
+        petOwner: {
+          name: booking.userId.name,
+          email: booking.userId.email,
+          phone: booking.userId.phone
+        },
+        pet: {
+          name: booking.petId.name,
+          species: booking.petId.species,
+          breed: booking.petId.breed
+        }
       }
     });
   } catch (error) {
@@ -475,6 +664,30 @@ exports.verifyPickupOTP = async (req, res) => {
         await staff.updatePerformance('completed');
         await staff.save();
       }
+    }
+    
+    // Update pet ownership back to user and remove temporary care status
+    const Pet = require('../../../../core/models/Pet');
+    const pet = await Pet.findById(booking.petId);
+    if (pet) {
+      // Remove temporary care status and restore original ownership
+      pet.temporaryCareStatus = undefined;
+      pet.temporaryCareDetails = undefined;
+      
+      // IMPORTANT: Restore pet location to at_owner
+      pet.currentLocation = 'at_owner';
+      
+      // Ensure pet ownership is back to original user
+      pet.ownerId = booking.userId;
+      
+      // Ensure original tags are preserved (they should already be there)
+      // Tags like 'adoption', 'petshop', 'purchased' should remain intact
+      // Only remove temporary care related tags if any were added
+      if (pet.tags && pet.tags.includes('temporary-care')) {
+        pet.tags = pet.tags.filter(tag => tag !== 'temporary-care');
+      }
+      
+      await pet.save();
     }
     
     res.json({
@@ -578,24 +791,544 @@ exports.getDashboardStats = async (req, res) => {
   }
 };
 
-// Get available staff list
-exports.getAvailableStaff = async (req, res) => {
+// Resend pickup OTP
+exports.resendPickupOTP = async (req, res) => {
   try {
-    const staff = await CareStaff.find({
+    const booking = await CareBooking.findOne({
+      _id: req.params.id,
       storeId: req.user.storeId,
-      'availability.status': 'available',
-      isActive: true
+      status: 'in_progress'
     })
-    .populate('userId', 'name email phone profilePicture')
-    .select('userId skills experience performance')
-    .sort({ 'performance.averageRating': -1 });
+    .populate('userId', 'name email phone')
+    .populate('petId', 'name species breed');
+    
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found or not in progress'
+      });
+    }
+    
+    // Check if final payment is completed
+    if (booking.paymentStatus.final.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Final payment must be completed before generating pickup OTP'
+      });
+    }
+    
+    // Check if there's an existing OTP that's still valid
+    const existingOTP = booking.handover.pickup.otp;
+    if (existingOTP && existingOTP.code && !existingOTP.verified && new Date() < new Date(existingOTP.expiresAt)) {
+      // Resend the existing OTP
+      try {
+        const { sendMail } = require('../../../../core/utils/email');
+        const { generatePickupOTPEmail } = require('../../templates/pickup-otp-email');
+        
+        const emailData = {
+          userName: booking.userId.name,
+          petName: booking.petId.name,
+          otp: existingOTP.code,
+          expiresAt: existingOTP.expiresAt,
+          bookingNumber: booking.bookingNumber,
+          storeName: req.user.storeName || 'Pet Care Center',
+          storeAddress: req.user.storeAddress,
+          storePhone: req.user.storePhone
+        };
+        
+        await sendMail({
+          to: booking.userId.email,
+          subject: `🐾 ${booking.petId.name} Pickup OTP (Resent) - OTP: ${existingOTP.code}`,
+          html: generatePickupOTPEmail(emailData)
+        });
+        
+        return res.json({
+          success: true,
+          message: 'Existing pickup OTP resent to pet owner via email',
+          data: {
+            otp: existingOTP.code,
+            expiresAt: existingOTP.expiresAt,
+            bookingNumber: booking.bookingNumber,
+            isResend: true
+          }
+        });
+      } catch (emailError) {
+        console.error('Failed to resend pickup OTP email:', emailError);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to resend OTP email'
+        });
+      }
+    }
+    
+    // Generate new OTP if no valid existing OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    
+    booking.handover.pickup.otp = {
+      code: otp,
+      generatedAt: new Date(),
+      expiresAt,
+      verified: false
+    };
+    
+    await booking.save();
+    
+    // Send new OTP via email
+    try {
+      const { sendMail } = require('../../../../core/utils/email');
+      const { generatePickupOTPEmail } = require('../../templates/pickup-otp-email');
+      
+      const emailData = {
+        userName: booking.userId.name,
+        petName: booking.petId.name,
+        otp,
+        expiresAt,
+        bookingNumber: booking.bookingNumber,
+        storeName: req.user.storeName || 'Pet Care Center',
+        storeAddress: req.user.storeAddress,
+        storePhone: req.user.storePhone
+      };
+      
+      await sendMail({
+        to: booking.userId.email,
+        subject: `🐾 ${booking.petId.name} New Pickup OTP - OTP: ${otp}`,
+        html: generatePickupOTPEmail(emailData)
+      });
+      
+      res.json({
+        success: true,
+        message: 'New pickup OTP generated and sent to pet owner via email',
+        data: {
+          otp,
+          expiresAt,
+          bookingNumber: booking.bookingNumber,
+          isResend: false
+        }
+      });
+    } catch (emailError) {
+      console.error('Failed to send new pickup OTP email:', emailError);
+      res.status(500).json({
+        success: false,
+        message: 'OTP generated but failed to send email'
+      });
+    }
+  } catch (error) {
+    console.error('Error resending pickup OTP:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Generate pickup OTP for TemporaryCareApplication
+exports.generateApplicationPickupOTP = async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    
+    const application = await TemporaryCareApplication.findById(applicationId)
+      .populate('userId', 'name email phone')
+      .populate('pets.petId', 'name species breed');
+    
+    if (!application) {
+      return res.status(404).json({
+        success: false,
+        message: 'Application not found'
+      });
+    }
+    
+    // Check if final payment is completed
+    if (application.paymentStatus.final.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Final payment must be completed before generating pickup OTP'
+      });
+    }
+    
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    
+    // Initialize handover if it doesn't exist
+    if (!application.handover) {
+      application.handover = {};
+    }
+    if (!application.handover.pickup) {
+      application.handover.pickup = {};
+    }
+    
+    application.handover.pickup = {
+      otp: otp,
+      otpGeneratedAt: new Date(),
+      otpExpiresAt: expiresAt,
+      otpUsed: false
+    };
+    
+    await application.save();
+    
+    // Send OTP via email
+    try {
+      const { sendMail } = require('../../../../core/utils/email');
+      const { generatePickupOTPEmail } = require('../../templates/pickup-otp-email');
+      
+      const emailData = {
+        userName: application.userId.name,
+        petName: application.pets[0]?.petId || 'Your Pet',
+        otp,
+        expiresAt,
+        bookingNumber: application.applicationNumber,
+        storeName: 'Pet Care Center',
+        storeAddress: '',
+        storePhone: ''
+      };
+      
+      await sendMail({
+        to: application.userId.email,
+        subject: `🐾 Your Pet is Ready for Pickup - OTP: ${otp}`,
+        html: generatePickupOTPEmail(emailData)
+      });
+      
+      console.log(`Pickup OTP email sent to ${application.userId.email} for application ${application.applicationNumber}`);
+    } catch (emailError) {
+      console.error('Failed to send pickup OTP email:', emailError);
+      // Don't fail the request if email fails
+    }
     
     res.json({
       success: true,
-      data: staff
+      message: 'Pickup OTP generated and sent to pet owner via email',
+      data: {
+        otp, // Include OTP in response for manager to see
+        expiresAt,
+        applicationNumber: application.applicationNumber,
+        petOwner: {
+          name: application.userId.name,
+          email: application.userId.email,
+          phone: application.userId.phone
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error generating application pickup OTP:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Verify pickup OTP for TemporaryCareApplication
+exports.verifyApplicationPickupOTP = async (req, res) => {
+  try {
+    const { otp, notes } = req.body;
+    const applicationId = req.params.id;
+    
+    const application = await TemporaryCareApplication.findById(applicationId);
+    
+    if (!application) {
+      return res.status(404).json({ success: false, message: 'Application not found' });
+    }
+    
+    if (!application.handover?.pickup?.otp) {
+      return res.status(400).json({ success: false, message: 'OTP not generated' });
+    }
+    
+    if (application.handover.pickup.otpUsed) {
+      return res.status(400).json({ success: false, message: 'Pickup already completed' });
+    }
+    
+    if (new Date() > new Date(application.handover.pickup.otpExpiresAt)) {
+      return res.status(400).json({ success: false, message: 'OTP expired' });
+    }
+    
+    if (application.handover.pickup.otp !== otp) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP' });
+    }
+    
+    // Check if final payment is completed
+    if (application.paymentStatus.final.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Final payment must be completed before checkout'
+      });
+    }
+    
+    // Mark OTP as used and complete the application
+    application.handover.pickup.otpUsed = true;
+    application.handover.pickup.otpUsedAt = new Date();
+    application.handover.pickup.notes = notes || '';
+    application.status = 'completed';
+    
+    await application.save();
+    
+    // Update pet ownership back to user and remove temporary care status
+    for (const petEntry of application.pets) {
+      let pet = await Pet.findOne({ petCode: petEntry.petId });
+      if (!pet) {
+        const AdoptionPet = require('../../../adoption/manager/models/AdoptionPet');
+        pet = await AdoptionPet.findOne({ petCode: petEntry.petId });
+      }
+      
+      if (pet) {
+        // Remove temporary care status and restore original ownership
+        pet.temporaryCareStatus = undefined;
+        pet.temporaryCareDetails = undefined;
+        
+        // IMPORTANT: Restore pet location to at_owner
+        if (pet.currentLocation) {
+          pet.currentLocation = 'at_owner';
+        }
+        
+        // Ensure pet ownership is back to original user
+        pet.ownerId = application.userId;
+        
+        // Remove temporary care tags if any were added
+        if (pet.tags && pet.tags.includes('temporary-care')) {
+          pet.tags = pet.tags.filter(tag => tag !== 'temporary-care');
+        }
+        
+        await pet.save();
+        console.log(`✅ Pet ${pet.name} returned to owner after application pickup OTP verification`);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Pet checked out successfully and returned to owner',
+      data: application
+    });
+  } catch (error) {
+    console.error('Error verifying application pickup OTP:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Resend pickup OTP for TemporaryCareApplication
+exports.resendApplicationPickupOTP = async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    
+    const application = await TemporaryCareApplication.findById(applicationId)
+      .populate('userId', 'name email phone')
+      .populate('pets.petId', 'name species breed');
+    
+    if (!application) {
+      return res.status(404).json({
+        success: false,
+        message: 'Application not found'
+      });
+    }
+    
+    // Check if final payment is completed
+    if (application.paymentStatus.final.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Final payment must be completed before generating pickup OTP'
+      });
+    }
+    
+    // Check if there's an existing OTP that's still valid
+    const existingOTP = application.handover?.pickup;
+    if (existingOTP && existingOTP.otp && !existingOTP.otpUsed && new Date() < new Date(existingOTP.otpExpiresAt)) {
+      // Resend the existing OTP
+      try {
+        const { sendMail } = require('../../../../core/utils/email');
+        const { generatePickupOTPEmail } = require('../../templates/pickup-otp-email');
+        
+        const emailData = {
+          userName: application.userId.name,
+          petName: application.pets[0]?.petId || 'Your Pet',
+          otp: existingOTP.otp,
+          expiresAt: existingOTP.otpExpiresAt,
+          bookingNumber: application.applicationNumber,
+          storeName: 'Pet Care Center',
+          storeAddress: '',
+          storePhone: ''
+        };
+        
+        await sendMail({
+          to: application.userId.email,
+          subject: `🐾 Your Pet Pickup OTP (Resent) - OTP: ${existingOTP.otp}`,
+          html: generatePickupOTPEmail(emailData)
+        });
+        
+        return res.json({
+          success: true,
+          message: 'Existing pickup OTP resent to pet owner via email',
+          data: {
+            otp: existingOTP.otp,
+            expiresAt: existingOTP.otpExpiresAt,
+            applicationNumber: application.applicationNumber,
+            isResend: true
+          }
+        });
+      } catch (emailError) {
+        console.error('Failed to resend pickup OTP email:', emailError);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to resend OTP email'
+        });
+      }
+    }
+    
+    // Generate new OTP if no valid existing OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    
+    // Initialize handover if it doesn't exist
+    if (!application.handover) {
+      application.handover = {};
+    }
+    if (!application.handover.pickup) {
+      application.handover.pickup = {};
+    }
+    
+    application.handover.pickup = {
+      otp: otp,
+      otpGeneratedAt: new Date(),
+      otpExpiresAt: expiresAt,
+      otpUsed: false
+    };
+    
+    await application.save();
+    
+    // Send new OTP via email
+    try {
+      const { sendMail } = require('../../../../core/utils/email');
+      const { generatePickupOTPEmail } = require('../../templates/pickup-otp-email');
+      
+      const emailData = {
+        userName: application.userId.name,
+        petName: application.pets[0]?.petId || 'Your Pet',
+        otp,
+        expiresAt,
+        bookingNumber: application.applicationNumber,
+        storeName: 'Pet Care Center',
+        storeAddress: '',
+        storePhone: ''
+      };
+      
+      await sendMail({
+        to: application.userId.email,
+        subject: `🐾 New Pet Pickup OTP - OTP: ${otp}`,
+        html: generatePickupOTPEmail(emailData)
+      });
+      
+      res.json({
+        success: true,
+        message: 'New pickup OTP generated and sent to pet owner via email',
+        data: {
+          otp,
+          expiresAt,
+          applicationNumber: application.applicationNumber,
+          isResend: false
+        }
+      });
+    } catch (emailError) {
+      console.error('Failed to send new pickup OTP email:', emailError);
+      res.status(500).json({
+        success: false,
+        message: 'OTP generated but failed to send email'
+      });
+    }
+  } catch (error) {
+    console.error('Error resending application pickup OTP:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Get available staff (placeholder for compatibility)
+exports.getAvailableStaff = async (req, res) => {
+  try {
+    // This is a placeholder - implement based on your staff model
+    res.json({
+      success: true,
+      data: []
     });
   } catch (error) {
     console.error('Error fetching available staff:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+// Get all applications for debugging
+exports.getAllApplications = async (req, res) => {
+  try {
+    console.log('🔍 getAllApplications - Manager user:', req.user.id, req.user.email);
+    
+    // Get all applications regardless of status for debugging
+    const allApplications = await TemporaryCareApplication.find({})
+      .populate('userId', 'name email phone')
+      .sort({ createdAt: -1 });
+    
+    console.log('🔍 getAllApplications - Total applications found:', allApplications.length);
+    
+    // Log details of each application
+    allApplications.forEach((app, index) => {
+      console.log(`🔍 Application ${index + 1}:`, {
+        id: app._id,
+        applicationNumber: app.applicationNumber,
+        userId: app.userId?._id,
+        userEmail: app.userId?.email,
+        status: app.status,
+        centerId: app.centerId,
+        advancePayment: app.paymentStatus?.advance?.status,
+        finalPayment: app.paymentStatus?.final?.status,
+        startDate: app.startDate,
+        endDate: app.endDate,
+        pets: app.pets?.length || 0
+      });
+    });
+    
+    // Convert to booking-like format for frontend compatibility
+    const applicationBookings = [];
+    
+    for (const app of allApplications) {
+      for (const petEntry of app.pets || []) {
+        let petDetails = null;
+        
+        // Try to find pet by petCode
+        const Pet = require('../../../../core/models/Pet');
+        const AdoptionPet = require('../../../adoption/manager/models/AdoptionPet');
+        
+        petDetails = await Pet.findOne({ petCode: petEntry.petId });
+        if (!petDetails) {
+          petDetails = await AdoptionPet.findOne({ petCode: petEntry.petId });
+        }
+        
+        applicationBookings.push({
+          _id: app._id,
+          bookingNumber: app.applicationNumber,
+          userId: app.userId,
+          petId: petDetails || { name: 'Unknown Pet', species: 'Unknown', breed: 'Unknown' },
+          startDate: app.startDate,
+          endDate: app.endDate,
+          status: app.status,
+          paymentStatus: {
+            advance: app.paymentStatus.advance,
+            final: app.paymentStatus.final
+          },
+          handover: {
+            pickup: {
+              otp: app.handover?.pickup?.otp || null,
+              otpUsed: app.handover?.pickup?.otpUsed || false
+            }
+          },
+          isFromApplication: true,
+          applicationId: app._id,
+          centerId: app.centerId
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        applications: applicationBookings,
+        total: applicationBookings.length,
+        debug: {
+          managerUserId: req.user.id,
+          managerStoreId: req.user.storeId,
+          totalApplicationsInDB: allApplications.length
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching all applications:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };

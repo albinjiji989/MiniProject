@@ -426,10 +426,34 @@ const verifyPickupOTP = async (req, res) => {
     
     await care.save();
     
+    // Update pet ownership back to user and remove temporary care status
+    const Pet = require('../../../../core/models/Pet');
+    const pet = await Pet.findById(care.pet);
+    if (pet) {
+      // Remove temporary care status and restore original ownership
+      pet.temporaryCareStatus = undefined;
+      pet.temporaryCareDetails = undefined;
+      
+      // IMPORTANT: Restore pet location to at_owner
+      pet.currentLocation = 'at_owner';
+      
+      // Ensure pet ownership is back to original user
+      pet.ownerId = care.owner.userId;
+      
+      // Ensure original tags are preserved (they should already be there)
+      // Tags like 'adoption', 'petshop', 'purchased' should remain intact
+      // Only remove temporary care related tags if any were added
+      if (pet.tags && pet.tags.includes('temporary-care')) {
+        pet.tags = pet.tags.filter(tag => tag !== 'temporary-care');
+      }
+      
+      await pet.save();
+    }
+    
     res.json({ 
       success: true, 
       message: 'Pickup OTP verified successfully. Pet has been returned to you.',
-      data: { care }
+      data: { care, pet }
     });
   } catch (e) {
     console.error('Verify pickup OTP error:', e);
@@ -447,4 +471,129 @@ module.exports = {
   verifyDropOTP,
   generatePickupOTP,
   verifyPickupOTP
+};
+
+// Verify pickup OTP for TemporaryCareApplication
+const verifyApplicationPickupOTP = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: 'Validation errors', errors: errors.array() });
+    }
+
+    const { temporaryCareId, otp } = req.body;
+    
+    // Find the temporary care application
+    const TemporaryCareApplication = require('../../models/TemporaryCareApplication');
+    const application = await TemporaryCareApplication.findOne({
+      _id: temporaryCareId,
+      userId: req.user._id,
+      status: 'active_care'
+    });
+    
+    if (!application) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Temporary care application not found or not in active care status' 
+      });
+    }
+    
+    // Check if final payment is completed
+    if (application.paymentStatus.final.status !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Final payment must be completed before pickup'
+      });
+    }
+    
+    // Check if OTP exists and is valid
+    if (!application.handover?.pickup?.otp) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No pickup OTP generated for this application' 
+      });
+    }
+    
+    if (application.handover.pickup.otpUsed) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Pickup OTP has already been used' 
+      });
+    }
+    
+    const now = new Date();
+    if (now > application.handover.pickup.otpExpiresAt) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Pickup OTP has expired' 
+      });
+    }
+    
+    if (application.handover.pickup.otp !== otp) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid pickup OTP' 
+      });
+    }
+    
+    // Mark OTP as used and update status
+    application.handover.pickup.otpUsed = true;
+    application.handover.pickup.otpUsedAt = now;
+    application.status = 'completed';
+    
+    await application.save();
+    
+    // Update pet ownership back to user and remove temporary care status
+    for (const petEntry of application.pets) {
+      let pet = await Pet.findOne({ petCode: petEntry.petId });
+      if (!pet) {
+        const AdoptionPet = require('../../../adoption/manager/models/AdoptionPet');
+        pet = await AdoptionPet.findOne({ petCode: petEntry.petId });
+      }
+      
+      if (pet) {
+        // Remove temporary care status and restore original ownership
+        pet.temporaryCareStatus = undefined;
+        pet.temporaryCareDetails = undefined;
+        
+        // IMPORTANT: Restore pet location to at_owner
+        if (pet.currentLocation) {
+          pet.currentLocation = 'at_owner';
+        }
+        
+        // Ensure pet ownership is back to original user
+        pet.ownerId = application.userId;
+        
+        // Remove temporary care tags if any were added
+        if (pet.tags && pet.tags.includes('temporary-care')) {
+          pet.tags = pet.tags.filter(tag => tag !== 'temporary-care');
+        }
+        
+        await pet.save();
+        console.log(`✅ Pet ${pet.name} returned to owner after application pickup OTP verification`);
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Pickup OTP verified successfully. Pet has been returned to you.',
+      data: { application }
+    });
+  } catch (e) {
+    console.error('Verify application pickup OTP error:', e);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+module.exports = {
+  submitRequest,
+  listRequests,
+  getActiveCare,
+  getCareHistory,
+  cancelRequest,
+  generateDropOTP,
+  verifyDropOTP,
+  generatePickupOTP,
+  verifyPickupOTP,
+  verifyApplicationPickupOTP
 };

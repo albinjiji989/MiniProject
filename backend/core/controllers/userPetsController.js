@@ -26,7 +26,7 @@ const getAllUserPets = async (req, res) => {
       {
         $lookup: {
           from: 'species',
-          localField: 'speciesId',
+          localField: 'species',
           foreignField: '_id',
           as: 'speciesInfo'
         }
@@ -36,7 +36,7 @@ const getAllUserPets = async (req, res) => {
       {
         $lookup: {
           from: 'breeds',
-          localField: 'breedId',
+          localField: 'breed',
           foreignField: '_id',
           as: 'breedInfo'
         }
@@ -272,7 +272,7 @@ const getUserPetStats = async (req, res) => {
           bySpecies: [
             {
               $group: {
-                _id: '$speciesId',
+                _id: '$species',
                 count: { $sum: 1 }
               }
             },

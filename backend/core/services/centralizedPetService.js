@@ -234,36 +234,31 @@ const CentralizedPetService = {
       images  // Add images from source data
     };
 
-    // If sourceData has populated species/breed, use those instead of registry's
-    if (sourceData) {
-      // Handle different field names based on source
-      if (sourceData.speciesId) {
-        response.species = sourceData.speciesId;
-      }
-      if (sourceData.breedId) {
-        response.breed = sourceData.breedId;
-      }
-      
-      // Also use sourceData name if registry name is missing
-      if (sourceData.name && !response.name) {
-        response.name = sourceData.name;
-      }
-    }
-
-    // Ensure species and breed are properly formatted
-    // If they're still ObjectIds (population failed), try to get names from sourceData
-    if (response.species && typeof response.species === 'object' && response.species.toString && !response.species.name) {
-      // Species is an unpopulated ObjectId, try to get from sourceData
-      if (sourceData && sourceData.speciesId && sourceData.speciesId.name) {
-        response.species = sourceData.speciesId;
-      }
+    // Ensure species and breed are properly populated
+    // Priority: 1) Registry populated data, 2) Source data, 3) Keep as is
+    
+    // Handle species
+    if (registryEntry.species && typeof registryEntry.species === 'object' && registryEntry.species.name) {
+      // Registry has properly populated species, use it
+      response.species = registryEntry.species;
+    } else if (sourceData && sourceData.speciesId && typeof sourceData.speciesId === 'object' && sourceData.speciesId.name) {
+      // Source has populated species, use it
+      response.species = sourceData.speciesId;
+    } else if (sourceData && sourceData.species && typeof sourceData.species === 'object' && sourceData.species.name) {
+      // Source has species field (not speciesId), use it
+      response.species = sourceData.species;
     }
     
-    if (response.breed && typeof response.breed === 'object' && response.breed.toString && !response.breed.name) {
-      // Breed is an unpopulated ObjectId, try to get from sourceData
-      if (sourceData && sourceData.breedId && sourceData.breedId.name) {
-        response.breed = sourceData.breedId;
-      }
+    // Handle breed
+    if (registryEntry.breed && typeof registryEntry.breed === 'object' && registryEntry.breed.name) {
+      // Registry has properly populated breed, use it
+      response.breed = registryEntry.breed;
+    } else if (sourceData && sourceData.breedId && typeof sourceData.breedId === 'object' && sourceData.breedId.name) {
+      // Source has populated breed, use it
+      response.breed = sourceData.breedId;
+    } else if (sourceData && sourceData.breed && typeof sourceData.breed === 'object' && sourceData.breed.name) {
+      // Source has breed field (not breedId), use it
+      response.breed = sourceData.breed;
     }
 
     console.log('🔍 Final response species:', response.species);
@@ -350,13 +345,20 @@ const CentralizedPetService = {
         images: images.length > 0 ? images : registryEntry.imageIds || []
       };
 
-      // Override species and breed with source data if available
+      // Override species and breed with source data if available and better populated
       if (sourceData) {
-        if (sourceData.speciesId) {
+        // Handle species - prefer populated data
+        if (sourceData.speciesId && typeof sourceData.speciesId === 'object' && sourceData.speciesId.name) {
           enrichedPet.species = sourceData.speciesId;
+        } else if (sourceData.species && typeof sourceData.species === 'object' && sourceData.species.name) {
+          enrichedPet.species = sourceData.species;
         }
-        if (sourceData.breedId) {
+        
+        // Handle breed - prefer populated data
+        if (sourceData.breedId && typeof sourceData.breedId === 'object' && sourceData.breedId.name) {
           enrichedPet.breed = sourceData.breedId;
+        } else if (sourceData.breed && typeof sourceData.breed === 'object' && sourceData.breed.name) {
+          enrichedPet.breed = sourceData.breed;
         }
       }
 

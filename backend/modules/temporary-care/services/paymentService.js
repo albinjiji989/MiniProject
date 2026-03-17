@@ -243,10 +243,33 @@ exports.verifyPayment = async (req, res) => {
       if (booking.status === 'pending_payment') {
         booking.status = 'confirmed';
       }
+      
+      // IMPORTANT: Pet stays at_owner after advance payment (no temporary care banner)
+      // Pet only goes to temporary care after final payment
+      
     } else if (paymentType === 'final') {
       booking.paymentStatus.final.status = 'completed';
       booking.paymentStatus.final.paidAt = new Date();
       booking.paymentStatus.final.paymentId = razorpay_payment_id;
+      
+      // IMPORTANT: After final payment, pet goes to temporary care
+      // This is when the temporary care banner should appear
+      const Pet = require('../../../core/models/Pet');
+      const pet = await Pet.findById(booking.petId);
+      if (pet) {
+        // Set pet to temporary care status
+        pet.temporaryCareStatus = {
+          inCare: true,
+          bookingId: booking._id,
+          startDate: booking.startDate,
+          expectedEndDate: booking.endDate
+        };
+        
+        // Update pet location to temporary care center
+        pet.currentLocation = 'at_care_center';
+        
+        await pet.save();
+      }
     }
     
     await booking.save();
