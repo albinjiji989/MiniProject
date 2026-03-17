@@ -33,6 +33,7 @@ app.config.from_object(config['development'])
 cors_origins = os.getenv('CORS_ORIGINS', '').split(',') if os.getenv('CORS_ORIGINS') else [
     'http://localhost:3000',  # Local frontend
     'http://localhost:5000',  # Local backend
+    'http://localhost:5173',  # Vite dev server frontend
     'https://mini-project-ebon-omega.vercel.app',  # Production backend
     'http://mini-project-6ot9.vercel.app',  # Production frontend
     'https://mini-project-6ot9.vercel.app'  # Production frontend (https)

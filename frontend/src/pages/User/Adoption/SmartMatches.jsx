@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiClient, resolveMediaUrl } from '../../../services/api';
+import { apiClient, mlApi, resolveMediaUrl } from '../../../services/api';
 import {
   Box, Container, Typography, Button, Grid, Chip, LinearProgress,
   CircularProgress, IconButton, Dialog, Stack, Alert, Tooltip, Collapse,
@@ -218,7 +218,7 @@ const SmartMatches = () => {
     setLoading(true); setError('');
     try {
       const [mRes, pRes] = await Promise.all([
-        apiClient.get('/adoption/user/matches/hybrid', { params: { topN: 20, algorithm:'hybrid' } }),
+        mlApi.get('/adoption/user/matches/hybrid', { params: { topN: 20, algorithm:'hybrid' } }),
         apiClient.get('/adoption/user/profile/adoption').catch(() => ({ data:{ success:false } }))
       ]);
       if (mRes.data.success) {
@@ -234,7 +234,14 @@ const SmartMatches = () => {
     } catch (e) {
       if (e.response?.data?.needsProfile || e.response?.status === 400)
         navigate('/user/adoption/profile-wizard');
-      else setError(e.response?.data?.message || 'Failed to load matches. Please try again.');
+      else {
+        let errorMessage = 'Failed to load matches. Please try again.';
+        if (e.code === 'ECONNABORTED' || e.message.includes('timeout')) {
+          errorMessage = 'AI service is starting up. This may take up to 90 seconds. Please try again in a moment.';
+          setMlAvailable(false);
+        }
+        setError(e.response?.data?.message || errorMessage);
+      }
     } finally { setLoading(false); }
   };
 

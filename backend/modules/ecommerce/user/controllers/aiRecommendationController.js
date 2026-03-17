@@ -16,7 +16,7 @@ const getRecommendations = async (req, res) => {
     
     const response = await axios.get(`${PYTHON_ML_URL}/api/ecommerce/recommendations`, {
       params: { userId: userId?.toString() },
-      timeout: 10000
+      timeout: 90000 // 90 seconds for Render sleeping service
     });
     
     if (response.data.success) {
@@ -51,7 +51,7 @@ const getBestSellers = async (req, res) => {
     
     const response = await axios.get(`${PYTHON_ML_URL}/api/ecommerce/recommendations/best-sellers`, {
       params: { limit },
-      timeout: 10000
+      timeout: 90000 // 90 seconds for Render sleeping service
     });
     
     res.json(response.data);
@@ -69,7 +69,7 @@ const getTrending = async (req, res) => {
     
     const response = await axios.get(`${PYTHON_ML_URL}/api/ecommerce/recommendations/trending`, {
       params: { limit },
-      timeout: 10000
+      timeout: 90000 // 90 seconds for Render sleeping service
     });
     
     res.json(response.data);
@@ -87,7 +87,7 @@ const getMostBought = async (req, res) => {
     
     const response = await axios.get(`${PYTHON_ML_URL}/api/ecommerce/recommendations/most-bought`, {
       params: { limit },
-      timeout: 10000
+      timeout: 90000 // 90 seconds for Render sleeping service
     });
     
     res.json(response.data);

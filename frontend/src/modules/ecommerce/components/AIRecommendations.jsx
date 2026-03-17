@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../../services/api';
+import { mlApi } from '../../../services/api';
 import { 
   TrendingUp, 
   Award, 
@@ -34,14 +34,23 @@ const AIRecommendations = () => {
   const fetchRecommendations = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/ecommerce/ai/recommendations');
+      setError(''); // Clear previous errors
+      
+      // Show loading message for ML service
+      console.log('🤖 Fetching AI recommendations (this may take up to 90 seconds if service is starting up)...');
+      
+      const response = await mlApi.get('/ecommerce/ai/recommendations');
       
       if (response.data.success) {
         setRecommendations(response.data.data);
       }
     } catch (error) {
       console.error('Error fetching AI recommendations:', error);
-      setError('Failed to load recommendations');
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        setError('AI service is starting up. Please try again in a moment.');
+      } else {
+        setError('Failed to load recommendations');
+      }
     } finally {
       setLoading(false);
     }
@@ -49,7 +58,7 @@ const AIRecommendations = () => {
 
   const trackClick = async (productId) => {
     try {
-      await api.post('/ecommerce/ai/recommendations/track-click', { productId });
+      await mlApi.post('/ecommerce/ai/recommendations/track-click', { productId });
     } catch (error) {
       console.error('Track click error:', error);
     }

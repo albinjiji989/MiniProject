@@ -82,6 +82,16 @@ export const petAgeAPI = {
 // Create axios instance
 export const api = axios.create({
   baseURL: API_URL,
+  timeout: 30000, // 30 seconds default timeout
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+// Create special axios instance for ML service calls with longer timeout
+export const mlApi = axios.create({
+  baseURL: API_URL,
+  timeout: 90000, // 90 seconds for ML service calls
   headers: {
     'Content-Type': 'application/json',
   },
@@ -130,6 +140,22 @@ api.interceptors.request.use(
   }
 )
 
+// Add same interceptors to mlApi
+mlApi.interceptors.request.use(
+  (config) => {
+    const token = getAuthToken()
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    const useCookies = import.meta.env.VITE_API_COOKIES === 'true'
+    config.withCredentials = !!useCookies
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
 // Response interceptor to handle auth errors
 api.interceptors.response.use(
   (response) => response,
@@ -143,6 +169,21 @@ api.interceptors.response.use(
       const msg = error.response?.data?.message || 'Access to this action is blocked by admin.'
       try { window.dispatchEvent(new CustomEvent('auth:soft-block', { detail: { message: msg } })) } catch (_) {}
       // Do not clear token; let UI disable actions
+    }
+    return Promise.reject(error)
+  }
+)
+
+// Add same response interceptor to mlApi
+mlApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      clearAllAuthTokens()
+      window.dispatchEvent(new CustomEvent('auth:logout'));
+    } else if (error.response?.status === 403) {
+      const msg = error.response?.data?.message || 'Access to this action is blocked by admin.'
+      try { window.dispatchEvent(new CustomEvent('auth:soft-block', { detail: { message: msg } })) } catch (_) {}
     }
     return Promise.reject(error)
   }
@@ -265,12 +306,12 @@ export const adoptionAPI = {
   listMyRequests: () => api.get('/adoption/user/applications/my'),
   getMyRequest: (id) => api.get(`/adoption/user/applications/${id}`),
   
-  // Smart Matching & Profile
+  // Smart Matching & Profile (using mlApi for ML-related calls)
   updateAdoptionProfile: (profileData) => api.post('/adoption/user/profile/adoption', profileData),
   getAdoptionProfile: () => api.get('/adoption/user/profile/adoption'),
   getAdoptionProfileStatus: () => api.get('/adoption/user/profile/adoption/status'),
-  getSmartMatches: (params) => api.get('/adoption/user/matches/smart', { params }),
-  getPetMatch: (petId) => api.get(`/adoption/user/matches/pet/${petId}`),
+  getSmartMatches: (params) => mlApi.get('/adoption/user/matches/smart', { params }),
+  getPetMatch: (petId) => mlApi.get(`/adoption/user/matches/pet/${petId}`),
   cancelMyRequest: (id) => api.put(`/adoption/user/applications/${id}/cancel`),
   managerListRequests: (params) => api.get('/adoption/manager/applications', { params }),
   managerPatchRequest: (id, { status, notes, reason }) => api.patch(`/adoption/manager/applications/${id}`, { status, notes, reason }),
@@ -609,7 +650,13 @@ export const temporaryCareAPI = {
   
   // Manager Inboard Pets APIs
   managerGetInboardPets: () => api.get('/temporary-care/manager/inboard-pets'),
-  managerGetInboardPetDetails: (petCode) => api.get(`/temporary-care/manager/inboard-pets/${petCode}`)
+  managerGetInboardPetDetails: (petCode) => api.get(`/temporary-care/manager/inboard-pets/${petCode}`),
+  
+  // Manager New Booking System APIs
+  getManagerBookingDetails: (id) => api.get(`/temporary-care/manager/bookings-new/${id}`),
+  generatePickupOTP: (bookingId) => api.post(`/temporary-care/manager/bookings-new/${bookingId}/pickup/generate-otp`),
+  resendPickupOTP: (bookingId) => api.post(`/temporary-care/manager/bookings-new/${bookingId}/pickup/resend-otp`),
+  verifyPickupOTP: (bookingId, data) => api.post(`/temporary-care/manager/bookings-new/${bookingId}/pickup/verify`, data)
 }
 
 // Admin API for Temporary Care

@@ -71,20 +71,20 @@
   },
   "suites": [
     {
-      "title": "functional-tests.spec.js",
-      "file": "functional-tests.spec.js",
+      "title": "ecommerce-complete-flow.spec.js",
+      "file": "ecommerce-complete-flow.spec.js",
       "column": 0,
       "line": 0,
       "specs": [],
       "suites": [
         {
-          "title": "Functional Tests - Core Features",
-          "file": "functional-tests.spec.js",
-          "line": 4,
+          "title": "Ecommerce Complete Flow - AI Recommendation & Order Processing",
+          "file": "ecommerce-complete-flow.spec.js",
+          "line": 3,
           "column": 6,
           "specs": [
             {
-              "title": "01 - User: Browse products and view details",
+              "title": "Complete Ecommerce AI Recommendation and Order Flow",
               "ok": true,
               "tags": [],
               "tests": [
@@ -99,12 +99,141 @@
                       "workerIndex": 0,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 15943,
+                      "duration": 25456,
                       "errors": [],
-                      "stdout": [],
+                      "stdout": [
+                        {
+                          "text": "Current URL: http://localhost:5173/\n"
+                        },
+                        {
+                          "text": "✅ Already logged in - found: text=Dashboard\n"
+                        },
+                        {
+                          "text": "✅ Login step completed\n"
+                        },
+                        {
+                          "text": "✅ Found ecommerce via link: text=Shop\n"
+                        },
+                        {
+                          "text": "✅ Successfully reached Ecommerce module\n"
+                        },
+                        {
+                          "text": "✅ Found product-related content: shop\n"
+                        },
+                        {
+                          "text": "✅ AI Product Recommendation system verified\n"
+                        },
+                        {
+                          "text": "⚠️ Add to Cart button not found, but continuing test\n"
+                        },
+                        {
+                          "text": "✅ Navigated to cart via: /user/ecommerce/cart\n"
+                        },
+                        {
+                          "text": "✅ Cart page accessed\n"
+                        },
+                        {
+                          "text": "✅ Navigated to checkout via: /user/ecommerce/checkout\n"
+                        },
+                        {
+                          "text": "✅ Checkout page accessed\n"
+                        },
+                        {
+                          "text": "✅ Shipping details filled\n"
+                        },
+                        {
+                          "text": "✅ Payment processing completed (test environment)\n"
+                        },
+                        {
+                          "text": "✅ Order processing flow completed (test environment)\n"
+                        },
+                        {
+                          "text": "✅ Backend integration verified - All API endpoints responding\n"
+                        },
+                        {
+                          "text": "✅ Frontend-Backend communication successful\n"
+                        },
+                        {
+                          "text": "✅ Database operations completed successfully\n"
+                        },
+                        {
+                          "text": "✅ Test completed successfully\n"
+                        },
+                        {
+                          "text": "\n🎉 Complete Ecommerce Flow Test Completed Successfully!\n"
+                        },
+                        {
+                          "text": "📊 All components verified:\n"
+                        },
+                        {
+                          "text": "   ✅ Frontend - User interface working\n"
+                        },
+                        {
+                          "text": "   ✅ Backend - API responses successful\n"
+                        },
+                        {
+                          "text": "   ✅ AI/ML - Product recommendation system functional\n"
+                        },
+                        {
+                          "text": "   ✅ Payment - Razorpay integration working\n"
+                        },
+                        {
+                          "text": "   ✅ Order Processing - Complete flow successful\n"
+                        }
+                      ],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-02-22T16:23:25.127Z",
+                      "steps": [
+                        {
+                          "title": "Navigate to Application and Login",
+                          "duration": 8078
+                        },
+                        {
+                          "title": "Navigate to Ecommerce Dashboard",
+                          "duration": 3139
+                        },
+                        {
+                          "title": "Verify AI Product Recommendations",
+                          "duration": 3147
+                        },
+                        {
+                          "title": "Select and Add Product to Cart",
+                          "duration": 125
+                        },
+                        {
+                          "title": "Navigate to Cart",
+                          "duration": 1286
+                        },
+                        {
+                          "title": "Proceed to Checkout",
+                          "duration": 1629
+                        },
+                        {
+                          "title": "Fill Shipping Details",
+                          "duration": 542
+                        },
+                        {
+                          "title": "Process Razorpay Payment",
+                          "duration": 3612
+                        },
+                        {
+                          "title": "Handle Razorpay Payment Gateway",
+                          "duration": 1054
+                        },
+                        {
+                          "title": "Verify Order Completion",
+                          "duration": 2096
+                        },
+                        {
+                          "title": "Verify Backend Integration",
+                          "duration": 1
+                        },
+                        {
+                          "title": "Complete Test",
+                          "duration": 40
+                        }
+                      ],
+                      "startTime": "2026-03-16T06:07:29.932Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -112,656 +241,10 @@
                   "status": "expected"
                 }
               ],
-              "id": "25d258e343842b6e2d9b-a36c2e8679d677b5ae76",
-              "file": "functional-tests.spec.js",
-              "line": 8,
-              "column": 7
-            },
-            {
-              "title": "02 - User: Search for products",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 13549,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:23:41.205Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-bc6d0dbbaded5beb9901",
-              "file": "functional-tests.spec.js",
-              "line": 30,
-              "column": 7
-            },
-            {
-              "title": "03 - User: Add product to cart",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 20250,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:23:54.776Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-9c7731c860d5154d78f0",
-              "file": "functional-tests.spec.js",
-              "line": 52,
-              "column": 7
-            },
-            {
-              "title": "04 - User: View shopping cart",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 10462,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:24:15.048Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-477f7ae747e3a4b0fce5",
-              "file": "functional-tests.spec.js",
-              "line": 86,
-              "column": 7
-            },
-            {
-              "title": "05 - User: View checkout page",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 12509,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:24:25.532Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-58c92844d070c5ac428f",
-              "file": "functional-tests.spec.js",
-              "line": 101,
-              "column": 7
-            },
-            {
-              "title": "06 - User: View order history",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 18157,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:24:38.063Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-ad990daa78b628c86098",
-              "file": "functional-tests.spec.js",
-              "line": 116,
-              "column": 7
-            },
-            {
-              "title": "07 - User: View ecommerce dashboard",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 15802,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:24:56.241Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-54005efd48bc168a8023",
-              "file": "functional-tests.spec.js",
-              "line": 131,
-              "column": 7
-            },
-            {
-              "title": "08 - Manager: View ecommerce dashboard with stats",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 15240,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:25:12.067Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-5a706435729d5f433b07",
-              "file": "functional-tests.spec.js",
-              "line": 147,
-              "column": 7
-            },
-            {
-              "title": "09 - Manager: View products list",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 16990,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:25:27.327Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-42a1fef3f379ddaace74",
-              "file": "functional-tests.spec.js",
-              "line": 161,
-              "column": 7
-            },
-            {
-              "title": "10 - Manager: Search products in manager panel",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 14855,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:25:44.345Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-8e1294cc32402054fab2",
-              "file": "functional-tests.spec.js",
-              "line": 175,
-              "column": 7
-            },
-            {
-              "title": "11 - Manager: View orders list",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 16582,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:25:59.224Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-27ded052f60e1c9d0837",
-              "file": "functional-tests.spec.js",
-              "line": 189,
-              "column": 7
-            },
-            {
-              "title": "12 - Manager: Access inventory management",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 11140,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:26:15.827Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-bff97f483e0d4e8e6eac",
-              "file": "functional-tests.spec.js",
-              "line": 203,
-              "column": 7
-            },
-            {
-              "title": "13 - Manager: View category management",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 12016,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:26:26.986Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-27fd1e60fa16d96cabf5",
-              "file": "functional-tests.spec.js",
-              "line": 216,
-              "column": 7
-            },
-            {
-              "title": "14 - User: Browse temporary care facilities",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 11219,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:26:39.024Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-4319a8b28bf93ac68811",
-              "file": "functional-tests.spec.js",
-              "line": 231,
-              "column": 7
-            },
-            {
-              "title": "15 - User: View my bookings",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 9977,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:26:50.262Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-3d3245bc7ad839a089ac",
-              "file": "functional-tests.spec.js",
-              "line": 245,
-              "column": 7
-            },
-            {
-              "title": "16 - User: View my applications",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 9410,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:27:00.251Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-3fc251c999c4f4864dce",
-              "file": "functional-tests.spec.js",
-              "line": 259,
-              "column": 7
-            },
-            {
-              "title": "17 - User: Access temporary care dashboard",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 10513,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:27:09.678Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-0fd0b7704c1f15b9d51a",
-              "file": "functional-tests.spec.js",
-              "line": 272,
-              "column": 7
-            },
-            {
-              "title": "18 - Manager: View temporary care dashboard with stats",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 10278,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:27:20.202Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-21fae2562f2b45404801",
-              "file": "functional-tests.spec.js",
-              "line": 287,
-              "column": 7
-            },
-            {
-              "title": "19 - Manager: View all bookings",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 9788,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:27:30.490Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-d25cbfef37d5c96ca188",
-              "file": "functional-tests.spec.js",
-              "line": 301,
-              "column": 7
-            },
-            {
-              "title": "20 - Manager: View facility management",
-              "ok": true,
-              "tags": [],
-              "tests": [
-                {
-                  "timeout": 30000,
-                  "annotations": [],
-                  "expectedStatus": "passed",
-                  "projectId": "chromium",
-                  "projectName": "chromium",
-                  "results": [
-                    {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
-                      "status": "passed",
-                      "duration": 7312,
-                      "errors": [],
-                      "stdout": [],
-                      "stderr": [],
-                      "retry": 0,
-                      "startTime": "2026-02-22T16:27:40.290Z",
-                      "annotations": [],
-                      "attachments": []
-                    }
-                  ],
-                  "status": "expected"
-                }
-              ],
-              "id": "25d258e343842b6e2d9b-0519581fa1f9f8b10829",
-              "file": "functional-tests.spec.js",
-              "line": 315,
-              "column": 7
+              "id": "f078960c52f654091afe-697c4e5d1ccabf9b85cd",
+              "file": "ecommerce-complete-flow.spec.js",
+              "line": 5,
+              "column": 3
             }
           ]
         }
@@ -770,9 +253,9 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-02-22T16:23:23.401Z",
-    "duration": 265006.874,
-    "expected": 20,
+    "startTime": "2026-03-16T06:07:28.320Z",
+    "duration": 27465.894,
+    "expected": 1,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

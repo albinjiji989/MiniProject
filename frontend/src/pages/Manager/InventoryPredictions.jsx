@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../../services/api';
+import { mlApi } from '../../services/api';
 import {
   Package, TrendingUp, AlertTriangle, RefreshCw, 
   ArrowRight, BarChart3, Calendar, Zap, Brain,
@@ -38,14 +38,14 @@ const InventoryPredictions = () => {
       setError(null);
 
       // Check ML service health first
-      const healthRes = await api.get('/ecommerce/manager/inventory/health');
+      const healthRes = await mlApi.get('/ecommerce/manager/inventory/health');
       setMlHealthy(healthRes.data.mlService?.available || false);
 
       // Load dashboard, predictions, and seasonal data in parallel
       const [dashboardRes, predictionsRes, seasonalRes] = await Promise.all([
-        api.get('/ecommerce/manager/inventory/dashboard'),
-        api.get('/ecommerce/manager/inventory/predictions').catch(() => ({ data: { data: null } })),
-        api.get('/ecommerce/manager/inventory/seasonal').catch(() => ({ data: { data: null } }))
+        mlApi.get('/ecommerce/manager/inventory/dashboard'),
+        mlApi.get('/ecommerce/manager/inventory/predictions').catch(() => ({ data: { data: null } })),
+        mlApi.get('/ecommerce/manager/inventory/seasonal').catch(() => ({ data: { data: null } }))
       ]);
 
       setDashboard(dashboardRes.data.data);

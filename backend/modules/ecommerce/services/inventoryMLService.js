@@ -9,7 +9,7 @@ const axios = require('axios');
 
 // Configuration
 const ML_SERVICE_URL = process.env.PYTHON_ML_URL || 'http://localhost:5001';
-const ML_TIMEOUT = 30000; // 30 seconds for ML operations
+const ML_TIMEOUT = 90000; // 90 seconds for Render sleeping service
 
 // Create axios instance for ML service
 const mlClient = axios.create({

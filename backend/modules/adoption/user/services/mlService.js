@@ -6,7 +6,7 @@
 const axios = require('axios');
 
 const ML_SERVICE_URL = process.env.AIML_API_URL || 'http://localhost:5001';
-const ML_TIMEOUT = 15000; // 15 seconds
+const ML_TIMEOUT = 90000; // 90 seconds for Render sleeping service
 const RETRY_ATTEMPTS = 2;
 
 class MLService {
@@ -27,7 +27,7 @@ class MLService {
    */
   async isAvailable() {
     try {
-      const response = await this.client.get('/api/adoption/health', { timeout: 3000 });
+      const response = await this.client.get('/api/adoption/health', { timeout: 10000 }); // 10 seconds for health check
       return response.data.success === true;
     } catch (error) {
       console.warn('ML Service unavailable:', error.message);
@@ -390,7 +390,7 @@ class MLService {
    */
   async getWeights() {
     try {
-      const response = await this.client.get('/api/adoption/ml/weights', { timeout: 3000 });
+      const response = await this.client.get('/api/adoption/ml/weights', { timeout: 30000 }); // 30 seconds for weights
       if (response.data.success) {
         return response.data.weights;
       }

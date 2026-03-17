@@ -5,6 +5,40 @@
 
 const AI_SERVICE_URL = import.meta.env.VITE_AI_SERVICE_URL || 'http://localhost:5001';
 
+// Helper function to create fetch with timeout and retry
+const fetchWithTimeout = async (url, options = {}, timeout = 90000, retries = 2) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  const fetchOptions = {
+    ...options,
+    signal: controller.signal
+  };
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url, fetchOptions);
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      if (attempt === retries - 1) {
+        throw error;
+      }
+      
+      // Wait 5 seconds before retry
+      console.log(`AI service attempt ${attempt + 1} failed, retrying in 5 seconds...`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Reset timeout for retry
+      const newController = new AbortController();
+      const newTimeoutId = setTimeout(() => newController.abort(), timeout);
+      fetchOptions.signal = newController.signal;
+    }
+  }
+};
+
 class AIService {
   /**
    * Identify pet breed from image
@@ -18,7 +52,7 @@ class AIService {
       formData.append('image', imageFile);
       formData.append('top_k', topK);
 
-      const response = await fetch(`${AI_SERVICE_URL}/api/petshop/identify-breed`, {
+      const response = await fetchWithTimeout(`${AI_SERVICE_URL}/api/petshop/identify-breed`, {
         method: 'POST',
         body: formData,
       });
@@ -46,7 +80,7 @@ class AIService {
       const formData = new FormData();
       formData.append('image', imageFile);
 
-      const response = await fetch(`${AI_SERVICE_URL}/api/petshop/identify-species`, {
+      const response = await fetchWithTimeout(`${AI_SERVICE_URL}/api/petshop/identify-species`, {
         method: 'POST',
         body: formData,
       });
@@ -78,7 +112,7 @@ class AIService {
         formData.append('species', species);
       }
 
-      const response = await fetch(`${AI_SERVICE_URL}/api/petshop/breed-suggestions`, {
+      const response = await fetchWithTimeout(`${AI_SERVICE_URL}/api/petshop/breed-suggestions`, {
         method: 'POST',
         body: formData,
       });
@@ -106,7 +140,7 @@ class AIService {
       const formData = new FormData();
       formData.append('image', imageFile);
 
-      const response = await fetch(`${AI_SERVICE_URL}/api/adoption/identify`, {
+      const response = await fetchWithTimeout(`${AI_SERVICE_URL}/api/adoption/identify`, {
         method: 'POST',
         body: formData,
       });
@@ -130,7 +164,7 @@ class AIService {
    */
   async checkHealth() {
     try {
-      const response = await fetch(`${AI_SERVICE_URL}/health`);
+      const response = await fetchWithTimeout(`${AI_SERVICE_URL}/health`, {}, 10000, 1);
       const data = await response.json();
       return data.success && data.status === 'healthy';
     } catch (error) {
@@ -138,6 +172,7 @@ class AIService {
       return false;
     }
   }
+}
 }
 
 export default new AIService();
