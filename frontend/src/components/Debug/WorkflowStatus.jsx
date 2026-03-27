@@ -42,7 +42,8 @@ const WorkflowStatus = () => {
       setError('')
 
       // Check system health
-      const healthResponse = await fetch('http://localhost:5000/api/health')
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+      const healthResponse = await fetch(`${API_URL}/health`)
       const healthData = await healthResponse.json()
 
       // Get reservations data

@@ -8,7 +8,7 @@ const FormData = require('form-data');
 
 class PythonAIService {
   constructor() {
-    this.baseURL = process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
+    this.baseURL = process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:5001';
     this.timeout = 120000; // 2 minutes for ML processing
   }
 

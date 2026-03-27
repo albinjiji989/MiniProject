@@ -92,7 +92,8 @@ const BlockchainExplorer = () => {
 
   const checkTampering = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/blockchain/detect-tampering')
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+      const response = await fetch(`${API_URL}/blockchain/detect-tampering`)
       const result = await response.json()
       
       if (result.success && result.data.tamperedPets > 0) {
