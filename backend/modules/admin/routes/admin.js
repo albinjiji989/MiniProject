@@ -834,4 +834,8 @@ router.delete('/cancel-invite/:id', [auth, authorize('admin')], async (req, res)
   }
 });
 
+// Mount reports routes
+const reportsRoutes = require('./reportsRoutes');
+router.use('/reports', reportsRoutes);
+
 module.exports = router;

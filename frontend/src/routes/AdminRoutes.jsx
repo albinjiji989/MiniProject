@@ -36,6 +36,7 @@ import DebugPage from '../pages/Admin/DebugPage'
 import TemporaryCareAdminDashboard from '../pages/Admin/TemporaryCareAdminDashboard'
 import ModelPerformance from '../pages/Admin/Adoption/ModelPerformance'
 import NameChangeRequests from '../pages/Admin/NameChangeRequests'
+import ReportsPage from '../pages/Admin/ReportsPage'
 
 // New Admin Components
 import ModuleManagementNew from '../modules/admin/components/ModuleManagement'
@@ -77,6 +78,7 @@ const AdminRoutes = () => {
         <Route path="pet-registry" element={<PetRegistry />} />
         <Route path="pet-registry/:petCode" element={<PetRegistryDetails />} />
         <Route path="name-change-requests" element={<NameChangeRequests />} />
+        <Route path="reports" element={<ReportsPage />} />
         {/* Test route */}
         <Route path="test" element={<TestPage />} />
         <Route path="test-debug" element={<TestDebug />} />

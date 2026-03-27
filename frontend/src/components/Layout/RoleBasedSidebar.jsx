@@ -112,6 +112,7 @@ const getMenuItems = (userRole, userDetails, activeModules = []) => {
           { text: 'Name Change Requests', icon: <EditIcon />, path: '/admin/name-change-requests', roles: ['admin'] },
         ]
       },
+      { text: 'Report Generation', icon: <AssessmentIcon />, path: '/admin/reports', roles: ['admin'] },
     ]
   }
 

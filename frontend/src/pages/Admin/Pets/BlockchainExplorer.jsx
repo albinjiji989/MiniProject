@@ -48,6 +48,8 @@ import {
   AttachMoney as MoneyIcon,
   CheckCircle as CheckCircleIcon,
   Link as LinkIcon,
+  Security,
+  Warning as WarningIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { petsAPI } from '../../../services/petSystemAPI'
@@ -63,6 +65,8 @@ const BlockchainExplorer = () => {
   const [expandedPet, setExpandedPet] = useState(null)
   const [availableSpecies, setAvailableSpecies] = useState([])
   const [availableBreeds, setAvailableBreeds] = useState([])
+  const [tamperingData, setTamperingData] = useState(null)
+  const [showTamperingAlert, setShowTamperingAlert] = useState(false)
   
   const [blockchainData, setBlockchainData] = useState({
     overview: {
@@ -76,7 +80,31 @@ const BlockchainExplorer = () => {
 
   useEffect(() => {
     loadBlockchainData()
+    checkTampering()
+    
+    // Auto-refresh every 10 seconds to check for tampering
+    const interval = setInterval(() => {
+      checkTampering()
+    }, 10000)
+    
+    return () => clearInterval(interval)
   }, [])
+
+  const checkTampering = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/blockchain/detect-tampering')
+      const result = await response.json()
+      
+      if (result.success && result.data.tamperedPets > 0) {
+        setTamperingData(result.data)
+        setShowTamperingAlert(true)
+      } else {
+        setTamperingData(null)
+      }
+    } catch (err) {
+      console.error('Tampering check failed:', err)
+    }
+  }
 
   const loadBlockchainData = async () => {
     setLoading(true)
@@ -177,20 +205,47 @@ const BlockchainExplorer = () => {
     const petHash = Math.abs(pet.petCode.split('').reduce((a, b) => a + b.charCodeAt(0), 0)).toString()
     const isExpanded = expandedPet === petHash
     
+    // Check if this pet has tampering
+    const petTampering = tamperingData?.tamperingResults?.find(t => t.petCode === pet.petCode)
+    const hasTampering = !!petTampering
+    
     return (
       <Card 
         sx={{ 
           mb: 2,
-          border: '1px solid',
-          borderColor: pet.status === 'adopted' ? 'success.main' : 'info.main',
+          border: '2px solid',
+          borderColor: hasTampering ? 'error.main' : (pet.status === 'adopted' ? 'success.main' : 'info.main'),
           transition: 'all 0.3s ease',
+          bgcolor: hasTampering ? alpha('#f44336', 0.05) : 'background.paper',
           '&:hover': {
             boxShadow: 4,
-            borderColor: pet.status === 'adopted' ? 'success.dark' : 'info.dark'
+            borderColor: hasTampering ? 'error.dark' : (pet.status === 'adopted' ? 'success.dark' : 'info.dark')
           }
         }}
       >
         <CardContent>
+          {/* Tampering Alert */}
+          {hasTampering && (
+            <Alert 
+              severity="error" 
+              sx={{ mb: 2 }}
+              icon={<Security />}
+            >
+              <Typography variant="subtitle2" fontWeight="bold">
+                🚨 DATA TAMPERING DETECTED!
+              </Typography>
+              {petTampering.discrepancies.map((disc, idx) => (
+                <Typography key={idx} variant="body2" sx={{ mt: 1 }}>
+                  • <strong>{disc.field}</strong>: Blockchain shows <strong>${disc.blockchainValue}</strong>, 
+                  but MongoDB shows <strong>${disc.currentValue}</strong>
+                  {disc.difference && ` (Loss: $${disc.difference})`}
+                  <br />
+                  Missing Event: <strong>{disc.missingEvent}</strong>
+                </Typography>
+              ))}
+            </Alert>
+          )}
+          
           {/* Pet Header */}
           <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
             <Box display="flex" alignItems="center" gap={2}>
@@ -213,6 +268,14 @@ const BlockchainExplorer = () => {
               </Box>
             </Box>
             <Stack direction="row" spacing={1} alignItems="center">
+              {hasTampering && (
+                <Chip 
+                  label="🚨 TAMPERED" 
+                  color="error"
+                  icon={<WarningIcon />}
+                  sx={{ fontWeight: 'bold', animation: 'pulse 2s infinite' }}
+                />
+              )}
               <Chip 
                 label={pet.status === 'adopted' ? 'Adopted' : 'Available'} 
                 color={pet.status === 'adopted' ? 'success' : 'info'}
@@ -381,9 +444,21 @@ const BlockchainExplorer = () => {
                             <Typography variant="caption" color="text.secondary">
                               Amount
                             </Typography>
-                            <Typography variant="body2" fontWeight="bold" color="success.main">
-                              ${block.amount.toLocaleString()}
-                            </Typography>
+                            <Box display="flex" alignItems="center" gap={1}>
+                              <Typography variant="body2" fontWeight="bold" color={
+                                petTampering && block.eventType === 'PET_CREATED' ? 'primary.main' :
+                                petTampering && (block.eventType === 'PAYMENT_COMPLETED' || block.eventType === 'payment') ? 'error.main' :
+                                'success.main'
+                              }>
+                                ${block.amount.toLocaleString()}
+                              </Typography>
+                              {petTampering && block.eventType === 'PET_CREATED' && (
+                                <Chip label="ORIGINAL" size="small" color="primary" sx={{ height: 20 }} />
+                              )}
+                              {petTampering && (block.eventType === 'PAYMENT_COMPLETED' || block.eventType === 'payment') && (
+                                <Chip label="TAMPERED" size="small" color="error" sx={{ height: 20 }} />
+                              )}
+                            </Box>
                           </Box>
                         </Box>
                       </Grid>
@@ -414,6 +489,95 @@ const BlockchainExplorer = () => {
                 </Paper>
               ))}
             </Stack>
+
+            {/* Tampering Detection Summary */}
+            {petTampering && (
+              <Paper 
+                sx={{ 
+                  mt: 3, 
+                  p: 3, 
+                  bgcolor: alpha('#f44336', 0.1),
+                  border: '2px solid',
+                  borderColor: 'error.main',
+                  borderRadius: 2
+                }}
+              >
+                <Box display="flex" alignItems="center" gap={2} mb={2}>
+                  <WarningIcon sx={{ fontSize: 40, color: 'error.main' }} />
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'error.main' }}>
+                      🚨 TAMPERING DETECTED
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Unauthorized data modification detected through blockchain comparison
+                    </Typography>
+                  </Box>
+                </Box>
+                
+                <Divider sx={{ my: 2 }} />
+                
+                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                  Discrepancies Found:
+                </Typography>
+                
+                {petTampering.discrepancies.map((disc, idx) => (
+                  <Paper key={idx} sx={{ p: 2, mb: 2, bgcolor: 'background.paper' }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} md={6}>
+                        <Typography variant="caption" color="text.secondary">
+                          Field Modified
+                        </Typography>
+                        <Typography variant="body1" fontWeight="bold">
+                          {disc.field}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6} md={3}>
+                        <Typography variant="caption" color="text.secondary">
+                          Blockchain Value (Original)
+                        </Typography>
+                        <Typography variant="body1" fontWeight="bold" color="primary.main">
+                          ${disc.blockchainValue}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6} md={3}>
+                        <Typography variant="caption" color="text.secondary">
+                          MongoDB Value (Current)
+                        </Typography>
+                        <Typography variant="body1" fontWeight="bold" color="error.main">
+                          ${disc.currentValue}
+                        </Typography>
+                      </Grid>
+                      {disc.difference && (
+                        <Grid item xs={12}>
+                          <Alert severity="error" icon={<MoneyIcon />}>
+                            <Typography variant="body2" fontWeight="bold">
+                              Financial Loss: ${disc.difference.toLocaleString()}
+                            </Typography>
+                          </Alert>
+                        </Grid>
+                      )}
+                      <Grid item xs={12}>
+                        <Alert severity="warning" icon={<BlockchainIcon />}>
+                          <Typography variant="body2">
+                            Missing Blockchain Event: <strong>{disc.missingEvent}</strong>
+                          </Typography>
+                          <Typography variant="caption">
+                            If this change was legitimate, a blockchain block should have been created.
+                          </Typography>
+                        </Alert>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                ))}
+                
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Evidence:</strong> Block #{petTampering.createdBlock.index} (PET_CREATED) 
+                    immutably records the original values. This provides forensic proof of tampering.
+                  </Typography>
+                </Alert>
+              </Paper>
+            )}
 
             {/* Adoption Info */}
             {pet.status === 'adopted' && (
@@ -476,8 +640,47 @@ const BlockchainExplorer = () => {
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      <style>
+        {`
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+          }
+        `}
+      </style>
+      
       {/* Header */}
       <Box mb={4}>
+        {/* Global Tampering Alert */}
+        {tamperingData && tamperingData.tamperedPets > 0 && (
+          <Alert 
+            severity="error" 
+            sx={{ mb: 3 }}
+            icon={<WarningIcon />}
+            action={
+              <Button color="inherit" size="small" onClick={() => setShowTamperingAlert(false)}>
+                DISMISS
+              </Button>
+            }
+          >
+            <Typography variant="h6" fontWeight="bold">
+              🚨 BLOCKCHAIN TAMPERING DETECTED!
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              <strong>{tamperingData.tamperedPets}</strong> pet(s) have unauthorized data modifications detected through blockchain comparison.
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              Total Financial Loss: <strong>${tamperingData.tamperingResults.reduce((sum, t) => {
+                const feeLoss = t.discrepancies.find(d => d.field === 'adoptionFee' || d.field === 'payment')
+                return sum + (feeLoss?.difference || 0)
+              }, 0).toLocaleString()}</strong>
+            </Typography>
+            <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+              Last checked: {new Date(tamperingData.checkedAt).toLocaleTimeString()}
+            </Typography>
+          </Alert>
+        )}
+        
         <Breadcrumbs separator={<NavigateNextIcon fontSize="small" />} sx={{ mb: 2 }}>
           <Link color="inherit" href="/admin/dashboard" sx={{ display: 'flex', alignItems: 'center' }}>
             <DashboardIcon sx={{ mr: 0.5 }} fontSize="inherit" />
@@ -501,14 +704,29 @@ const BlockchainExplorer = () => {
             <Typography variant="subtitle1" color="text.secondary">
               View complete blockchain history for each pet with SHA-256 verification
             </Typography>
+            {tamperingData && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                🔄 Auto-checking for tampering every 10 seconds... Last check: {new Date(tamperingData.checkedAt).toLocaleTimeString()}
+              </Typography>
+            )}
           </Box>
-          <Button
-            variant="outlined"
-            startIcon={<ArrowBackIcon />}
-            onClick={() => navigate('/admin/pets')}
-          >
-            Back to Dashboard
-          </Button>
+          <Stack direction="row" spacing={2}>
+            <Button
+              variant="contained"
+              startIcon={<Security />}
+              onClick={checkTampering}
+              color={tamperingData && tamperingData.tamperedPets > 0 ? 'error' : 'primary'}
+            >
+              Check Tampering Now
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<ArrowBackIcon />}
+              onClick={() => navigate('/admin/pets')}
+            >
+              Back to Dashboard
+            </Button>
+          </Stack>
         </Box>
       </Box>
 

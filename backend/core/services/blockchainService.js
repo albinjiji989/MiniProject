@@ -499,6 +499,146 @@ class BlockchainService {
       message: `🔧 Repaired ${repaired} blocks. Chain is now ${isValid ? 'VALID ✅' : 'STILL INVALID ❌'}`,
     };
   }
+  /**
+   * Detect tampering by comparing blockchain data with MongoDB data
+   * Returns discrepancies for each pet
+   */
+  static async detectAllTampering() {
+    try {
+      const AdoptionPet = require('../../modules/adoption/manager/models/AdoptionPet');
+      const blocks = await BlockchainBlock.find().sort({ index: 1 });
+
+      // Group blocks by petId
+      const petBlocksMap = {};
+      blocks.forEach(block => {
+        if (block.petId) {
+          const petIdStr = block.petId.toString();
+          if (!petBlocksMap[petIdStr]) {
+            petBlocksMap[petIdStr] = [];
+          }
+          petBlocksMap[petIdStr].push(block);
+        }
+      });
+
+      const tamperingResults = [];
+
+      console.log(`🔍 Total pets with blockchain: ${Object.keys(petBlocksMap).length}`);
+
+      // Check each pet for tampering
+      for (const [petIdStr, petBlocks] of Object.entries(petBlocksMap)) {
+        const pet = await AdoptionPet.findById(petIdStr);
+        if (!pet) {
+          console.log(`⚠️ Pet ${petIdStr} not found in MongoDB`);
+          continue;
+        }
+
+        const createdBlock = petBlocks.find(b => b.eventType === 'PET_CREATED');
+        const paymentBlock = petBlocks.find(b => b.eventType === 'PAYMENT_COMPLETED');
+
+        if (!createdBlock) {
+          console.log(`⚠️ Pet ${pet.petCode} has no PET_CREATED block`);
+          continue;
+        }
+
+        const discrepancies = [];
+
+        // Debug logging
+        console.log(`🔍 Checking pet ${pet.petCode}:`, {
+          blockchainFee: createdBlock.data.adoptionFee,
+          mongoFee: pet.adoptionFee,
+          blockchainFeeType: typeof createdBlock.data.adoptionFee,
+          mongoFeeType: typeof pet.adoptionFee,
+          areEqual: createdBlock.data.adoptionFee === pet.adoptionFee,
+          blockData: createdBlock.data
+        });
+
+        // Check adoptionFee tampering (convert both to numbers for comparison)
+        const blockchainFee = Number(createdBlock.data.adoptionFee);
+        const mongoFee = Number(pet.adoptionFee);
+        
+        if (!isNaN(blockchainFee) && !isNaN(mongoFee) && blockchainFee !== mongoFee) {
+          const feeChangeEvent = petBlocks.find(b => b.eventType === 'PET_ADOPTIONFEE_CHANGED' || b.eventType === 'PET_FEE_CHANGED');
+
+          if (!feeChangeEvent) {
+            discrepancies.push({
+              field: 'adoptionFee',
+              blockchainValue: blockchainFee,
+              currentValue: mongoFee,
+              difference: blockchainFee - mongoFee,
+              missingEvent: 'PET_FEE_CHANGED',
+              severity: 'high'
+            });
+            console.log(`🚨 TAMPERING DETECTED for ${pet.petCode}: Fee changed from ${blockchainFee} to ${mongoFee}`);
+          }
+        }
+
+        // Check breed tampering
+        if (createdBlock.data.breed && createdBlock.data.breed !== pet.breed) {
+          const breedChangeEvent = petBlocks.find(b => b.eventType === 'PET_BREED_CHANGED');
+          if (!breedChangeEvent) {
+            discrepancies.push({
+              field: 'breed',
+              blockchainValue: createdBlock.data.breed,
+              currentValue: pet.breed,
+              missingEvent: 'PET_BREED_CHANGED',
+              severity: 'medium'
+            });
+          }
+        }
+
+        // Check payment discrepancy
+        if (paymentBlock && createdBlock.data.adoptionFee !== undefined) {
+          const paidAmount = paymentBlock.data.amount || 0;
+          const originalFee = createdBlock.data.adoptionFee || 0;
+
+          if (paidAmount !== originalFee) {
+            discrepancies.push({
+              field: 'payment',
+              blockchainValue: originalFee,
+              currentValue: paidAmount,
+              difference: originalFee - paidAmount,
+              missingEvent: 'FEE_MISMATCH',
+              severity: 'critical',
+              description: `User paid $${paidAmount} but original fee was $${originalFee}`
+            });
+          }
+        }
+
+        if (discrepancies.length > 0) {
+          tamperingResults.push({
+            petId: pet._id,
+            petCode: pet.petCode,
+            petName: pet.name,
+            breed: pet.breed,
+            species: pet.species,
+            status: pet.status,
+            discrepancies,
+            blockCount: petBlocks.length,
+            createdBlock: {
+              index: createdBlock.index,
+              timestamp: createdBlock.timestamp,
+              data: createdBlock.data
+            },
+            paymentBlock: paymentBlock ? {
+              index: paymentBlock.index,
+              timestamp: paymentBlock.timestamp,
+              data: paymentBlock.data
+            } : null
+          });
+        }
+      }
+
+      return {
+        totalPetsChecked: Object.keys(petBlocksMap).length,
+        tamperedPets: tamperingResults.length,
+        tamperingResults,
+        checkedAt: new Date()
+      };
+    } catch (err) {
+      console.error('Tampering detection error:', err);
+      throw err;
+    }
+  }
 }
 
 module.exports = BlockchainService;

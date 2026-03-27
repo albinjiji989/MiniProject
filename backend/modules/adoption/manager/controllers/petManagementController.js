@@ -296,6 +296,7 @@ const createPet = async (req, res) => {
           species: result.adoptionPet.species,
           status: result.adoptionPet.status,
           petCode: result.adoptionPet.petCode,
+          adoptionFee: result.adoptionPet.adoptionFee,
         }
       });
     } catch (blockchainErr) {
@@ -1372,6 +1373,7 @@ const importPetsCSV = async (req, res) => {
               species: savedPet.species,
               status: savedPet.status,
               petCode: savedPet.petCode,
+              adoptionFee: savedPet.adoptionFee,
               importMethod: 'CSV_BULK_IMPORT',
               csvRow: rowNumber
             }
